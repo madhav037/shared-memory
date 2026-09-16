@@ -16,6 +16,7 @@ from shared_memory.embeddings import Embedder, FastEmbedEmbedder
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
+from shared_memory.lifecycle import Lifecycle
 from shared_memory.service import MemoryService
 from shared_memory.store import MemoryStore
 
@@ -50,6 +51,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
     store = MemoryStore(settings.memory_root, listeners=[index])
     service = MemoryService(settings, identity, store, index)
+    lifecycle = Lifecycle(settings, db, store, index, clock)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -145,6 +147,24 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def read(path: str, ctx: Context) -> dict[str, Any]:
         """Read one memory in full by its path."""
         return service.read(caller(ctx), path)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def promote(
+        path: str,
+        level: str,
+        ctx: Context,
+        reference: str | None = None,
+        resolutions: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Promote your personal memory into project memory or team memory (level: project or team).
+
+        Call it first without a reference. If similar project or team memories exist, nothing changes yet: you get
+        them back with a reference. Judge whether each contradicts the memory being promoted, ask the member, then
+        call promote again with the reference and resolutions mapping every similar memory's path to supersede,
+        keep_both or cancel.
+        """
+        return lifecycle.promote(caller(ctx), path, level, reference, resolutions)
 
     @server.tool()
     @_refusals_as_tool_errors

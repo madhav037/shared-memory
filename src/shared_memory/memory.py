@@ -67,6 +67,7 @@ class Location:
     type: str
     project_id: str | None
     member_id: str | None
+    topic: str | None = None
 
     @property
     def folder(self) -> PurePosixPath:
@@ -81,19 +82,27 @@ def locate(path: str) -> Location:
     if parts[0] == "team" and len(parts) in (3, 4):
         level: Level = "team"
         project_id = member_id = None
-        type_folder = parts[1]
-    elif parts[0] == "projects" and len(parts) >= 5 and parts[2] == "shared" and len(parts) in (5, 6):
-        level, project_id, member_id, type_folder = "project", parts[1], None, parts[3]
-    elif parts[0] == "projects" and len(parts) >= 6 and parts[2] == "people" and len(parts) in (6, 7):
-        level, project_id, member_id, type_folder = "personal", parts[1], parts[3], parts[4]
+        type_index = 1
+    elif parts[0] == "projects" and len(parts) in (5, 6) and parts[2] == "shared":
+        level, project_id, member_id, type_index = "project", parts[1], None, 3
+    elif parts[0] == "projects" and len(parts) in (6, 7) and parts[2] == "people":
+        level, project_id, member_id, type_index = "personal", parts[1], parts[3], 4
     else:
         raise Refused(f"{path!r} is not a memory path.")
-    if type_folder not in FOLDER_TYPES:
+    if parts[type_index] not in FOLDER_TYPES:
         raise Refused(f"{path!r} is not a memory path.")
-    return Location(pure, level, FOLDER_TYPES[type_folder], project_id, member_id)
+    topic = parts[type_index + 1] if len(parts) == type_index + 3 else None
+    return Location(pure, level, FOLDER_TYPES[parts[type_index]], project_id, member_id, topic)
 
 
-def personal_folder(project_id: str, member_id: str, kind: str) -> PurePosixPath:
+def level_folder(level: Level, kind: str, project_id: str | None = None, member_id: str | None = None) -> PurePosixPath:
+    """The type folder a memory of this level and type lives in."""
+    if level == "team":
+        return PurePosixPath("team", type_folder(kind))
+    assert project_id is not None
+    if level == "project":
+        return PurePosixPath("projects", project_id, "shared", type_folder(kind))
+    assert member_id is not None
     return PurePosixPath("projects", project_id, "people", member_id, type_folder(kind))
 
 

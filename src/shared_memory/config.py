@@ -16,6 +16,7 @@ class Settings:
     recall_budget_seconds: float = 2.0
     challenge_fallback_days: int = 3
     memory_word_limit: int = 600
+    similar_threshold: float = 0.62
     allowed_hosts: tuple[str, ...] = ()
 
     @classmethod

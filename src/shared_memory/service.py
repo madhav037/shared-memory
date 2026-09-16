@@ -10,7 +10,7 @@ from shared_memory.config import Settings
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name
 from shared_memory.index import SearchIndex
-from shared_memory.memory import Location, Memory, locate, personal_folder, slugify
+from shared_memory.memory import Location, Memory, level_folder, locate, slugify
 from shared_memory.store import Committer, MemoryStore
 from shared_memory.validation import validate
 
@@ -85,7 +85,7 @@ class MemoryService:
             related_files=list(related_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
-        folder = personal_folder(project.project_id, caller.member.member_id, type)
+        folder = level_folder("personal", type, project.project_id, caller.member.member_id)
         if topic is not None:
             topic_folder = slugify(topic)
             if not topic.strip() or topic_folder in ("memory", "index"):

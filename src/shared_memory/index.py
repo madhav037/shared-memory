@@ -195,6 +195,22 @@ class SearchIndex:
             for key in ordered[:limit]
         ]
 
+    def similar(
+        self, team: str, path: PurePosixPath, *, project_id: str, threshold: float, limit: int = 10
+    ) -> list[tuple[str, float]]:
+        """Active project and team memories whose sections come close in meaning to any section of this memory."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT c.path, MAX(1 - (c.embedding <=> s.embedding)) AS similarity"
+                " FROM sections s JOIN sections c ON c.team = s.team AND c.path <> s.path"
+                " WHERE s.team = %(team)s AND s.path = %(path)s AND c.status = 'active'"
+                " AND (c.level = 'team' OR (c.level = 'project' AND c.project_id = %(project)s))"
+                " GROUP BY c.path HAVING MAX(1 - (c.embedding <=> s.embedding)) >= %(threshold)s"
+                " ORDER BY similarity DESC LIMIT %(limit)s",
+                {"team": team, "path": str(path), "project": project_id, "threshold": threshold, "limit": limit},
+            ).fetchall()
+        return [(str(row["path"]), float(row["similarity"])) for row in rows]
+
     @staticmethod
     def _keyword(conn: Conn, columns: str, where: str, params: dict[str, object]) -> list[dict[str, object]]:
         return conn.execute(
