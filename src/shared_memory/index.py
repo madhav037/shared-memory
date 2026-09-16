@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 @dataclass(frozen=True)
 class Hit:
     path: str
+    section_no: int
     heading: str
     level: str
     project_id: str | None
@@ -183,6 +184,7 @@ class SearchIndex:
         return [
             Hit(
                 path=str(rows[key]["path"]),
+                section_no=int(str(rows[key]["section_no"])),
                 heading=str(rows[key]["heading"]),
                 level=str(rows[key]["level"]),
                 project_id=None if rows[key]["project_id"] is None else str(rows[key]["project_id"]),

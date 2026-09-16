@@ -14,6 +14,7 @@ class Settings:
     briefing_cap_tokens: int = 1500
     recall_limit: int = 3
     recall_budget_seconds: float = 2.0
+    recall_threshold: float = 0.63
     challenge_fallback_days: int = 3
     memory_word_limit: int = 600
     similar_threshold: float = 0.62

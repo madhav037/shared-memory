@@ -1,13 +1,19 @@
 """The HTTP interface: MCP tools and Claude Code hook endpoints."""
 
 import functools
+import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+import anyio
+import anyio.to_thread
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
+from starlette.datastructures import Headers
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
@@ -17,6 +23,7 @@ from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.lifecycle import Lifecycle
+from shared_memory.recall import Recall
 from shared_memory.service import MemoryService
 from shared_memory.store import MemoryStore
 
@@ -26,6 +33,7 @@ INSTRUCTIONS = (
 )
 
 F = TypeVar("F", bound=Callable[..., Any])
+log = logging.getLogger("shared_memory")
 
 
 def _refusals_as_tool_errors(fn: F) -> F:
@@ -52,16 +60,54 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     store = MemoryStore(settings.memory_root, listeners=[index])
     service = MemoryService(settings, identity, store, index)
     lifecycle = Lifecycle(settings, db, store, index, clock)
+    recall = Recall(settings, index, store)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
-    def caller(ctx: Context) -> Caller:
-        headers = ctx.headers or {}
+    def authenticate(headers: Any) -> Caller:
         return identity.authenticate(
             _bearer(headers.get("authorization")),
             headers.get("x-shared-memory-project") or None,
             headers.get("x-shared-memory-repository") or None,
         )
+
+    def caller(ctx: Context) -> Caller:
+        return authenticate(ctx.headers or {})
+
+    async def hook(request: Request, event: str, work: Callable[[Caller, dict[str, Any]], str | None]) -> Response:
+        """Run a hook within the time budget. Anything that goes wrong leaves the session unaffected."""
+        try:
+            payload = await request.json()
+        except ValueError:
+            return JSONResponse({})
+        if not isinstance(payload, dict):
+            return JSONResponse({})
+        headers = Headers(scope=request.scope)
+
+        def run() -> str | None:
+            try:
+                return work(authenticate(headers), payload)
+            except Refused:
+                return None
+
+        context: str | None = None
+        try:
+            with anyio.move_on_after(settings.recall_budget_seconds):
+                context = await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
+        except Exception:
+            log.exception("%s hook failed", event)
+            return JSONResponse({})
+        if not context:
+            return JSONResponse({})
+        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}})
+
+    @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def prompt_submitted(request: Request) -> Response:
+        def work(current: Caller, payload: dict[str, Any]) -> str | None:
+            prompt = payload.get("prompt")
+            return recall.for_prompt(current, prompt) if isinstance(prompt, str) else None
+
+        return await hook(request, "UserPromptSubmit", work)
 
     @server.tool()
     @_refusals_as_tool_errors
