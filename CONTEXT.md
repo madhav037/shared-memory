@@ -1,0 +1,154 @@
+# Shared Memory
+
+A memory that every member's Claude sessions can read and write, so what one member's Claude learns reaches every other member's Claude and the team's ways of working stay consistent.
+
+## Language
+
+### Structure
+
+**Team**:
+The top-level group of members that owns projects and team memory.
+_Avoid_: Company, organization, org
+
+**Project**:
+A named space within a team holding the memory for one product; one or more repositories point to it by its project ID.
+_Avoid_: Workspace, namespace
+
+**Repository**:
+A git repository that belongs to a project, known by a short name unique within that project.
+_Avoid_: Repo
+
+### People and access
+
+**Member**:
+A person who belongs to a team and uses Claude sessions connected to its memory.
+_Avoid_: User, developer, dev, employee
+
+**Owner**:
+The one member of a team who can add and remove members and revoke personal tokens; every other member has equal rights.
+_Avoid_: Admin, lead
+
+**Personal token**:
+The secret that proves which member a session belongs to; issued once per member.
+_Avoid_: API key, password, project token
+
+### Memory
+
+**Memory**:
+One Markdown file with a header of details; the unit that is saved, promoted, superseded, pinned and retired.
+_Avoid_: Note, doc, context, knowledge
+
+**Topic**:
+A folder of memories with an index, used when a subject is too long for one memory.
+_Avoid_: Long memory, folder memory
+
+**Author**:
+The member who wrote a memory.
+_Avoid_: Owner, creator
+
+**Level**:
+Where a memory sits: local, personal, project or team.
+_Avoid_: Tier, scope, L1/L2/L3
+
+**Local memory**:
+Claude Code's built-in memory on one member's machine; it never reaches the team.
+_Avoid_: Private memory, auto memory
+
+**Personal memory**:
+A memory belonging to one member, readable by the whole team but not accepted by it.
+_Avoid_: Draft, notes, my memory
+
+**Project memory**:
+A memory that holds for everyone working on one project.
+_Avoid_: Shared memory
+
+**Team memory**:
+A memory that holds for every project in the team.
+_Avoid_: Company memory, global memory, shared memory
+
+**Exception**:
+A project memory that deliberately overrides a named team memory for that one project.
+_Avoid_: Override, local rule
+
+**Outdated memory**:
+A memory nobody has used for long enough that it may no longer be true.
+_Avoid_: Stale, expired
+
+### Memory types
+
+**Convention**:
+A rule for how the team works, followed every day.
+_Avoid_: Standard, guideline
+
+**Decision**:
+A choice made once, recorded with its reasons and the alternatives rejected.
+_Avoid_: ADR
+
+**Architecture**:
+How the system is built and how its parts relate.
+_Avoid_: Design, overview
+
+**Gotcha**:
+A surprising fact that wastes time if you don't know it.
+_Avoid_: Pitfall, trap, lesson
+
+### Changing memory
+
+**Promote**:
+To move a personal memory into project memory or team memory.
+_Avoid_: Share, publish
+
+**Contradiction**:
+Two memories that cannot both be true.
+_Avoid_: Conflict, collision
+
+**Supersede**:
+To put a new memory in an old one's place, keeping the old one in history.
+_Avoid_: Replace, overwrite, update
+
+**Challenge**:
+A request to supersede or retire another author's memory, waiting for that author's decision.
+_Avoid_: Approval, proposal, change request
+
+**Retire**:
+To mark a memory as no longer true without anything superseding it.
+_Avoid_: Delete, archive
+
+### Reading memory
+
+**Briefing**:
+What every session receives when it starts: pinned memories and current activity.
+_Avoid_: Pinned set
+
+**Pin**:
+A mark that puts a memory into every briefing.
+_Avoid_: Star, favorite
+
+**Recall**:
+Memories added to a prompt automatically because they match it.
+_Avoid_: Injection, auto-search
+
+### Sessions and collisions
+
+**Session**:
+One running Claude Code conversation belonging to a member.
+_Avoid_: Chat, conversation, agent
+
+**Activity**:
+A session's one-line statement of what it is working on.
+_Avoid_: Status, working-on line
+
+**Lock**:
+A session's claim on a file in a repository that its Claude is editing.
+
+**Holder**:
+The session holding a lock.
+_Avoid_: Owner
+
+**Takeover**:
+Moving another session's lock to your own session.
+_Avoid_: Steal, force-unlock
+
+**Collision**:
+Two sessions working on the same file or the same task at the same time.
+_Avoid_: Conflict, clash
