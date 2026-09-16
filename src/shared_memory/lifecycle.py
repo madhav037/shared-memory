@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -103,20 +104,54 @@ class Lifecycle:
         unknown = sorted({value for value in chosen.values() if value not in RESOLUTIONS})
         if unknown:
             raise Refused(f"Unknown resolution {unknown[0]!r}: use supersede, keep_both or cancel.")
-        if "supersede" in chosen.values():
-            raise Refused("Superseding another memory is not available yet. Use keep_both or cancel.")
+        if "cancel" in chosen.values():
+            self._forget(reference)
+            return {"status": "cancelled", "path": path}
+        supersede: str | None = None
+        exception_to: str | None = None
+        for similar_path in sorted(p for p, resolution in chosen.items() if resolution == "supersede"):
+            similar_location = locate(similar_path)
+            other = self._store.read(caller.team, similar_location.path)
+            if other.status != "active":
+                raise Refused(f"{similar_path} is no longer active. Call promote again without a reference.")
+            if target == "project" and similar_location.level == "team":
+                if exception_to is not None:
+                    raise Refused("A project memory can be an exception to only one team memory.")
+                exception_to = similar_path
+            elif other.author == caller.member.member_id:
+                if supersede is not None:
+                    raise Refused("A promotion can supersede only one memory. Retire the others first.")
+                supersede = similar_path
+            else:
+                raise Refused(
+                    f"{similar_path} belongs to another author ({other.author}). Superseding another author's "
+                    "memory needs a challenge, which is not available yet. Use keep_both or cancel."
+                )
+        self._forget(reference)
+        return self._move(caller, location, memory, target, supersede=supersede, exception_to=exception_to)
+
+    def _forget(self, reference: str) -> None:
         with self._db.transaction() as conn:
             conn.execute("DELETE FROM promotions WHERE reference = %s", (reference,))
-        if "cancel" in chosen.values():
-            return {"status": "cancelled", "path": path}
-        return self._move(caller, location, memory, target)
 
-    def _move(self, caller: Caller, location: Location, memory: Memory, target: Level) -> dict[str, Any]:
+    def _move(
+        self,
+        caller: Caller,
+        location: Location,
+        memory: Memory,
+        target: Level,
+        *,
+        supersede: str | None = None,
+        exception_to: str | None = None,
+    ) -> dict[str, Any]:
         folder = level_folder(target, memory.type, location.project_id)
         if location.topic:
             folder = folder / location.topic
         with self._store.change(caller.team, committer(caller), f"Promote: {memory.title}") as change:
             new_path = change.new_path(folder, location.path.stem)
             change.delete(location.path)
-            change.write(new_path, memory)
+            change.write(new_path, replace(memory, replaces=supersede, exception_to=exception_to))
+            if supersede is not None:
+                old = PurePosixPath(supersede)
+                change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
         return {"status": "promoted", "path": str(new_path)}

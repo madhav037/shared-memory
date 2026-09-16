@@ -48,7 +48,10 @@ class Recall:
             sections = split_sections(memory)
             heading, text = sections[hit.section_no] if hit.section_no < len(sections) else sections[0]
             title = memory.title if heading == memory.title else f"{memory.title}: {heading}"
-            entries.append(f"[{label(caller, hit.level, hit.member_id)}] {title} ({hit.path})\n{text}")
+            kind = label(caller, hit.level, hit.member_id)
+            if memory.exception_to:
+                kind += f", exception to {memory.exception_to}"
+            entries.append(f"[{kind}] {title} ({hit.path})\n{text}")
         if not entries:
             return None
         return "<shared-memory-recall>\n" + FRAMING + "\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"
