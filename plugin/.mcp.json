@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "shared-memory": {
+      "type": "http",
+      "url": "${user_config.server_url}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.api_token}",
+        "X-Shared-Memory-Project": "${SHARED_MEMORY_PROJECT:-}",
+        "X-Shared-Memory-Repository": "${SHARED_MEMORY_REPOSITORY:-}"
+      }
+    }
+  }
+}
