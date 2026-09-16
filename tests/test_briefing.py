@@ -98,3 +98,31 @@ def test_session_start_never_breaks_the_session(team: Team, owner: Session) -> N
 
     assert team.owner().start() == {}
     assert "not recognised" in revoked_token.start()["systemMessage"]
+
+
+def test_the_briefing_stays_within_the_cap_when_a_pin_moves_to_a_longer_memory(owner: Session) -> None:
+    long_body = " ".join(["Billing charges are retried with exponential backoff."] * 56)
+    kept = promote(owner, "Retry policy", long_body)
+    short = promote(owner, "Refund window", "Refunds are allowed for 30 days.")
+    owner.call("pin", path=kept)
+    owner.call("pin", path=short)
+
+    personal = owner.call(
+        "remember",
+        title="Refund window and process",
+        summary="Refund rules.",
+        type="convention",
+        body=" ".join(["Refunds are allowed for thirty days and are issued to the original card."] * 45),
+    )["path"]
+    first = owner.call("promote", path=personal, level="project")
+    owner.call(
+        "promote",
+        path=personal,
+        level="project",
+        reference=first["reference"],
+        resolutions={s["path"]: ("supersede" if s["path"] == short else "keep_both") for s in first["similar"]},
+    )
+    briefing = added_context(owner.start())
+
+    assert len(briefing) // 4 <= 1500
+    assert "did not fit" in briefing

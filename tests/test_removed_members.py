@@ -125,3 +125,23 @@ def test_an_active_members_personal_memory_still_cannot_be_promoted_by_others(da
     danas = dana.call("remember", **PNPM)["path"]
 
     assert "your own personal memory" in cole.refusal("promote", path=danas, level="project")
+
+
+def test_promoted_by_is_kept_when_promoting_a_removed_members_memory_raises_a_challenge(
+    team: Team, owner: Session, dana: Session, cole: Session
+) -> None:
+    target = promote_now(owner, NPM)
+    danas = dana.call("remember", **PNPM)["path"]
+    team.owner().call("remove_member", employee_id="emp-2")
+    first = cole.call("promote", path=danas, level="project")
+    raised = cole.call(
+        "promote",
+        path=danas,
+        level="project",
+        reference=first["reference"],
+        resolutions={s["path"]: ("supersede" if s["path"] == target else "keep_both") for s in first["similar"]},
+    )
+
+    accepted = owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
+
+    assert owner.call("read", path=accepted["path"])["promoted_by"] == "emp-3"

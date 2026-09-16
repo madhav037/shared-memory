@@ -88,7 +88,7 @@ def test_tree_shows_the_whole_project_with_summaries(team: Team, member: Session
 
     folders = {entry["folder"]: entry["memories"] for entry in tree["folders"]}
     assert folders[folder_of(saved["path"])] == [
-        {"path": saved["path"], "title": "Retries", "summary": "Billing retries twice."}
+        {"path": saved["path"], "title": "Retries", "summary": "Billing retries twice.", "pending": []}
     ]
 
 

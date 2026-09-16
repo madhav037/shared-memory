@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
+from shared_memory.memory import slugify
 
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -40,6 +41,10 @@ class Caller:
     def team(self) -> str:
         return self.member.team_code
 
+    @property
+    def member_id(self) -> str:
+        return self.member.member_id
+
     def require_project(self) -> Project:
         if self.project is None:
             raise Refused(
@@ -60,11 +65,6 @@ def check_name(kind: str, value: str) -> str:
             "starting with a letter or digit."
         )
     return value
-
-
-def _slug(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return slug[:40].strip("-") or "project"
 
 
 class Identity:
@@ -149,8 +149,10 @@ class Identity:
         pk: int = row["id"]
         return pk
 
-    def add_member(self, caller: Caller, employee_id: str, name: str) -> str:
+    def add_member(self, caller: Caller, employee_id: str, name: str, team: str | None = None) -> str:
         self._require_owner(caller)
+        if team is not None and team != caller.team:
+            raise Refused(f"You can only add members to your own team ({caller.team}).")
         check_name("Employee ID", employee_id)
         if not name.strip():
             raise Refused("A member needs a name.")
@@ -170,7 +172,7 @@ class Identity:
 
     def remove_member(self, caller: Caller, employee_id: str) -> None:
         self._require_owner(caller)
-        if employee_id == caller.member.member_id:
+        if employee_id == caller.member_id:
             raise Refused("You cannot remove yourself: the team would have no owner.")
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, employee_id)
@@ -187,10 +189,18 @@ class Identity:
             )
             return self._issue_token(conn, pk)
 
+    def is_removed(self, team_code: str, member_id: str) -> bool:
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT m.removed_at FROM members m JOIN teams t ON t.id = m.team_id WHERE t.code = %s AND m.member_id = %s",
+                (team_code, member_id),
+            ).fetchone()
+        return row is not None and row["removed_at"] is not None
+
     def create_project(self, caller: Caller, name: str) -> Project:
         if not name.strip():
             raise Refused("A project needs a name.")
-        project_id = f"{_slug(name)}-{secrets.token_hex(3)}"
+        project_id = f"{slugify(name)[:40].strip('-')}-{secrets.token_hex(3)}"
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO projects (project_id, team_id, name, created_at) VALUES (%s, %s, %s, %s)",

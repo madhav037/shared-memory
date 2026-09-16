@@ -28,7 +28,7 @@ def test_the_generated_plugin_name_matches_the_marketplace_and_plugin_in_this_re
 
     assert marketplace["name"] == "shared-memory"
     assert manifest["name"] == "shared-memory"
-    assert manifest["userConfig"]["api_token"]["sensitive"] is True
+    assert manifest["userConfig"]["personal_token"]["sensitive"] is True
     assert manifest["userConfig"]["server_url"]["sensitive"] is False
 
 
@@ -52,6 +52,14 @@ def test_several_repositories_share_one_projects_memory(team: Team) -> None:
         ("search", {"query": "anything"}),
         ("tree", {}),
         ("promote", {"path": "projects/x/people/owner-1/conventions/a.md", "level": "project"}),
+        ("read", {"path": "projects/x/shared/conventions/a.md"}),
+        ("list", {"folder": "team"}),
+        ("edit_memory", {"path": "projects/x/people/owner-1/conventions/a.md", "body": "b"}),
+        ("delete_memory", {"path": "projects/x/people/owner-1/conventions/a.md"}),
+        ("pin", {"path": "projects/x/shared/conventions/a.md"}),
+        ("unpin", {"path": "projects/x/shared/conventions/a.md"}),
+        ("retire", {"path": "projects/x/shared/conventions/a.md"}),
+        ("decide_challenge", {"challenge_id": 1, "decision": "accept"}),
     ],
 )
 def test_memory_tools_in_a_repository_without_a_project_explain_why(team: Team, tool: str, arguments: dict[str, object]) -> None:

@@ -32,7 +32,7 @@ class Recall:
             caller.team,
             prompt,
             project_id=caller.project.project_id,
-            member_id=caller.member.member_id,
+            member_id=caller.member_id,
             limit=self._settings.recall_limit * 3,
         )
         strong = sorted(

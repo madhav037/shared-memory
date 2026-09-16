@@ -6,17 +6,18 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name
-from shared_memory.index import SearchIndex
+from shared_memory.index import SearchIndex, split_sections
 from shared_memory.memory import Location, Memory, level_folder, locate, slugify
 from shared_memory.store import Committer, MemoryStore
 from shared_memory.validation import validate
 
 
 def committer(caller: Caller) -> Committer:
-    return Committer(caller.member.member_id, caller.member.name)
+    return Committer(caller.member_id, caller.member.name)
 
 
 def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
@@ -44,17 +45,20 @@ def label(caller: Caller, level: str, member_id: str | None) -> str:
         return "team memory"
     if level == "project":
         return "project memory"
-    if member_id == caller.member.member_id:
+    if member_id == caller.member_id:
         return "your personal memory"
     return f"personal memory of {member_id}, not accepted by the team"
 
 
 class MemoryService:
-    def __init__(self, settings: Settings, identity: Identity, store: MemoryStore, index: SearchIndex) -> None:
+    def __init__(
+        self, settings: Settings, identity: Identity, store: MemoryStore, index: SearchIndex, challenges: Challenges
+    ) -> None:
         self._settings = settings
         self._identity = identity
         self._store = store
         self._index = index
+        self._challenges = challenges
 
     def create_project(self, caller: Caller, name: str, repository: str) -> dict[str, Any]:
         check_name("Repository name", repository)
@@ -89,12 +93,12 @@ class MemoryService:
             title=title.strip(),
             summary=summary.strip(),
             type=type,
-            author=caller.member.member_id,
+            author=caller.member_id,
             body=body,
             related_files=list(related_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
-        folder = level_folder("personal", type, project.project_id, caller.member.member_id)
+        folder = level_folder("personal", type, project.project_id, caller.member_id)
         if topic is not None:
             topic_folder = slugify(topic)
             if not topic.strip() or topic_folder in ("memory", "index"):
@@ -106,16 +110,30 @@ class MemoryService:
         return {"path": str(path)}
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
+        caller.require_project()
         location = locate(path)
-        return describe(location.path, self._store.read(caller.team, location.path))
+        memory = describe(location.path, self._store.read(caller.team, location.path))
+        memory["pending"] = self._challenges.pending(caller.team, [memory["path"]])[memory["path"]]
+        memory["open_challenges"] = self._challenges.against(caller.team, memory["path"])
+        return memory
 
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
+        caller.require_project()
         pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
         memories, folders = self._store.list_folder(caller.team, pure)
+        pending = self._challenges.pending(caller.team, [str(path) for path, _ in memories])
         return {
             "folder": str(pure),
             "memories": [
-                {"path": str(path), "title": m.title, "summary": m.summary, "type": m.type, "status": m.status, "author": m.author}
+                {
+                    "path": str(path),
+                    "title": m.title,
+                    "summary": m.summary,
+                    "type": m.type,
+                    "status": m.status,
+                    "author": m.author,
+                    "pending": pending[str(path)],
+                }
                 for path, m in memories
             ],
             "folders": [str(sub) for sub in folders],
@@ -132,14 +150,22 @@ class MemoryService:
         }
         if level not in roots:
             raise Refused(f"Unknown level {level!r}: use team, project or personal, or leave it out for everything.")
-        entries = [
-            {
-                "folder": str(folder),
-                "memories": [{"path": str(path), "title": m.title, "summary": m.summary} for path, m in memories],
-            }
+        walked = [
+            (folder, memories)
             for root in roots[level]
             for folder, memories in self._store.walk(caller.team, root)
             if memories
+        ]
+        pending = self._challenges.pending(caller.team, [str(path) for _, memories in walked for path, _ in memories])
+        entries = [
+            {
+                "folder": str(folder),
+                "memories": [
+                    {"path": str(path), "title": m.title, "summary": m.summary, "pending": pending[str(path)]}
+                    for path, m in memories
+                ],
+            }
+            for folder, memories in walked
         ]
         return {"folders": entries}
 
@@ -159,30 +185,34 @@ class MemoryService:
             type=type,
             limit=max(1, min(limit, 50)),
         )
+        pending = self._challenges.pending(caller.team, [hit.path for hit in hits])
         results = []
         for hit in hits:
             try:
                 memory = self._store.read(caller.team, PurePosixPath(hit.path))
             except Refused:
                 continue
+            sections = split_sections(memory)
             results.append(
                 {
                     "path": hit.path,
                     "title": memory.title,
-                    "heading": hit.heading,
+                    "heading": sections[hit.section_no][0] if hit.section_no < len(sections) else memory.title,
                     "level": hit.level,
                     "type": hit.type,
                     "author": hit.author,
                     "summary": memory.summary,
                     "label": label(caller, hit.level, hit.member_id),
+                    "pending": pending[hit.path],
                 }
             )
         return {"results": results}
 
     def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
+        caller.require_project()
         location = locate(path)
         memory = self._store.read(caller.team, location.path)
-        if location.level != "personal" or location.member_id != caller.member.member_id:
+        if location.level != "personal" or location.member_id != caller.member_id:
             raise Refused(
                 f"You can only {verb} your own personal memory. Project and team memory change only by "
                 "promoting a memory that supersedes it."

@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS pins (
 """
 
 
+ONLY_ACCEPTED = "Only project memory and team memory can be pinned, so the briefing holds accepted memory."
+
+
 @dataclass(frozen=True)
 class PinTarget:
     path: str
@@ -47,7 +50,7 @@ def pin_target(path: str) -> PinTarget:
     if cleaned.endswith(".md"):
         location = locate(cleaned)
         if location.level == "personal":
-            raise Refused("Only project memory and team memory can be pinned, so the briefing holds accepted knowledge.")
+            raise Refused(ONLY_ACCEPTED)
         return PinTarget(str(location.path), "memory", location.level, location.project_id)
     parts = PurePosixPath(cleaned).parts
     if ".." not in parts and len(parts) == 3 and parts[0] == "team" and parts[1] in FOLDER_TYPES:
@@ -55,7 +58,7 @@ def pin_target(path: str) -> PinTarget:
     if ".." not in parts and len(parts) == 5 and parts[0] == "projects" and parts[2] == "shared" and parts[3] in FOLDER_TYPES:
         return PinTarget(cleaned, "topic", "project", parts[1])
     if len(parts) >= 3 and parts[0] == "projects" and parts[2] == "people":
-        raise Refused("Only project memory and team memory can be pinned, so the briefing holds accepted knowledge.")
+        raise Refused(ONLY_ACCEPTED)
     raise Refused(f"{path!r} is neither a project or team memory nor a topic folder.")
 
 
@@ -69,6 +72,7 @@ class Briefing:
             conn.execute(SCHEMA)
 
     def pin(self, caller: Caller, path: str) -> dict[str, Any]:
+        caller.require_project()
         target = pin_target(path)
         rendered = self._render(caller.team, target)
         if rendered is None:
@@ -96,11 +100,12 @@ class Briefing:
             conn.execute(
                 "INSERT INTO pins (team, path, kind, level, project_id, pinned_by, pinned_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (caller.team, target.path, target.kind, target.level, target.project_id, caller.member.member_id, self._clock()),
+                (caller.team, target.path, target.kind, target.level, target.project_id, caller.member_id, self._clock()),
             )
         return {"pinned": target.path}
 
     def unpin(self, caller: Caller, path: str) -> dict[str, Any]:
+        caller.require_project()
         cleaned = path.replace("\\", "/").strip("/")
         with self._db.transaction() as conn:
             deleted = conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (caller.team, cleaned)).rowcount
@@ -122,10 +127,23 @@ class Briefing:
                     conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, str(path)))
 
     def for_session(self, caller: Caller, extra: list[str] | None = None) -> str | None:
-        """The briefing: pinned memories for the session's project, plus any extra notices."""
+        """The briefing: pinned memories for the session's project within the cap, plus any extra notices."""
         if caller.project is None:
             return None
-        sections = [text for text, _ in self._pinned_texts(caller.team, caller.project.project_id)]
+        budget = self._settings.briefing_cap_tokens - _tokens(FRAMING)
+        sections: list[str] = []
+        left_out: list[str] = []
+        for path, text in self._pinned_texts(caller.team, caller.project.project_id):
+            if _tokens(text) <= budget:
+                sections.append(text)
+                budget -= _tokens(text)
+            else:
+                left_out.append(path)
+        if left_out:
+            sections.append(
+                f"[briefing cap] These pins did not fit within the briefing cap and were left out: {', '.join(left_out)}. "
+                "Suggest the member unpin something to make room."
+            )
         sections.extend(extra or [])
         if not sections:
             return None
@@ -141,15 +159,17 @@ class Briefing:
         return [PinTarget(row["path"], row["kind"], row["level"], row["project_id"]) for row in rows]
 
     def _pinned_texts(self, team: str, project_id: str | None) -> list[tuple[str, str]]:
+        """(path, rendered text) for each pin visible from a project, oldest first."""
         texts = []
         for target in self._rows(team, project_id):
             rendered = self._render(team, target)
             if rendered is not None:
-                texts.append((rendered, target.path))
+                texts.append((target.path, rendered))
         return texts
 
     def _pinned(self, team: str, project_id: str | None) -> list[tuple[str, int]]:
-        return [(path, _tokens(text)) for text, path in self._pinned_texts(team, project_id)]
+        """(path, approximate tokens) for each pin visible from a project."""
+        return [(path, _tokens(text)) for path, text in self._pinned_texts(team, project_id)]
 
     def _render(self, team: str, target: PinTarget) -> str | None:
         if target.kind == "memory":

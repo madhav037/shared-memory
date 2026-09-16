@@ -79,3 +79,10 @@ def test_every_member_can_use_every_project_in_the_team(team: Team) -> None:
     member = add(team, "emp-2", "Dana Dev").in_project(owners_project)
 
     assert member.call("read", path=saved["path"])["title"] == "Owner knowledge"
+
+
+def test_add_member_accepts_the_team_id_but_only_the_callers_own_team(team: Team) -> None:
+    added = team.owner().call("add_member", team=team.code, employee_id="emp-2", name="Dana Dev")
+
+    assert added["team"] == team.code
+    assert "your own team" in team.owner().refusal("add_member", team="some-other-team", employee_id="emp-3", name="Eve")

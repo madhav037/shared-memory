@@ -1,4 +1,7 @@
-"""The search index: sections of memories with embeddings and keyword tokens, and no readable content (ADR-0002)."""
+"""The search index: memory sections as embeddings and unordered keyword tokens, with no readable content (ADR-0002).
+
+Headings and text are always read back from the memory files; Postgres holds only what ranking needs.
+"""
 
 from __future__ import annotations
 
@@ -7,24 +10,25 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from typing import Any
 
 from pgvector import Vector
 
 from shared_memory.db import Conn, Database
-from shared_memory.embeddings import Embedder
+from shared_memory.embeddings import DIMENSIONS, Embedder
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 
 _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 _RRF_K = 60
 _CANDIDATES = 30
+_SIMILAR_LIMIT = 10
 
-SCHEMA = """
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS sections (
     team TEXT NOT NULL,
     path TEXT NOT NULL,
     section_no INT NOT NULL,
-    heading TEXT NOT NULL,
     level TEXT NOT NULL,
     project_id TEXT,
     member_id TEXT,
@@ -32,10 +36,11 @@ CREATE TABLE IF NOT EXISTS sections (
     author TEXT NOT NULL,
     status TEXT NOT NULL,
     content_hash TEXT NOT NULL,
-    embedding vector(384) NOT NULL,
+    embedding vector({DIMENSIONS}) NOT NULL,
     tokens tsvector NOT NULL,
     PRIMARY KEY (team, path, section_no)
 );
+ALTER TABLE sections DROP COLUMN IF EXISTS heading;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 """
 
@@ -44,14 +49,11 @@ CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 class Hit:
     path: str
     section_no: int
-    heading: str
     level: str
-    project_id: str | None
     member_id: str | None
     type: str
     author: str
     similarity: float
-    keyword: bool
 
 
 def split_sections(memory: Memory) -> list[tuple[str, str]]:
@@ -79,8 +81,8 @@ class SearchIndex:
     def update(self, team: str, path: PurePosixPath, memory: Memory) -> None:
         location = locate(str(path))
         texts = [f"{memory.title}\n{heading}\n{text}" for heading, text in split_sections(memory)]
-        headings = [heading for heading, _ in split_sections(memory)]
         hashes = [hashlib.sha256(text.encode()).hexdigest() for text in texts]
+        details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
         with self._db.transaction() as conn:
             existing = {
                 row["section_no"]: row["content_hash"]
@@ -94,23 +96,22 @@ class SearchIndex:
                 "DELETE FROM sections WHERE team = %s AND path = %s AND section_no >= %s", (team, str(path), len(texts))
             )
             for n, text in enumerate(texts):
-                details = (headings[n], location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
                 if n in vectors:
                     conn.execute(
-                        "INSERT INTO sections (team, path, section_no, heading, level, project_id, member_id, type,"
-                        " author, status, content_hash, embedding, tokens)"
-                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                        " setweight(to_tsvector('simple', %s), 'A') || to_tsvector('english', %s))"
-                        " ON CONFLICT (team, path, section_no) DO UPDATE SET heading = EXCLUDED.heading,"
-                        " level = EXCLUDED.level, project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id,"
-                        " type = EXCLUDED.type, author = EXCLUDED.author, status = EXCLUDED.status,"
-                        " content_hash = EXCLUDED.content_hash, embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
+                        "INSERT INTO sections (team, path, section_no, level, project_id, member_id, type, author,"
+                        " status, content_hash, embedding, tokens)"
+                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                        " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
+                        " ON CONFLICT (team, path, section_no) DO UPDATE SET level = EXCLUDED.level,"
+                        " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
+                        " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
+                        " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
                         (team, str(path), n, *details, hashes[n], Vector(vectors[n]), text, text),
                     )
                 else:
                     conn.execute(
-                        "UPDATE sections SET heading = %s, level = %s, project_id = %s, member_id = %s, type = %s,"
-                        " author = %s, status = %s WHERE team = %s AND path = %s AND section_no = %s",
+                        "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
+                        " status = %s WHERE team = %s AND path = %s AND section_no = %s",
                         (*details, team, str(path), n),
                     )
 
@@ -163,7 +164,7 @@ class SearchIndex:
             params["type"] = type
         params["query"] = Vector(self._embedder.query(query))
         where = " AND ".join(conditions)
-        columns = "path, section_no, heading, level, project_id, member_id, type, author, 1 - (embedding <=> %(query)s) AS similarity"
+        columns = "path, section_no, level, member_id, type, author, 1 - (embedding <=> %(query)s) AS similarity"
         with self._db.transaction() as conn:
             by_meaning = conn.execute(
                 f"SELECT {columns} FROM sections WHERE {where} ORDER BY embedding <=> %(query)s LIMIT {_CANDIDATES}",
@@ -171,35 +172,27 @@ class SearchIndex:
             ).fetchall()
             by_words = self._keyword(conn, columns, where, params)
         scores: dict[tuple[str, int], float] = {}
-        rows: dict[tuple[str, int], dict[str, object]] = {}
-        keyword_keys = set()
-        for ranking, is_keyword in ((by_meaning, False), (by_words, True)):
+        rows: dict[tuple[str, int], dict[str, Any]] = {}
+        for ranking in (by_meaning, by_words):
             for rank, row in enumerate(ranking):
                 key = (row["path"], row["section_no"])
                 scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
                 rows[key] = row
-                if is_keyword:
-                    keyword_keys.add(key)
-        ordered = sorted(scores, key=lambda key: (-scores[key], -float(str(rows[key]["similarity"]))))
+        ordered = sorted(scores, key=lambda key: (-scores[key], -float(rows[key]["similarity"])))
         return [
             Hit(
-                path=str(rows[key]["path"]),
-                section_no=int(str(rows[key]["section_no"])),
-                heading=str(rows[key]["heading"]),
-                level=str(rows[key]["level"]),
-                project_id=None if rows[key]["project_id"] is None else str(rows[key]["project_id"]),
-                member_id=None if rows[key]["member_id"] is None else str(rows[key]["member_id"]),
-                type=str(rows[key]["type"]),
-                author=str(rows[key]["author"]),
-                similarity=float(str(rows[key]["similarity"])),
-                keyword=key in keyword_keys,
+                path=rows[key]["path"],
+                section_no=rows[key]["section_no"],
+                level=rows[key]["level"],
+                member_id=rows[key]["member_id"],
+                type=rows[key]["type"],
+                author=rows[key]["author"],
+                similarity=float(rows[key]["similarity"]),
             )
             for key in ordered[:limit]
         ]
 
-    def similar(
-        self, team: str, path: PurePosixPath, *, project_id: str, threshold: float, limit: int = 10
-    ) -> list[tuple[str, float]]:
+    def similar(self, team: str, path: PurePosixPath, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
         """Active project and team memories whose sections come close in meaning to any section of this memory."""
         with self._db.transaction() as conn:
             rows = conn.execute(
@@ -208,15 +201,15 @@ class SearchIndex:
                 " WHERE s.team = %(team)s AND s.path = %(path)s AND c.status = 'active'"
                 " AND (c.level = 'team' OR (c.level = 'project' AND c.project_id = %(project)s))"
                 " GROUP BY c.path HAVING MAX(1 - (c.embedding <=> s.embedding)) >= %(threshold)s"
-                " ORDER BY similarity DESC LIMIT %(limit)s",
-                {"team": team, "path": str(path), "project": project_id, "threshold": threshold, "limit": limit},
+                f" ORDER BY similarity DESC LIMIT {_SIMILAR_LIMIT}",
+                {"team": team, "path": str(path), "project": project_id, "threshold": threshold},
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 
     @staticmethod
-    def _keyword(conn: Conn, columns: str, where: str, params: dict[str, object]) -> list[dict[str, object]]:
+    def _keyword(conn: Conn, columns: str, where: str, params: dict[str, object]) -> list[dict[str, Any]]:
         return conn.execute(
-            f"SELECT {columns}, ts_rank_cd(tokens, q.tq) AS rank FROM sections,"
+            f"SELECT {columns}, ts_rank(tokens, q.tq) AS rank FROM sections,"
             " (SELECT websearch_to_tsquery('simple', %(text)s) || websearch_to_tsquery('english', %(text)s) AS tq) q"
             f" WHERE {where} AND tokens @@ q.tq ORDER BY rank DESC LIMIT {_CANDIDATES}",
             params,

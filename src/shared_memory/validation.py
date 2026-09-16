@@ -8,7 +8,7 @@ from collections import Counter
 
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN
-from shared_memory.memory import TYPE_FOLDERS, Memory
+from shared_memory.memory import Memory, type_folder
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("an AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -58,8 +58,7 @@ def _single_line(field: str, value: str, limit: int) -> None:
 def validate(memory: Memory, word_limit: int) -> None:
     _single_line("title", memory.title, 200)
     _single_line("summary", memory.summary, 300)
-    if memory.type not in TYPE_FOLDERS:
-        raise Refused(f"Unknown memory type {memory.type!r}: use convention, decision, architecture or gotcha.")
+    type_folder(memory.type)
     for entry in memory.related_files:
         repository, _, path = entry.partition(":")
         if not NAME_PATTERN.match(repository) or not path.strip() or "\n" in entry:

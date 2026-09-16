@@ -13,7 +13,6 @@ from shared_memory.errors import Refused
 
 TYPE_FOLDERS = {"convention": "conventions", "decision": "decisions", "architecture": "architecture", "gotcha": "gotchas"}
 FOLDER_TYPES = {folder: kind for kind, folder in TYPE_FOLDERS.items()}
-STATUSES = ("active", "superseded", "retired")
 INDEX_NAME = "index.md"
 
 Level = Literal["team", "project", "personal"]
@@ -68,10 +67,6 @@ class Location:
     project_id: str | None
     member_id: str | None
     topic: str | None = None
-
-    @property
-    def folder(self) -> PurePosixPath:
-        return self.path.parent
 
 
 def locate(path: str) -> Location:

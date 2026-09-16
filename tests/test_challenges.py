@@ -153,3 +153,58 @@ def test_a_memory_waiting_on_a_challenge_cannot_be_promoted_again(owner: Session
     raised = challenge(dana, PNPM, target)
 
     assert "waiting on challenge" in dana.refusal("promote", path=raised["personal"], level="project")
+
+
+def test_a_new_challenge_is_shown_together_with_earlier_ones_on_the_authors_prompt(
+    owner: Session, dana: Session, cole: Session
+) -> None:
+    target = promote_now(owner, NPM)
+    danas = challenge(dana, PNPM, target)
+    owner.prompt("write a haiku about cats")
+    coles = challenge(cole, BUN, target)
+
+    context = added_context(owner.prompt("write a haiku about dogs"))
+
+    assert f"Challenge {danas['challenge_id']} by emp-2" in context
+    assert f"Challenge {coles['challenge_id']} by emp-3" in context
+
+
+def test_superseding_a_challenged_memory_directly_closes_its_challenges(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+    raised = challenge(dana, PNPM, target)
+    personal = owner.call("remember", **BUN)["path"]
+    first = owner.call("promote", path=personal, level="project")
+    owner.call(
+        "promote",
+        path=personal,
+        level="project",
+        reference=first["reference"],
+        resolutions={s["path"]: ("supersede" if s["path"] == target else "keep_both") for s in first["similar"]},
+    )
+
+    assert dana.call("read", path=raised["personal"])["pending"] == []
+    assert f"challenge {raised['challenge_id']}" in added_context(dana.prompt("write a haiku about cats"))
+
+
+def test_retiring_a_challenged_memory_closes_its_challenges(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+    raised = challenge(dana, PNPM, target)
+
+    owner.call("retire", path=target)
+
+    assert dana.call("read", path=raised["personal"])["pending"] == []
+
+
+def test_a_pending_memory_is_labeled_in_search_list_and_tree(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+    raised = challenge(dana, PNPM, target)
+    expected = [{"challenge_id": raised["challenge_id"], "kind": "supersede", "replaces": target}]
+    folder = raised["personal"].rsplit("/", 1)[0]
+
+    found = next(r for r in owner.call("search", query="pnpm lockfile")["results"] if r["path"] == raised["personal"])
+    listed = next(m for m in owner.call("list", folder=folder)["memories"] if m["path"] == raised["personal"])
+    in_tree = next(
+        m for entry in owner.call("tree")["folders"] for m in entry["memories"] if m["path"] == raised["personal"]
+    )
+
+    assert found["pending"] == listed["pending"] == in_tree["pending"] == expected

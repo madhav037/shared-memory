@@ -59,9 +59,9 @@ Personal memory becomes what the team follows only when it is promoted with `pro
 
 1. Call `promote` with the path and level, and no reference.
 2. If it comes back `promoted`, you're done.
-3. If it comes back `similar_memories`, **judge each similar memory against the one being promoted**:
-   - **Contradicts it**: both can't be true at once (for example "use pnpm" and "use npm"). Tell the member which memory it contradicts and who wrote it, and ask whether to **supersede** it or **cancel**.
-   - **Doesn't contradict it**: it's related but both can be true (for example "use pnpm" and "pnpm workspaces live in /packages"). Resolve it as **keep_both**, and tell the member.
+3. If it comes back `similar_memories`, **judge each similar memory against the one being promoted**, then show the member every similar memory with your judgement and ask them to choose **supersede**, **keep both** or **cancel** for each:
+   - **Contradicts it**: both can't be true at once (for example "use pnpm" and "use npm"). Say which memory it contradicts and who wrote it, and recommend supersede or cancel.
+   - **Doesn't contradict it**: it's related but both can be true (for example "use pnpm" and "pnpm workspaces live in /packages"). Recommend keep both.
 4. Call `promote` again with the same path, level, the `reference`, and `resolutions` giving every similar memory's path one of `supersede`, `keep_both` or `cancel`.
 
 Never resolve a real contradiction as keep_both to get a promotion through: project and team memory must never contradict each other.

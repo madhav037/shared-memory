@@ -8,7 +8,7 @@
       "title": "Shared Memory server URL (for example https://memory.example.com)",
       "sensitive": false
     },
-    "api_token": {
+    "personal_token": {
       "type": "string",
       "title": "Your personal token",
       "sensitive": true

@@ -145,3 +145,31 @@ def test_recall_that_takes_too_long_is_skipped(slow_server: RunningServer) -> No
 
     assert output == {}
     assert time.monotonic() - started < 2.5
+
+
+def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningServer) -> None:
+    team = new_team(slow_server)
+    project = team.owner().call("create_project", name="Billing")["project_id"]
+    owner = team.owner().in_project(project)
+    added = team.owner().call("add_member", employee_id="emp-2", name="Dana Dev")
+    dana = Session(slow_server, added["personal_token"], project)
+    npm = owner.call(
+        "remember",
+        title="Use npm for installs",
+        summary="Packages are installed with npm.",
+        type="convention",
+        body="Install dependencies with npm install. Do not use other package managers.",
+    )["path"]
+    target = owner.call("promote", path=npm, level="project")["path"]
+    pnpm = dana.call(
+        "remember",
+        title="Use pnpm, not npm",
+        summary="Every package uses pnpm.",
+        type="convention",
+        body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
+    )["path"]
+    first = dana.call("promote", path=pnpm, level="project")
+    raised = dana.call("promote", path=pnpm, level="project", reference=first["reference"], resolutions={target: "supersede"})
+    owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
+
+    assert "was rejected" in added_context(dana.prompt("which package manager do we use?"))

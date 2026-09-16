@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from shared_memory.briefing import Briefing
+from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -59,8 +60,9 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     identity = Identity(db, clock)
     index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
     store = MemoryStore(settings.memory_root, listeners=[index])
-    service = MemoryService(settings, identity, store, index)
-    lifecycle = Lifecycle(settings, db, store, index, clock)
+    challenges = Challenges(settings, db, store, identity, clock)
+    service = MemoryService(settings, identity, store, index, challenges)
+    lifecycle = Lifecycle(settings, db, store, index, identity, challenges, clock)
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, clock)
     store.subscribe(briefing)
@@ -77,15 +79,16 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def caller(ctx: Context) -> Caller:
         return authenticate(ctx.headers or {})
 
+    HookPart = Callable[[Caller, dict[str, Any]], str | None]
+
     async def hook(
-        request: Request,
-        event: str,
-        work: Callable[[Caller, dict[str, Any]], str | None],
-        *,
-        budget_seconds: float,
-        report_refusals: bool = False,
+        request: Request, event: str, required: HookPart, optional: HookPart | None = None, *, report_refusals: bool = False
     ) -> Response:
-        """Run a hook within its time budget. Anything that goes wrong leaves the session unaffected."""
+        """Answer a Claude Code hook. Anything that goes wrong leaves the session unaffected.
+
+        The required part always runs to completion, because it marks news as delivered and so must reach the
+        member. The optional part (recall) is dropped if it runs past the recall budget.
+        """
         try:
             payload = await request.json()
         except ValueError:
@@ -93,49 +96,54 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         if not isinstance(payload, dict):
             return JSONResponse({})
         headers = Headers(scope=request.scope)
-        outcome: dict[str, str | None] = {"context": None, "refusal": None}
 
-        def run() -> None:
+        def authenticated() -> Caller | Refused:
             try:
-                outcome["context"] = work(authenticate(headers), payload)
+                return authenticate(headers)
             except Refused as refused:
-                outcome["refusal"] = str(refused)
+                return refused
 
+        parts: list[str | None] = []
         try:
-            with anyio.move_on_after(budget_seconds):
-                await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
+            current = await anyio.to_thread.run_sync(authenticated)
+            if isinstance(current, Refused):
+                connected = headers.get("x-shared-memory-project") or headers.get("authorization")
+                if report_refusals and connected:
+                    return JSONResponse({"systemMessage": f"Shared Memory is unavailable: {current}"})
+                return JSONResponse({})
+            if current.project is None:
+                return JSONResponse({})
+            parts.append(await anyio.to_thread.run_sync(required, current, payload))
+            if optional is not None:
+                with anyio.move_on_after(settings.recall_budget_seconds):
+                    parts.append(await anyio.to_thread.run_sync(optional, current, payload, abandon_on_cancel=True))
+        except Refused:
+            return JSONResponse({})
         except Exception:
             log.exception("%s hook failed", event)
             return JSONResponse({})
-        connected = headers.get("x-shared-memory-project") or headers.get("authorization")
-        if outcome["refusal"] and report_refusals and connected:
-            return JSONResponse({"systemMessage": f"Shared Memory is unavailable: {outcome['refusal']}"})
-        if not outcome["context"]:
+        context = "\n\n".join(part for part in parts if part)
+        if not context:
             return JSONResponse({})
-        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": outcome["context"]}})
+        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}})
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
-        def work(current: Caller, payload: dict[str, Any]) -> str | None:
-            prompt = payload.get("prompt")
-            if current.project is None:
-                return None
-            parts = [
-                lifecycle.prompt_notices(current),
-                recall.for_prompt(current, prompt) if isinstance(prompt, str) else None,
-            ]
-            return "\n\n".join(part for part in parts if part) or None
+        def notices(current: Caller, payload: dict[str, Any]) -> str | None:
+            return challenges.prompt_notices(current)
 
-        return await hook(request, "UserPromptSubmit", work, budget_seconds=settings.recall_budget_seconds)
+        def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
+            prompt = payload.get("prompt")
+            return recall.for_prompt(current, prompt) if isinstance(prompt, str) else None
+
+        return await hook(request, "UserPromptSubmit", notices, recalled)
 
     @server.custom_route("/hooks/session-start", methods=["POST"])  # type: ignore[untyped-decorator]
     async def session_start(request: Request) -> Response:
-        def work(current: Caller, payload: dict[str, Any]) -> str | None:
-            if current.project is None:
-                return None
-            return briefing.for_session(current, extra=lifecycle.briefing_notices(current))
+        def briefed(current: Caller, payload: dict[str, Any]) -> str | None:
+            return briefing.for_session(current, extra=challenges.briefing_notices(current))
 
-        return await hook(request, "SessionStart", work, budget_seconds=5.0, report_refusals=True)
+        return await hook(request, "SessionStart", briefed, report_refusals=True)
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -165,10 +173,10 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
     @server.tool()
     @_refusals_as_tool_errors
-    def add_member(employee_id: str, name: str, ctx: Context) -> dict[str, Any]:
-        """Owner only: add a member to your team. Their personal token is shown once, in this result."""
+    def add_member(employee_id: str, name: str, ctx: Context, team: str | None = None) -> dict[str, Any]:
+        """Owner only: add a member to your team (team ID optional). Their personal token is shown once, in this result."""
         current = caller(ctx)
-        token = identity.add_member(current, employee_id, name)
+        token = identity.add_member(current, employee_id, name, team)
         return {"team": current.team, "employee_id": employee_id, "name": name, "personal_token": token}
 
     @server.tool()
@@ -236,9 +244,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     @_refusals_as_tool_errors
     def read(path: str, ctx: Context) -> dict[str, Any]:
         """Read one memory in full by its path, with any challenges it is part of."""
-        current = caller(ctx)
-        memory = service.read(current, path)
-        return {**memory, **lifecycle.challenge_info(current.team, memory["path"])}
+        return service.read(caller(ctx), path)
 
     @server.tool()
     @_refusals_as_tool_errors
