@@ -233,6 +233,21 @@ class Lifecycle:
                 change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
         return {"status": "promoted", "path": str(new_path)}
 
+    # Retiring
+
+    def retire(self, caller: Caller, path: str) -> dict[str, Any]:
+        location = locate(path)
+        memory = self._store.read(caller.team, location.path)
+        if location.level == "personal":
+            raise Refused("Personal memory isn't retired. If it's yours and no longer true, remove it with delete_memory.")
+        if memory.status != "active":
+            raise Refused(f"This memory is already {memory.status}.")
+        if memory.author != caller.member.member_id:
+            return self._raise(caller, "retire", str(location.path), memory, None, location.level)
+        with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:
+            change.write(location.path, replace(memory, status="retired"))
+        return {"status": "retired", "path": str(location.path)}
+
     # Challenges
 
     def _raise(

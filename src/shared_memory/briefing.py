@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -11,7 +12,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
-from shared_memory.memory import FOLDER_TYPES, locate
+from shared_memory.memory import FOLDER_TYPES, Memory, locate
 from shared_memory.recall import FRAMING
 from shared_memory.store import MemoryStore
 
@@ -107,13 +108,18 @@ class Briefing:
             raise Refused(f"{cleaned} is not pinned.")
         return {"unpinned": cleaned}
 
-    def move_pin(self, team: str, old_path: str, new_path: str) -> None:
+    def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None:
+        """Pins follow memory: a pin moves to whatever supersedes its memory and goes away when it is retired."""
         with self._db.transaction() as conn:
-            conn.execute("UPDATE pins SET path = %s WHERE team = %s AND path = %s", (new_path, team, old_path))
-
-    def remove_pin(self, team: str, path: str) -> None:
-        with self._db.transaction() as conn:
-            conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, path))
+            for path, memory in writes.items():
+                if memory.status == "superseded" and memory.superseded_by:
+                    new = locate(memory.superseded_by)
+                    conn.execute(
+                        "UPDATE pins SET path = %s, level = %s, project_id = %s WHERE team = %s AND path = %s",
+                        (str(new.path), new.level, new.project_id, team, str(path)),
+                    )
+                elif memory.status == "retired":
+                    conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, str(path)))
 
     def for_session(self, caller: Caller, extra: list[str] | None = None) -> str | None:
         """The briefing: pinned memories for the session's project, plus any extra notices."""

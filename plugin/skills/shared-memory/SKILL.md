@@ -60,6 +60,10 @@ Never resolve a real contradiction as keep_both to get a promotion through: proj
 
 If the member chooses **supersede** for a memory someone else wrote, nobody's knowledge is overridden without their say: promote returns `challenge_raised`, the member's memory stays personal (labeled pending), and the other author decides.
 
+## Retiring a memory
+
+When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge they decide. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
+
 ## Challenges
 
 When the briefing or a prompt shows **challenges waiting for your decision**, they are about memories this member wrote:

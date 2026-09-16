@@ -174,6 +174,9 @@ class MemoryStore:
             for listener in self._listeners:
                 listener.on_change(team, dict(change.writes), set(change.deletes))
 
+    def subscribe(self, listener: ChangeListener) -> None:
+        self._listeners.append(listener)
+
     def teams(self) -> list[str]:
         return sorted(d.name for d in self._root.iterdir() if d.is_dir() and not d.name.startswith("."))
 

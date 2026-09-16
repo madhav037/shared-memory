@@ -63,6 +63,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     lifecycle = Lifecycle(settings, db, store, index, clock)
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, clock)
+    store.subscribe(briefing)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -237,6 +238,15 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         current = caller(ctx)
         memory = service.read(current, path)
         return {**memory, **lifecycle.challenge_info(current.team, memory["path"])}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def retire(path: str, ctx: Context) -> dict[str, Any]:
+        """Mark a project or team memory as no longer true, with nothing superseding it.
+
+        Your own memory is retired at once. Retiring another author's memory raises a challenge they decide.
+        """
+        return lifecycle.retire(caller(ctx), path)
 
     @server.tool()
     @_refusals_as_tool_errors
