@@ -22,6 +22,8 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     setup.add_argument("--owner-employee-id", required=True)
     setup.add_argument("--owner-name", required=True)
 
+    commands.add_parser("reindex", help="Rebuild the search index from the memory files.")
+
     serve = commands.add_parser("serve", help="Run the server.")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8000)
@@ -41,6 +43,19 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         print(f"Team: {args.team}", file=out)
         print(f"Owner personal token: {token}", file=out)
         print("Keep this token secret: it is shown only once.", file=out)
+        return 0
+
+    if args.command == "reindex":
+        from shared_memory.embeddings import FastEmbedEmbedder
+        from shared_memory.index import SearchIndex
+        from shared_memory.store import MemoryStore
+
+        db = Database(settings.database_url)
+        try:
+            count = SearchIndex(db, FastEmbedEmbedder(settings.model_cache)).rebuild(MemoryStore(settings.memory_root))
+        finally:
+            db.close()
+        print(f"Reindexed {count} memories.", file=out)
         return 0
 
     if args.command == "serve":

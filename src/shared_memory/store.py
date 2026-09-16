@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 import subprocess
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Protocol
 
 from shared_memory.errors import Refused
 from shared_memory.memory import INDEX_NAME, Memory, slugify
@@ -49,11 +50,16 @@ class Change:
         return candidate
 
 
+class ChangeListener(Protocol):
+    def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None: ...
+
+
 class MemoryStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, listeners: Iterable[ChangeListener] = ()) -> None:
         self._root = root.resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._listeners = list(listeners)
         if not (self._root / ".git").exists():
             self._git("init", "-q", "-b", "main")
             self._git("config", "core.autocrlf", "false")
@@ -165,6 +171,11 @@ class MemoryStore:
             self._git("add", "-A", "--", str(self._file(team, PurePosixPath())))
             if self._git_has_staged_changes():
                 self._git("commit", "-q", "-m", message, committer=committer)
+            for listener in self._listeners:
+                listener.on_change(team, dict(change.writes), set(change.deletes))
+
+    def teams(self) -> list[str]:
+        return sorted(d.name for d in self._root.iterdir() if d.is_dir() and not d.name.startswith("."))
 
     def _git_has_staged_changes(self) -> bool:
         result = subprocess.run(["git", "-C", str(self._root), "diff", "--cached", "--quiet"], check=False)

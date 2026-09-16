@@ -9,6 +9,7 @@ from typing import Any
 from shared_memory.config import Settings
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name
+from shared_memory.index import SearchIndex
 from shared_memory.memory import Location, Memory, locate, personal_folder, slugify
 from shared_memory.store import Committer, MemoryStore
 from shared_memory.validation import validate
@@ -38,11 +39,22 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
     }
 
 
+def label(caller: Caller, level: str, member_id: str | None) -> str:
+    if level == "team":
+        return "team memory"
+    if level == "project":
+        return "project memory"
+    if member_id == caller.member.member_id:
+        return "your personal memory"
+    return f"personal memory of {member_id}, not accepted by the team"
+
+
 class MemoryService:
-    def __init__(self, settings: Settings, identity: Identity, store: MemoryStore) -> None:
+    def __init__(self, settings: Settings, identity: Identity, store: MemoryStore, index: SearchIndex) -> None:
         self._settings = settings
         self._identity = identity
         self._store = store
+        self._index = index
 
     def create_project(self, caller: Caller, name: str, repository: str) -> dict[str, Any]:
         check_name("Repository name", repository)
@@ -121,6 +133,42 @@ class MemoryService:
             if memories
         ]
         return {"folders": entries}
+
+    def search(
+        self, caller: Caller, query: str, level: str | None = None, type: str | None = None, limit: int = 10
+    ) -> dict[str, Any]:
+        project = caller.require_project()
+        if level not in (None, "team", "project", "personal"):
+            raise Refused(f"Unknown level {level!r}: use team, project or personal.")
+        if not query.strip():
+            raise Refused("Search needs some words to look for.")
+        hits = self._index.search(
+            caller.team,
+            query,
+            project_id=project.project_id,
+            levels=None if level is None else [level],
+            type=type,
+            limit=max(1, min(limit, 50)),
+        )
+        results = []
+        for hit in hits:
+            try:
+                memory = self._store.read(caller.team, PurePosixPath(hit.path))
+            except Refused:
+                continue
+            results.append(
+                {
+                    "path": hit.path,
+                    "title": memory.title,
+                    "heading": hit.heading,
+                    "level": hit.level,
+                    "type": hit.type,
+                    "author": hit.author,
+                    "summary": memory.summary,
+                    "label": label(caller, hit.level, hit.member_id),
+                }
+            )
+        return {"results": results}
 
     def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
         location = locate(path)

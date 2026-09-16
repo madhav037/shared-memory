@@ -15,6 +15,7 @@ from shared_memory.db import Database
 from shared_memory.embeddings import Embedder, FastEmbedEmbedder
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity
+from shared_memory.index import SearchIndex
 from shared_memory.service import MemoryService
 from shared_memory.store import MemoryStore
 
@@ -46,9 +47,9 @@ def _bearer(value: str | None) -> str | None:
 def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None) -> Starlette:
     db = Database(settings.database_url)
     identity = Identity(db, clock)
-    store = MemoryStore(settings.memory_root)
-    service = MemoryService(settings, identity, store)
-    _ = embedder or FastEmbedEmbedder(settings.model_cache)
+    index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
+    store = MemoryStore(settings.memory_root, listeners=[index])
+    service = MemoryService(settings, identity, store, index)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -116,6 +117,19 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def list_folder(folder: str, ctx: Context) -> dict[str, Any]:
         """List the memories in a folder, with their summaries, and its subfolders."""
         return service.list_folder(caller(ctx), folder)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def search(
+        query: str, ctx: Context, level: str | None = None, type: str | None = None, limit: int = 10
+    ) -> dict[str, Any]:
+        """Search this project's memory by meaning and by exact words.
+
+        Covers team memory, project memory and every member's personal memory in this project. Other members'
+        personal memory is labeled as not accepted by the team. level is team, project or personal; type is
+        convention, decision, architecture or gotcha.
+        """
+        return service.search(caller(ctx), query, level, type, limit)
 
     @server.tool()
     @_refusals_as_tool_errors
