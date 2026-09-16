@@ -47,7 +47,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     db = Database(settings.database_url)
     identity = Identity(db, clock)
     store = MemoryStore(settings.memory_root)
-    service = MemoryService(identity, store)
+    service = MemoryService(settings, identity, store)
     _ = embedder or FastEmbedEmbedder(settings.model_cache)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
@@ -94,18 +94,46 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
     @server.tool()
     @_refusals_as_tool_errors
-    def remember(title: str, summary: str, type: str, body: str, ctx: Context) -> dict[str, Any]:
+    def remember(
+        title: str,
+        summary: str,
+        type: str,
+        body: str,
+        ctx: Context,
+        related_files: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Save knowledge a teammate would need as your personal memory in this project.
 
         type is one of: convention, decision, architecture, gotcha. summary is one line.
+        related_files are written as repository:path, for example billing-api:package.json.
         """
-        return service.remember(caller(ctx), title, summary, type, body)
+        return service.remember(caller(ctx), title, summary, type, body, related_files)
 
     @server.tool()
     @_refusals_as_tool_errors
     def read(path: str, ctx: Context) -> dict[str, Any]:
         """Read one memory in full by its path."""
         return service.read(caller(ctx), path)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def edit_memory(
+        path: str,
+        ctx: Context,
+        title: str | None = None,
+        summary: str | None = None,
+        type: str | None = None,
+        body: str | None = None,
+        related_files: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Edit your own personal memory. Only the fields you pass change."""
+        return service.edit_memory(caller(ctx), path, title, summary, type, body, related_files)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def delete_memory(path: str, ctx: Context) -> dict[str, Any]:
+        """Delete your own personal memory."""
+        return service.delete_memory(caller(ctx), path)
 
     security = None
     if settings.allowed_hosts:

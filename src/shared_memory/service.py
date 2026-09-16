@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.config import Settings
+from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name
-from shared_memory.memory import Memory, locate, personal_folder, type_folder
+from shared_memory.memory import Location, Memory, locate, personal_folder
 from shared_memory.store import Committer, MemoryStore
+from shared_memory.validation import validate
 
 
 def committer(caller: Caller) -> Committer:
@@ -35,7 +39,8 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
 
 
 class MemoryService:
-    def __init__(self, identity: Identity, store: MemoryStore) -> None:
+    def __init__(self, settings: Settings, identity: Identity, store: MemoryStore) -> None:
+        self._settings = settings
         self._identity = identity
         self._store = store
 
@@ -48,16 +53,75 @@ class MemoryService:
             "settings": {"env": {"SHARED_MEMORY_PROJECT": project.project_id, "SHARED_MEMORY_REPOSITORY": repository}},
         }
 
-    def remember(self, caller: Caller, title: str, summary: str, type: str, body: str) -> dict[str, Any]:
+    def remember(
+        self,
+        caller: Caller,
+        title: str,
+        summary: str,
+        type: str,
+        body: str,
+        related_files: list[str] | None = None,
+    ) -> dict[str, Any]:
         project = caller.require_project()
+        memory = Memory(
+            title=title.strip(),
+            summary=summary.strip(),
+            type=type,
+            author=caller.member.member_id,
+            body=body,
+            related_files=list(related_files or []),
+        )
+        validate(memory, self._settings.memory_word_limit)
         folder = personal_folder(project.project_id, caller.member.member_id, type)
-        memory = Memory(title=title, summary=summary, type=type, author=caller.member.member_id, body=body)
-        type_folder(type)
-        with self._store.change(caller.team, committer(caller), f"Remember: {title}") as change:
-            path = change.new_path(folder, title)
+        with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
+            path = change.new_path(folder, memory.title)
             change.write(path, memory)
         return {"path": str(path)}
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         location = locate(path)
         return describe(location.path, self._store.read(caller.team, location.path))
+
+    def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
+        location = locate(path)
+        memory = self._store.read(caller.team, location.path)
+        if location.level != "personal" or location.member_id != caller.member.member_id:
+            raise Refused(
+                f"You can only {verb} your own personal memory. Project and team memory change only by "
+                "promoting a memory that supersedes it."
+            )
+        return location, memory
+
+    def edit_memory(
+        self,
+        caller: Caller,
+        path: str,
+        title: str | None = None,
+        summary: str | None = None,
+        type: str | None = None,
+        body: str | None = None,
+        related_files: list[str] | None = None,
+    ) -> dict[str, Any]:
+        location, memory = self._own_personal_memory(caller, path, "edit")
+        if type is not None and type != location.type:
+            raise Refused(
+                f"This memory is in the {location.type} folder, so its type must match. To change its type, "
+                "remember it again with the new type and delete this one."
+            )
+        edited = replace(
+            memory,
+            title=memory.title if title is None else title.strip(),
+            summary=memory.summary if summary is None else summary.strip(),
+            body=memory.body if body is None else body,
+            related_files=memory.related_files if related_files is None else list(related_files),
+        )
+        validate(edited, self._settings.memory_word_limit)
+        with self._store.change(caller.team, committer(caller), f"Edit: {edited.title}") as change:
+            change.write(location.path, edited)
+        return describe(location.path, edited)
+
+    def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
+        location, memory = self._own_personal_memory(caller, path, "delete")
+        with self._store.change(caller.team, committer(caller), f"Delete: {memory.title}") as change:
+            change.delete(location.path)
+        return {"deleted": str(location.path)}
