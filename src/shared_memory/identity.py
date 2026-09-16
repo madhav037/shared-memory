@@ -135,6 +135,58 @@ class Identity:
                     )
             return Caller(member, project, repository or None)
 
+    def _require_owner(self, caller: Caller) -> None:
+        if not caller.member.is_owner:
+            raise Refused("Only the team's owner can add or remove members and reissue personal tokens.")
+
+    def _member_pk(self, conn: Conn, caller: Caller, employee_id: str) -> int:
+        row = conn.execute(
+            "SELECT id FROM members WHERE team_id = %s AND member_id = %s AND removed_at IS NULL",
+            (caller.member.team_pk, employee_id),
+        ).fetchone()
+        if row is None:
+            raise Refused(f"No member with employee ID {employee_id!r} in your team.")
+        pk: int = row["id"]
+        return pk
+
+    def add_member(self, caller: Caller, employee_id: str, name: str) -> str:
+        self._require_owner(caller)
+        check_name("Employee ID", employee_id)
+        if not name.strip():
+            raise Refused("A member needs a name.")
+        with self._db.transaction() as conn:
+            existing = conn.execute(
+                "SELECT removed_at FROM members WHERE team_id = %s AND member_id = %s",
+                (caller.member.team_pk, employee_id),
+            ).fetchone()
+            if existing is not None:
+                raise Refused(f"Employee ID {employee_id!r} is already a member of your team, or was one.")
+            row = conn.execute(
+                "INSERT INTO members (team_id, member_id, name, created_at) VALUES (%s, %s, %s, %s) RETURNING id",
+                (caller.member.team_pk, employee_id, name.strip(), self._clock()),
+            ).fetchone()
+            assert row is not None
+            return self._issue_token(conn, row["id"])
+
+    def remove_member(self, caller: Caller, employee_id: str) -> None:
+        self._require_owner(caller)
+        if employee_id == caller.member.member_id:
+            raise Refused("You cannot remove yourself: the team would have no owner.")
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, employee_id)
+            now = self._clock()
+            conn.execute("UPDATE members SET removed_at = %s WHERE id = %s", (now, pk))
+            conn.execute("UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (now, pk))
+
+    def reissue_token(self, caller: Caller, employee_id: str) -> str:
+        self._require_owner(caller)
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, employee_id)
+            conn.execute(
+                "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (self._clock(), pk)
+            )
+            return self._issue_token(conn, pk)
+
     def create_project(self, caller: Caller, name: str) -> Project:
         if not name.strip():
             raise Refused("A project needs a name.")
