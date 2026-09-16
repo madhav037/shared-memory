@@ -62,7 +62,16 @@ class MemoryService:
         return {
             "project_id": project.project_id,
             "name": project.name,
-            "settings": {"env": {"SHARED_MEMORY_PROJECT": project.project_id, "SHARED_MEMORY_REPOSITORY": repository}},
+            "settings": {
+                "extraKnownMarketplaces": {
+                    "shared-memory": {"source": {"source": "github", "repo": self._settings.plugin_marketplace}}
+                },
+                "enabledPlugins": {"shared-memory@shared-memory": True},
+                "env": {"SHARED_MEMORY_PROJECT": project.project_id, "SHARED_MEMORY_REPOSITORY": repository},
+            },
+            "next": "Merge these settings into this repository's committed .claude/settings.json (keep any existing "
+            "keys), then ask the member to commit it. Other repositories of the same product can use the same "
+            "project ID with their own repository name.",
         }
 
     def remember(

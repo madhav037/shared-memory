@@ -157,8 +157,9 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def create_project(name: str, ctx: Context, repository: str = "app") -> dict[str, Any]:
         """Create a project in your team.
 
-        repository is this repository's short name. Write the returned settings into the repository's
-        committed .claude/settings.json so every session in it connects to the project.
+        repository is this repository's short name. Merge the returned settings into the repository's committed
+        .claude/settings.json: they install the Shared Memory plugin for everyone who opens the repository and
+        connect every session in it to the project.
         """
         return service.create_project(caller(ctx), name, repository)
 

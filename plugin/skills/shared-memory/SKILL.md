@@ -14,6 +14,14 @@ Your team shares memory through the `shared-memory` MCP tools. Memory has four l
 
 When memories disagree, project memory wins over team memory, team memory over personal memory, and personal memory over local memory.
 
+## Connecting a repository
+
+Memory tools need the repository to be connected to a project. If a tool says the repository isn't connected, offer to connect it:
+
+1. Ask the member for the product's name and a short name for this repository (for example `billing-web`). If another repository of the same product is already connected, reuse its project ID instead of creating a new project.
+2. Call `create_project`, then merge the returned `settings` into the repository's `.claude/settings.json`, keeping any keys already there.
+3. Ask the member to commit the file, so everyone who opens the repository gets the plugin and the same project.
+
 ## What to save where
 
 Ask: **would a teammate need this?**

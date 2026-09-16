@@ -19,6 +19,7 @@ class Settings:
     memory_word_limit: int = 600
     similar_threshold: float = 0.62
     allowed_hosts: tuple[str, ...] = ()
+    plugin_marketplace: str = "madhav037/shared-memory"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
@@ -30,4 +31,5 @@ class Settings:
             memory_root=Path(env.get("SHARED_MEMORY_ROOT", "data/memory")),
             model_cache=Path(env.get("SHARED_MEMORY_MODEL_CACHE", ".cache/fastembed")),
             allowed_hosts=hosts,
+            plugin_marketplace=env.get("SHARED_MEMORY_PLUGIN_MARKETPLACE", "madhav037/shared-memory"),
         )
