@@ -15,6 +15,7 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from shared_memory.briefing import Briefing
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -61,6 +62,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     service = MemoryService(settings, identity, store, index)
     lifecycle = Lifecycle(settings, db, store, index, clock)
     recall = Recall(settings, index, store)
+    briefing = Briefing(settings, db, store, clock)
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -74,8 +76,15 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def caller(ctx: Context) -> Caller:
         return authenticate(ctx.headers or {})
 
-    async def hook(request: Request, event: str, work: Callable[[Caller, dict[str, Any]], str | None]) -> Response:
-        """Run a hook within the time budget. Anything that goes wrong leaves the session unaffected."""
+    async def hook(
+        request: Request,
+        event: str,
+        work: Callable[[Caller, dict[str, Any]], str | None],
+        *,
+        budget_seconds: float,
+        report_refusals: bool = False,
+    ) -> Response:
+        """Run a hook within its time budget. Anything that goes wrong leaves the session unaffected."""
         try:
             payload = await request.json()
         except ValueError:
@@ -83,23 +92,26 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         if not isinstance(payload, dict):
             return JSONResponse({})
         headers = Headers(scope=request.scope)
+        outcome: dict[str, str | None] = {"context": None, "refusal": None}
 
-        def run() -> str | None:
+        def run() -> None:
             try:
-                return work(authenticate(headers), payload)
-            except Refused:
-                return None
+                outcome["context"] = work(authenticate(headers), payload)
+            except Refused as refused:
+                outcome["refusal"] = str(refused)
 
-        context: str | None = None
         try:
-            with anyio.move_on_after(settings.recall_budget_seconds):
-                context = await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
+            with anyio.move_on_after(budget_seconds):
+                await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
         except Exception:
             log.exception("%s hook failed", event)
             return JSONResponse({})
-        if not context:
+        connected = headers.get("x-shared-memory-project") or headers.get("authorization")
+        if outcome["refusal"] and report_refusals and connected:
+            return JSONResponse({"systemMessage": f"Shared Memory is unavailable: {outcome['refusal']}"})
+        if not outcome["context"]:
             return JSONResponse({})
-        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}})
+        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": outcome["context"]}})
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
@@ -107,7 +119,29 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             prompt = payload.get("prompt")
             return recall.for_prompt(current, prompt) if isinstance(prompt, str) else None
 
-        return await hook(request, "UserPromptSubmit", work)
+        return await hook(request, "UserPromptSubmit", work, budget_seconds=settings.recall_budget_seconds)
+
+    @server.custom_route("/hooks/session-start", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def session_start(request: Request) -> Response:
+        def work(current: Caller, payload: dict[str, Any]) -> str | None:
+            return briefing.for_session(current)
+
+        return await hook(request, "SessionStart", work, budget_seconds=5.0, report_refusals=True)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def pin(path: str, ctx: Context) -> dict[str, Any]:
+        """Pin a project or team memory, or a topic folder, so it appears in every session's briefing.
+
+        The briefing has a size cap; if a pin would go over it, you are told what is already pinned.
+        """
+        return briefing.pin(caller(ctx), path)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def unpin(path: str, ctx: Context) -> dict[str, Any]:
+        """Remove a pin so the memory or topic no longer appears in the briefing."""
+        return briefing.unpin(caller(ctx), path)
 
     @server.tool()
     @_refusals_as_tool_errors
