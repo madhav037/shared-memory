@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -111,8 +111,14 @@ class Lifecycle:
         memory = self._store.read(caller.team, location.path)
         if location.level != "personal":
             raise Refused(f"This is already {location.level} memory. Only personal memory can be promoted.")
+        promoted_by: str | None = None
         if location.member_id != caller.member.member_id:
-            raise Refused("You can only promote your own personal memory.")
+            if location.member_id is None or not self._is_removed(caller.team, location.member_id):
+                raise Refused(
+                    "You can only promote your own personal memory, or the personal memory of a member who has "
+                    "been removed from the team."
+                )
+            promoted_by = caller.member.member_id
         if location.project_id != project.project_id:
             raise Refused("This memory belongs to another project. Promote it from a session in that project.")
         pending = self._open_challenges(caller.team, challenger_path=str(location.path))
@@ -125,7 +131,7 @@ class Lifecycle:
                 caller.team, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
             )
             if not similar:
-                return self._move(caller, location, memory, target)
+                return self._move(caller, location, memory, target, promoted_by=promoted_by)
             reference = secrets.token_urlsafe(12)
             with self._db.transaction() as conn:
                 conn.execute(
@@ -192,7 +198,9 @@ class Lifecycle:
         self._forget(reference)
         if challenged is not None:
             return self._raise(caller, "supersede", challenged[0], challenged[1], str(location.path), target)
-        return self._move(caller, location, memory, target, supersede=supersede, exception_to=exception_to)
+        return self._move(
+            caller, location, memory, target, supersede=supersede, exception_to=exception_to, promoted_by=promoted_by
+        )
 
     def _forget(self, reference: str) -> None:
         with self._db.transaction() as conn:
@@ -207,6 +215,7 @@ class Lifecycle:
         *,
         supersede: str | None = None,
         exception_to: str | None = None,
+        promoted_by: str | None = None,
         message: str | None = None,
     ) -> dict[str, Any]:
         folder = level_folder(target, memory.type, location.project_id)
@@ -215,7 +224,10 @@ class Lifecycle:
         with self._store.change(caller.team, committer(caller), message or f"Promote: {memory.title}") as change:
             new_path = change.new_path(folder, location.path.stem)
             change.delete(location.path)
-            change.write(new_path, replace(memory, replaces=supersede, exception_to=exception_to))
+            change.write(
+                new_path,
+                replace(memory, replaces=supersede, exception_to=exception_to, promoted_by=promoted_by or memory.promoted_by),
+            )
             if supersede is not None:
                 old = PurePosixPath(supersede)
                 change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
@@ -270,8 +282,21 @@ class Lifecycle:
             ],
         }
 
+    def _is_removed(self, team: str, member_id: str) -> bool:
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT m.removed_at FROM members m JOIN teams t ON t.id = m.team_id WHERE t.code = %s AND m.member_id = %s",
+                (team, member_id),
+            ).fetchone()
+        return row is not None and row["removed_at"] is not None
+
     def _may_decide(self, caller: Caller, challenge: Challenge) -> bool:
-        return challenge.target_author == caller.member.member_id
+        """The author decides; after the fallback period, or once the author has left, any member may."""
+        if challenge.target_author == caller.member.member_id:
+            return True
+        if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
+            return True
+        return self._is_removed(caller.team, challenge.target_author)
 
     def decide_challenge(self, caller: Caller, challenge_id: int, decision: str) -> dict[str, Any]:
         if decision not in ("accept", "reject"):
@@ -284,7 +309,10 @@ class Lifecycle:
             raise Refused(f"There is no open challenge {challenge_id} in your team.")
         challenge = Challenge.from_row(row)
         if not self._may_decide(caller, challenge):
-            raise Refused(f"Only {challenge.target_author}, the author of the challenged memory, can decide this challenge.")
+            raise Refused(
+                f"Only {challenge.target_author}, the author of the challenged memory, can decide this challenge "
+                f"until it has been open for {self._settings.challenge_fallback_days} days."
+            )
         target_path = PurePosixPath(challenge.target_path)
         target = self._store.read(caller.team, target_path)
         now = self._clock()
@@ -400,7 +428,11 @@ class Lifecycle:
 
     def prompt_notices(self, caller: Caller) -> str | None:
         """Challenges the member hasn't been told about on a prompt yet, and news not yet delivered."""
-        fresh = [c for c in self._decidable(caller) if not self._author_notified(c.id)]
+        fresh = [
+            c
+            for c in self._decidable(caller)
+            if c.target_author == caller.member.member_id and not self._author_notified(c.id)
+        ]
         parts = [self._render_challenges(caller, fresh), *self._notice_lines(caller)]
         if fresh:
             with self._db.transaction() as conn:
