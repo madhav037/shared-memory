@@ -55,7 +55,7 @@ def test_each_save_is_one_commit_credited_to_the_member(team: Team) -> None:
     ).stdout
     header, *files = [line for line in log.splitlines() if line]
     assert header == "Olive Owner|owner-1@members.shared-memory.invalid|Remember: Staging resets nightly"
-    assert files == [f"{team.code}/projects/{project}/people/owner-1/gotchas/staging-resets-nightly.md"]
+    assert f"{team.code}/projects/{project}/people/owner-1/gotchas/staging-resets-nightly.md" in files
 
 
 def test_create_project_gives_the_settings_a_repository_needs(team: Team) -> None:

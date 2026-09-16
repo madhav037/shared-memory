@@ -9,7 +9,7 @@ from typing import Any
 from shared_memory.config import Settings
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name
-from shared_memory.memory import Location, Memory, locate, personal_folder
+from shared_memory.memory import Location, Memory, locate, personal_folder, slugify
 from shared_memory.store import Committer, MemoryStore
 from shared_memory.validation import validate
 
@@ -61,6 +61,7 @@ class MemoryService:
         type: str,
         body: str,
         related_files: list[str] | None = None,
+        topic: str | None = None,
     ) -> dict[str, Any]:
         project = caller.require_project()
         memory = Memory(
@@ -73,6 +74,11 @@ class MemoryService:
         )
         validate(memory, self._settings.memory_word_limit)
         folder = personal_folder(project.project_id, caller.member.member_id, type)
+        if topic is not None:
+            topic_folder = slugify(topic)
+            if not topic.strip() or topic_folder in ("memory", "index"):
+                raise Refused("A topic needs a name made of letters or digits.")
+            folder = folder / topic_folder
         with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
@@ -81,6 +87,40 @@ class MemoryService:
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         location = locate(path)
         return describe(location.path, self._store.read(caller.team, location.path))
+
+    def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
+        pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
+        memories, folders = self._store.list_folder(caller.team, pure)
+        return {
+            "folder": str(pure),
+            "memories": [
+                {"path": str(path), "title": m.title, "summary": m.summary, "type": m.type, "status": m.status, "author": m.author}
+                for path, m in memories
+            ],
+            "folders": [str(sub) for sub in folders],
+        }
+
+    def tree(self, caller: Caller, level: str | None = None) -> dict[str, Any]:
+        project = caller.require_project()
+        project_folder = PurePosixPath("projects", project.project_id)
+        roots = {
+            None: [PurePosixPath("team"), project_folder],
+            "team": [PurePosixPath("team")],
+            "project": [project_folder / "shared"],
+            "personal": [project_folder / "people"],
+        }
+        if level not in roots:
+            raise Refused(f"Unknown level {level!r}: use team, project or personal, or leave it out for everything.")
+        entries = [
+            {
+                "folder": str(folder),
+                "memories": [{"path": str(path), "title": m.title, "summary": m.summary} for path, m in memories],
+            }
+            for root in roots[level]
+            for folder, memories in self._store.walk(caller.team, root)
+            if memories
+        ]
+        return {"folders": entries}
 
     def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
         location = locate(path)

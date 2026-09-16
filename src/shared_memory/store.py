@@ -86,6 +86,54 @@ class MemoryStore:
     def exists(self, team: str, path: PurePosixPath) -> bool:
         return self._file(team, path).is_file()
 
+    def list_folder(
+        self, team: str, folder: PurePosixPath
+    ) -> tuple[list[tuple[PurePosixPath, Memory]], list[PurePosixPath]]:
+        """The memories directly in a folder (sorted by title) and its subfolders."""
+        directory = self._file(team, folder)
+        if not directory.is_dir():
+            return [], []
+        memories: list[tuple[PurePosixPath, Memory]] = []
+        for file in directory.glob("*.md"):
+            if file.name == INDEX_NAME:
+                continue
+            try:
+                memories.append((folder / file.name, Memory.from_text(file.read_text(encoding="utf-8"))))
+            except Refused:
+                continue
+        memories.sort(key=lambda item: (item[1].title.lower(), str(item[0])))
+        folders = sorted(folder / d.name for d in directory.iterdir() if d.is_dir() and not d.name.startswith("."))
+        return memories, folders
+
+    def walk(self, team: str, root: PurePosixPath) -> Iterator[tuple[PurePosixPath, list[tuple[PurePosixPath, Memory]]]]:
+        """Every folder under root, depth first in path order, with the memories directly in it."""
+        memories, folders = self.list_folder(team, root)
+        yield root, memories
+        for folder in folders:
+            yield from self.walk(team, folder)
+
+    def _write_index(self, team: str, folder: PurePosixPath) -> None:
+        directory = self._file(team, folder)
+        index = directory / INDEX_NAME
+        memories, folders = self.list_folder(team, folder)
+        if not memories and not folders:
+            if index.exists():
+                index.unlink()
+            if folder.parts and directory.is_dir() and not any(directory.iterdir()):
+                directory.rmdir()
+            return
+        lines = [f"# {folder if folder.parts else 'Memory'}", ""]
+        if memories:
+            lines += ["## Memories", ""]
+            lines += [f"- [{memory.title}]({path.name}): {memory.summary}" for path, memory in memories]
+            lines.append("")
+        if folders:
+            lines += ["## Folders", ""]
+            lines += [f"- [{sub.name}/]({sub.name}/{INDEX_NAME})" for sub in folders]
+            lines.append("")
+        directory.mkdir(parents=True, exist_ok=True)
+        index.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
     def read(self, team: str, path: PurePosixPath) -> Memory:
         file = self._file(team, path)
         if not file.is_file():
@@ -97,20 +145,27 @@ class MemoryStore:
         with self._lock:
             change = Change(self, team)
             yield change
-            touched: list[Path] = []
+            folders: set[PurePosixPath] = set()
             for path, memory in change.writes.items():
                 file = self._file(team, path)
                 if file.name == INDEX_NAME:
                     raise Refused(f"{INDEX_NAME} is reserved for folder indexes.")
                 file.parent.mkdir(parents=True, exist_ok=True)
                 file.write_text(memory.to_text(), encoding="utf-8", newline="\n")
-                touched.append(file)
+                folders.update(path.parents)
             for path in change.deletes:
                 file = self._file(team, path)
                 if file.is_file():
                     file.unlink()
-                touched.append(file)
-            if not touched:
+                folders.update(path.parents)
+            if not folders:
                 return
-            self._git("add", "-A", "--", *(str(file) for file in touched))
-            self._git("commit", "-q", "-m", message, committer=committer)
+            for folder in sorted(folders, key=lambda f: len(f.parts), reverse=True):
+                self._write_index(team, folder)
+            self._git("add", "-A", "--", str(self._file(team, PurePosixPath())))
+            if self._git_has_staged_changes():
+                self._git("commit", "-q", "-m", message, committer=committer)
+
+    def _git_has_staged_changes(self) -> bool:
+        result = subprocess.run(["git", "-C", str(self._root), "diff", "--cached", "--quiet"], check=False)
+        return result.returncode == 1

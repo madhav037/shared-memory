@@ -101,13 +101,30 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         body: str,
         ctx: Context,
         related_files: list[str] | None = None,
+        topic: str | None = None,
     ) -> dict[str, Any]:
         """Save knowledge a teammate would need as your personal memory in this project.
 
         type is one of: convention, decision, architecture, gotcha. summary is one line.
         related_files are written as repository:path, for example billing-api:package.json.
+        topic groups several memories about one long subject into a folder; each stays its own memory.
         """
-        return service.remember(caller(ctx), title, summary, type, body, related_files)
+        return service.remember(caller(ctx), title, summary, type, body, related_files, topic)
+
+    @server.tool(name="list")
+    @_refusals_as_tool_errors
+    def list_folder(folder: str, ctx: Context) -> dict[str, Any]:
+        """List the memories in a folder, with their summaries, and its subfolders."""
+        return service.list_folder(caller(ctx), folder)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def tree(ctx: Context, level: str | None = None) -> dict[str, Any]:
+        """Show the memory folders of this project with each memory's title and summary.
+
+        level is team, project or personal; leave it out to see everything in this project.
+        """
+        return service.tree(caller(ctx), level)
 
     @server.tool()
     @_refusals_as_tool_errors
