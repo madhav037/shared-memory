@@ -122,18 +122,6 @@ def test_a_project_memory_contradicting_team_memory_becomes_an_exception(team: T
     assert team_memory in added_context(team.owner().in_project(other_project).prompt("how should services log?"))
 
 
-def test_superseding_another_authors_memory_is_refused_for_now(owner: Session, dana: Session) -> None:
-    danas = promote_now(dana, NPM)
-    personal = owner.call("remember", **PNPM)["path"]
-    first = owner.call("promote", path=personal, level="project")
-
-    refusal = owner.refusal(
-        "promote", path=personal, level="project", reference=first["reference"], resolutions={danas: "supersede"}
-    )
-
-    assert "another author" in refusal
-
-
 def test_recall_marks_an_exception_so_claude_applies_it_in_that_project(owner: Session, dana: Session) -> None:
     team_memory = promote_now(dana, JSON_LOGS, level="team")
     promote_superseding(owner, PLAIN_LOGS, target=team_memory)

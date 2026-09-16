@@ -117,14 +117,22 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     async def prompt_submitted(request: Request) -> Response:
         def work(current: Caller, payload: dict[str, Any]) -> str | None:
             prompt = payload.get("prompt")
-            return recall.for_prompt(current, prompt) if isinstance(prompt, str) else None
+            if current.project is None:
+                return None
+            parts = [
+                lifecycle.prompt_notices(current),
+                recall.for_prompt(current, prompt) if isinstance(prompt, str) else None,
+            ]
+            return "\n\n".join(part for part in parts if part) or None
 
         return await hook(request, "UserPromptSubmit", work, budget_seconds=settings.recall_budget_seconds)
 
     @server.custom_route("/hooks/session-start", methods=["POST"])  # type: ignore[untyped-decorator]
     async def session_start(request: Request) -> Response:
         def work(current: Caller, payload: dict[str, Any]) -> str | None:
-            return briefing.for_session(current)
+            if current.project is None:
+                return None
+            return briefing.for_session(current, extra=lifecycle.briefing_notices(current))
 
         return await hook(request, "SessionStart", work, budget_seconds=5.0, report_refusals=True)
 
@@ -225,8 +233,20 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     @server.tool()
     @_refusals_as_tool_errors
     def read(path: str, ctx: Context) -> dict[str, Any]:
-        """Read one memory in full by its path."""
-        return service.read(caller(ctx), path)
+        """Read one memory in full by its path, with any challenges it is part of."""
+        current = caller(ctx)
+        memory = service.read(current, path)
+        return {**memory, **lifecycle.challenge_info(current.team, memory["path"])}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
+        """Accept or reject a challenge against a memory (decision: accept or reject).
+
+        Accepting a supersede challenge promotes the challenging memory over the old one; every other open challenge
+        against the same memory then closes. Rejecting leaves the challenging memory as personal memory.
+        """
+        return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
     @server.tool()
     @_refusals_as_tool_errors
