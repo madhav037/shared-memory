@@ -1,0 +1,50 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Shared Memory console API",
+    "version": "1"
+  },
+  "paths": {
+    "/api/status": {
+      "get": {
+        "operationId": "status",
+        "summary": "Whether the console has reached the server, and who it is signed in as.",
+        "responses": {
+          "200": {
+            "description": "Whether the console has reached the server, and who it is signed in as.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Status": {
+        "description": "Whether the console has reached the server, and who it is signed in as.",
+        "properties": {
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          },
+          "github_sign_in": {
+            "title": "Github Sign In",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "signed_in",
+          "github_sign_in"
+        ],
+        "title": "Status",
+        "type": "object"
+      }
+    }
+  }
+}

@@ -24,6 +24,8 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
 
     commands.add_parser("reindex", help="Rebuild the search index from the memory files.")
 
+    commands.add_parser("openapi", help="Print the console API's description, which the console builds its types from.")
+
     serve = commands.add_parser("serve", help="Run the server.")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8000)
@@ -56,6 +58,14 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         finally:
             db.close()
         print(f"Reindexed {count} memories.", file=out)
+        return 0
+
+    if args.command == "openapi":
+        import json
+
+        from shared_memory import console_api
+
+        print(json.dumps(console_api.description(), indent=2), file=out)
         return 0
 
     if args.command == "serve":
