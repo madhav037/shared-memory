@@ -6,6 +6,7 @@ import { fetchStatus, signOut, type Status } from "./api/client";
 import { AuditLog } from "./pages/AuditLog";
 import { Home } from "./pages/Home";
 import { Memory } from "./pages/Memory";
+import { MyToken } from "./pages/MyToken";
 import { Project } from "./pages/Project";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
@@ -50,6 +51,11 @@ export function App() {
                 Shared Memory
               </Title>
             </Anchor>
+            {member && (
+              <Anchor component={Link} to="/my-token" size="sm" data-testid="to-my-token">
+                My token
+              </Anchor>
+            )}
             {member?.role === "owner" && (
               <Anchor component={Link} to="/audit" size="sm" data-testid="to-audit">
                 Audit log
@@ -86,6 +92,7 @@ export function App() {
             <Route path="/" element={<Home status={connection.status} />} />
             <Route path="/projects/:projectId" element={member ? <Project /> : <Navigate to="/" replace />} />
             <Route path="/projects/:projectId/memory" element={member ? <Memory /> : <Navigate to="/" replace />} />
+            <Route path="/my-token" element={member ? <MyToken member={member} /> : <Navigate to="/" replace />} />
             <Route path="/audit" element={member ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

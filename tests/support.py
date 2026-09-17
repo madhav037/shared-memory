@@ -255,9 +255,12 @@ class ConsoleClient:
         """Follow the whole sign-in: to GitHub, back to the callback, and on to the console."""
         return self._http.get("/api/sign-in/github")
 
-    def sign_out(self, with_header: bool = True) -> httpx.Response:
+    def post(self, path: str, with_header: bool = True) -> httpx.Response:
         headers = {"X-Shared-Memory-Console": "1"} if with_header else {}
-        return self._http.post("/api/sign-out", headers=headers)
+        return self._http.post(path, headers=headers)
+
+    def sign_out(self, with_header: bool = True) -> httpx.Response:
+        return self.post("/api/sign-out", with_header)
 
     def close(self) -> None:
         self._http.close()

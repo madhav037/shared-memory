@@ -140,6 +140,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/my-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a new personal token for the signed-in member, revoking the one they had. */
+        post: operations["reissue_my_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/members/{employee_id}/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a new personal token for a member of the team, revoking the one they had. */
+        post: operations["reissue_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sign-out": {
         parameters: {
             query?: never;
@@ -355,6 +389,18 @@ export interface components {
             /** Next */
             next: number | null;
         };
+        /**
+         * IssuedToken
+         * @description A personal token, shown the once. The console never shows it again.
+         */
+        IssuedToken: {
+            /** Employee Id */
+            employee_id: string;
+            /** Personal Token */
+            personal_token: string;
+            /** Server Url */
+            server_url: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -531,6 +577,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+        };
+    };
+    reissue_my_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issue a new personal token for the signed-in member, revoking the one they had. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedToken"];
+                };
+            };
+        };
+    };
+    reissue_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Issue a new personal token for a member of the team, revoking the one they had. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedToken"];
                 };
             };
         };

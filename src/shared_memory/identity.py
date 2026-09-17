@@ -243,6 +243,15 @@ class Identity:
             )
             return Member(row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"])
 
+    def reissue_own_token(self, member: Member) -> str:
+        """A member replaces their own personal token; the one they had stops working."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL",
+                (self._clock(), member.pk),
+            )
+            return self._issue_token(conn, member.pk)
+
     def is_removed(self, team_code: str, member_id: str) -> bool:
         with self._db.transaction() as conn:
             row = conn.execute(

@@ -213,6 +213,52 @@
         }
       }
     },
+    "/api/my-token": {
+      "post": {
+        "operationId": "reissue_my_token",
+        "summary": "Issue a new personal token for the signed-in member, revoking the one they had.",
+        "responses": {
+          "200": {
+            "description": "Issue a new personal token for the signed-in member, revoking the one they had.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedToken"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/{employee_id}/token": {
+      "post": {
+        "operationId": "reissue_token",
+        "summary": "Issue a new personal token for a member of the team, revoking the one they had.",
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issue a new personal token for a member of the team, revoking the one they had.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedToken"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sign-out": {
       "post": {
         "operationId": "sign_out",
@@ -760,6 +806,30 @@
           "next"
         ],
         "title": "AuditPage",
+        "type": "object"
+      },
+      "IssuedToken": {
+        "description": "A personal token, shown the once. The console never shows it again.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          },
+          "personal_token": {
+            "title": "Personal Token",
+            "type": "string"
+          },
+          "server_url": {
+            "title": "Server Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id",
+          "personal_token",
+          "server_url"
+        ],
+        "title": "IssuedToken",
         "type": "object"
       }
     }
