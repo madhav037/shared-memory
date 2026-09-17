@@ -69,6 +69,8 @@ In a Claude Code session inside the repository, ask Claude to create a project (
 
 Commit the file. Several repositories can use the same project ID, each with its own repository name.
 
+Whoever creates a project becomes its first **project lead**: they appoint other leads and look after its repositories. The same can be done in the console — **New project** on its front page, then its **Settings**, which shows each repository with the settings to commit into it. A project lead can also read the audit log for their own projects.
+
 ## 4. Join as a new member
 
 1. Clone the repository and open it in Claude Code.

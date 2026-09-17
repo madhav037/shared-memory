@@ -6,6 +6,9 @@ export type AuditPage = components["schemas"]["AuditPage"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
 export type Projects = components["schemas"]["Projects"];
 export type ProjectSummary = components["schemas"]["ProjectSummary"];
+export type ProjectDetail = components["schemas"]["ProjectDetail"];
+export type ProjectMember = components["schemas"]["ProjectMember"];
+export type ProjectRepository = components["schemas"]["ProjectRepository"];
 export type Tree = components["schemas"]["Tree"];
 export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
@@ -66,6 +69,11 @@ export function fetchAudit(filters: AuditFilters, signal?: AbortSignal): Promise
 /** The projects this member can reach. */
 export function fetchProjects(signal?: AbortSignal): Promise<Projects> {
   return ask<Projects>("/api/projects", { signal });
+}
+
+/** One project: who leads it, and the repositories that belong to it. */
+export function fetchProject(projectId: string, signal?: AbortSignal): Promise<ProjectDetail> {
+  return ask<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}`, { signal });
 }
 
 /** A project's memory, folder by folder. */
@@ -156,6 +164,33 @@ export function setAdmin(employeeId: string, admin: boolean): Promise<Members> {
 
 export function handOverOwnership(employeeId: string): Promise<Members> {
   return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/ownership`);
+}
+
+/** Create a project; whoever creates it is its first project lead. */
+export function createProject(name: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>("/api/projects", { name });
+}
+
+export function renameProject(projectId: string, name: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/rename`, { name });
+}
+
+export function appointLead(projectId: string, employeeId: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/leads`, { employee_id: employeeId });
+}
+
+export function removeLead(projectId: string, employeeId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/leads/${encodeURIComponent(employeeId)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/remove`);
+}
+
+export function addRepository(projectId: string, name: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/repositories`, { name });
+}
+
+export function removeRepository(projectId: string, name: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/repositories/${encodeURIComponent(name)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
 export const signInUrl = "/api/sign-in/github";

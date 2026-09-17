@@ -48,14 +48,254 @@
     "/api/projects": {
       "get": {
         "operationId": "projects",
-        "summary": "The projects this member can reach.",
+        "summary": "The projects this member can reach, with the members who lead each one.",
         "responses": {
           "200": {
-            "description": "The projects this member can reach.",
+            "description": "The projects this member can reach, with the members who lead each one.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Projects"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_project",
+        "summary": "Create a project. Whoever creates it is its first project lead.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Create a project. Whoever creates it is its first project lead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}": {
+      "get": {
+        "operationId": "project",
+        "summary": "One project: its leads, its repositories and the settings each one commits.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One project: its leads, its repositories and the settings each one commits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/rename": {
+      "post": {
+        "operationId": "rename_project",
+        "summary": "Change a project's name. Its project ID stays as it is.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change a project's name. Its project ID stays as it is.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/leads": {
+      "post": {
+        "operationId": "appoint_lead",
+        "summary": "Make a member a lead of this project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Appointment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Make a member a lead of this project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/leads/{employee_id}/remove": {
+      "post": {
+        "operationId": "remove_lead",
+        "summary": "Take a lead off this project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a lead off this project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/repositories": {
+      "post": {
+        "operationId": "add_repository",
+        "summary": "Add a repository to this project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add a repository to this project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/repositories/{repository}/remove": {
+      "post": {
+        "operationId": "remove_repository",
+        "summary": "Forget a repository of this project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Forget a repository of this project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
                 }
               }
             }
@@ -611,13 +851,18 @@
             ],
             "title": "Role",
             "type": "string"
+          },
+          "leads_a_project": {
+            "title": "Leads A Project",
+            "type": "boolean"
           }
         },
         "required": [
           "employee_id",
           "name",
           "team",
-          "role"
+          "role",
+          "leads_a_project"
         ],
         "title": "SignedInMember",
         "type": "object"
@@ -652,11 +897,11 @@
         "title": "Status",
         "type": "object"
       },
-      "ProjectSummary": {
-        "description": "A project the member can reach.",
+      "ProjectMember": {
+        "description": "A member named on a project.",
         "properties": {
-          "project_id": {
-            "title": "Project Id",
+          "employee_id": {
+            "title": "Employee Id",
             "type": "string"
           },
           "name": {
@@ -665,8 +910,40 @@
           }
         },
         "required": [
-          "project_id",
+          "employee_id",
           "name"
+        ],
+        "title": "ProjectMember",
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "description": "A project the member can reach, and who looks after it.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "you_lead": {
+            "title": "You Lead",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "leads",
+          "you_lead"
         ],
         "title": "ProjectSummary",
         "type": "object"
@@ -685,6 +962,112 @@
           "projects"
         ],
         "title": "Projects",
+        "type": "object"
+      },
+      "ProjectRepository": {
+        "description": "A repository of a project, with what it commits to connect its sessions to the project.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "settings": {
+            "title": "Settings",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "settings"
+        ],
+        "title": "ProjectRepository",
+        "type": "object"
+      },
+      "ProjectDetail": {
+        "description": "One project: who leads it, which repositories belong to it, and what this member may change.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRepository"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "you_lead": {
+            "title": "You Lead",
+            "type": "boolean"
+          },
+          "you_may_change": {
+            "title": "You May Change",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "leads",
+          "repositories",
+          "you_lead",
+          "you_may_change"
+        ],
+        "title": "ProjectDetail",
+        "type": "object"
+      },
+      "ProjectName": {
+        "description": "What a project is called.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectName",
+        "type": "object"
+      },
+      "Appointment": {
+        "description": "The member being made a lead of this project.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id"
+        ],
+        "title": "Appointment",
+        "type": "object"
+      },
+      "RepositoryName": {
+        "description": "A repository's short name, unique within its project.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RepositoryName",
         "type": "object"
       },
       "PendingChallenge": {

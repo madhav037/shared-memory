@@ -7,6 +7,7 @@ can be generated from that description and can't drift away from it.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field as dataclass_field
@@ -23,10 +24,16 @@ from starlette.routing import Route
 from shared_memory.audit import (
     ADMIN_GRANTED,
     ADMIN_REVOKED,
+    LEAD_APPOINTED,
+    LEAD_REMOVED,
     MEMBER_ADDED,
     MEMBER_CHANGED,
     MEMBER_REMOVED,
     OWNERSHIP_HANDED_OVER,
+    PROJECT_CREATED,
+    PROJECT_RENAMED,
+    REPOSITORY_ADDED,
+    REPOSITORY_REMOVED,
     TOKEN_ISSUED,
     Audit,
 )
@@ -69,6 +76,7 @@ class SignedInMember(BaseModel):
     name: str
     team: str
     role: Literal["owner", "admin", "member"]
+    leads_a_project: bool
 
 
 class Status(BaseModel):
@@ -98,15 +106,60 @@ class AuditPage(BaseModel):
     next: int | None
 
 
+class ProjectMember(BaseModel):
+    """A member named on a project."""
+
+    employee_id: str
+    name: str
+
+
 class ProjectSummary(BaseModel):
-    """A project the member can reach."""
+    """A project the member can reach, and who looks after it."""
 
     project_id: str
     name: str
+    leads: list[ProjectMember]
+    you_lead: bool
 
 
 class Projects(BaseModel):
     projects: list[ProjectSummary]
+
+
+class ProjectRepository(BaseModel):
+    """A repository of a project, with what it commits to connect its sessions to the project."""
+
+    name: str
+    settings: str
+
+
+class ProjectDetail(BaseModel):
+    """One project: who leads it, which repositories belong to it, and what this member may change."""
+
+    project_id: str
+    name: str
+    leads: list[ProjectMember]
+    repositories: list[ProjectRepository]
+    you_lead: bool
+    you_may_change: bool
+
+
+class ProjectName(BaseModel):
+    """What a project is called."""
+
+    name: str
+
+
+class Appointment(BaseModel):
+    """The member being made a lead of this project."""
+
+    employee_id: str
+
+
+class RepositoryName(BaseModel):
+    """A repository's short name, unique within its project."""
+
+    name: str
 
 
 class PendingChallenge(BaseModel):
@@ -296,8 +349,67 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/projects",
         method="GET",
         operation_id="projects",
-        summary="The projects this member can reach.",
+        summary="The projects this member can reach, with the members who lead each one.",
         answers=Projects,
+    ),
+    Declaration(
+        path="/projects",
+        method="POST",
+        operation_id="create_project",
+        summary="Create a project. Whoever creates it is its first project lead.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=ProjectName,
+    ),
+    Declaration(
+        path="/projects/{project_id}",
+        method="GET",
+        operation_id="project",
+        summary="One project: its leads, its repositories and the settings each one commits.",
+        answers=ProjectDetail,
+    ),
+    Declaration(
+        path="/projects/{project_id}/rename",
+        method="POST",
+        operation_id="rename_project",
+        summary="Change a project's name. Its project ID stays as it is.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=ProjectName,
+    ),
+    Declaration(
+        path="/projects/{project_id}/leads",
+        method="POST",
+        operation_id="appoint_lead",
+        summary="Make a member a lead of this project.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=Appointment,
+    ),
+    Declaration(
+        path="/projects/{project_id}/leads/{employee_id}/remove",
+        method="POST",
+        operation_id="remove_lead",
+        summary="Take a lead off this project.",
+        answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/repositories",
+        method="POST",
+        operation_id="add_repository",
+        summary="Add a repository to this project.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=RepositoryName,
+    ),
+    Declaration(
+        path="/projects/{project_id}/repositories/{repository}/remove",
+        method="POST",
+        operation_id="remove_repository",
+        summary="Forget a repository of this project.",
+        answers=ProjectDetail,
+        changes=True,
     ),
     Declaration(
         path="/projects/{project_id}/tree",
@@ -512,6 +624,13 @@ class ConsoleApi:
             "sign_in_callback": self._sign_in_callback,
             "audit": self._audit_log,
             "projects": self._projects,
+            "create_project": self._create_project,
+            "project": self._project,
+            "rename_project": self._rename_project,
+            "appoint_lead": self._appoint_lead,
+            "remove_lead": self._remove_lead,
+            "add_repository": self._add_repository,
+            "remove_repository": self._remove_repository,
             "tree": self._tree,
             "memory": self._memory,
             "search": self._search,
@@ -585,9 +704,92 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        projects = self._identity.projects(member)
-        answer = Projects(projects=[ProjectSummary(project_id=p.project_id, name=p.name) for p in projects])
+        answer = Projects(projects=[ProjectSummary(**one) for one in self._identity.project_summaries(member)])
         return JSONResponse(answer.model_dump(mode="json"))
+
+    def _create_project(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked: ProjectName = request.state.asked
+        try:
+            project = self._identity.create_project(self._identity.caller_in(member, None), asked.name)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        self._audit.record(PROJECT_CREATED, member=member, project_id=project.project_id, detail={"name": project.name})
+        return self._project_now(member, project.project_id)
+
+    def _project(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return self._project_now(member, request.path_params["project_id"])
+
+    def _rename_project(self, request: Request) -> Response:
+        def rename(member: Member, caller: Caller, project_id: str) -> None:
+            asked: ProjectName = request.state.asked
+            self._identity.rename_project(caller, project_id, asked.name)
+            self._audit.record(PROJECT_RENAMED, member=member, project_id=project_id, detail={"name": asked.name})
+
+        return self._change_project(request, rename)
+
+    def _appoint_lead(self, request: Request) -> Response:
+        def appoint(member: Member, caller: Caller, project_id: str) -> None:
+            asked: Appointment = request.state.asked
+            self._identity.appoint_lead(caller, project_id, asked.employee_id)
+            self._audit.record(LEAD_APPOINTED, member=member, project_id=project_id, target=asked.employee_id)
+
+        return self._change_project(request, appoint)
+
+    def _remove_lead(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, project_id: str) -> None:
+            employee_id = request.path_params["employee_id"]
+            self._identity.remove_lead(caller, project_id, employee_id)
+            self._audit.record(LEAD_REMOVED, member=member, project_id=project_id, target=employee_id)
+
+        return self._change_project(request, remove)
+
+    def _add_repository(self, request: Request) -> Response:
+        def add(member: Member, caller: Caller, project_id: str) -> None:
+            asked: RepositoryName = request.state.asked
+            self._identity.add_repository(caller, project_id, asked.name)
+            self._audit.record(REPOSITORY_ADDED, member=member, project_id=project_id, target=asked.name)
+
+        return self._change_project(request, add)
+
+    def _remove_repository(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, project_id: str) -> None:
+            repository = request.path_params["repository"]
+            self._identity.remove_repository(caller, project_id, repository)
+            self._audit.record(REPOSITORY_REMOVED, member=member, project_id=project_id, target=repository)
+
+        return self._change_project(request, remove)
+
+    def _change_project(self, request: Request, change: Callable[[Member, Caller, str], None]) -> Response:
+        """Everything a lead or an admin does to one project: the same guard, and the project as it now stands."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        project_id = request.path_params["project_id"]
+        try:
+            change(member, self._identity.caller_in(member, project_id), project_id)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return self._project_now(member, project_id)
+
+    def _project_now(self, member: Member, project_id: str) -> Response:
+        try:
+            found = self._identity.project_detail(member, project_id)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        detail = ProjectDetail(
+            **{**found, "repositories": [self._repository(project_id, name) for name in found["repositories"]]}
+        )
+        return JSONResponse(detail.model_dump(mode="json"))
+
+    def _repository(self, project_id: str, name: str) -> ProjectRepository:
+        settings = self._service.settings_for(project_id, name)
+        return ProjectRepository(name=name, settings=json.dumps(settings, indent=2))
 
     def _tree(self, request: Request) -> Response:
         return self._browse(request, lambda caller: Tree(**self._service.tree(caller, request.query_params.get("level"))))
@@ -797,6 +999,7 @@ class ConsoleApi:
                 name=member.name,
                 team=member.team_code,
                 role=member.role,  # type: ignore[arg-type]
+                leads_a_project=bool(self._identity.leads_of(member)),
             ),
         )
 

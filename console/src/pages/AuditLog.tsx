@@ -6,6 +6,19 @@ import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } f
 const WORDS: Record<string, string> = {
   signed_in: "signed in",
   sign_in_refused: "sign-in refused",
+  token_issued: "token issued",
+  member_added: "member added",
+  member_removed: "member removed",
+  member_changed: "member changed",
+  admin_granted: "admin granted",
+  admin_revoked: "admin taken away",
+  ownership_handed_over: "ownership handed over",
+  project_created: "project created",
+  project_renamed: "project renamed",
+  lead_appointed: "project lead appointed",
+  lead_removed: "project lead taken off",
+  repository_added: "repository added",
+  repository_removed: "repository forgotten",
 };
 
 function when(at: string): string {
@@ -56,7 +69,9 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         Audit log
       </Title>
       <Text c="dimmed" size="sm" mb="md">
-        Everything that changed in team {member.team}, newest first.
+        {member.role === "owner" || member.role === "admin"
+          ? `Everything that changed in team ${member.team}, newest first.`
+          : "Everything that changed in the projects you lead, newest first."}
       </Text>
 
       <Card withBorder mb="md">

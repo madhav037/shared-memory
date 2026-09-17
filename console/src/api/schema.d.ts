@@ -62,10 +62,113 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The projects this member can reach. */
+        /** The projects this member can reach, with the members who lead each one. */
         get: operations["projects"];
         put?: never;
+        /** Create a project. Whoever creates it is its first project lead. */
+        post: operations["create_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One project: its leads, its repositories and the settings each one commits. */
+        get: operations["project"];
+        put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change a project's name. Its project ID stays as it is. */
+        post: operations["rename_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a member a lead of this project. */
+        post: operations["appoint_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/leads/{employee_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a lead off this project. */
+        post: operations["remove_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a repository to this project. */
+        post: operations["add_repository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/repositories/{repository}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forget a repository of this project. */
+        post: operations["remove_repository"];
         delete?: never;
         options?: never;
         head?: never;
@@ -348,6 +451,8 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member";
+            /** Leads A Project */
+            leads_a_project: boolean;
         };
         /**
          * Status
@@ -361,19 +466,85 @@ export interface components {
             member: components["schemas"]["SignedInMember"] | null;
         };
         /**
+         * ProjectMember
+         * @description A member named on a project.
+         */
+        ProjectMember: {
+            /** Employee Id */
+            employee_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * ProjectSummary
-         * @description A project the member can reach.
+         * @description A project the member can reach, and who looks after it.
          */
         ProjectSummary: {
             /** Project Id */
             project_id: string;
             /** Name */
             name: string;
+            /** Leads */
+            leads: components["schemas"]["ProjectMember"][];
+            /** You Lead */
+            you_lead: boolean;
         };
         /** Projects */
         Projects: {
             /** Projects */
             projects: components["schemas"]["ProjectSummary"][];
+        };
+        /**
+         * ProjectRepository
+         * @description A repository of a project, with what it commits to connect its sessions to the project.
+         */
+        ProjectRepository: {
+            /** Name */
+            name: string;
+            /** Settings */
+            settings: string;
+        };
+        /**
+         * ProjectDetail
+         * @description One project: who leads it, which repositories belong to it, and what this member may change.
+         */
+        ProjectDetail: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            /** Leads */
+            leads: components["schemas"]["ProjectMember"][];
+            /** Repositories */
+            repositories: components["schemas"]["ProjectRepository"][];
+            /** You Lead */
+            you_lead: boolean;
+            /** You May Change */
+            you_may_change: boolean;
+        };
+        /**
+         * ProjectName
+         * @description What a project is called.
+         */
+        ProjectName: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * Appointment
+         * @description The member being made a lead of this project.
+         */
+        Appointment: {
+            /** Employee Id */
+            employee_id: string;
+        };
+        /**
+         * RepositoryName
+         * @description A repository's short name, unique within its project.
+         */
+        RepositoryName: {
+            /** Name */
+            name: string;
         };
         /**
          * PendingChallenge
@@ -727,13 +898,183 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The projects this member can reach. */
+            /** @description The projects this member can reach, with the members who lead each one. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Projects"];
+                };
+            };
+        };
+    };
+    create_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectName"];
+            };
+        };
+        responses: {
+            /** @description Create a project. Whoever creates it is its first project lead. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One project: its leads, its repositories and the settings each one commits. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    rename_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectName"];
+            };
+        };
+        responses: {
+            /** @description Change a project's name. Its project ID stays as it is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    appoint_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Appointment"];
+            };
+        };
+        responses: {
+            /** @description Make a member a lead of this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    remove_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a lead off this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    add_repository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryName"];
+            };
+        };
+        responses: {
+            /** @description Add a repository to this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    remove_repository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                repository: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Forget a repository of this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
                 };
             };
         };

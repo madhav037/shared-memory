@@ -161,6 +161,22 @@ class Identity:
         if not caller.member.is_owner:
             raise Refused("Only the team's owner can grant admin, take it away, or hand over ownership.")
 
+    def _require_lead(self, caller: Caller, project_id: str) -> None:
+        """A project's leads look after it; the team's admins can too, because they have to be able to repair it."""
+        if caller.member.is_owner or caller.member.is_admin:
+            return
+        with self._db.transaction() as conn:
+            if self._leads_it(conn, caller.member.pk, project_id):
+                return
+        raise Refused("Only this project's leads and the team's admins can change it.")
+
+    @staticmethod
+    def _leads_it(conn: Conn, member_pk: int, project_id: str) -> bool:
+        found = conn.execute(
+            "SELECT 1 FROM project_leads WHERE project_id = %s AND member_id = %s", (project_id, member_pk)
+        ).fetchone()
+        return found is not None
+
     def _member_pk(self, conn: Conn, caller: Caller, employee_id: str) -> int:
         row = conn.execute(
             "SELECT id FROM members WHERE team_id = %s AND member_id = %s AND removed_at IS NULL",
@@ -266,7 +282,10 @@ class Identity:
                 "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
                 (account_id, login, row["id"]),
             )
-            return Member(row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"])
+            return Member(
+                row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
+                row["is_admin"],
+            )  # fmt: skip
 
     def reissue_own_token(self, member: Member) -> str:
         """A member replaces their own personal token; the one they had stops working."""
@@ -378,12 +397,143 @@ class Identity:
         return Caller(member, Project(found["project_id"], found["name"]), None)
 
     def create_project(self, caller: Caller, name: str) -> Project:
+        """Create a project. Whoever creates it is its first project lead."""
         if not name.strip():
             raise Refused("A project needs a name.")
         project_id = f"{slugify(name)[:40].strip('-')}-{secrets.token_hex(3)}"
+        now = self._clock()
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO projects (project_id, team_id, name, created_at) VALUES (%s, %s, %s, %s)",
-                (project_id, caller.member.team_pk, name.strip(), self._clock()),
+                (project_id, caller.member.team_pk, name.strip(), now),
+            )
+            conn.execute(
+                "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)",
+                (project_id, caller.member.pk, now),
             )
         return Project(project_id, name.strip())
+
+    def rename_project(self, caller: Caller, project_id: str, name: str) -> None:
+        """Change a project's name. Its project ID never changes: repositories are committed with it."""
+        if not name.strip():
+            raise Refused("A project needs a name.")
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            conn.execute("UPDATE projects SET name = %s WHERE project_id = %s", (name.strip(), project_id))
+
+    def leads_of(self, member: Member) -> list[str]:
+        """The projects this member leads."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT l.project_id FROM project_leads l JOIN projects p ON p.project_id = l.project_id"
+                " WHERE l.member_id = %s AND p.team_id = %s ORDER BY l.project_id",
+                (member.pk, member.team_pk),
+            ).fetchall()
+        return [row["project_id"] for row in rows]
+
+    @staticmethod
+    def _project_name(conn: Conn, member: Member, project_id: str) -> str:
+        """The project's name, if it is one of this member's team's projects."""
+        row = conn.execute(
+            "SELECT name FROM projects WHERE project_id = %s AND team_id = %s", (project_id, member.team_pk)
+        ).fetchone()
+        if row is None:
+            raise Refused(f"Project {project_id!r} is not a project in your team.")
+        name: str = row["name"]
+        return name
+
+    @staticmethod
+    def _leads_listed(conn: Conn, project_ids: list[str]) -> dict[str, list[dict[str, str]]]:
+        rows = conn.execute(
+            "SELECT l.project_id, m.member_id, m.name FROM project_leads l JOIN members m ON m.id = l.member_id"
+            " WHERE l.project_id = ANY(%s) AND m.removed_at IS NULL ORDER BY m.member_id",
+            (project_ids,),
+        ).fetchall()
+        listed: dict[str, list[dict[str, str]]] = {project_id: [] for project_id in project_ids}
+        for row in rows:
+            listed[row["project_id"]].append({"employee_id": row["member_id"], "name": row["name"]})
+        return listed
+
+    def project_summaries(self, member: Member) -> list[dict[str, Any]]:
+        """Every project this member can reach, with the members who lead it."""
+        projects = self.projects(member)
+        ids = [project.project_id for project in projects]
+        with self._db.transaction() as conn:
+            leads = self._leads_listed(conn, ids)
+        return [
+            {
+                "project_id": project.project_id,
+                "name": project.name,
+                "leads": leads[project.project_id],
+                "you_lead": any(one["employee_id"] == member.member_id for one in leads[project.project_id]),
+            }
+            for project in projects
+        ]
+
+    def project_detail(self, member: Member, project_id: str) -> dict[str, Any]:
+        """One project: its name, its leads and its repositories."""
+        with self._db.transaction() as conn:
+            name = self._project_name(conn, member, project_id)
+            leads = self._leads_listed(conn, [project_id])[project_id]
+            repositories = conn.execute(
+                "SELECT name FROM repositories WHERE project_id = %s ORDER BY name", (project_id,)
+            ).fetchall()
+            you_lead = self._leads_it(conn, member.pk, project_id)
+        return {
+            "project_id": project_id,
+            "name": name,
+            "leads": leads,
+            "repositories": [row["name"] for row in repositories],
+            "you_lead": you_lead,
+            "you_may_change": you_lead or member.is_owner or member.is_admin,
+        }
+
+    def appoint_lead(self, caller: Caller, project_id: str, employee_id: str) -> None:
+        """Make a member a lead of this project. A lead can appoint another lead; so can an admin."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            pk = self._member_pk(conn, caller, employee_id)
+            conn.execute(
+                "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)"
+                " ON CONFLICT DO NOTHING",
+                (project_id, pk, self._clock()),
+            )
+
+    def remove_lead(self, caller: Caller, project_id: str, employee_id: str) -> None:
+        """Take a lead off a project. Only the team's admins can, so one lead can't unseat another."""
+        if not (caller.member.is_owner or caller.member.is_admin):
+            raise Refused("Only the team's owner and its admins can take a lead off a project.")
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            pk = self._member_pk(conn, caller, employee_id)
+            removed = conn.execute(
+                "DELETE FROM project_leads WHERE project_id = %s AND member_id = %s RETURNING member_id",
+                (project_id, pk),
+            ).fetchone()
+        if removed is None:
+            raise Refused(f"{employee_id!r} does not lead this project.")
+
+    def add_repository(self, caller: Caller, project_id: str, repository: str) -> None:
+        """Note a repository of this project, so its settings can be shown before anyone works in it."""
+        check_name("Repository name", repository)
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            conn.execute(
+                "INSERT INTO repositories (project_id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (project_id, repository),
+            )
+
+    def remove_repository(self, caller: Caller, project_id: str, repository: str) -> None:
+        """Forget a repository. A session connecting from it again puts it back."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            removed = conn.execute(
+                "DELETE FROM repositories WHERE project_id = %s AND name = %s RETURNING name",
+                (project_id, repository),
+            ).fetchone()
+        if removed is None:
+            raise Refused(f"Repository {repository!r} is not one of this project's repositories.")
