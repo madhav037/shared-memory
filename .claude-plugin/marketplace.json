@@ -1,0 +1,13 @@
+{
+  "name": "shared-memory",
+  "owner": {
+    "name": "madhav037"
+  },
+  "plugins": [
+    {
+      "name": "shared-memory",
+      "source": "./plugin",
+      "description": "Connects Claude Code sessions to your team's Shared Memory server."
+    }
+  ]
+}

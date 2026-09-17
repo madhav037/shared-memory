@@ -1,0 +1,51 @@
+[project]
+name = "shared-memory"
+version = "0.1.0"
+description = "Shared memory for a team's Claude Code sessions"
+authors = [
+    { name = "madhav037", email = "madhavlehru@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anyio>=4.15.1",
+    "fastembed>=0.8.0",
+    "mcp>=2.2.0",
+    "pgvector>=0.5.0",
+    "psycopg-pool>=3.3.1",
+    "psycopg[binary]>=3.3.5",
+    "pyyaml>=6.0.3",
+    "starlette>=1.6.0",
+    "uvicorn>=0.53.0",
+]
+
+[project.scripts]
+shared-memory = "shared_memory.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.16,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+python-preference = "only-managed"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["fastembed.*", "pgvector.*"]
+ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "types-pyyaml>=6.0.12.20260906",
+]

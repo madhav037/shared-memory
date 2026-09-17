@@ -1,0 +1,10 @@
+.venv
+.cache
+.git
+.claude
+.agents
+.pytest_cache
+.mypy_cache
+docs
+tests
+plugin

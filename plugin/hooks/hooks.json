@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "${user_config.server_url}/hooks/session-start",
+            "headers": {
+              "Authorization": "Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
+              "X-Shared-Memory-Project": "$SHARED_MEMORY_PROJECT",
+              "X-Shared-Memory-Repository": "$SHARED_MEMORY_REPOSITORY"
+            },
+            "allowedEnvVars": ["CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN", "SHARED_MEMORY_PROJECT", "SHARED_MEMORY_REPOSITORY"],
+            "timeout": 6
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "${user_config.server_url}/hooks/prompt-submitted",
+            "headers": {
+              "Authorization": "Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
+              "X-Shared-Memory-Project": "$SHARED_MEMORY_PROJECT",
+              "X-Shared-Memory-Repository": "$SHARED_MEMORY_REPOSITORY"
+            },
+            "allowedEnvVars": ["CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN", "SHARED_MEMORY_PROJECT", "SHARED_MEMORY_REPOSITORY"],
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
