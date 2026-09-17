@@ -72,6 +72,14 @@ def _github_login(login: str | None) -> str | None:
     return cleaned or None
 
 
+def restricted_project(project_id: str) -> Refused:
+    """The one refusal a member gets for a restricted project, wherever they meet it."""
+    return Refused(
+        f"Project {project_id!r} is restricted, so it isn't open to the whole team. "
+        "Ask one of its project leads or a team admin to add you to its access list."
+    )
+
+
 def check_name(kind: str, value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise Refused(
@@ -138,13 +146,7 @@ class Identity:
             )  # fmt: skip
             project = None
             if project_id:
-                found = conn.execute(
-                    "SELECT project_id, name FROM projects WHERE project_id = %s AND team_id = %s",
-                    (project_id, member.team_pk),
-                ).fetchone()
-                if found is None:
-                    raise Refused(f"Project {project_id!r} is not a project in your team.")
-                project = Project(found["project_id"], found["name"])
+                project = self._reachable(conn, member, project_id)
                 if repository:
                     check_name("Repository name", repository)
                     conn.execute(
@@ -376,25 +378,44 @@ class Identity:
         return row is not None and row["removed_at"] is not None
 
     def projects(self, member: Member) -> list[Project]:
-        """The projects this member can reach. Restricted projects narrow this in #34."""
+        """The projects this member can reach: every open one, and the restricted ones they are allowed into."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT project_id, name FROM projects WHERE team_id = %s ORDER BY name", (member.team_pk,)
+                "SELECT p.project_id, p.name FROM projects p WHERE p.team_id = %s AND (NOT p.restricted OR %s"
+                " OR EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = %s)"
+                " OR EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = %s))"
+                " ORDER BY p.name",
+                (member.team_pk, member.is_owner or member.is_admin, member.pk, member.pk),
             ).fetchall()
         return [Project(row["project_id"], row["name"]) for row in rows]
+
+    def _reachable(self, conn: Conn, member: Member, project_id: str) -> Project:
+        """One of this member's team's projects, refused if it is restricted and they are not allowed into it."""
+        found = conn.execute(
+            "SELECT project_id, name, restricted FROM projects WHERE project_id = %s AND team_id = %s",
+            (project_id, member.team_pk),
+        ).fetchone()
+        if found is None:
+            raise Refused(f"Project {project_id!r} is not a project in your team.")
+        if found["restricted"] and not self._allowed_in(conn, member, project_id):
+            raise restricted_project(project_id)
+        return Project(found["project_id"], found["name"])
+
+    def _allowed_in(self, conn: Conn, member: Member, project_id: str) -> bool:
+        """Who a restricted project lets in: the team's owner and admins, its leads, and its access list."""
+        if member.is_owner or member.is_admin or self._leads_it(conn, member.pk, project_id):
+            return True
+        found = conn.execute(
+            "SELECT 1 FROM project_access WHERE project_id = %s AND member_id = %s", (project_id, member.pk)
+        ).fetchone()
+        return found is not None
 
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
         """The member as a caller of the memory services, working in one of their team's projects."""
         if project_id is None:
             return Caller(member, None, None)
         with self._db.transaction() as conn:
-            found = conn.execute(
-                "SELECT project_id, name FROM projects WHERE project_id = %s AND team_id = %s",
-                (project_id, member.team_pk),
-            ).fetchone()
-        if found is None:
-            raise Refused(f"Project {project_id!r} is not a project in your team.")
-        return Caller(member, Project(found["project_id"], found["name"]), None)
+            return Caller(member, self._reachable(conn, member, project_id), None)
 
     def create_project(self, caller: Caller, name: str) -> Project:
         """Create a project. Whoever creates it is its first project lead."""
@@ -472,22 +493,66 @@ class Identity:
         ]
 
     def project_detail(self, member: Member, project_id: str) -> dict[str, Any]:
-        """One project: its name, its leads and its repositories."""
+        """One project: its name, its leads, its repositories and, if it is restricted, who is allowed in."""
         with self._db.transaction() as conn:
-            name = self._project_name(conn, member, project_id)
+            project = self._reachable(conn, member, project_id)
+            row = conn.execute("SELECT restricted FROM projects WHERE project_id = %s", (project_id,)).fetchone()
+            assert row is not None
             leads = self._leads_listed(conn, [project_id])[project_id]
             repositories = conn.execute(
                 "SELECT name FROM repositories WHERE project_id = %s ORDER BY name", (project_id,)
             ).fetchall()
+            access = conn.execute(
+                "SELECT m.member_id, m.name FROM project_access a JOIN members m ON m.id = a.member_id"
+                " WHERE a.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
+                (project_id,),
+            ).fetchall()
             you_lead = self._leads_it(conn, member.pk, project_id)
         return {
             "project_id": project_id,
-            "name": name,
+            "name": project.name,
+            "restricted": row["restricted"],
             "leads": leads,
+            "access": [{"employee_id": one["member_id"], "name": one["name"]} for one in access],
             "repositories": [row["name"] for row in repositories],
             "you_lead": you_lead,
             "you_may_change": you_lead or member.is_owner or member.is_admin,
         }
+
+    def restrict(self, caller: Caller, project_id: str, restricted: bool) -> None:
+        """Close a project to its access list, or open it to the whole team again.
+
+        Unrestricting keeps the access list, so restricting it again lets the same members straight back in.
+        """
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            conn.execute("UPDATE projects SET restricted = %s WHERE project_id = %s", (restricted, project_id))
+
+    def grant_access(self, caller: Caller, project_id: str, employee_id: str) -> None:
+        """Let a member into this project. It takes effect on their next call."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            pk = self._member_pk(conn, caller, employee_id)
+            conn.execute(
+                "INSERT INTO project_access (project_id, member_id, granted_at) VALUES (%s, %s, %s)"
+                " ON CONFLICT DO NOTHING",
+                (project_id, pk, self._clock()),
+            )
+
+    def revoke_access(self, caller: Caller, project_id: str, employee_id: str) -> None:
+        """Take a member off this project's access list. They lose it on their next call."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            pk = self._member_pk(conn, caller, employee_id)
+            gone = conn.execute(
+                "DELETE FROM project_access WHERE project_id = %s AND member_id = %s RETURNING member_id",
+                (project_id, pk),
+            ).fetchone()
+        if gone is None:
+            raise Refused(f"{employee_id!r} is not on this project's access list.")
 
     def appoint_lead(self, caller: Caller, project_id: str, employee_id: str) -> None:
         """Make a member a lead of this project. A lead can appoint another lead; so can an admin."""

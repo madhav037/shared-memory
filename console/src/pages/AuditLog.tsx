@@ -19,6 +19,10 @@ const WORDS: Record<string, string> = {
   lead_removed: "project lead taken off",
   repository_added: "repository added",
   repository_removed: "repository forgotten",
+  project_restricted: "project restricted",
+  project_opened: "project opened to the team",
+  access_granted: "access granted",
+  access_revoked: "access taken away",
 };
 
 function when(at: string): string {

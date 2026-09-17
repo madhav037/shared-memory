@@ -141,6 +141,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/restrict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a project to its access list, or open it to the whole team again. */
+        post: operations["restrict_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Let a member into a restricted project. */
+        post: operations["grant_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/access/{employee_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a member off a project's access list. */
+        post: operations["revoke_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/repositories": {
         parameters: {
             query?: never;
@@ -506,15 +557,19 @@ export interface components {
         };
         /**
          * ProjectDetail
-         * @description One project: who leads it, which repositories belong to it, and what this member may change.
+         * @description One project: who leads it, who is allowed in, which repositories belong to it, and what may be changed.
          */
         ProjectDetail: {
             /** Project Id */
             project_id: string;
             /** Name */
             name: string;
+            /** Restricted */
+            restricted: boolean;
             /** Leads */
             leads: components["schemas"]["ProjectMember"][];
+            /** Access */
+            access: components["schemas"]["ProjectMember"][];
             /** Repositories */
             repositories: components["schemas"]["ProjectRepository"][];
             /** You Lead */
@@ -535,6 +590,22 @@ export interface components {
          * @description The member being made a lead of this project.
          */
         Appointment: {
+            /** Employee Id */
+            employee_id: string;
+        };
+        /**
+         * Restriction
+         * @description Whether this project is closed to its access list, or open to the whole team.
+         */
+        Restriction: {
+            /** Restricted */
+            restricted: boolean;
+        };
+        /**
+         * AccessChange
+         * @description The member being let into this project.
+         */
+        AccessChange: {
             /** Employee Id */
             employee_id: string;
         };
@@ -1020,6 +1091,81 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Take a lead off this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    restrict_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Restriction"];
+            };
+        };
+        responses: {
+            /** @description Close a project to its access list, or open it to the whole team again. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    grant_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessChange"];
+            };
+        };
+        responses: {
+            /** @description Let a member into a restricted project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    revoke_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a member off a project's access list. */
             200: {
                 headers: {
                     [name: string]: unknown;
