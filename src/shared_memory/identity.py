@@ -251,6 +251,27 @@ class Identity:
             ).fetchone()
         return row is not None and row["removed_at"] is not None
 
+    def projects(self, member: Member) -> list[Project]:
+        """The projects this member can reach. Restricted projects narrow this in #34."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT project_id, name FROM projects WHERE team_id = %s ORDER BY name", (member.team_pk,)
+            ).fetchall()
+        return [Project(row["project_id"], row["name"]) for row in rows]
+
+    def caller_in(self, member: Member, project_id: str | None) -> Caller:
+        """The member as a caller of the memory services, working in one of their team's projects."""
+        if project_id is None:
+            return Caller(member, None, None)
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT project_id, name FROM projects WHERE project_id = %s AND team_id = %s",
+                (project_id, member.team_pk),
+            ).fetchone()
+        if found is None:
+            raise Refused(f"Project {project_id!r} is not a project in your team.")
+        return Caller(member, Project(found["project_id"], found["name"]), None)
+
     def create_project(self, caller: Caller, name: str) -> Project:
         if not name.strip():
             raise Refused("A project needs a name.")

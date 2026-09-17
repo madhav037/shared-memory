@@ -13,7 +13,7 @@ from anyio.from_thread import start_blocking_portal  # noqa: E402
 
 from shared_memory.app import build_app  # noqa: E402
 from shared_memory.config import Settings  # noqa: E402
-from tests.support import FakeGitHub, RunningServer, TestClock, fresh_database  # noqa: E402
+from tests.support import FakeGitHub, RunningServer, Session, TestClock, fresh_database  # noqa: E402
 
 CONSOLE = "http://127.0.0.1:4173"
 PORT = 8123
@@ -34,11 +34,26 @@ if __name__ == "__main__":
             console_url=CONSOLE,
         )
         server = RunningServer(build_app(settings, clock=TestClock()), settings, TestClock(), portal, port=PORT)
-        server.run_cli(
+        printed = server.run_cli(
             "setup", "--team", "acme", "--owner-employee-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
-        print(f"console server on {server.url}, fake GitHub on {github.url}", flush=True)
+        token = next(
+            line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal")
+        )
+        # A project with one memory in it, so the browsing journeys have something to read.
+        owner = Session(server, token)
+        project = owner.call("create_project", name="Billing", repository="billing-api")["project_id"]
+        in_project = owner.in_project(project, "billing-api")
+        saved = in_project.call(
+            "remember",
+            title="Use pnpm, not npm",
+            summary="Every package in billing is managed with pnpm, never npm.",
+            type="convention",
+            body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
+        )
+        in_project.call("promote", path=saved["path"], level="project")
+        print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
             server.join()
         except KeyboardInterrupt:

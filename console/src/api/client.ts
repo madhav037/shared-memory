@@ -4,6 +4,12 @@ export type Status = components["schemas"]["Status"];
 export type SignedInMember = components["schemas"]["SignedInMember"];
 export type AuditPage = components["schemas"]["AuditPage"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
+export type Projects = components["schemas"]["Projects"];
+export type ProjectSummary = components["schemas"]["ProjectSummary"];
+export type Tree = components["schemas"]["Tree"];
+export type MemoryDetail = components["schemas"]["MemoryDetail"];
+export type SearchResults = components["schemas"]["SearchResults"];
+export type SearchHit = components["schemas"]["SearchHit"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -17,10 +23,17 @@ class ApiError extends Error {
   }
 }
 
+function withQuery(path: string, asked: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(asked)) if (value !== undefined && value !== "") query.set(name, String(value));
+  const written = query.toString();
+  return written ? `${path}?${written}` : path;
+}
+
 async function ask<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, headers: { Accept: "application/json", ...options.headers } });
   if (!response.ok) {
-    const said = await response.json().catch(() => null);
+    const said = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(said?.message ?? `The server answered ${response.status}.`, response.status);
   }
   return (await response.json()) as T;
@@ -40,9 +53,29 @@ export type AuditFilters = { member?: string; kind?: string; since?: string; unt
 
 /** A page of the audit log, newest first. */
 export function fetchAudit(filters: AuditFilters, signal?: AbortSignal): Promise<AuditPage> {
-  const asked = new URLSearchParams();
-  for (const [name, value] of Object.entries(filters)) if (value) asked.set(name, String(value));
-  return ask<AuditPage>(`/api/audit?${asked.toString()}`, { signal });
+  return ask<AuditPage>(withQuery("/api/audit", filters), { signal });
+}
+
+/** The projects this member can reach. */
+export function fetchProjects(signal?: AbortSignal): Promise<Projects> {
+  return ask<Projects>("/api/projects", { signal });
+}
+
+/** A project's memory, folder by folder. */
+export function fetchTree(projectId: string, level?: string, signal?: AbortSignal): Promise<Tree> {
+  return ask<Tree>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/tree`, { level }), { signal });
+}
+
+/** One memory in full. */
+export function fetchMemory(projectId: string, path: string, signal?: AbortSignal): Promise<MemoryDetail> {
+  return ask<MemoryDetail>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory`, { path }), { signal });
+}
+
+export type SearchAsked = { query: string; level?: string; type?: string };
+
+/** Memories that match, by meaning and by exact words. */
+export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
+  return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
 }
 
 export const signInUrl = "/api/sign-in/github";
