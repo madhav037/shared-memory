@@ -15,12 +15,21 @@ from typing import Any, Literal
 from urllib.parse import quote
 
 import anyio.to_thread
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory.audit import TOKEN_ISSUED, Audit
+from shared_memory.audit import (
+    ADMIN_GRANTED,
+    ADMIN_REVOKED,
+    MEMBER_ADDED,
+    MEMBER_CHANGED,
+    MEMBER_REMOVED,
+    OWNERSHIP_HANDED_OVER,
+    TOKEN_ISSUED,
+    Audit,
+)
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
@@ -29,6 +38,14 @@ from shared_memory.service import MemoryService
 
 PREFIX = "/api"
 CONSOLE_HEADER = "x-shared-memory-console"
+
+
+def _plainly(wrong: Exception) -> str:
+    """A refusal a member can act on, rather than a validation dump."""
+    if isinstance(wrong, ValidationError):
+        missing = ", ".join(str(problem["loc"][-1]) for problem in wrong.errors())
+        return f"That request was missing something: {missing}."
+    return "That request wasn't understood."
 
 
 def _sign_in_first() -> Response:
@@ -51,7 +68,7 @@ class SignedInMember(BaseModel):
     employee_id: str
     name: str
     team: str
-    role: Literal["owner", "member"]
+    role: Literal["owner", "admin", "member"]
 
 
 class Status(BaseModel):
@@ -164,6 +181,41 @@ class SearchResults(BaseModel):
     results: list[SearchHit]
 
 
+class MemberSummary(BaseModel):
+    """One member of the team, as an admin sees them."""
+
+    employee_id: str
+    name: str
+    role: Literal["owner", "admin", "member"]
+    github_login: str | None
+    removed: bool
+
+
+class Members(BaseModel):
+    members: list[MemberSummary]
+
+
+class NewMember(BaseModel):
+    """A member being added to the team."""
+
+    employee_id: str
+    name: str
+    github: str | None = None
+
+
+class ChangedMember(BaseModel):
+    """What to correct about a member. Anything left out stays as it was."""
+
+    name: str | None = None
+    github: str | None = None
+
+
+class AdminChange(BaseModel):
+    """Whether this member should be an admin."""
+
+    admin: bool
+
+
 class MemoryVersion(BaseModel):
     """One version of a memory in the memory folder's history."""
 
@@ -215,6 +267,7 @@ class Declaration:
     answers: type[BaseModel] | None
     changes: bool = False
     query: tuple[str, ...] = ()
+    accepts: type[BaseModel] | None = None
 
 
 DECLARATIONS: tuple[Declaration, ...] = (
@@ -302,6 +355,56 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("path", "before", "after"),
     ),
     Declaration(
+        path="/members",
+        method="GET",
+        operation_id="members",
+        summary="Everyone in the team, with their role and GitHub account.",
+        answers=Members,
+    ),
+    Declaration(
+        path="/members",
+        method="POST",
+        operation_id="add_member",
+        summary="Add a member and issue their first personal token.",
+        answers=IssuedToken,
+        changes=True,
+        accepts=NewMember,
+    ),
+    Declaration(
+        path="/members/{employee_id}/remove",
+        method="POST",
+        operation_id="remove_member",
+        summary="Remove a member: their sessions end and their personal token stops working.",
+        answers=Members,
+        changes=True,
+    ),
+    Declaration(
+        path="/members/{employee_id}/change",
+        method="POST",
+        operation_id="change_member",
+        summary="Correct a member's name or the GitHub account they sign in with.",
+        answers=Members,
+        changes=True,
+        accepts=ChangedMember,
+    ),
+    Declaration(
+        path="/members/{employee_id}/admin",
+        method="POST",
+        operation_id="set_admin",
+        summary="Grant admin to a member, or take it away.",
+        answers=Members,
+        changes=True,
+        accepts=AdminChange,
+    ),
+    Declaration(
+        path="/members/{employee_id}/ownership",
+        method="POST",
+        operation_id="hand_over_ownership",
+        summary="Make another member the team's owner.",
+        answers=Members,
+        changes=True,
+    ),
+    Declaration(
         path="/my-token",
         method="POST",
         operation_id="reissue_my_token",
@@ -355,10 +458,26 @@ def description() -> dict[str, Any]:
             {"name": name, "in": "query", "required": False, "schema": {"type": "string"}}
             for name in declaration.query
         ]
+        body: dict[str, Any] = {}
+        if declaration.accepts is not None:
+            accepted = declaration.accepts.model_json_schema(ref_template="#/components/schemas/{model}")
+            schemas.update(accepted.pop("$defs", {}))
+            schemas[declaration.accepts.__name__] = accepted
+            body = {
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": f"#/components/schemas/{declaration.accepts.__name__}"}
+                        }
+                    },
+                }
+            }
         paths.setdefault(f"{PREFIX}{declaration.path}", {})[declaration.method.lower()] = {
             "operationId": declaration.operation_id,
             "summary": declaration.summary,
             **({"parameters": parameters} if parameters else {}),
+            **body,
             "responses": responses,
         }
     return {
@@ -399,6 +518,12 @@ class ConsoleApi:
             "history": self._history,
             "version": self._version,
             "difference": self._difference,
+            "members": self._members,
+            "add_member": self._add_member,
+            "remove_member": self._remove_member,
+            "change_member": self._change_member,
+            "set_admin": self._set_admin,
+            "hand_over_ownership": self._hand_over_ownership,
             "reissue_my_token": self._reissue_my_token,
             "reissue_token": self._reissue_token,
             "sign_out": self._sign_out,
@@ -414,6 +539,11 @@ class ConsoleApi:
         async def endpoint(request: Request) -> Response:
             if declaration.changes and CONSOLE_HEADER not in request.headers:
                 return JSONResponse({"message": "This request didn't come from the console."}, status_code=403)
+            if declaration.accepts is not None:
+                try:
+                    request.state.asked = declaration.accepts.model_validate(await request.json())
+                except (ValueError, ValidationError) as wrong:
+                    return JSONResponse({"message": _plainly(wrong)}, status_code=422)
             return await anyio.to_thread.run_sync(handle, request)
 
         return Route(
@@ -522,6 +652,76 @@ class ConsoleApi:
         except ValueError:
             return JSONResponse({"message": "That request wasn't understood."}, status_code=422)
 
+    def _members(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return self._team(member)
+
+    def _add_member(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked: NewMember = request.state.asked
+        try:
+            caller = self._identity.caller_in(member, None)
+            token = self._identity.add_member(caller, asked.employee_id, asked.name, github=asked.github)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        self._audit.record(
+            MEMBER_ADDED, member=member, target=asked.employee_id, detail={"name": asked.name, "github": asked.github}
+        )
+        self._audit.record(TOKEN_ISSUED, member=member, target=asked.employee_id, detail={"for": asked.employee_id})
+        return self._issued(request, asked.employee_id, token)
+
+    def _remove_member(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, employee_id: str) -> None:
+            self._identity.remove_member(caller, employee_id)
+            self._sessions.end_all_for(employee_id, member.team_pk)
+            self._audit.record(MEMBER_REMOVED, member=member, target=employee_id)
+
+        return self._run_on_member(request, remove)
+
+    def _change_member(self, request: Request) -> Response:
+        def change(member: Member, caller: Caller, employee_id: str) -> None:
+            asked: ChangedMember = request.state.asked
+            self._identity.change_member(caller, employee_id, asked.name, asked.github)
+            self._audit.record(
+                MEMBER_CHANGED, member=member, target=employee_id, detail={"name": asked.name, "github": asked.github}
+            )
+
+        return self._run_on_member(request, change)
+
+    def _set_admin(self, request: Request) -> Response:
+        def change(member: Member, caller: Caller, employee_id: str) -> None:
+            asked: AdminChange = request.state.asked
+            self._identity.set_admin(caller, employee_id, asked.admin)
+            self._audit.record(ADMIN_GRANTED if asked.admin else ADMIN_REVOKED, member=member, target=employee_id)
+
+        return self._run_on_member(request, change)
+
+    def _hand_over_ownership(self, request: Request) -> Response:
+        def hand_over(member: Member, caller: Caller, employee_id: str) -> None:
+            self._identity.hand_over_ownership(caller, employee_id)
+            self._audit.record(OWNERSHIP_HANDED_OVER, member=member, target=employee_id)
+
+        return self._run_on_member(request, hand_over)
+
+    def _run_on_member(self, request: Request, change: Callable[[Member, Caller, str], None]) -> Response:
+        """Everything an admin does to one member: the same guard, the same answer, the team as it now stands."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            change(member, self._identity.caller_in(member, None), request.path_params["employee_id"])
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return self._team(member)
+
+    def _team(self, member: Member) -> Response:
+        everyone = Members(members=[MemberSummary(**one) for one in self._identity.members(member)])
+        return JSONResponse(everyone.model_dump(mode="json"))
+
     def _reissue_my_token(self, request: Request) -> Response:
         member = self._member(request)
         if member is None:
@@ -596,7 +796,7 @@ class ConsoleApi:
                 employee_id=member.member_id,
                 name=member.name,
                 team=member.team_code,
-                role="owner" if member.is_owner else "member",
+                role=member.role,  # type: ignore[arg-type]
             ),
         )
 

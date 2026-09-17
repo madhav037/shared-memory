@@ -5,6 +5,9 @@ const consoleUrl = "http://127.0.0.1:4173";
 // The journeys run against the built console and a real server, both started here.
 export default defineConfig({
   testDir: "e2e",
+  // One at a time: the journeys share one server and one fake GitHub, whose signed-in account is global.
+  workers: 1,
+  fullyParallel: false,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   use: { baseURL: consoleUrl, trace: "retain-on-failure" },

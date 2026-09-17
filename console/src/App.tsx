@@ -8,6 +8,7 @@ import { Home } from "./pages/Home";
 import { Memory } from "./pages/Memory";
 import { MyToken } from "./pages/MyToken";
 import { Project } from "./pages/Project";
+import { Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -56,10 +57,15 @@ export function App() {
                 My token
               </Anchor>
             )}
-            {member?.role === "owner" && (
-              <Anchor component={Link} to="/audit" size="sm" data-testid="to-audit">
-                Audit log
-              </Anchor>
+            {(member?.role === "owner" || member?.role === "admin") && (
+              <>
+                <Anchor component={Link} to="/team" size="sm" data-testid="to-team">
+                  Team
+                </Anchor>
+                <Anchor component={Link} to="/audit" size="sm" data-testid="to-audit">
+                  Audit log
+                </Anchor>
+              </>
             )}
           </Group>
           {member && (
@@ -93,6 +99,7 @@ export function App() {
             <Route path="/projects/:projectId" element={member ? <Project /> : <Navigate to="/" replace />} />
             <Route path="/projects/:projectId/memory" element={member ? <Memory /> : <Navigate to="/" replace />} />
             <Route path="/my-token" element={member ? <MyToken member={member} /> : <Navigate to="/" replace />} />
+            <Route path="/team" element={member ? <Team me={member} /> : <Navigate to="/" replace />} />
             <Route path="/audit" element={member ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

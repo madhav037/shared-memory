@@ -259,6 +259,9 @@ class ConsoleClient:
         headers = {"X-Shared-Memory-Console": "1"} if with_header else {}
         return self._http.post(path, headers=headers)
 
+    def post_json(self, path: str, body: dict[str, Any]) -> httpx.Response:
+        return self._http.post(path, json=body, headers={"X-Shared-Memory-Console": "1"})
+
     def sign_out(self, with_header: bool = True) -> httpx.Response:
         return self.post("/api/sign-out", with_header)
 

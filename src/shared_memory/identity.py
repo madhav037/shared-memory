@@ -6,6 +6,7 @@ import hashlib
 import re
 import secrets
 from dataclasses import dataclass
+from typing import Any
 
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
@@ -23,6 +24,14 @@ class Member:
     member_id: str
     name: str
     is_owner: bool
+    is_admin: bool = False
+
+    @property
+    def role(self) -> str:
+        """owner, admin or member."""
+        if self.is_owner:
+            return "owner"
+        return "admin" if self.is_admin else "member"
 
 
 @dataclass(frozen=True)
@@ -109,7 +118,8 @@ class Identity:
             raise Refused("No personal token was sent. Enter your personal token in the Shared Memory plugin settings.")
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.removed_at, k.revoked_at"
+                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at,"
+                " k.revoked_at"
                 " FROM tokens k JOIN members m ON m.id = k.member_id JOIN teams t ON t.id = m.team_id"
                 " WHERE k.token_hash = %s",
                 (_hash(token),),
@@ -122,7 +132,10 @@ class Identity:
                 raise Refused("This personal token belongs to a member who has been removed from the team.")
             if row["revoked_at"] is not None:
                 raise Refused("This personal token has been revoked. Ask your team's owner for a new one.")
-            member = Member(row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"])
+            member = Member(
+                row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
+                row["is_admin"],
+            )  # fmt: skip
             project = None
             if project_id:
                 found = conn.execute(
@@ -140,9 +153,13 @@ class Identity:
                     )
             return Caller(member, project, repository or None)
 
+    def _require_admin(self, caller: Caller) -> None:
+        if not (caller.member.is_owner or caller.member.is_admin):
+            raise Refused("Only the team's owner and its admins can manage members and personal tokens.")
+
     def _require_owner(self, caller: Caller) -> None:
         if not caller.member.is_owner:
-            raise Refused("Only the team's owner can add or remove members and reissue personal tokens.")
+            raise Refused("Only the team's owner can grant admin, take it away, or hand over ownership.")
 
     def _member_pk(self, conn: Conn, caller: Caller, employee_id: str) -> int:
         row = conn.execute(
@@ -154,8 +171,10 @@ class Identity:
         pk: int = row["id"]
         return pk
 
-    def add_member(self, caller: Caller, employee_id: str, name: str, team: str | None = None) -> str:
-        self._require_owner(caller)
+    def add_member(
+        self, caller: Caller, employee_id: str, name: str, team: str | None = None, github: str | None = None
+    ) -> str:
+        self._require_admin(caller)
         if team is not None and team != caller.team:
             raise Refused(f"You can only add members to your own team ({caller.team}).")
         check_name("Employee ID", employee_id)
@@ -168,25 +187,30 @@ class Identity:
             ).fetchone()
             if existing is not None:
                 raise Refused(f"Employee ID {employee_id!r} is already a member of your team, or was one.")
+            login = _github_login(github)
+            if login is not None:
+                self._github_free(conn, caller.member.team_pk, login, None)
             row = conn.execute(
-                "INSERT INTO members (team_id, member_id, name, created_at) VALUES (%s, %s, %s, %s) RETURNING id",
-                (caller.member.team_pk, employee_id, name.strip(), self._clock()),
+                "INSERT INTO members (team_id, member_id, name, github_login, created_at)"
+                " VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (caller.member.team_pk, employee_id, name.strip(), login, self._clock()),
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
 
     def remove_member(self, caller: Caller, employee_id: str) -> None:
-        self._require_owner(caller)
+        self._require_admin(caller)
         if employee_id == caller.member_id:
-            raise Refused("You cannot remove yourself: the team would have no owner.")
+            raise Refused("You cannot remove yourself.")
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, employee_id)
+            self._only_the_owner_touches_admins(conn, caller, pk, "removed", "remove")
             now = self._clock()
             conn.execute("UPDATE members SET removed_at = %s WHERE id = %s", (now, pk))
             conn.execute("UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (now, pk))
 
     def reissue_token(self, caller: Caller, employee_id: str) -> str:
-        self._require_owner(caller)
+        self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, employee_id)
             conn.execute(
@@ -223,7 +247,8 @@ class Identity:
         """The member a GitHub account belongs to, remembering the account's id the first time it signs in."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.removed_at, m.github_user_id"
+                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at,"
+                " m.github_user_id"
                 " FROM members m JOIN teams t ON t.id = m.team_id"
                 " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
                 (account_id, login),
@@ -251,6 +276,77 @@ class Identity:
                 (self._clock(), member.pk),
             )
             return self._issue_token(conn, member.pk)
+
+    def _github_free(self, conn: Conn, team_pk: int, login: str, except_pk: int | None) -> None:
+        taken = conn.execute(
+            "SELECT member_id FROM members WHERE team_id = %s AND lower(github_login) = lower(%s)"
+            " AND (%s::bigint IS NULL OR id <> %s)",
+            (team_pk, login, except_pk, except_pk),
+        ).fetchone()
+        if taken is not None:
+            raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this team.")
+
+    def _only_the_owner_touches_admins(self, conn: Conn, caller: Caller, pk: int, done: str, verb: str) -> None:
+        row = conn.execute("SELECT is_owner, is_admin FROM members WHERE id = %s", (pk,)).fetchone()
+        assert row is not None
+        if row["is_owner"]:
+            raise Refused(f"The team's owner can't be {done}. Hand ownership over first.")
+        if row["is_admin"] and not caller.member.is_owner:
+            raise Refused(f"Only the team's owner can {verb} an admin.")
+
+    def members(self, member: Member) -> list[dict[str, Any]]:
+        """Everyone in this member's team, with their role and the GitHub account they sign in with."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT member_id, name, is_owner, is_admin, github_login, removed_at FROM members"
+                " WHERE team_id = %s ORDER BY is_owner DESC, is_admin DESC, member_id",
+                (member.team_pk,),
+            ).fetchall()
+        return [
+            {
+                "employee_id": row["member_id"],
+                "name": row["name"],
+                "role": "owner" if row["is_owner"] else "admin" if row["is_admin"] else "member",
+                "github_login": row["github_login"],
+                "removed": row["removed_at"] is not None,
+            }
+            for row in rows
+        ]
+
+    def change_member(self, caller: Caller, employee_id: str, name: str | None, github: str | None) -> None:
+        """Correct a member's name, or the GitHub account they sign in with."""
+        self._require_admin(caller)
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, employee_id)
+            if name is not None:
+                if not name.strip():
+                    raise Refused("A member needs a name.")
+                conn.execute("UPDATE members SET name = %s WHERE id = %s", (name.strip(), pk))
+            if github is not None:
+                login = _github_login(github)
+                if login is not None:
+                    self._github_free(conn, caller.member.team_pk, login, pk)
+                # Clearing the account id lets the next sign-in bind this login to whoever signs in with it.
+                conn.execute("UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, pk))
+
+    def set_admin(self, caller: Caller, employee_id: str, admin: bool) -> None:
+        """Grant admin to a member, or take it away. Only the owner can."""
+        self._require_owner(caller)
+        if employee_id == caller.member_id:
+            raise Refused("You are the owner: you have everything an admin has.")
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, employee_id)
+            conn.execute("UPDATE members SET is_admin = %s WHERE id = %s", (admin, pk))
+
+    def hand_over_ownership(self, caller: Caller, employee_id: str) -> None:
+        """Make another member the team's owner. The member handing it over stays an admin."""
+        self._require_owner(caller)
+        if employee_id == caller.member_id:
+            raise Refused("You are already the owner.")
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, employee_id)
+            conn.execute("UPDATE members SET is_owner = FALSE, is_admin = TRUE WHERE id = %s", (caller.member.pk,))
+            conn.execute("UPDATE members SET is_owner = TRUE, is_admin = TRUE WHERE id = %s", (pk,))
 
     def is_removed(self, team_code: str, member_id: str) -> bool:
         with self._db.transaction() as conn:
