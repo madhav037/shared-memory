@@ -10,4 +10,8 @@ tests
 plugin
 smoke
 deploy
-console
+!deploy/Caddyfile
+console/node_modules
+console/dist
+console/test-results
+console/playwright-report
