@@ -1,6 +1,10 @@
+import { Alert, AppShell, Button, Group, Loader, Text, Title } from "@mantine/core";
 import { useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router";
 
-import { fetchStatus, signInUrl, signOut, type Status } from "./api/client";
+import { fetchStatus, signOut, type Status } from "./api/client";
+import { AuditLog } from "./pages/AuditLog";
+import { SignIn } from "./pages/SignIn";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -13,6 +17,7 @@ function refusal(): string | null {
 export function App() {
   const [connection, setConnection] = useState<Connection>({ state: "asking" });
   const [signInRefused, setSignInRefused] = useState<string | null>(refusal);
+  const goTo = useNavigate();
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -28,55 +33,51 @@ export function App() {
     const status = await signOut();
     setSignInRefused(null);
     setConnection({ state: "reached", status });
-  }, []);
+    goTo("/");
+  }, [goTo]);
+
+  const member = connection.state === "reached" ? connection.status.member : null;
 
   return (
-    <main>
-      <h1>Shared Memory</h1>
-      {signInRefused && (
-        <p data-testid="sign-in-error" role="alert">
-          {signInRefused}
-        </p>
-      )}
-      {connection.state === "asking" && <p data-testid="status">Reaching the server…</p>}
-      {connection.state === "unreachable" && (
-        <p data-testid="status" role="alert">
-          Can’t reach the Shared Memory server. Check that it is running, then reload.
-        </p>
-      )}
-      {connection.state === "reached" && <SignedIn status={connection.status} onSignOut={leave} />}
-    </main>
-  );
-}
+    <AppShell header={{ height: 56 }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Title order={1} size="h4">
+            Shared Memory
+          </Title>
+          {member && (
+            <Group gap="sm" wrap="nowrap">
+              <Text size="sm" c="dimmed" visibleFrom="xs" data-testid="who">
+                {member.name} · {member.team}
+              </Text>
+              <Button size="xs" variant="default" data-testid="sign-out" onClick={leave}>
+                Sign out
+              </Button>
+            </Group>
+          )}
+        </Group>
+      </AppShell.Header>
 
-function SignedIn({ status, onSignOut }: { status: Status; onSignOut: () => void }) {
-  if (!status.member) {
-    return (
-      <>
-        <p data-testid="status">Connected to the Shared Memory server.</p>
-        {status.github_sign_in ? (
-          <p>
-            <a className="button" data-testid="sign-in" href={signInUrl}>
-              Sign in with GitHub
-            </a>
-          </p>
-        ) : (
-          <p>Signing in with GitHub isn’t set up on this server yet.</p>
+      <AppShell.Main>
+        {signInRefused && (
+          <Alert color="red" mb="md" title="That sign-in didn’t work" data-testid="sign-in-error">
+            {signInRefused}
+          </Alert>
         )}
-      </>
-    );
-  }
-  return (
-    <>
-      <p data-testid="status">
-        Signed in as <strong>{status.member.name}</strong> ({status.member.employee_id}), {status.member.role} of team{" "}
-        <strong>{status.member.team}</strong>.
-      </p>
-      <p>
-        <button type="button" data-testid="sign-out" onClick={onSignOut}>
-          Sign out
-        </button>
-      </p>
-    </>
+        {connection.state === "asking" && <Loader data-testid="status" size="sm" />}
+        {connection.state === "unreachable" && (
+          <Alert color="red" title="Can’t reach the server" data-testid="status">
+            The Shared Memory server didn’t answer. Check that it is running, then reload.
+          </Alert>
+        )}
+        {connection.state === "reached" && (
+          <Routes>
+            <Route path="/" element={<SignIn status={connection.status} />} />
+            <Route path="/audit" element={member ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
+      </AppShell.Main>
+    </AppShell>
   );
 }

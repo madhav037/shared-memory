@@ -45,6 +45,24 @@
         }
       }
     },
+    "/api/audit": {
+      "get": {
+        "operationId": "audit",
+        "summary": "The team's audit log, newest first.",
+        "responses": {
+          "200": {
+            "description": "The team's audit log, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sign-out": {
       "post": {
         "operationId": "sign_out",
@@ -127,6 +145,95 @@
           "github_sign_in"
         ],
         "title": "Status",
+        "type": "object"
+      },
+      "AuditEvent": {
+        "description": "One thing that happened, and who did it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Target"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "kind",
+          "detail"
+        ],
+        "title": "AuditEvent",
+        "type": "object"
+      },
+      "AuditPage": {
+        "description": "A page of the audit log, newest first, with where the next page starts.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "AuditPage",
         "type": "object"
       }
     }
