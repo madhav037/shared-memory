@@ -294,6 +294,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everything pinned that this project's sessions are briefed with. */
+        get: operations["pins"];
+        put?: never;
+        /** Pin a project or team memory, or a topic folder, into every session's briefing. */
+        post: operations["pin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pins/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a pin, so it no longer appears in the briefing. */
+        post: operations["unpin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/memory/history": {
         parameters: {
             query?: never;
@@ -629,10 +664,17 @@ export interface components {
             /** Replaces */
             replaces: string | null;
         };
-        /** TreeFolder */
+        /**
+         * TreeFolder
+         * @description A folder of memory. A topic folder can be pinned, which pins its index.
+         */
         TreeFolder: {
             /** Folder */
             folder: string;
+            /** Pinnable */
+            pinnable: boolean;
+            /** Pinned */
+            pinned: boolean;
             /** Memories */
             memories: components["schemas"]["TreeMemory"][];
         };
@@ -644,6 +686,8 @@ export interface components {
             title: string;
             /** Summary */
             summary: string;
+            /** Pinned */
+            pinned: boolean;
             /** Pending */
             pending: components["schemas"]["PendingChallenge"][];
         };
@@ -702,6 +746,8 @@ export interface components {
             promoted_by: string | null;
             /** Body */
             body: string;
+            /** Pinned */
+            pinned: boolean;
             /** Pending */
             pending: components["schemas"]["PendingChallenge"][];
             /** Open Challenges */
@@ -767,6 +813,49 @@ export interface components {
             events: components["schemas"]["AuditEvent"][];
             /** Next */
             next: number | null;
+        };
+        /**
+         * Pin
+         * @description One thing pinned into every session's briefing for this project.
+         */
+        Pin: {
+            /** Path */
+            path: string;
+            /** Kind */
+            kind: string;
+            /** Level */
+            level: string;
+            /** Title */
+            title: string;
+            /** Tokens */
+            tokens: number;
+            /** Pinned By */
+            pinned_by: string;
+            /**
+             * Pinned At
+             * Format: date-time
+             */
+            pinned_at: string;
+        };
+        /**
+         * Pins
+         * @description Everything pinned that this project's sessions are briefed with, and how big the briefing may be.
+         */
+        Pins: {
+            /** Pins */
+            pins: components["schemas"]["Pin"][];
+            /** Tokens */
+            tokens: number;
+            /** Cap */
+            cap: number;
+        };
+        /**
+         * MemoryPath
+         * @description The memory or topic folder this change is about.
+         */
+        MemoryPath: {
+            /** Path */
+            path: string;
         };
         /**
          * MemoryVersion
@@ -1324,6 +1413,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+        };
+    };
+    pins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everything pinned that this project's sessions are briefed with. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pins"];
+                };
+            };
+        };
+    };
+    pin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Pin a project or team memory, or a topic folder, into every session's briefing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pins"];
+                };
+            };
+        };
+    };
+    unpin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Remove a pin, so it no longer appears in the briefing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pins"];
                 };
             };
         };

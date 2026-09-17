@@ -41,6 +41,7 @@ from shared_memory.audit import (
     TOKEN_ISSUED,
     Audit,
 )
+from shared_memory.briefing import Briefing, pin_target
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
@@ -57,6 +58,15 @@ def _plainly(wrong: Exception) -> str:
         missing = ", ".join(str(problem["loc"][-1]) for problem in wrong.errors())
         return f"That request was missing something: {missing}."
     return "That request wasn't understood."
+
+
+def _may_be_pinned(path: str) -> bool:
+    """Whether a folder is a topic, which is the only kind of folder a pin can point at."""
+    try:
+        pin_target(path)
+    except Refused:
+        return False
+    return True
 
 
 def _sign_in_first() -> Response:
@@ -201,11 +211,16 @@ class TreeMemory(BaseModel):
     path: str
     title: str
     summary: str
+    pinned: bool
     pending: list[PendingChallenge]
 
 
 class TreeFolder(BaseModel):
+    """A folder of memory. A topic folder can be pinned, which pins its index."""
+
     folder: str
+    pinnable: bool
+    pinned: bool
     memories: list[TreeMemory]
 
 
@@ -213,6 +228,32 @@ class Tree(BaseModel):
     """A project's memory, folder by folder."""
 
     folders: list[TreeFolder]
+
+
+class Pin(BaseModel):
+    """One thing pinned into every session's briefing for this project."""
+
+    path: str
+    kind: str
+    level: str
+    title: str
+    tokens: int
+    pinned_by: str
+    pinned_at: datetime
+
+
+class Pins(BaseModel):
+    """Everything pinned that this project's sessions are briefed with, and how big the briefing may be."""
+
+    pins: list[Pin]
+    tokens: int
+    cap: int
+
+
+class MemoryPath(BaseModel):
+    """The memory or topic folder this change is about."""
+
+    path: str
 
 
 class MemoryDetail(BaseModel):
@@ -232,6 +273,7 @@ class MemoryDetail(BaseModel):
     related_files: list[str]
     promoted_by: str | None
     body: str
+    pinned: bool
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
 
@@ -488,6 +530,31 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
     Declaration(
+        path="/projects/{project_id}/pins",
+        method="GET",
+        operation_id="pins",
+        summary="Everything pinned that this project's sessions are briefed with.",
+        answers=Pins,
+    ),
+    Declaration(
+        path="/projects/{project_id}/pins",
+        method="POST",
+        operation_id="pin",
+        summary="Pin a project or team memory, or a topic folder, into every session's briefing.",
+        answers=Pins,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/projects/{project_id}/pins/remove",
+        method="POST",
+        operation_id="unpin",
+        summary="Remove a pin, so it no longer appears in the briefing.",
+        answers=Pins,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
         path="/projects/{project_id}/memory/history",
         method="GET",
         operation_id="history",
@@ -655,12 +722,14 @@ class ConsoleApi:
         audit: Audit,
         identity: Identity,
         service: MemoryService,
+        briefing: Briefing,
     ) -> None:
         self._settings = settings
         self._sessions = sessions
         self._audit = audit
         self._identity = identity
         self._service = service
+        self._briefing = briefing
 
     def routes(self) -> list[Route]:
         handlers: Mapping[str, Callable[[Request], Response]] = {
@@ -680,6 +749,9 @@ class ConsoleApi:
             "grant_access": self._grant_access,
             "revoke_access": self._revoke_access,
             "tree": self._tree,
+            "pins": self._pins,
+            "pin": self._pin,
+            "unpin": self._unpin,
             "memory": self._memory,
             "search": self._search,
             "history": self._history,
@@ -866,13 +938,50 @@ class ConsoleApi:
         return ProjectRepository(name=name, settings=json.dumps(settings, indent=2))
 
     def _tree(self, request: Request) -> Response:
-        return self._browse(request, lambda caller: Tree(**self._service.tree(caller, request.query_params.get("level"))))
+        def walk(caller: Caller) -> Tree:
+            walked = self._service.tree(caller, request.query_params.get("level"))
+            pinned = self._briefing.pinned_paths(caller.team)
+            for folder in walked["folders"]:
+                folder["pinnable"] = _may_be_pinned(folder["folder"])
+                folder["pinned"] = folder["folder"] in pinned
+                for memory in folder["memories"]:
+                    memory["pinned"] = memory["path"] in pinned
+            return Tree(**walked)
+
+        return self._browse(request, walk)
 
     def _memory(self, request: Request) -> Response:
         def read(caller: Caller) -> MemoryDetail:
-            return MemoryDetail(**self._service.read(caller, request.query_params.get("path", "")))
+            memory = self._service.read(caller, request.query_params.get("path", ""))
+            memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
+            return MemoryDetail(**memory)
 
         return self._browse(request, read)
+
+    def _pins(self, request: Request) -> Response:
+        return self._browse(request, self._pinned)
+
+    def _pin(self, request: Request) -> Response:
+        def pin(caller: Caller) -> Pins:
+            asked: MemoryPath = request.state.asked
+            self._briefing.pin(caller, asked.path)
+            return self._pinned(caller)
+
+        return self._browse(request, pin)
+
+    def _unpin(self, request: Request) -> Response:
+        def unpin(caller: Caller) -> Pins:
+            asked: MemoryPath = request.state.asked
+            self._briefing.unpin(caller, asked.path)
+            return self._pinned(caller)
+
+        return self._browse(request, unpin)
+
+    def _pinned(self, caller: Caller) -> Pins:
+        pins = [Pin(**one) for one in self._briefing.listed(caller)]
+        return Pins(
+            pins=pins, tokens=sum(pin.tokens for pin in pins), cap=self._settings.briefing_cap_tokens
+        )
 
     def _search(self, request: Request) -> Response:
         def search(caller: Caller) -> SearchResults:

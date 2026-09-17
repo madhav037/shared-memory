@@ -117,6 +117,47 @@ class Briefing:
         self._audit.memory(caller, MEMORY_UNPINNED, cleaned)
         return {"unpinned": cleaned}
 
+    def pinned_paths(self, team: str) -> set[str]:
+        """Every path this team has pinned, for marking up what the console shows."""
+        with self._db.transaction() as conn:
+            rows = conn.execute("SELECT path FROM pins WHERE team = %s", (team,)).fetchall()
+        return {row["path"] for row in rows}
+
+    def listed(self, caller: Caller) -> list[dict[str, Any]]:
+        """Everything pinned that this project's sessions are briefed with, oldest pin first."""
+        project = caller.require_project()
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT path, kind, level, project_id, pinned_by, pinned_at FROM pins WHERE team = %s"
+                " AND (level = 'team' OR project_id = %s) ORDER BY pinned_at, path",
+                (caller.team, project.project_id),
+            ).fetchall()
+        pins = []
+        for row in rows:
+            target = PinTarget(row["path"], row["kind"], row["level"], row["project_id"])
+            rendered = self._render(caller.team, target)
+            pins.append(
+                {
+                    "path": target.path,
+                    "kind": target.kind,
+                    "level": target.level,
+                    "title": self._name(caller.team, target),
+                    "tokens": _tokens(rendered) if rendered else 0,
+                    "pinned_by": row["pinned_by"],
+                    "pinned_at": row["pinned_at"],
+                }
+            )
+        return pins
+
+    def _name(self, team: str, target: PinTarget) -> str:
+        """What to call a pin: the memory's title, or the topic folder's name."""
+        if target.kind == "memory":
+            try:
+                return self._store.read(team, PurePosixPath(target.path)).title
+            except Refused:
+                return PurePosixPath(target.path).stem
+        return PurePosixPath(target.path).name
+
     def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None:
         """Pins follow memory: a pin moves to whatever supersedes its memory and goes away when it is retired."""
         with self._db.transaction() as conn:

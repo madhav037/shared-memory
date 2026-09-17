@@ -86,6 +86,10 @@ Access to the plugin marketplace repository is needed to install the plugin. Whi
 
 The plugin's hooks call the server with `curl`, which ships with Windows 10 and later, macOS and Linux. On Windows, Claude Code runs the hooks with Git Bash (from Git for Windows).
 
-## 5. Repositories without a project
+## 5. Decide what every session is briefed with
+
+Open a project in the console and a memory shows whether it is **pinned**. Pinning a project or team memory — or a topic folder, which pins its index — puts it into the briefing every session in that project receives. The project page lists everything pinned in it with roughly how many tokens each one costs; when a pin would take the briefing over its cap, the console says so and shows what is already pinned, so you can choose what to unpin. The same thing can be done from a session with the `pin` and `unpin` tools.
+
+## 6. Repositories without a project
 
 A repository whose settings don't name a project behaves exactly as before: hooks add nothing, and memory tools reply that the repository isn't connected to a project.

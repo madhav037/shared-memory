@@ -19,6 +19,8 @@ export type MemoryVersion = components["schemas"]["MemoryVersion"];
 export type MemoryAtVersion = components["schemas"]["MemoryAtVersion"];
 export type MemoryDifference = components["schemas"]["MemoryDifference"];
 export type Members = components["schemas"]["Members"];
+export type Pins = components["schemas"]["Pins"];
+export type Pin = components["schemas"]["Pin"];
 export type MemberSummary = components["schemas"]["MemberSummary"];
 
 /** The header that tells the server a request came from the console, not from another site. */
@@ -98,6 +100,20 @@ export type SearchAsked = { query: string; level?: string; type?: string };
 /** Memories that match, by meaning and by exact words. */
 export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
+}
+
+/** Everything pinned that this project's sessions are briefed with. */
+export function fetchPins(projectId: string, signal?: AbortSignal): Promise<Pins> {
+  return ask<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { signal });
+}
+
+/** Pin a project or team memory, or a topic folder, into every session's briefing. */
+export function pin(projectId: string, path: string): Promise<Pins> {
+  return change<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { path });
+}
+
+export function unpin(projectId: string, path: string): Promise<Pins> {
+  return change<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins/remove`, { path });
 }
 
 /** Every version of one memory, newest first. */

@@ -1,8 +1,8 @@
-import { Alert, Anchor, Badge, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
-import { fetchMemory, type MemoryDetail } from "../api/client";
+import { fetchMemory, pin, unpin, type MemoryDetail } from "../api/client";
 import { History } from "./History";
 import { memoryUrl } from "./Project";
 
@@ -19,6 +19,7 @@ export function Memory() {
   const path = asked.get("path") ?? "";
   const [memory, setMemory] = useState<MemoryDetail | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
+  const [pinRefused, setPinRefused] = useState<string | null>(null);
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -53,10 +54,39 @@ export function Memory() {
         <Badge variant="light" color={memory.status === "active" ? "green" : "gray"}>
           {memory.status}
         </Badge>
+        {memory.pinned && (
+          <Badge variant="light" color="indigo" data-testid="pinned">
+            pinned
+          </Badge>
+        )}
         <Text size="sm" c="dimmed">
           by {memory.author}
         </Text>
+        {memory.level !== "personal" && (
+          <Button
+            size="compact-xs"
+            variant={memory.pinned ? "subtle" : "light"}
+            data-testid={memory.pinned ? "unpin" : "pin"}
+            onClick={async () => {
+              try {
+                await (memory.pinned ? unpin : pin)(projectId, memory.path);
+                setMemory({ ...memory, pinned: !memory.pinned });
+                setPinRefused(null);
+              } catch (problem) {
+                setPinRefused((problem as Error).message);
+              }
+            }}
+          >
+            {memory.pinned ? "Unpin" : "Pin to every briefing"}
+          </Button>
+        )}
       </Group>
+
+      {pinRefused && (
+        <Alert color="red" data-testid="pin-refused">
+          {pinRefused}
+        </Alert>
+      )}
 
       {memory.superseded_by && (
         <Alert color="gray" data-testid="superseded-by">

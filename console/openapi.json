@@ -623,6 +623,108 @@
         }
       }
     },
+    "/api/projects/{project_id}/pins": {
+      "get": {
+        "operationId": "pins",
+        "summary": "Everything pinned that this project's sessions are briefed with.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Everything pinned that this project's sessions are briefed with.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pins"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "pin",
+        "summary": "Pin a project or team memory, or a topic folder, into every session's briefing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pin a project or team memory, or a topic folder, into every session's briefing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pins"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/pins/remove": {
+      "post": {
+        "operationId": "unpin",
+        "summary": "Remove a pin, so it no longer appears in the briefing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Remove a pin, so it no longer appears in the briefing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pins"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/memory/history": {
       "get": {
         "operationId": "history",
@@ -1313,10 +1415,19 @@
         "type": "object"
       },
       "TreeFolder": {
+        "description": "A folder of memory. A topic folder can be pinned, which pins its index.",
         "properties": {
           "folder": {
             "title": "Folder",
             "type": "string"
+          },
+          "pinnable": {
+            "title": "Pinnable",
+            "type": "boolean"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
           },
           "memories": {
             "items": {
@@ -1328,6 +1439,8 @@
         },
         "required": [
           "folder",
+          "pinnable",
+          "pinned",
           "memories"
         ],
         "title": "TreeFolder",
@@ -1347,6 +1460,10 @@
             "title": "Summary",
             "type": "string"
           },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
           "pending": {
             "items": {
               "$ref": "#/components/schemas/PendingChallenge"
@@ -1359,6 +1476,7 @@
           "path",
           "title",
           "summary",
+          "pinned",
           "pending"
         ],
         "title": "TreeMemory",
@@ -1514,6 +1632,10 @@
             "title": "Body",
             "type": "string"
           },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
           "pending": {
             "items": {
               "$ref": "#/components/schemas/PendingChallenge"
@@ -1544,6 +1666,7 @@
           "related_files",
           "promoted_by",
           "body",
+          "pinned",
           "pending",
           "open_challenges"
         ],
@@ -1709,6 +1832,92 @@
           "next"
         ],
         "title": "AuditPage",
+        "type": "object"
+      },
+      "Pin": {
+        "description": "One thing pinned into every session's briefing for this project.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "pinned_by": {
+            "title": "Pinned By",
+            "type": "string"
+          },
+          "pinned_at": {
+            "format": "date-time",
+            "title": "Pinned At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "level",
+          "title",
+          "tokens",
+          "pinned_by",
+          "pinned_at"
+        ],
+        "title": "Pin",
+        "type": "object"
+      },
+      "Pins": {
+        "description": "Everything pinned that this project's sessions are briefed with, and how big the briefing may be.",
+        "properties": {
+          "pins": {
+            "items": {
+              "$ref": "#/components/schemas/Pin"
+            },
+            "title": "Pins",
+            "type": "array"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "cap": {
+            "title": "Cap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pins",
+          "tokens",
+          "cap"
+        ],
+        "title": "Pins",
+        "type": "object"
+      },
+      "MemoryPath": {
+        "description": "The memory or topic folder this change is about.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "MemoryPath",
         "type": "object"
       },
       "MemoryVersion": {
