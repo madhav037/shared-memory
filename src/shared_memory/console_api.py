@@ -22,6 +22,8 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
 from shared_memory.audit import (
+    ACCESS_GRANTED,
+    ACCESS_REVOKED,
     ADMIN_GRANTED,
     ADMIN_REVOKED,
     LEAD_APPOINTED,
@@ -31,7 +33,9 @@ from shared_memory.audit import (
     MEMBER_REMOVED,
     OWNERSHIP_HANDED_OVER,
     PROJECT_CREATED,
+    PROJECT_OPENED,
     PROJECT_RENAMED,
+    PROJECT_RESTRICTED,
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
     TOKEN_ISSUED,
@@ -134,11 +138,13 @@ class ProjectRepository(BaseModel):
 
 
 class ProjectDetail(BaseModel):
-    """One project: who leads it, which repositories belong to it, and what this member may change."""
+    """One project: who leads it, who is allowed in, which repositories belong to it, and what may be changed."""
 
     project_id: str
     name: str
+    restricted: bool
     leads: list[ProjectMember]
+    access: list[ProjectMember]
     repositories: list[ProjectRepository]
     you_lead: bool
     you_may_change: bool
@@ -160,6 +166,18 @@ class RepositoryName(BaseModel):
     """A repository's short name, unique within its project."""
 
     name: str
+
+
+class Restriction(BaseModel):
+    """Whether this project is closed to its access list, or open to the whole team."""
+
+    restricted: bool
+
+
+class AccessChange(BaseModel):
+    """The member being let into this project."""
+
+    employee_id: str
 
 
 class PendingChallenge(BaseModel):
@@ -391,6 +409,32 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="POST",
         operation_id="remove_lead",
         summary="Take a lead off this project.",
+        answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/restrict",
+        method="POST",
+        operation_id="restrict_project",
+        summary="Close a project to its access list, or open it to the whole team again.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=Restriction,
+    ),
+    Declaration(
+        path="/projects/{project_id}/access",
+        method="POST",
+        operation_id="grant_access",
+        summary="Let a member into a restricted project.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=AccessChange,
+    ),
+    Declaration(
+        path="/projects/{project_id}/access/{employee_id}/remove",
+        method="POST",
+        operation_id="revoke_access",
+        summary="Take a member off a project's access list.",
         answers=ProjectDetail,
         changes=True,
     ),
@@ -631,6 +675,9 @@ class ConsoleApi:
             "remove_lead": self._remove_lead,
             "add_repository": self._add_repository,
             "remove_repository": self._remove_repository,
+            "restrict_project": self._restrict_project,
+            "grant_access": self._grant_access,
+            "revoke_access": self._revoke_access,
             "tree": self._tree,
             "memory": self._memory,
             "search": self._search,
@@ -764,6 +811,32 @@ class ConsoleApi:
             self._audit.record(REPOSITORY_REMOVED, member=member, project_id=project_id, target=repository)
 
         return self._change_project(request, remove)
+
+    def _restrict_project(self, request: Request) -> Response:
+        def restrict(member: Member, caller: Caller, project_id: str) -> None:
+            asked: Restriction = request.state.asked
+            self._identity.restrict(caller, project_id, asked.restricted)
+            self._audit.record(
+                PROJECT_RESTRICTED if asked.restricted else PROJECT_OPENED, member=member, project_id=project_id
+            )
+
+        return self._change_project(request, restrict)
+
+    def _grant_access(self, request: Request) -> Response:
+        def grant(member: Member, caller: Caller, project_id: str) -> None:
+            asked: AccessChange = request.state.asked
+            self._identity.grant_access(caller, project_id, asked.employee_id)
+            self._audit.record(ACCESS_GRANTED, member=member, project_id=project_id, target=asked.employee_id)
+
+        return self._change_project(request, grant)
+
+    def _revoke_access(self, request: Request) -> Response:
+        def revoke(member: Member, caller: Caller, project_id: str) -> None:
+            employee_id = request.path_params["employee_id"]
+            self._identity.revoke_access(caller, project_id, employee_id)
+            self._audit.record(ACCESS_REVOKED, member=member, project_id=project_id, target=employee_id)
+
+        return self._change_project(request, revoke)
 
     def _change_project(self, request: Request, change: Callable[[Member, Caller, str], None]) -> Response:
         """Everything a lead or an admin does to one project: the same guard, and the project as it now stands."""

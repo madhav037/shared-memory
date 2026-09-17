@@ -71,6 +71,8 @@ Commit the file. Several repositories can use the same project ID, each with its
 
 Whoever creates a project becomes its first **project lead**: they appoint other leads and look after its repositories. The same can be done in the console — **New project** on its front page, then its **Settings**, which shows each repository with the settings to commit into it. A project lead can also read the audit log for their own projects.
 
+A project is open to the whole team unless a lead or an admin **restricts** it. A restricted project can be reached only by the members on its **access list**, its leads and the team's admins: everyone else stops seeing it listed, its memory tools refuse, and a session started in one of its repositories is told why and gets no briefing or recall. Team memory stays readable by the whole team. Opening a project up again keeps its access list, so restricting it later lets the same members straight back in.
+
 ## 4. Join as a new member
 
 1. Clone the repository and open it in Claude Code.

@@ -184,6 +184,20 @@ export function removeLead(projectId: string, employeeId: string): Promise<Proje
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
+/** Close a project to its access list, or open it to the whole team again. */
+export function restrictProject(projectId: string, restricted: boolean): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/restrict`, { restricted });
+}
+
+export function grantAccess(projectId: string, employeeId: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/access`, { employee_id: employeeId });
+}
+
+export function revokeAccess(projectId: string, employeeId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/access/${encodeURIComponent(employeeId)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/remove`);
+}
+
 export function addRepository(projectId: string, name: string): Promise<ProjectDetail> {
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/repositories`, { name });
 }

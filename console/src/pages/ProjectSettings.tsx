@@ -20,9 +20,12 @@ import {
   addRepository,
   appointLead,
   fetchProject,
+  grantAccess,
   removeLead,
   removeRepository,
   renameProject,
+  restrictProject,
+  revokeAccess,
   type ProjectDetail,
   type SignedInMember,
 } from "../api/client";
@@ -67,6 +70,11 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           {project.you_lead && (
             <Badge variant="light" color="teal">
               you lead this
+            </Badge>
+          )}
+          {project.restricted && (
+            <Badge variant="light" color="orange" data-testid="restricted">
+              restricted
             </Badge>
           )}
         </Group>
@@ -129,6 +137,67 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             testid="lead"
             onAdd={(employeeId) => attempt(() => appointLead(project.project_id, employeeId))}
           />
+        )}
+      </Card>
+
+      <Card withBorder>
+        <Group justify="space-between" align="start" mb="xs">
+          <div>
+            <Title order={3} size="h5">
+              Who can reach it
+            </Title>
+            <Text c="dimmed" size="sm">
+              {project.restricted
+                ? "Restricted: only the members below, this project’s leads and the team’s admins can reach it."
+                : "Open to the whole team. Restricting it keeps memory in this project to its access list."}
+            </Text>
+          </div>
+          {project.you_may_change && (
+            <Button
+              variant="light"
+              color={project.restricted ? "gray" : "orange"}
+              data-testid="restrict"
+              onClick={() => attempt(() => restrictProject(project.project_id, !project.restricted))}
+            >
+              {project.restricted ? "Open to the team" : "Restrict"}
+            </Button>
+          )}
+        </Group>
+        <Stack gap="xs" data-testid="access">
+          {project.access.length === 0 && <Text c="dimmed">Nobody has been let in yet.</Text>}
+          {project.access.map((member) => (
+            <Group key={member.employee_id} justify="space-between">
+              <Text>
+                {member.name} <Code>{member.employee_id}</Code>
+              </Text>
+              {project.you_may_change && (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="red"
+                  data-testid={`revoke-${member.employee_id}`}
+                  onClick={() => attempt(() => revokeAccess(project.project_id, member.employee_id))}
+                >
+                  Take access away
+                </Button>
+              )}
+            </Group>
+          ))}
+        </Stack>
+        {project.you_may_change && (
+          <Adding
+            label="Employee ID"
+            placeholder="emp-2"
+            action="Let in"
+            testid="access"
+            onAdd={(employeeId) => attempt(() => grantAccess(project.project_id, employeeId))}
+          />
+        )}
+        {!project.restricted && project.access.length > 0 && (
+          <Text c="dimmed" size="sm" mt="sm">
+            This list is kept while the project is open, so restricting it again lets the same members straight back
+            in.
+          </Text>
         )}
       </Card>
 

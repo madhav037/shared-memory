@@ -36,6 +36,10 @@ LEAD_APPOINTED = "lead_appointed"
 LEAD_REMOVED = "lead_removed"
 REPOSITORY_ADDED = "repository_added"
 REPOSITORY_REMOVED = "repository_removed"
+PROJECT_RESTRICTED = "project_restricted"
+PROJECT_OPENED = "project_opened"
+ACCESS_GRANTED = "access_granted"
+ACCESS_REVOKED = "access_revoked"
 
 
 @dataclass(frozen=True)

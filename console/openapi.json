@@ -229,6 +229,118 @@
         }
       }
     },
+    "/api/projects/{project_id}/restrict": {
+      "post": {
+        "operationId": "restrict_project",
+        "summary": "Close a project to its access list, or open it to the whole team again.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Restriction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Close a project to its access list, or open it to the whole team again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/access": {
+      "post": {
+        "operationId": "grant_access",
+        "summary": "Let a member into a restricted project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Let a member into a restricted project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/access/{employee_id}/remove": {
+      "post": {
+        "operationId": "revoke_access",
+        "summary": "Take a member off a project's access list.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a member off a project's access list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/repositories": {
       "post": {
         "operationId": "add_repository",
@@ -984,7 +1096,7 @@
         "type": "object"
       },
       "ProjectDetail": {
-        "description": "One project: who leads it, which repositories belong to it, and what this member may change.",
+        "description": "One project: who leads it, who is allowed in, which repositories belong to it, and what may be changed.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -994,11 +1106,22 @@
             "title": "Name",
             "type": "string"
           },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
           "leads": {
             "items": {
               "$ref": "#/components/schemas/ProjectMember"
             },
             "title": "Leads",
+            "type": "array"
+          },
+          "access": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Access",
             "type": "array"
           },
           "repositories": {
@@ -1020,7 +1143,9 @@
         "required": [
           "project_id",
           "name",
+          "restricted",
           "leads",
+          "access",
           "repositories",
           "you_lead",
           "you_may_change"
@@ -1054,6 +1179,34 @@
           "employee_id"
         ],
         "title": "Appointment",
+        "type": "object"
+      },
+      "Restriction": {
+        "description": "Whether this project is closed to its access list, or open to the whole team.",
+        "properties": {
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restricted"
+        ],
+        "title": "Restriction",
+        "type": "object"
+      },
+      "AccessChange": {
+        "description": "The member being let into this project.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id"
+        ],
+        "title": "AccessChange",
         "type": "object"
       },
       "RepositoryName": {
