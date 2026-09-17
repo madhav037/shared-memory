@@ -59,7 +59,14 @@ export function signOut(): Promise<Status> {
   return ask<Status>("/api/sign-out", { method: "POST", headers: fromConsole });
 }
 
-export type AuditFilters = { member?: string; kind?: string; since?: string; until?: string; before?: number };
+export type AuditFilters = {
+  member?: string;
+  kind?: string;
+  project?: string;
+  since?: string;
+  until?: string;
+  before?: number;
+};
 
 /** A page of the audit log, newest first. */
 export function fetchAudit(filters: AuditFilters, signal?: AbortSignal): Promise<AuditPage> {

@@ -485,6 +485,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="audit",
         summary="The team's audit log, newest first.",
         answers=AuditPage,
+        query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
     Declaration(
         path="/projects/{project_id}/memory/history",
@@ -1037,6 +1038,7 @@ class ConsoleApi:
                 before=int(asked["before"]) if asked.get("before") else None,
                 member_id=asked.get("member") or None,
                 kind=asked.get("kind") or None,
+                project_id=asked.get("project") or None,
                 since=_moment(asked.get("since"), time.min),
                 until=_moment(asked.get("until"), time.max),
             )

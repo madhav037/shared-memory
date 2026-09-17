@@ -23,6 +23,16 @@ const WORDS: Record<string, string> = {
   project_opened: "project opened to the team",
   access_granted: "access granted",
   access_revoked: "access taken away",
+  memory_saved: "memory saved",
+  memory_edited: "memory edited",
+  memory_deleted: "memory deleted",
+  memory_promoted: "memory promoted",
+  memory_superseded: "memory superseded",
+  memory_retired: "memory retired",
+  memory_pinned: "memory pinned",
+  memory_unpinned: "memory unpinned",
+  challenge_raised: "challenge raised",
+  challenge_decided: "challenge decided",
 };
 
 function when(at: string): string {
@@ -82,6 +92,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         <Group align="end" gap="sm">
           <TextInput label="Member" placeholder="employee ID" data-testid="filter-member" onChange={filter("member")} />
           <TextInput label="Kind" placeholder="signed_in" data-testid="filter-kind" onChange={filter("kind")} />
+          <TextInput label="Project" placeholder="project ID" data-testid="filter-project" onChange={filter("project")} />
           <TextInput label="From" type="date" data-testid="filter-since" onChange={filter("since")} />
           <TextInput label="To" type="date" data-testid="filter-until" onChange={filter("until")} />
         </Group>
