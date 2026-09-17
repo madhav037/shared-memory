@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import httpx
 import httpx2
@@ -21,6 +22,10 @@ import uvicorn
 from anyio.from_thread import BlockingPortal
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.routing import Route
 
 from shared_memory import cli
 from shared_memory.config import Settings
@@ -60,11 +65,13 @@ class ToolRefused(Exception):
 
 
 class RunningServer:
-    def __init__(self, app: Any, settings: Settings, clock: TestClock, portal: BlockingPortal) -> None:
+    def __init__(
+        self, app: Any, settings: Settings, clock: TestClock, portal: BlockingPortal, port: int = 0
+    ) -> None:
         self.settings = settings
         self.clock = clock
         self.portal = portal
-        config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning", lifespan="on")
+        config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
         self._server = uvicorn.Server(config)
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
@@ -79,6 +86,10 @@ class RunningServer:
     def stop(self) -> None:
         self._server.should_exit = True
         self._thread.join(timeout=10)
+
+    def join(self) -> None:
+        """Stay up until the process is stopped, for a server the browser journeys run against."""
+        self._thread.join()
 
     def run_cli(self, *argv: str) -> str:
         out = io.StringIO()
@@ -175,3 +186,83 @@ def new_team(server: RunningServer) -> Team:
     output = server.run_cli("setup", "--team", code, "--owner-employee-id", "owner-1", "--owner-name", "Olive Owner")
     token = next(line.split(":", 1)[1].strip() for line in output.splitlines() if line.startswith("Owner personal token:"))
     return Team(server, code, token)
+
+
+class FakeGitHub:
+    """Stands in for GitHub's sign-in, so no test touches the real one.
+
+    It signs everyone in as whichever account it has been told to return, which is how a test chooses who is at the
+    keyboard. The browser journeys change that account through `POST /as-account`.
+    """
+
+    def __init__(self, portal: BlockingPortal, settings: Settings, port: int = 0) -> None:
+        self.account_id = 1
+        self.login = "olive"
+
+        async def authorize(request: Request) -> Response:
+            redirect_uri = request.query_params["redirect_uri"]
+            state = request.query_params.get("state", "")
+            joiner = "&" if "?" in redirect_uri else "?"
+            return RedirectResponse(f"{redirect_uri}{joiner}code=fake-code&state={state}", status_code=302)
+
+        async def access_token(request: Request) -> Response:
+            return JSONResponse({"access_token": "gho_fake", "token_type": "bearer", "scope": "read:user"})
+
+        async def user(request: Request) -> Response:
+            return JSONResponse({"id": self.account_id, "login": self.login})
+
+        async def as_account(request: Request) -> Response:
+            body = await request.json()
+            self.as_(int(body["id"]), str(body["login"]))
+            return JSONResponse({"id": self.account_id, "login": self.login})
+
+        app = Starlette(
+            routes=[
+                Route("/login/oauth/authorize", authorize, methods=["GET"]),
+                Route("/login/oauth/access_token", access_token, methods=["POST"]),
+                Route("/user", user, methods=["GET"]),
+                Route("/as-account", as_account, methods=["POST"]),
+            ]
+        )
+        self._server = RunningServer(app, settings, TestClock(), portal, port=port)
+        self.url = self._server.url
+
+    def as_(self, account_id: int, login: str) -> None:
+        """Whoever signs in next is this GitHub account."""
+        self.account_id, self.login = account_id, login
+
+    def stop(self) -> None:
+        self._server.stop()
+
+
+class ConsoleClient:
+    """A browser, as the server sees it: it follows redirects and keeps the session cookie."""
+
+    def __init__(self, server: RunningServer) -> None:
+        self.server = server
+        self._http = httpx.Client(base_url=server.url, follow_redirects=True, timeout=30)
+
+    def status(self) -> dict[str, Any]:
+        response = self._http.get("/api/status")
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    def get(self, path: str) -> httpx.Response:
+        return self._http.get(path)
+
+    def sign_in(self) -> httpx.Response:
+        """Follow the whole sign-in: to GitHub, back to the callback, and on to the console."""
+        return self._http.get("/api/sign-in/github")
+
+    def sign_out(self, with_header: bool = True) -> httpx.Response:
+        headers = {"X-Shared-Memory-Console": "1"} if with_header else {}
+        return self._http.post("/api/sign-out", headers=headers)
+
+    def close(self) -> None:
+        self._http.close()
+
+
+def sign_in_error(response: httpx.Response) -> str:
+    """The message the console was sent back with, when a sign-in was refused."""
+    return unquote(str(response.url.params.get("sign-in-error", "")))

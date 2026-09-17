@@ -58,6 +58,11 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _github_login(login: str | None) -> str | None:
+    cleaned = (login or "").strip().lstrip("@")
+    return cleaned or None
+
+
 def check_name(kind: str, value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise Refused(
@@ -72,7 +77,7 @@ class Identity:
         self._db = db
         self._clock = clock
 
-    def setup_team(self, team_code: str, owner_employee_id: str, owner_name: str) -> str:
+    def setup_team(self, team_code: str, owner_employee_id: str, owner_name: str, owner_github: str | None = None) -> str:
         check_name("Team ID", team_code)
         check_name("Employee ID", owner_employee_id)
         now = self._clock()
@@ -84,9 +89,9 @@ class Identity:
             ).fetchone()
             assert team is not None
             member = conn.execute(
-                "INSERT INTO members (team_id, member_id, name, is_owner, created_at)"
-                " VALUES (%s, %s, %s, TRUE, %s) RETURNING id",
-                (team["id"], owner_employee_id, owner_name, now),
+                "INSERT INTO members (team_id, member_id, name, is_owner, github_login, created_at)"
+                " VALUES (%s, %s, %s, TRUE, %s, %s) RETURNING id",
+                (team["id"], owner_employee_id, owner_name, _github_login(owner_github), now),
             ).fetchone()
             assert member is not None
             return self._issue_token(conn, member["id"])
@@ -188,6 +193,55 @@ class Identity:
                 "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (self._clock(), pk)
             )
             return self._issue_token(conn, pk)
+
+    def link_github(self, team_code: str, employee_id: str, github_login: str) -> None:
+        """Link a GitHub account to a member who already exists, so they can sign in to the console."""
+        login = _github_login(github_login)
+        if login is None:
+            raise Refused("A GitHub username is needed.")
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT m.id FROM members m JOIN teams t ON t.id = m.team_id"
+                " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL",
+                (team_code, employee_id),
+            ).fetchone()
+            if row is None:
+                raise Refused(f"No member with employee ID {employee_id!r} in team {team_code!r}.")
+            taken = conn.execute(
+                "SELECT m.member_id FROM members m JOIN teams t ON t.id = m.team_id"
+                " WHERE t.code = %s AND lower(m.github_login) = lower(%s) AND m.id <> %s",
+                (team_code, login, row["id"]),
+            ).fetchone()
+            if taken is not None:
+                raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this team.")
+            # Clearing the account id makes the next sign-in bind this login to whichever account signs in with it.
+            conn.execute(
+                "UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, row["id"])
+            )
+
+    def member_for_github(self, account_id: int, login: str) -> Member:
+        """The member a GitHub account belongs to, remembering the account's id the first time it signs in."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.removed_at, m.github_user_id"
+                " FROM members m JOIN teams t ON t.id = m.team_id"
+                " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
+                (account_id, login),
+            ).fetchall()
+            if not rows:
+                raise Refused(
+                    f"The GitHub account @{login} isn't linked to a member. Ask an admin to link it to you."
+                )
+            if len(rows) > 1:
+                raise Refused(f"The GitHub account @{login} is linked to members in more than one team. Ask an admin.")
+            row = rows[0]
+            if row["removed_at"] is not None:
+                raise Refused("You have been removed from this team, so you can no longer sign in.")
+            conn.execute(
+                "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
+                (account_id, login, row["id"]),
+            )
+            return Member(row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"])
 
     def is_removed(self, team_code: str, member_id: str) -> bool:
         with self._db.transaction() as conn:

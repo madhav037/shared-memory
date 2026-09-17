@@ -20,6 +20,18 @@ class Settings:
     similar_threshold: float = 0.62
     allowed_hosts: tuple[str, ...] = ()
     plugin_marketplace: str = "madhav037/shared-memory"
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    github_sign_in_url: str = "https://github.com"
+    github_api_url: str = "https://api.github.com"
+    console_url: str = ""
+    console_session_idle_hours: float = 24
+    console_session_days: float = 7
+
+    @property
+    def github_sign_in(self) -> bool:
+        """Whether this server can sign anyone in to the console."""
+        return bool(self.github_client_id and self.github_client_secret)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
@@ -32,4 +44,9 @@ class Settings:
             model_cache=Path(env.get("SHARED_MEMORY_MODEL_CACHE", ".cache/fastembed")),
             allowed_hosts=hosts,
             plugin_marketplace=env.get("SHARED_MEMORY_PLUGIN_MARKETPLACE", "madhav037/shared-memory"),
+            github_client_id=env.get("SHARED_MEMORY_GITHUB_CLIENT_ID", ""),
+            github_client_secret=env.get("SHARED_MEMORY_GITHUB_CLIENT_SECRET", ""),
+            github_sign_in_url=env.get("SHARED_MEMORY_GITHUB_SIGN_IN_URL", "https://github.com"),
+            github_api_url=env.get("SHARED_MEMORY_GITHUB_API_URL", "https://api.github.com"),
+            console_url=env.get("SHARED_MEMORY_CONSOLE_URL", ""),
         )

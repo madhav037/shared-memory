@@ -21,10 +21,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sign-in/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Begin signing in: send the member to GitHub. */
+        get: operations["sign_in"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sign-in/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Finish signing in and return the member to the console. */
+        get: operations["sign_in_callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End this console session. */
+        post: operations["sign_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * SignedInMember
+         * @description Who the console is signed in as.
+         */
+        SignedInMember: {
+            /** Employee Id */
+            employee_id: string;
+            /** Name */
+            name: string;
+            /** Team */
+            team: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "member";
+        };
         /**
          * Status
          * @description Whether the console has reached the server, and who it is signed in as.
@@ -34,6 +102,8 @@ export interface components {
             signed_in: boolean;
             /** Github Sign In */
             github_sign_in: boolean;
+            /** @default null */
+            member: components["schemas"]["SignedInMember"] | null;
         };
     };
     responses: never;
@@ -54,6 +124,62 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Whether the console has reached the server, and who it is signed in as. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
+            };
+        };
+    };
+    sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Begin signing in: send the member to GitHub. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sign_in_callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finish signing in and return the member to the console. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sign_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description End this console session. */
             200: {
                 headers: {
                     [name: string]: unknown;

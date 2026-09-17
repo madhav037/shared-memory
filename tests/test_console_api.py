@@ -20,7 +20,7 @@ def get(server: RunningServer, path: str) -> dict[str, Any]:
 def test_the_console_is_told_that_nobody_is_signed_in(server: RunningServer) -> None:
     status = get(server, "/api/status")
 
-    assert status == {"signed_in": False, "github_sign_in": False}
+    assert status == {"signed_in": False, "github_sign_in": False, "member": None}
 
 
 def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: RunningServer) -> None:
@@ -30,7 +30,13 @@ def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: 
     assert "/api/status" in document["paths"]
     schema = document["paths"]["/api/status"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
     assert schema == {"$ref": "#/components/schemas/Status"}
-    assert document["components"]["schemas"]["Status"]["properties"].keys() == {"signed_in", "github_sign_in"}
+    assert document["components"]["schemas"]["Status"]["properties"].keys() == {
+        "signed_in",
+        "github_sign_in",
+        "member",
+    }
+    assert "SignedInMember" in document["components"]["schemas"]
+    assert document["paths"]["/api/sign-in/github"]["get"]["responses"].keys() == {"302"}
 
 
 def test_the_console_api_leaves_the_memory_tools_and_the_hooks_alone(team: Team) -> None:
