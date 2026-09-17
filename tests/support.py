@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import io
+import os
 import threading
 import time
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import httpx
 import httpx2
+import psycopg
+import pytest
 import uvicorn
 from anyio.from_thread import BlockingPortal
 from mcp import Client
@@ -20,6 +24,20 @@ from mcp.client.streamable_http import streamable_http_client
 
 from shared_memory import cli
 from shared_memory.config import Settings
+
+ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def fresh_database(name: str) -> str:
+    """Drop and recreate a database on the test Postgres; return its URL."""
+    try:
+        with psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=5) as conn:
+            conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
+            conn.execute(f"CREATE DATABASE {name}")
+    except psycopg.OperationalError as error:
+        pytest.exit(f"Postgres is not reachable ({error}). Start it with: docker compose up -d db", returncode=2)
+    return ADMIN_URL.rsplit("/", 1)[0] + f"/{name}"
 
 
 class TestClock:

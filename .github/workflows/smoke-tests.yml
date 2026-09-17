@@ -1,0 +1,91 @@
+name: Smoke tests
+
+# Real Claude Code with the plugin against a locally started server (docs/smoke-tests.md).
+# Needs an ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret; without one the run is skipped with a warning.
+
+on:
+  schedule:
+    - cron: "30 20 * * *" # nightly, 02:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shared_memory
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - name: Check for Claude credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::warning::Smoke tests skipped: add an ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.credentials.outputs.ready == 'true'
+
+      - uses: astral-sh/setup-uv@v10
+        if: steps.credentials.outputs.ready == 'true'
+
+      - name: Cache the search model
+        if: steps.credentials.outputs.ready == 'true'
+        uses: actions/cache@v6
+        with:
+          path: .cache/fastembed
+          key: fastembed-${{ hashFiles('uv.lock') }}
+
+      - name: Install Claude Code
+        if: steps.credentials.outputs.ready == 'true'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run smoke tests
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          # Export only the credential that is set: an empty one can shadow the other.
+          if [ -n "$API_KEY" ]; then export ANTHROPIC_API_KEY="$API_KEY"; else export CLAUDE_CODE_OAUTH_TOKEN="$OAUTH_TOKEN"; fi
+          claude --version
+          uv run pytest smoke -v
+
+      - name: Report the failure in an issue
+        if: failure() && steps.credentials.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create smoke-test-failure --color B60205 --description "Smoke tests with real Claude Code failed" --force
+          existing=$(gh issue list --label smoke-test-failure --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --label smoke-test-failure --title "Smoke tests with real Claude Code are failing" \
+              --body "The smoke tests failed: $RUN_URL. Close this issue once they pass again; the next failure opens a new one."
+          fi

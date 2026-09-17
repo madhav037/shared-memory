@@ -1,0 +1,4 @@
+# Caddy gets and renews the HTTPS certificate for the domain automatically.
+{$SHARED_MEMORY_DOMAIN} {
+	reverse_proxy server:8000
+}

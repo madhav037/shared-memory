@@ -36,7 +36,7 @@ addopts = "-q"
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
-files = ["src", "tests"]
+files = ["src", "tests", "smoke"]
 
 [[tool.mypy.overrides]]
 module = ["fastembed.*", "pgvector.*"]
