@@ -10,6 +10,7 @@ export type Tree = components["schemas"]["Tree"];
 export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
 export type SearchHit = components["schemas"]["SearchHit"];
+export type IssuedToken = components["schemas"]["IssuedToken"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -76,6 +77,11 @@ export type SearchAsked = { query: string; level?: string; type?: string };
 /** Memories that match, by meaning and by exact words. */
 export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
+}
+
+/** Issue a new personal token for the signed-in member; the one they had stops working. */
+export function reissueMyToken(): Promise<IssuedToken> {
+  return ask<IssuedToken>("/api/my-token", { method: "POST", headers: fromConsole });
 }
 
 export const signInUrl = "/api/sign-in/github";

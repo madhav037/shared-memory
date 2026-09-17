@@ -23,6 +23,7 @@ from shared_memory.identity import Member
 
 SIGNED_IN = "signed_in"
 SIGN_IN_REFUSED = "sign_in_refused"
+TOKEN_ISSUED = "token_issued"
 
 
 @dataclass(frozen=True)

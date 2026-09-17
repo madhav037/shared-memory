@@ -20,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory.audit import Audit
+from shared_memory.audit import TOKEN_ISSUED, Audit
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
@@ -164,6 +164,14 @@ class SearchResults(BaseModel):
     results: list[SearchHit]
 
 
+class IssuedToken(BaseModel):
+    """A personal token, shown the once. The console never shows it again."""
+
+    employee_id: str
+    personal_token: str
+    server_url: str
+
+
 @dataclass(frozen=True)
 class Declaration:
     """One call the console can make, and what it answers with. A call that answers `None` redirects instead."""
@@ -236,6 +244,22 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="audit",
         summary="The team's audit log, newest first.",
         answers=AuditPage,
+    ),
+    Declaration(
+        path="/my-token",
+        method="POST",
+        operation_id="reissue_my_token",
+        summary="Issue a new personal token for the signed-in member, revoking the one they had.",
+        answers=IssuedToken,
+        changes=True,
+    ),
+    Declaration(
+        path="/members/{employee_id}/token",
+        method="POST",
+        operation_id="reissue_token",
+        summary="Issue a new personal token for a member of the team, revoking the one they had.",
+        answers=IssuedToken,
+        changes=True,
     ),
     Declaration(
         path="/sign-out",
@@ -316,6 +340,8 @@ class ConsoleApi:
             "tree": self._tree,
             "memory": self._memory,
             "search": self._search,
+            "reissue_my_token": self._reissue_my_token,
+            "reissue_token": self._reissue_token,
             "sign_out": self._sign_out,
         }
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
@@ -410,6 +436,34 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         except ValueError:
             return JSONResponse({"message": "That request wasn't understood."}, status_code=422)
+
+    def _reissue_my_token(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        token = self._identity.reissue_own_token(member)
+        self._audit.record(TOKEN_ISSUED, member=member, target=member.member_id, detail={"for": "themselves"})
+        return self._issued(request, member.member_id, token)
+
+    def _reissue_token(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        employee_id = request.path_params["employee_id"]
+        try:
+            token = self._identity.reissue_token(self._identity.caller_in(member, None), employee_id)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        self._audit.record(TOKEN_ISSUED, member=member, target=employee_id, detail={"for": employee_id})
+        return self._issued(request, employee_id, token)
+
+    def _issued(self, request: Request, employee_id: str, token: str) -> Response:
+        issued = IssuedToken(employee_id=employee_id, personal_token=token, server_url=self._server_url(request))
+        return JSONResponse(issued.model_dump(mode="json"))
+
+    def _server_url(self, request: Request) -> str:
+        """What a member puts into the plugin: the address their Claude reaches this server at."""
+        return (self._settings.console_url or self._root(request)).rstrip("/")
 
     def _audit_log(self, request: Request) -> Response:
         member = self._member(request)
