@@ -2,8 +2,6 @@
 
 This guide covers the three people involved: the person running the server, the owner, and every member. Words in **bold** are defined in [`CONTEXT.md`](../CONTEXT.md).
 
-> **Partly verified.** Prototype #2 confirmed the plugin's MCP connection, briefing and recall in real Claude Code sessions (Claude Code 2.1.274, Windows). The steps marked *Human check* still need confirming by a person.
-
 ## 1. Run the server (the person running the server)
 
 Requirements: Docker with Compose.
@@ -77,9 +75,8 @@ Commit the file. Several repositories can use the same project ID, each with its
 2. Trust the repository's settings when Claude Code asks. That adds the marketplace and enables the **shared-memory** plugin; there is no separate install prompt.
 3. When the plugin is enabled, it asks for:
    - **Shared Memory server URL**, for example `https://memory.example.com`
-   - **Your personal token** (stored as a sensitive value)
-   *(Human check: confirm both prompts appear and the token is masked.)*
-4. Start a session. The **briefing** appears at session start, and **recall** is added to prompts. *(Human check: ask "which package manager do we use?" in a project with a pinned convention.)*
+   - **Your personal token** (stored as a sensitive value, and masked on screen)
+4. Start a session. The **briefing** appears at session start, and **recall** is added to prompts.
 
 Access to the plugin marketplace repository is needed to install the plugin. While the repository is private, members need read access to it on GitHub.
 
