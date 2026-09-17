@@ -39,7 +39,6 @@ class ClaudeRun:
     results: list[str] = field(default_factory=list)
     tool_uses: list[str] = field(default_factory=list)
     hooks: list[HookRun] = field(default_factory=list)
-    transcript: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def answer(self) -> str:
@@ -121,7 +120,6 @@ def run_claude(
                 event = json.loads(line)
             except ValueError:
                 continue
-            run.transcript.append(event)
             _record(run, event, started, time.monotonic())
             if event.get("type") == "result":
                 send_next()
