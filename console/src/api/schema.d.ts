@@ -140,6 +140,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/memory/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of one memory, newest first. */
+        get: operations["history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/memory/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A memory as it was at one version. */
+        get: operations["version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/memory/difference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What changed in a memory between two versions. */
+        get: operations["difference"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/my-token": {
         parameters: {
             query?: never;
@@ -390,6 +441,58 @@ export interface components {
             next: number | null;
         };
         /**
+         * MemoryVersion
+         * @description One version of a memory in the memory folder's history.
+         */
+        MemoryVersion: {
+            /** Commit */
+            commit: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Author */
+            author: string;
+            /** Name */
+            name: string;
+            /** Message */
+            message: string;
+        };
+        /** MemoryHistory */
+        MemoryHistory: {
+            /** Path */
+            path: string;
+            /** Versions */
+            versions: components["schemas"]["MemoryVersion"][];
+        };
+        /**
+         * MemoryAtVersion
+         * @description A memory's text as it was at one version.
+         */
+        MemoryAtVersion: {
+            /** Path */
+            path: string;
+            /** Commit */
+            commit: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * MemoryDifference
+         * @description What changed in a memory between two versions.
+         */
+        MemoryDifference: {
+            /** Path */
+            path: string;
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+            /** Difference */
+            difference: string;
+        };
+        /**
          * IssuedToken
          * @description A personal token, shown the once. The console never shows it again.
          */
@@ -577,6 +680,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every version of one memory, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryHistory"];
+                };
+            };
+        };
+    };
+    version: {
+        parameters: {
+            query?: {
+                path?: string;
+                commit?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A memory as it was at one version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryAtVersion"];
+                };
+            };
+        };
+    };
+    difference: {
+        parameters: {
+            query?: {
+                path?: string;
+                before?: string;
+                after?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What changed in a memory between two versions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDifference"];
                 };
             };
         };

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
@@ -52,6 +54,22 @@ class Change:
 
 class ChangeListener(Protocol):
     def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None: ...
+
+
+@dataclass(frozen=True)
+class Version:
+    """One version of a memory in the memory folder's history."""
+
+    commit: str
+    at: datetime
+    author: str
+    name: str
+    message: str
+
+
+def _check_commit(commit: str) -> None:
+    if not re.fullmatch(r"[0-9a-f]{7,64}", commit):
+        raise Refused(f"{commit!r} is not a version of anything.")
 
 
 class MemoryStore:
@@ -139,6 +157,44 @@ class MemoryStore:
             lines.append("")
         directory.mkdir(parents=True, exist_ok=True)
         index.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
+    def history(self, team: str, path: PurePosixPath) -> list[Version]:
+        """Every version of one memory, newest first: who wrote it, when, and what the change was called."""
+        inside = self._inside_team(team, path)
+        printed = self._git("log", "--format=%H%x1f%aI%x1f%ae%x1f%an%x1f%s", "--", inside)
+        versions = []
+        for line in printed.splitlines():
+            if not line.strip():
+                continue
+            commit, at, email, name, message = line.split("")
+            versions.append(
+                Version(commit=commit, at=datetime.fromisoformat(at), author=email.split("@")[0], name=name, message=message)
+            )
+        return versions
+
+    def version(self, team: str, path: PurePosixPath, commit: str) -> str:
+        """The memory's text as it was at one version."""
+        inside = self._inside_team(team, path)
+        _check_commit(commit)
+        try:
+            return self._git("show", f"{commit}:{inside}")
+        except RuntimeError:
+            raise Refused(f"There is no version {commit!r} of {str(path)!r}.") from None
+
+    def difference(self, team: str, path: PurePosixPath, before: str, after: str) -> str:
+        """What changed in this memory between two versions, as a unified difference."""
+        inside = self._inside_team(team, path)
+        _check_commit(before)
+        _check_commit(after)
+        try:
+            return self._git("diff", "--unified=3", before, after, "--", inside)
+        except RuntimeError:
+            raise Refused("Those versions can't be compared.") from None
+
+    def _inside_team(self, team: str, path: PurePosixPath) -> str:
+        """The path git knows this memory by, confined to the team's own folder."""
+        self._file(team, path)  # refuses anything outside the team's folder
+        return str(PurePosixPath(team) / path)
 
     def read(self, team: str, path: PurePosixPath) -> Memory:
         file = self._file(team, path)

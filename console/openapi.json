@@ -213,6 +213,138 @@
         }
       }
     },
+    "/api/projects/{project_id}/memory/history": {
+      "get": {
+        "operationId": "history",
+        "summary": "Every version of one memory, newest first.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every version of one memory, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryHistory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/memory/version": {
+      "get": {
+        "operationId": "version",
+        "summary": "A memory as it was at one version.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A memory as it was at one version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryAtVersion"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/memory/difference": {
+      "get": {
+        "operationId": "difference",
+        "summary": "What changed in a memory between two versions.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What changed in a memory between two versions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDifference"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/my-token": {
       "post": {
         "operationId": "reissue_my_token",
@@ -806,6 +938,115 @@
           "next"
         ],
         "title": "AuditPage",
+        "type": "object"
+      },
+      "MemoryVersion": {
+        "description": "One version of a memory in the memory folder's history.",
+        "properties": {
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit",
+          "at",
+          "author",
+          "name",
+          "message"
+        ],
+        "title": "MemoryVersion",
+        "type": "object"
+      },
+      "MemoryHistory": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "versions"
+        ],
+        "title": "MemoryHistory",
+        "type": "object"
+      },
+      "MemoryAtVersion": {
+        "description": "A memory's text as it was at one version.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "commit",
+          "text"
+        ],
+        "title": "MemoryAtVersion",
+        "type": "object"
+      },
+      "MemoryDifference": {
+        "description": "What changed in a memory between two versions.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "difference": {
+            "title": "Difference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "before",
+          "after",
+          "difference"
+        ],
+        "title": "MemoryDifference",
         "type": "object"
       },
       "IssuedToken": {
