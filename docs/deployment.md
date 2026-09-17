@@ -9,6 +9,7 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
 - A Linux host with Docker and Docker Compose.
 - A domain name (for example `memory.example.com`) whose DNS record points at the host, with ports 80 and 443 open. Caddy uses both to get and renew the certificate.
 - A **private** git repository for backups, for example `your-org/shared-memory-backup` on GitHub, and an SSH key with write access to it.
+- For the **console**, a GitHub OAuth app (free, made in a few clicks below). Without one the console still runs, but nobody can sign in to it.
 
 ## Deploy
 
@@ -35,10 +36,10 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
    docker compose up -d --build
    ```
 
-5. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately:
+5. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
 
    ```bash
-   docker compose exec server shared-memory setup --team acme --owner-employee-id E1001 --owner-name "Olive Owner"
+   docker compose exec server shared-memory setup --team acme --owner-employee-id E1001 --owner-name "Olive Owner" --owner-github olive
    ```
 
 6. Check HTTPS works. This should print `200`:
@@ -53,9 +54,30 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
    docker compose exec backup backup now
    ```
 
-Members use `https://memory.example.com` as the **Shared Memory server URL** in the plugin ([`setup.md`](./setup.md) §4).
+Members use `https://memory.example.com` as the **Shared Memory server URL** in the plugin ([`setup.md`](./setup.md) §4), and open the **console** at `https://memory.example.com`.
 
 To update the server later, pull this repository and run `docker compose up -d --build` again.
+
+## The console
+
+The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).
+
+1. Register a GitHub OAuth app at **Settings → Developer settings → OAuth Apps → New OAuth App** (on your account or your organisation):
+
+   | Field | Value |
+   |---|---|
+   | Application name | Shared Memory |
+   | Homepage URL | `https://memory.example.com` |
+   | Authorization callback URL | `https://memory.example.com/api/sign-in/github/callback` |
+
+2. Put the app's client ID and a generated client secret in `.env` as `SHARED_MEMORY_GITHUB_CLIENT_ID` and `SHARED_MEMORY_GITHUB_CLIENT_SECRET`, then `docker compose up -d`.
+3. Link each member's GitHub account, so they can sign in. The owner's was linked by `setup --owner-github`:
+
+   ```bash
+   docker compose exec server shared-memory link-github --team acme --employee-id E1042 --github dana
+   ```
+
+A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
 
 ## Backups
 

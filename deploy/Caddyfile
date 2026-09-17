@@ -1,4 +1,22 @@
-# Caddy gets and renews the HTTPS certificate for the domain automatically.
+# Caddy gets and renews the HTTPS certificate for the domain automatically, serves the console, and passes
+# everything the server owns through to it. One domain, one certificate, one origin for the console's cookies.
 {$SHARED_MEMORY_DOMAIN} {
-	reverse_proxy server:8000
+	handle /api/* {
+		reverse_proxy server:8000
+	}
+
+	handle /mcp* {
+		reverse_proxy server:8000
+	}
+
+	handle /hooks/* {
+		reverse_proxy server:8000
+	}
+
+	# The console is a single-page app: any address it owns is served by its own page.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
 }

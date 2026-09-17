@@ -28,11 +28,17 @@ services:
       SHARED_MEMORY_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/shared_memory
       SHARED_MEMORY_ALLOWED_HOSTS: ${SHARED_MEMORY_DOMAIN:?set SHARED_MEMORY_DOMAIN in .env}
       SHARED_MEMORY_PLUGIN_MARKETPLACE: ${SHARED_MEMORY_PLUGIN_MARKETPLACE:-madhav037/shared-memory}
+      SHARED_MEMORY_CONSOLE_URL: https://${SHARED_MEMORY_DOMAIN}
+      SHARED_MEMORY_GITHUB_CLIENT_ID: ${SHARED_MEMORY_GITHUB_CLIENT_ID:-}
+      SHARED_MEMORY_GITHUB_CLIENT_SECRET: ${SHARED_MEMORY_GITHUB_CLIENT_SECRET:-}
     volumes:
       - memory-data:/data
 
+  # Caddy with the console built into it: it serves the console and passes /api, /mcp and /hooks to the server.
   caddy:
-    image: caddy:2
+    build:
+      context: ..
+      dockerfile: deploy/console/Dockerfile
     restart: unless-stopped
     depends_on:
       - server
@@ -43,7 +49,6 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
 
