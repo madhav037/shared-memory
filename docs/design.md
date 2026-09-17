@@ -202,7 +202,7 @@ flowchart LR
   subgraph Machine["Member's machine"]
     CC["Claude Code session"]
     LM["Local memory (built-in)"]
-    PL["Plugin: MCP connection,<br/>HTTP hooks, instructions"]
+    PL["Plugin: MCP connection,<br/>hooks (curl), instructions"]
   end
   subgraph Server["Server: one Linux host, Docker Compose"]
     CA["Caddy (HTTPS)"]
@@ -239,8 +239,10 @@ flowchart LR
   - the MCP connection
   - the hooks
   - the instructions for Claude (when to use `remember` rather than local memory, how to handle challenges)
-- **Setup** is automatic through the repository's settings. The member accepts the plugin prompt and pastes their personal token.
-- **Hooks are HTTP hooks.** They call the server directly, so nothing needs installing on members' machines. If the prototype shows that **MCP-tool hooks** work, switch to them.
+- **Setup** is automatic through the repository's settings. Trusting the repository enables the plugin without a separate install prompt, and the member pastes their personal token.
+- **Hooks are command hooks that call the server's hook endpoints with `curl`.** curl ships with Windows 10+, macOS and Linux, so nothing needs installing on members' machines. The prototype (#2) ruled out the alternatives:
+  - **HTTP hooks** don't run for session start, and can't read the personal token from plugin config.
+  - **MCP-tool hooks** don't run for session start either. On a prompt they are skipped until the MCP connection is up.
 
 | Hook | Phase | What it does |
 |---|---|---|
@@ -310,5 +312,5 @@ flowchart LR
 - **Built-in agent memory may make this unnecessary.** memctl, a shared memory server for teams, shut down for this reason. What sets this design apart is challenges, collisions and the level model, not merely sharing memory.
 - **One member's memory steering another member's Claude.** Mitigated: other members' personal memories are never recalled automatically, and everything recalled is labeled as information, not instructions.
 - **The contradiction check trusts the member's session** (ADR-0004). Challenges, history and undo are the safety net.
-- **Hook behavior on timeout is undocumented.** Prototype check 3 settles it.
+- **Hook behavior on timeout is undocumented.** Settled by prototype #2: a hook that times out, errors or can't reach the server is cancelled or reported as a non-blocking error, and the prompt carries on.
 - **Locks only cover Claude's edit tools** (§7).

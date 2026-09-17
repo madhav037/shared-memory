@@ -2,7 +2,7 @@
 
 This guide covers the three people involved: the person running the server, the owner, and every member. Words in **bold** are defined in [`CONTEXT.md`](../CONTEXT.md).
 
-> **Not yet verified in a real Claude Code session.** The plugin's hook and header settings follow the Claude Code documentation, but prototype ticket #2 has not been run. Until it has, treat the plugin steps below as expected behaviour, and report anything that differs on #2.
+> **Partly verified.** Prototype #2 confirmed the plugin's MCP connection, briefing and recall in real Claude Code sessions (Claude Code 2.1.274, Windows). The steps marked *Human check* still need confirming by a person.
 
 ## 1. Run the server (the person running the server)
 
@@ -74,7 +74,7 @@ Commit the file. Several repositories can use the same project ID, each with its
 ## 4. Join as a new member
 
 1. Clone the repository and open it in Claude Code.
-2. Trust the repository's settings when Claude Code asks. It offers to install the **shared-memory** plugin from the marketplace. Accept. *(Human check: confirm the install prompt appears.)*
+2. Trust the repository's settings when Claude Code asks. That adds the marketplace and enables the **shared-memory** plugin; there is no separate install prompt.
 3. When the plugin is enabled, it asks for:
    - **Shared Memory server URL**, for example `https://memory.example.com`
    - **Your personal token** (stored as a sensitive value)
@@ -82,6 +82,8 @@ Commit the file. Several repositories can use the same project ID, each with its
 4. Start a session. The **briefing** appears at session start, and **recall** is added to prompts. *(Human check: ask "which package manager do we use?" in a project with a pinned convention.)*
 
 Access to the plugin marketplace repository is needed to install the plugin. While the repository is private, members need read access to it on GitHub.
+
+The plugin's hooks call the server with `curl`, which ships with Windows 10 and later, macOS and Linux. On Windows, Claude Code runs the hooks with Git Bash (from Git for Windows).
 
 ## 5. Repositories without a project
 

@@ -1,16 +1,18 @@
 {
   "name": "shared-memory",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Connects Claude Code sessions to your team's Shared Memory server.",
   "userConfig": {
     "server_url": {
       "type": "string",
-      "title": "Shared Memory server URL (for example https://memory.example.com)",
+      "title": "Shared Memory server URL",
+      "description": "Address of your team's Shared Memory server, for example https://memory.example.com",
       "sensitive": false
     },
     "personal_token": {
       "type": "string",
-      "title": "Your personal token",
+      "title": "Personal token",
+      "description": "Your personal token from your team's owner. It proves which member you are.",
       "sensitive": true
     }
   }

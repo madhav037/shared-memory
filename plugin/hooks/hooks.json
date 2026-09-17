@@ -5,14 +5,8 @@
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
-            "type": "http",
-            "url": "${user_config.server_url}/hooks/session-start",
-            "headers": {
-              "Authorization": "Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
-              "X-Shared-Memory-Project": "$SHARED_MEMORY_PROJECT",
-              "X-Shared-Memory-Repository": "$SHARED_MEMORY_REPOSITORY"
-            },
-            "allowedEnvVars": ["CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN", "SHARED_MEMORY_PROJECT", "SHARED_MEMORY_REPOSITORY"],
+            "type": "command",
+            "command": "curl -s --fail --max-time 5 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-start\" || echo '{\"systemMessage\":\"Shared Memory is unavailable: the server did not answer.\"}'",
             "timeout": 6
           }
         ]
@@ -22,15 +16,9 @@
       {
         "hooks": [
           {
-            "type": "http",
-            "url": "${user_config.server_url}/hooks/prompt-submitted",
-            "headers": {
-              "Authorization": "Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
-              "X-Shared-Memory-Project": "$SHARED_MEMORY_PROJECT",
-              "X-Shared-Memory-Repository": "$SHARED_MEMORY_REPOSITORY"
-            },
-            "allowedEnvVars": ["CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN", "SHARED_MEMORY_PROJECT", "SHARED_MEMORY_REPOSITORY"],
-            "timeout": 3
+            "type": "command",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/prompt-submitted\" || true",
+            "timeout": 4
           }
         ]
       }

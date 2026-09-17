@@ -30,6 +30,7 @@ def test_the_generated_plugin_name_matches_the_marketplace_and_plugin_in_this_re
     assert manifest["name"] == "shared-memory"
     assert manifest["userConfig"]["personal_token"]["sensitive"] is True
     assert manifest["userConfig"]["server_url"]["sensitive"] is False
+    assert all(option.get("description") for option in manifest["userConfig"].values())
 
 
 def test_several_repositories_share_one_projects_memory(team: Team) -> None:
