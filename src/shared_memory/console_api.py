@@ -164,6 +164,38 @@ class SearchResults(BaseModel):
     results: list[SearchHit]
 
 
+class MemoryVersion(BaseModel):
+    """One version of a memory in the memory folder's history."""
+
+    commit: str
+    at: datetime
+    author: str
+    name: str
+    message: str
+
+
+class MemoryHistory(BaseModel):
+    path: str
+    versions: list[MemoryVersion]
+
+
+class MemoryAtVersion(BaseModel):
+    """A memory's text as it was at one version."""
+
+    path: str
+    commit: str
+    text: str
+
+
+class MemoryDifference(BaseModel):
+    """What changed in a memory between two versions."""
+
+    path: str
+    before: str
+    after: str
+    difference: str
+
+
 class IssuedToken(BaseModel):
     """A personal token, shown the once. The console never shows it again."""
 
@@ -244,6 +276,30 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="audit",
         summary="The team's audit log, newest first.",
         answers=AuditPage,
+    ),
+    Declaration(
+        path="/projects/{project_id}/memory/history",
+        method="GET",
+        operation_id="history",
+        summary="Every version of one memory, newest first.",
+        answers=MemoryHistory,
+        query=("path",),
+    ),
+    Declaration(
+        path="/projects/{project_id}/memory/version",
+        method="GET",
+        operation_id="version",
+        summary="A memory as it was at one version.",
+        answers=MemoryAtVersion,
+        query=("path", "commit"),
+    ),
+    Declaration(
+        path="/projects/{project_id}/memory/difference",
+        method="GET",
+        operation_id="difference",
+        summary="What changed in a memory between two versions.",
+        answers=MemoryDifference,
+        query=("path", "before", "after"),
     ),
     Declaration(
         path="/my-token",
@@ -340,6 +396,9 @@ class ConsoleApi:
             "tree": self._tree,
             "memory": self._memory,
             "search": self._search,
+            "history": self._history,
+            "version": self._version,
+            "difference": self._difference,
             "reissue_my_token": self._reissue_my_token,
             "reissue_token": self._reissue_token,
             "sign_out": self._sign_out,
@@ -423,6 +482,32 @@ class ConsoleApi:
             )
 
         return self._browse(request, search)
+
+    def _history(self, request: Request) -> Response:
+        def read(caller: Caller) -> MemoryHistory:
+            return MemoryHistory(**self._service.history(caller, request.query_params.get("path", "")))
+
+        return self._browse(request, read)
+
+    def _version(self, request: Request) -> Response:
+        def read(caller: Caller) -> MemoryAtVersion:
+            asked = request.query_params
+            return MemoryAtVersion(
+                **self._service.version(caller, asked.get("path", ""), asked.get("commit", ""))
+            )
+
+        return self._browse(request, read)
+
+    def _difference(self, request: Request) -> Response:
+        def read(caller: Caller) -> MemoryDifference:
+            asked = request.query_params
+            return MemoryDifference(
+                **self._service.difference(
+                    caller, asked.get("path", ""), asked.get("before", ""), asked.get("after", "")
+                )
+            )
+
+        return self._browse(request, read)
 
     def _browse(self, request: Request, look: Callable[[Caller], BaseModel]) -> Response:
         """Everything a member reads about one project's memory, through the same services their Claude uses."""

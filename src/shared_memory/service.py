@@ -117,6 +117,43 @@ class MemoryService:
         memory["open_challenges"] = self._challenges.against(caller.team, memory["path"])
         return memory
 
+    def history(self, caller: Caller, path: str) -> dict[str, Any]:
+        """Every version of one memory, newest first."""
+        caller.require_project()
+        location = locate(path)
+        self._store.read(caller.team, location.path)  # refuses a memory that isn't there
+        versions = self._store.history(caller.team, location.path)
+        return {
+            "path": str(location.path),
+            "versions": [
+                {
+                    "commit": version.commit,
+                    "at": version.at.isoformat(),
+                    "author": version.author,
+                    "name": version.name,
+                    "message": version.message,
+                }
+                for version in versions
+            ],
+        }
+
+    def version(self, caller: Caller, path: str, commit: str) -> dict[str, Any]:
+        """One memory as it was at one version."""
+        caller.require_project()
+        location = locate(path)
+        return {"path": str(location.path), "commit": commit, "text": self._store.version(caller.team, location.path, commit)}
+
+    def difference(self, caller: Caller, path: str, before: str, after: str) -> dict[str, Any]:
+        """What changed in one memory between two versions."""
+        caller.require_project()
+        location = locate(path)
+        return {
+            "path": str(location.path),
+            "before": before,
+            "after": after,
+            "difference": self._store.difference(caller.team, location.path, before, after),
+        }
+
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
         caller.require_project()
         pure = PurePosixPath(folder.replace("\\", "/").strip("/"))

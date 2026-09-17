@@ -11,6 +11,10 @@ export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
 export type SearchHit = components["schemas"]["SearchHit"];
 export type IssuedToken = components["schemas"]["IssuedToken"];
+export type MemoryHistory = components["schemas"]["MemoryHistory"];
+export type MemoryVersion = components["schemas"]["MemoryVersion"];
+export type MemoryAtVersion = components["schemas"]["MemoryAtVersion"];
+export type MemoryDifference = components["schemas"]["MemoryDifference"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -77,6 +81,40 @@ export type SearchAsked = { query: string; level?: string; type?: string };
 /** Memories that match, by meaning and by exact words. */
 export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
+}
+
+/** Every version of one memory, newest first. */
+export function fetchHistory(projectId: string, path: string, signal?: AbortSignal): Promise<MemoryHistory> {
+  return ask<MemoryHistory>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/history`, { path }), {
+    signal,
+  });
+}
+
+/** A memory as it was at one version. */
+export function fetchVersion(
+  projectId: string,
+  path: string,
+  commit: string,
+  signal?: AbortSignal,
+): Promise<MemoryAtVersion> {
+  return ask<MemoryAtVersion>(
+    withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/version`, { path, commit }),
+    { signal },
+  );
+}
+
+/** What changed in a memory between two versions. */
+export function fetchDifference(
+  projectId: string,
+  path: string,
+  before: string,
+  after: string,
+  signal?: AbortSignal,
+): Promise<MemoryDifference> {
+  return ask<MemoryDifference>(
+    withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/difference`, { path, before, after }),
+    { signal },
+  );
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */

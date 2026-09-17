@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import { fetchMemory, type MemoryDetail } from "../api/client";
+import { History } from "./History";
 import { memoryUrl } from "./Project";
 
 const LEVELS: Record<string, string> = {
@@ -95,6 +96,11 @@ export function Memory() {
           {memory.body}
         </Text>
       </Card>
+
+      <Title order={3} size="h5" mt="md">
+        History
+      </Title>
+      <History projectId={projectId} path={memory.path} />
 
       <Table variant="vertical" withTableBorder data-testid="memory-details">
         <Table.Tbody>
