@@ -1,0 +1,85 @@
+name: Checks
+
+# Everything that must hold for every change: the server's tests and types, and the console's types, build and journeys.
+# The smoke tests with real Claude Code are separate and run nightly.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shared_memory
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Cache the search model
+        uses: actions/cache@v6
+        with:
+          path: .cache/fastembed
+          key: fastembed-${{ hashFiles('uv.lock') }}
+
+      - name: Server tests
+        run: uv run pytest
+
+      - name: Server types
+        run: uv run mypy
+
+      - name: Install the console's dependencies
+        working-directory: console
+        run: npm ci
+
+      - name: Console types and build
+        working-directory: console
+        run: npm run build
+
+      - name: The console's API types are current
+        working-directory: console
+        run: npm run api:check
+
+      - name: Install the browser
+        working-directory: console
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser journeys
+        working-directory: console
+        run: npm run e2e
+
+      - name: Keep the failed journeys' traces
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: console/playwright-report
+          retention-days: 7
