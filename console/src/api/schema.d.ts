@@ -1302,7 +1302,15 @@ export interface operations {
     };
     audit: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: string;
+                before?: string;
+                member?: string;
+                kind?: string;
+                project?: string;
+                since?: string;
+                until?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

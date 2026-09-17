@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.audit import CHALLENGE_RAISED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -74,11 +75,14 @@ class Challenge:
 
 
 class Challenges:
-    def __init__(self, settings: Settings, db: Database, store: MemoryStore, identity: Identity, clock: Clock) -> None:
+    def __init__(
+        self, settings: Settings, db: Database, store: MemoryStore, identity: Identity, audit: Audit, clock: Clock
+    ) -> None:
         self._settings = settings
         self._db = db
         self._store = store
         self._identity = identity
+        self._audit = audit
         self._clock = clock
         with db.transaction() as conn:
             conn.execute(SCHEMA)
@@ -103,6 +107,9 @@ class Challenges:
             ).fetchone()
         assert row is not None
         challenge_id: int = row["id"]
+        self._audit.memory(
+            caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author
+        )
         return challenge_id
 
     def open_challenge(self, team: str, challenge_id: int) -> Challenge | None:

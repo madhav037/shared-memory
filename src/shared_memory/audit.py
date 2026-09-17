@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from shared_memory.clock import Clock
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Identity, Member
+from shared_memory.identity import Caller, Identity, Member
 
 SIGNED_IN = "signed_in"
 SIGN_IN_REFUSED = "sign_in_refused"
@@ -40,6 +40,16 @@ PROJECT_RESTRICTED = "project_restricted"
 PROJECT_OPENED = "project_opened"
 ACCESS_GRANTED = "access_granted"
 ACCESS_REVOKED = "access_revoked"
+MEMORY_SAVED = "memory_saved"
+MEMORY_EDITED = "memory_edited"
+MEMORY_DELETED = "memory_deleted"
+MEMORY_PROMOTED = "memory_promoted"
+MEMORY_SUPERSEDED = "memory_superseded"
+MEMORY_RETIRED = "memory_retired"
+MEMORY_PINNED = "memory_pinned"
+MEMORY_UNPINNED = "memory_unpinned"
+CHALLENGE_RAISED = "challenge_raised"
+CHALLENGE_DECIDED = "challenge_decided"
 
 
 @dataclass(frozen=True)
@@ -76,7 +86,7 @@ class Audit:
         target: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> None:
-        """Remember that something changed. Never fails the change it is recording."""
+        """Remember that something changed, alongside the change itself, so the two can't disagree."""
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO audit_events (at, team_id, actor_id, actor, kind, project_id, target, detail)"
@@ -93,6 +103,19 @@ class Audit:
                 ),
             )
 
+    def memory(self, caller: Caller, change: str, path: str, **detail: Any) -> None:
+        """Note a change to one memory: who changed it, in which project, and at which path.
+
+        It records where the memory is, never what it says: the memory folder's git history holds that.
+        """
+        self.record(
+            change,
+            member=caller.member,
+            project_id=caller.project.project_id if caller.project else None,
+            target=path,
+            detail=detail,
+        )
+
     def read(
         self,
         reader: Member,
@@ -101,6 +124,7 @@ class Audit:
         before: int | None = None,
         member_id: str | None = None,
         kind: str | None = None,
+        project_id: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> Page:
@@ -124,6 +148,9 @@ class Audit:
         if kind:
             wheres.append("e.kind = %s")
             values.append(kind)
+        if project_id:
+            wheres.append("e.project_id = %s")
+            values.append(project_id)
         if since:
             wheres.append("e.at >= %s")
             values.append(since)

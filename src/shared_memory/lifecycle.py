@@ -7,6 +7,13 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.audit import (
+    CHALLENGE_DECIDED,
+    MEMORY_PROMOTED,
+    MEMORY_RETIRED,
+    MEMORY_SUPERSEDED,
+    Audit,
+)
 from shared_memory.challenges import Challenge, Challenges
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
@@ -42,6 +49,7 @@ class Lifecycle:
         index: SearchIndex,
         identity: Identity,
         challenges: Challenges,
+        audit: Audit,
         clock: Clock,
     ) -> None:
         self._settings = settings
@@ -50,6 +58,7 @@ class Lifecycle:
         self._index = index
         self._identity = identity
         self._challenges = challenges
+        self._audit = audit
         self._clock = clock
         with db.transaction() as conn:
             conn.execute(SCHEMA)
@@ -199,6 +208,9 @@ class Lifecycle:
             if supersede is not None:
                 old = PurePosixPath(supersede)
                 change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
+        self._audit.memory(caller, MEMORY_PROMOTED, str(new_path), level=target, was=str(location.path))
+        if supersede is not None:
+            self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, by=str(new_path))
         return {"status": "promoted", "path": str(new_path)}
 
     @staticmethod
@@ -228,6 +240,7 @@ class Lifecycle:
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
         with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:
             change.write(location.path, replace(memory, status="retired"))
+        self._audit.memory(caller, MEMORY_RETIRED, str(location.path))
         self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, "its author retired it.")
         return {"status": "retired", "path": str(location.path)}
 
@@ -245,6 +258,7 @@ class Lifecycle:
 
         if decision == "reject":
             self._challenges.decide(challenge, "rejected", decider)
+            self._decided(caller, challenge, "rejected")
             self._challenges.tell(
                 caller.team,
                 challenge.raised_by,
@@ -262,6 +276,7 @@ class Lifecycle:
         else:
             result, outcome = self._accept_supersede(caller, challenge, challenge.challenger_path)
         self._challenges.decide(challenge, "accepted", decider)
+        self._decided(caller, challenge, "accepted")
         self._challenges.tell(caller.team, challenge.raised_by, outcome)
         self._challenges.close_all_against(
             caller.team,
@@ -270,6 +285,12 @@ class Lifecycle:
             f"challenge {challenge.id} by {challenge.raised_by} was accepted instead.",
         )
         return result
+
+    def _decided(self, caller: Caller, challenge: Challenge, decision: str) -> None:
+        self._audit.memory(
+            caller, CHALLENGE_DECIDED, challenge.target_path, challenge_id=challenge.id, decision=decision,
+            challenge=challenge.kind,
+        )  # fmt: skip
 
     def _accept_supersede(self, caller: Caller, challenge: Challenge, challenger_path: str) -> tuple[dict[str, Any], str]:
         challenger_location = locate(challenger_path)
@@ -299,5 +320,6 @@ class Lifecycle:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
         with self._store.change(caller.team, committer(caller), message) as change:
             change.write(target_path, replace(target, status="retired"))
+        self._audit.memory(caller, MEMORY_RETIRED, str(target_path), challenge_id=challenge.id)
         outcome = f"Your challenge {challenge.id} was accepted by {caller.member_id}: {challenge.target_path} is retired."
         return {"status": "accepted", "challenge_id": challenge.id, "retired": challenge.target_path}, outcome

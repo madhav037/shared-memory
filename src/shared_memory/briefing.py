@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.audit import MEMORY_PINNED, MEMORY_UNPINNED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -63,10 +64,11 @@ def pin_target(path: str) -> PinTarget:
 
 
 class Briefing:
-    def __init__(self, settings: Settings, db: Database, store: MemoryStore, clock: Clock) -> None:
+    def __init__(self, settings: Settings, db: Database, store: MemoryStore, audit: Audit, clock: Clock) -> None:
         self._settings = settings
         self._db = db
         self._store = store
+        self._audit = audit
         self._clock = clock
         with db.transaction() as conn:
             conn.execute(SCHEMA)
@@ -102,6 +104,7 @@ class Briefing:
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (caller.team, target.path, target.kind, target.level, target.project_id, caller.member_id, self._clock()),
             )
+        self._audit.memory(caller, MEMORY_PINNED, target.path, pinned=target.kind, level=target.level)
         return {"pinned": target.path}
 
     def unpin(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -111,6 +114,7 @@ class Briefing:
             deleted = conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (caller.team, cleaned)).rowcount
         if not deleted:
             raise Refused(f"{cleaned} is not pinned.")
+        self._audit.memory(caller, MEMORY_UNPINNED, cleaned)
         return {"unpinned": cleaned}
 
     def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None:

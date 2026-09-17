@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Audit
 from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
 from shared_memory.errors import Refused
@@ -52,13 +53,20 @@ def label(caller: Caller, level: str, member_id: str | None) -> str:
 
 class MemoryService:
     def __init__(
-        self, settings: Settings, identity: Identity, store: MemoryStore, index: SearchIndex, challenges: Challenges
+        self,
+        settings: Settings,
+        identity: Identity,
+        store: MemoryStore,
+        index: SearchIndex,
+        challenges: Challenges,
+        audit: Audit,
     ) -> None:
         self._settings = settings
         self._identity = identity
         self._store = store
         self._index = index
         self._challenges = challenges
+        self._audit = audit
 
     def create_project(self, caller: Caller, name: str, repository: str) -> dict[str, Any]:
         check_name("Repository name", repository)
@@ -112,6 +120,7 @@ class MemoryService:
         with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
+        self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type)
         return {"path": str(path)}
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -287,10 +296,12 @@ class MemoryService:
         validate(edited, self._settings.memory_word_limit)
         with self._store.change(caller.team, committer(caller), f"Edit: {edited.title}") as change:
             change.write(location.path, edited)
+        self._audit.memory(caller, MEMORY_EDITED, str(location.path))
         return describe(location.path, edited)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
         location, memory = self._own_personal_memory(caller, path, "delete")
         with self._store.change(caller.team, committer(caller), f"Delete: {memory.title}") as change:
             change.delete(location.path)
+        self._audit.memory(caller, MEMORY_DELETED, str(location.path))
         return {"deleted": str(location.path)}
