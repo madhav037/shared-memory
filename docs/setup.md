@@ -4,6 +4,8 @@ This guide covers the three people involved: the person running the server, the 
 
 ## 1. Run the server (the person running the server)
 
+To run it for your team on a server, with HTTPS and nightly backups, follow [`deployment.md`](./deployment.md). The steps below run it on your own machine to try it out.
+
 Requirements: Docker with Compose.
 
 ```bash
@@ -39,8 +41,6 @@ If the search index is ever lost or damaged, rebuild it from the memory files:
 ```bash
 docker compose exec server shared-memory reindex
 ```
-
-HTTPS, the domain name and nightly backups are covered by ticket #16.
 
 ## 2. Add members (the owner)
 

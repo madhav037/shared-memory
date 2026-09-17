@@ -8,3 +8,5 @@
 docs
 tests
 plugin
+smoke
+deploy

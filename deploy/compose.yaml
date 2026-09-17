@@ -1,0 +1,74 @@
+# Production: the server behind Caddy (HTTPS), Postgres with pgvector, and nightly backups.
+# Run from this folder with a .env beside it (copy .env.example). See docs/deployment.md.
+name: shared-memory
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: shared_memory
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SHARED_MEMORY_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/shared_memory
+      SHARED_MEMORY_ALLOWED_HOSTS: ${SHARED_MEMORY_DOMAIN:?set SHARED_MEMORY_DOMAIN in .env}
+      SHARED_MEMORY_PLUGIN_MARKETPLACE: ${SHARED_MEMORY_PLUGIN_MARKETPLACE:-madhav037/shared-memory}
+    volumes:
+      - memory-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      SHARED_MEMORY_DOMAIN: ${SHARED_MEMORY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  backup:
+    build: backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: shared_memory
+      BACKUP_REMOTE: ${BACKUP_REMOTE:?set BACKUP_REMOTE in .env}
+      BACKUP_TIME: ${BACKUP_TIME:-02:00}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - memory-data:/data
+      - backup-data:/backups
+      - ${BACKUP_SSH_KEY:-./backup_key}:/run/secrets/backup_key:ro
+
+volumes:
+  db-data:
+  memory-data:
+  caddy-data:
+  caddy-config:
+  backup-data:
