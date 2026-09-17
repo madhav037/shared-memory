@@ -2,81 +2,9 @@
 
 from __future__ import annotations
 
-import uuid
-from collections.abc import Iterator
-from dataclasses import dataclass
-from pathlib import Path
-
 import pytest
-from anyio.from_thread import start_blocking_portal
 
-from shared_memory.app import build_app
-from shared_memory.config import Settings
-from tests.support import (
-    REPO_ROOT,
-    ConsoleClient,
-    FakeGitHub,
-    RunningServer,
-    Session,
-    TestClock,
-    fresh_database,
-    sign_in_error,
-)
-
-
-@dataclass
-class Console:
-    """A server with GitHub sign-in set up, and the fake GitHub it signs people in through."""
-
-    server: RunningServer
-    github: FakeGitHub
-    clock: TestClock
-
-    def client(self) -> ConsoleClient:
-        return ConsoleClient(self.server)
-
-    def a_team(self, github_login: str) -> tuple[str, str]:
-        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
-        code = f"team-{uuid.uuid4().hex[:8]}"
-        printed = self.server.run_cli(
-            "setup", "--team", code, "--owner-employee-id", "E1001", "--owner-name", "Olive Owner",
-            "--owner-github", github_login,
-        )  # fmt: skip
-        token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
-        return code, token
-
-
-@pytest.fixture(scope="module")
-def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
-    with start_blocking_portal() as portal:
-        memory = tmp_path_factory.mktemp("console-memory")
-        github = FakeGitHub(portal, Settings("", Path(memory), Path(memory)))
-        clock = TestClock()
-        settings = Settings(
-            database_url=fresh_database("shared_memory_console"),
-            memory_root=memory,
-            model_cache=REPO_ROOT / ".cache" / "fastembed",
-            github_client_id="client-id",
-            github_client_secret="client-secret",
-            github_sign_in_url=github.url,
-            github_api_url=github.url,
-        )
-        server = RunningServer(build_app(settings, clock=clock), settings, clock, portal)
-        try:
-            yield Console(server, github, clock)
-        finally:
-            server.stop()
-            github.stop()
-
-
-@pytest.fixture
-def signed_out(console: Console) -> Iterator[ConsoleClient]:
-    console.clock.now = TestClock().now
-    client = console.client()
-    try:
-        yield client
-    finally:
-        client.close()
+from tests.support import Console, ConsoleClient, RunningServer, Session, sign_in_error
 
 
 def test_a_member_signs_in_with_their_linked_github_account(console: Console, signed_out: ConsoleClient) -> None:

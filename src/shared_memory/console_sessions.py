@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from shared_memory.audit import SIGN_IN_REFUSED, SIGNED_IN, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -40,10 +41,11 @@ class GitHubAccount:
 class ConsoleSessions:
     """Sign-ins in flight, and the sessions they leave behind."""
 
-    def __init__(self, settings: Settings, db: Database, identity: Identity, clock: Clock) -> None:
+    def __init__(self, settings: Settings, db: Database, identity: Identity, audit: Audit, clock: Clock) -> None:
         self._settings = settings
         self._db = db
         self._identity = identity
+        self._audit = audit
         self._clock = clock
 
     @property
@@ -87,8 +89,14 @@ class ConsoleSessions:
         self._require_configured()
         self._spend_state(state)
         account = self._account(self._access_token(code, base_url))
-        member = self._identity.member_for_github(account.account_id, account.login)
-        return self._begin_session(member)
+        try:
+            member = self._identity.member_for_github(account.account_id, account.login)
+        except Refused as refused:
+            self._audit.record(SIGN_IN_REFUSED, actor=f"@{account.login}", detail={"reason": str(refused)})
+            raise
+        token = self._begin_session(member)
+        self._audit.record(SIGNED_IN, member=member, detail={"github": account.login})
+        return token
 
     def _spend_state(self, state: str) -> None:
         now = self._clock()

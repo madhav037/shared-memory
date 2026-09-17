@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS console_sign_ins (
     state_hash TEXT PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    id BIGSERIAL PRIMARY KEY,
+    at TIMESTAMPTZ NOT NULL,
+    team_id BIGINT REFERENCES teams(id),
+    actor_id BIGINT REFERENCES members(id),
+    actor TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    project_id TEXT,
+    target TEXT,
+    detail JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS audit_events_by_team ON audit_events (team_id, id DESC);
 """
 
 

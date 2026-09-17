@@ -266,3 +266,25 @@ class ConsoleClient:
 def sign_in_error(response: httpx.Response) -> str:
     """The message the console was sent back with, when a sign-in was refused."""
     return unquote(str(response.url.params.get("sign-in-error", "")))
+
+
+@dataclass
+class Console:
+    """A server with GitHub sign-in set up, and the fake GitHub it signs people in through."""
+
+    server: RunningServer
+    github: FakeGitHub
+    clock: TestClock
+
+    def client(self) -> ConsoleClient:
+        return ConsoleClient(self.server)
+
+    def a_team(self, github_login: str) -> tuple[str, str]:
+        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
+        code = f"team-{uuid.uuid4().hex[:8]}"
+        printed = self.server.run_cli(
+            "setup", "--team", code, "--owner-employee-id", "E1001", "--owner-name", "Olive Owner",
+            "--owner-github", github_login,
+        )  # fmt: skip
+        token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
+        return code, token

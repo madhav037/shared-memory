@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's audit log, newest first. */
+        get: operations["audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sign-out": {
         parameters: {
             query?: never;
@@ -104,6 +121,50 @@ export interface components {
             github_sign_in: boolean;
             /** @default null */
             member: components["schemas"]["SignedInMember"] | null;
+        };
+        /**
+         * AuditEvent
+         * @description One thing that happened, and who did it.
+         */
+        AuditEvent: {
+            /** Id */
+            id: number;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Actor */
+            actor: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Project Id
+             * @default null
+             */
+            project_id: string | null;
+            /**
+             * Target
+             * @default null
+             */
+            target: string | null;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AuditPage
+         * @description A page of the audit log, newest first, with where the next page starts.
+         */
+        AuditPage: {
+            /** Events */
+            events: components["schemas"]["AuditEvent"][];
+            /**
+             * Next
+             * @default null
+             */
+            next: number | null;
         };
     };
     responses: never;
@@ -167,6 +228,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    audit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The team's audit log, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
             };
         };
     };

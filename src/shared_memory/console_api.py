@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, time
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -18,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
+from shared_memory.audit import Audit
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
@@ -25,6 +27,16 @@ from shared_memory.identity import Member
 
 PREFIX = "/api"
 CONSOLE_HEADER = "x-shared-memory-console"
+
+
+def _moment(asked: str | None, edge: time) -> datetime | None:
+    """A date filter as a moment: a plain date covers its whole day."""
+    if not asked:
+        return None
+    try:
+        return datetime.fromisoformat(asked) if "T" in asked else datetime.combine(date.fromisoformat(asked), edge, UTC)
+    except ValueError:
+        raise ValueError(f"{asked!r} is not a date") from None
 
 
 class SignedInMember(BaseModel):
@@ -42,6 +54,25 @@ class Status(BaseModel):
     signed_in: bool
     github_sign_in: bool
     member: SignedInMember | None = None
+
+
+class AuditEvent(BaseModel):
+    """One thing that happened, and who did it."""
+
+    id: int
+    at: datetime
+    actor: str
+    kind: str
+    project_id: str | None = None
+    target: str | None = None
+    detail: dict[str, Any]
+
+
+class AuditPage(BaseModel):
+    """A page of the audit log, newest first, with where the next page starts."""
+
+    events: list[AuditEvent]
+    next: int | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +108,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="sign_in_callback",
         summary="Finish signing in and return the member to the console.",
         answers=None,
+    ),
+    Declaration(
+        path="/audit",
+        method="GET",
+        operation_id="audit",
+        summary="The team's audit log, newest first.",
+        answers=AuditPage,
     ),
     Declaration(
         path="/sign-out",
@@ -125,15 +163,17 @@ def description() -> dict[str, Any]:
 class ConsoleApi:
     """The API's behaviour: sessions in cookies, and the same refusals the memory tools give."""
 
-    def __init__(self, settings: Settings, sessions: ConsoleSessions) -> None:
+    def __init__(self, settings: Settings, sessions: ConsoleSessions, audit: Audit) -> None:
         self._settings = settings
         self._sessions = sessions
+        self._audit = audit
 
     def routes(self) -> list[Route]:
         handlers: Mapping[str, Callable[[Request], Response]] = {
             "status": self._status,
             "sign_in": self._sign_in,
             "sign_in_callback": self._sign_in_callback,
+            "audit": self._audit_log,
             "sign_out": self._sign_out,
         }
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
@@ -183,6 +223,31 @@ class ConsoleApi:
             path="/",
         )
         return signed_in
+
+    def _audit_log(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
+        asked = request.query_params
+        try:
+            page = self._audit.read(
+                member,
+                limit=int(asked.get("limit", 50)),
+                before=int(asked["before"]) if asked.get("before") else None,
+                member_id=asked.get("member") or None,
+                kind=asked.get("kind") or None,
+                since=_moment(asked.get("since"), time.min),
+                until=_moment(asked.get("until"), time.max),
+            )
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        except ValueError:
+            return JSONResponse({"message": "That filter wasn't understood."}, status_code=422)
+        answer = AuditPage(
+            events=[AuditEvent(**vars(event)) for event in page.events],
+            next=page.next,
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _sign_out(self, request: Request) -> Response:
         self._sessions.end(request.cookies.get(COOKIE))
