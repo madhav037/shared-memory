@@ -55,6 +55,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The projects this member can reach. */
+        get: operations["projects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's memory as a folder tree, with each memory's title and summary. */
+        get: operations["tree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One memory in full, with any challenges on it. */
+        get: operations["memory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Memories that match, by meaning and by exact words. */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit": {
         parameters: {
             query?: never;
@@ -119,8 +187,138 @@ export interface components {
             signed_in: boolean;
             /** Github Sign In */
             github_sign_in: boolean;
-            /** @default null */
             member: components["schemas"]["SignedInMember"] | null;
+        };
+        /**
+         * ProjectSummary
+         * @description A project the member can reach.
+         */
+        ProjectSummary: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+        };
+        /** Projects */
+        Projects: {
+            /** Projects */
+            projects: components["schemas"]["ProjectSummary"][];
+        };
+        /**
+         * PendingChallenge
+         * @description A challenge this personal memory is waiting on.
+         */
+        PendingChallenge: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Replaces */
+            replaces: string | null;
+        };
+        /** TreeFolder */
+        TreeFolder: {
+            /** Folder */
+            folder: string;
+            /** Memories */
+            memories: components["schemas"]["TreeMemory"][];
+        };
+        /** TreeMemory */
+        TreeMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Pending */
+            pending: components["schemas"]["PendingChallenge"][];
+        };
+        /**
+         * Tree
+         * @description A project's memory, folder by folder.
+         */
+        Tree: {
+            /** Folders */
+            folders: components["schemas"]["TreeFolder"][];
+        };
+        /**
+         * OpenChallenge
+         * @description A challenge raised against this memory.
+         */
+        OpenChallenge: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Raised By */
+            raised_by: string;
+            /** Challenger Path */
+            challenger_path: string | null;
+        };
+        /**
+         * MemoryDetail
+         * @description One memory in full, as its author wrote it.
+         */
+        MemoryDetail: {
+            /** Path */
+            path: string;
+            /** Level */
+            level: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Status */
+            status: string;
+            /** Replaces */
+            replaces: string | null;
+            /** Superseded By */
+            superseded_by: string | null;
+            /** Exception To */
+            exception_to: string | null;
+            /** Related Files */
+            related_files: string[];
+            /** Promoted By */
+            promoted_by: string | null;
+            /** Body */
+            body: string;
+            /** Pending */
+            pending: components["schemas"]["PendingChallenge"][];
+            /** Open Challenges */
+            open_challenges: components["schemas"]["OpenChallenge"][];
+        };
+        /** SearchHit */
+        SearchHit: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Heading */
+            heading: string;
+            /** Level */
+            level: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Summary */
+            summary: string;
+            /** Label */
+            label: string;
+            /** Pending */
+            pending: components["schemas"]["PendingChallenge"][];
+        };
+        /** SearchResults */
+        SearchResults: {
+            /** Results */
+            results: components["schemas"]["SearchHit"][];
         };
         /**
          * AuditEvent
@@ -138,15 +336,9 @@ export interface components {
             actor: string;
             /** Kind */
             kind: string;
-            /**
-             * Project Id
-             * @default null
-             */
+            /** Project Id */
             project_id: string | null;
-            /**
-             * Target
-             * @default null
-             */
+            /** Target */
             target: string | null;
             /** Detail */
             detail: {
@@ -160,10 +352,7 @@ export interface components {
         AuditPage: {
             /** Events */
             events: components["schemas"]["AuditEvent"][];
-            /**
-             * Next
-             * @default null
-             */
+            /** Next */
             next: number | null;
         };
     };
@@ -228,6 +417,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    projects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The projects this member can reach. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Projects"];
+                };
+            };
+        };
+    };
+    tree: {
+        parameters: {
+            query?: {
+                level?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's memory as a folder tree, with each memory's title and summary. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tree"];
+                };
+            };
+        };
+    };
+    memory: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One memory in full, with any challenges on it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDetail"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query?: {
+                query?: string;
+                level?: string;
+                type?: string;
+                limit?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Memories that match, by meaning and by exact words. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResults"];
+                };
             };
         };
     };

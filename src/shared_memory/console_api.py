@@ -7,8 +7,9 @@ can be generated from that description and can't drift away from it.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import UTC, date, datetime, time
 from typing import Any, Literal
 from urllib.parse import quote
@@ -23,10 +24,15 @@ from shared_memory.audit import Audit
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
-from shared_memory.identity import Member
+from shared_memory.identity import Caller, Identity, Member
+from shared_memory.service import MemoryService
 
 PREFIX = "/api"
 CONSOLE_HEADER = "x-shared-memory-console"
+
+
+def _sign_in_first() -> Response:
+    return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
 
 
 def _moment(asked: str | None, edge: time) -> datetime | None:
@@ -53,7 +59,7 @@ class Status(BaseModel):
 
     signed_in: bool
     github_sign_in: bool
-    member: SignedInMember | None = None
+    member: SignedInMember | None
 
 
 class AuditEvent(BaseModel):
@@ -63,8 +69,8 @@ class AuditEvent(BaseModel):
     at: datetime
     actor: str
     kind: str
-    project_id: str | None = None
-    target: str | None = None
+    project_id: str | None
+    target: str | None
     detail: dict[str, Any]
 
 
@@ -72,7 +78,90 @@ class AuditPage(BaseModel):
     """A page of the audit log, newest first, with where the next page starts."""
 
     events: list[AuditEvent]
-    next: int | None = None
+    next: int | None
+
+
+class ProjectSummary(BaseModel):
+    """A project the member can reach."""
+
+    project_id: str
+    name: str
+
+
+class Projects(BaseModel):
+    projects: list[ProjectSummary]
+
+
+class PendingChallenge(BaseModel):
+    """A challenge this personal memory is waiting on."""
+
+    challenge_id: int
+    kind: str
+    replaces: str | None
+
+
+class OpenChallenge(BaseModel):
+    """A challenge raised against this memory."""
+
+    challenge_id: int
+    kind: str
+    raised_by: str
+    challenger_path: str | None
+
+
+class TreeMemory(BaseModel):
+    path: str
+    title: str
+    summary: str
+    pending: list[PendingChallenge]
+
+
+class TreeFolder(BaseModel):
+    folder: str
+    memories: list[TreeMemory]
+
+
+class Tree(BaseModel):
+    """A project's memory, folder by folder."""
+
+    folders: list[TreeFolder]
+
+
+class MemoryDetail(BaseModel):
+    """One memory in full, as its author wrote it."""
+
+    path: str
+    level: str
+    project_id: str | None
+    title: str
+    summary: str
+    type: str
+    author: str
+    status: str
+    replaces: str | None
+    superseded_by: str | None
+    exception_to: str | None
+    related_files: list[str]
+    promoted_by: str | None
+    body: str
+    pending: list[PendingChallenge]
+    open_challenges: list[OpenChallenge]
+
+
+class SearchHit(BaseModel):
+    path: str
+    title: str
+    heading: str
+    level: str
+    type: str
+    author: str
+    summary: str
+    label: str
+    pending: list[PendingChallenge]
+
+
+class SearchResults(BaseModel):
+    results: list[SearchHit]
 
 
 @dataclass(frozen=True)
@@ -85,6 +174,7 @@ class Declaration:
     summary: str
     answers: type[BaseModel] | None
     changes: bool = False
+    query: tuple[str, ...] = ()
 
 
 DECLARATIONS: tuple[Declaration, ...] = (
@@ -108,6 +198,37 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="sign_in_callback",
         summary="Finish signing in and return the member to the console.",
         answers=None,
+    ),
+    Declaration(
+        path="/projects",
+        method="GET",
+        operation_id="projects",
+        summary="The projects this member can reach.",
+        answers=Projects,
+    ),
+    Declaration(
+        path="/projects/{project_id}/tree",
+        method="GET",
+        operation_id="tree",
+        summary="A project's memory as a folder tree, with each memory's title and summary.",
+        answers=Tree,
+        query=("level",),
+    ),
+    Declaration(
+        path="/projects/{project_id}/memory",
+        method="GET",
+        operation_id="memory",
+        summary="One memory in full, with any challenges on it.",
+        answers=MemoryDetail,
+        query=("path",),
+    ),
+    Declaration(
+        path="/projects/{project_id}/search",
+        method="GET",
+        operation_id="search",
+        summary="Memories that match, by meaning and by exact words.",
+        answers=SearchResults,
+        query=("query", "level", "type", "limit"),
     ),
     Declaration(
         path="/audit",
@@ -147,9 +268,17 @@ def description() -> dict[str, Any]:
                     },
                 }
             }
+        parameters = [
+            {"name": name, "in": "path", "required": True, "schema": {"type": "string"}}
+            for name in re.findall(r"{(\w+)}", declaration.path)
+        ] + [
+            {"name": name, "in": "query", "required": False, "schema": {"type": "string"}}
+            for name in declaration.query
+        ]
         paths.setdefault(f"{PREFIX}{declaration.path}", {})[declaration.method.lower()] = {
             "operationId": declaration.operation_id,
             "summary": declaration.summary,
+            **({"parameters": parameters} if parameters else {}),
             "responses": responses,
         }
     return {
@@ -163,10 +292,19 @@ def description() -> dict[str, Any]:
 class ConsoleApi:
     """The API's behaviour: sessions in cookies, and the same refusals the memory tools give."""
 
-    def __init__(self, settings: Settings, sessions: ConsoleSessions, audit: Audit) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        sessions: ConsoleSessions,
+        audit: Audit,
+        identity: Identity,
+        service: MemoryService,
+    ) -> None:
         self._settings = settings
         self._sessions = sessions
         self._audit = audit
+        self._identity = identity
+        self._service = service
 
     def routes(self) -> list[Route]:
         handlers: Mapping[str, Callable[[Request], Response]] = {
@@ -174,6 +312,10 @@ class ConsoleApi:
             "sign_in": self._sign_in,
             "sign_in_callback": self._sign_in_callback,
             "audit": self._audit_log,
+            "projects": self._projects,
+            "tree": self._tree,
+            "memory": self._memory,
+            "search": self._search,
             "sign_out": self._sign_out,
         }
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
@@ -224,10 +366,55 @@ class ConsoleApi:
         )
         return signed_in
 
+    def _projects(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        projects = self._identity.projects(member)
+        answer = Projects(projects=[ProjectSummary(project_id=p.project_id, name=p.name) for p in projects])
+        return JSONResponse(answer.model_dump(mode="json"))
+
+    def _tree(self, request: Request) -> Response:
+        return self._browse(request, lambda caller: Tree(**self._service.tree(caller, request.query_params.get("level"))))
+
+    def _memory(self, request: Request) -> Response:
+        def read(caller: Caller) -> MemoryDetail:
+            return MemoryDetail(**self._service.read(caller, request.query_params.get("path", "")))
+
+        return self._browse(request, read)
+
+    def _search(self, request: Request) -> Response:
+        def search(caller: Caller) -> SearchResults:
+            asked = request.query_params
+            return SearchResults(
+                **self._service.search(
+                    caller,
+                    asked.get("query", ""),
+                    level=asked.get("level") or None,
+                    type=asked.get("type") or None,
+                    limit=int(asked.get("limit", 10)),
+                )
+            )
+
+        return self._browse(request, search)
+
+    def _browse(self, request: Request, look: Callable[[Caller], BaseModel]) -> Response:
+        """Everything a member reads about one project's memory, through the same services their Claude uses."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            caller = self._identity.caller_in(member, request.path_params["project_id"])
+            return JSONResponse(look(caller).model_dump(mode="json"))
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        except ValueError:
+            return JSONResponse({"message": "That request wasn't understood."}, status_code=422)
+
     def _audit_log(self, request: Request) -> Response:
         member = self._member(request)
         if member is None:
-            return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
+            return _sign_in_first()
         asked = request.query_params
         try:
             page = self._audit.read(
