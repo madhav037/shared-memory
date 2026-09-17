@@ -63,19 +63,24 @@ class MemoryService:
     def create_project(self, caller: Caller, name: str, repository: str) -> dict[str, Any]:
         check_name("Repository name", repository)
         project = self._identity.create_project(caller, name)
+        self._identity.add_repository(caller, project.project_id, repository)
         return {
             "project_id": project.project_id,
             "name": project.name,
-            "settings": {
-                "extraKnownMarketplaces": {
-                    "shared-memory": {"source": {"source": "github", "repo": self._settings.plugin_marketplace}}
-                },
-                "enabledPlugins": {"shared-memory@shared-memory": True},
-                "env": {"SHARED_MEMORY_PROJECT": project.project_id, "SHARED_MEMORY_REPOSITORY": repository},
-            },
+            "settings": self.settings_for(project.project_id, repository),
             "next": "Merge these settings into this repository's committed .claude/settings.json (keep any existing "
             "keys), then ask the member to commit it. Other repositories of the same product can use the same "
             "project ID with their own repository name.",
+        }
+
+    def settings_for(self, project_id: str, repository: str) -> dict[str, Any]:
+        """What one repository commits into .claude/settings.json to connect its sessions to a project."""
+        return {
+            "extraKnownMarketplaces": {
+                "shared-memory": {"source": {"source": "github", "repo": self._settings.plugin_marketplace}}
+            },
+            "enabledPlugins": {"shared-memory@shared-memory": True},
+            "env": {"SHARED_MEMORY_PROJECT": project_id, "SHARED_MEMORY_REPOSITORY": repository},
         }
 
     def remember(

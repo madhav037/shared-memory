@@ -50,6 +50,13 @@ CREATE TABLE IF NOT EXISTS repositories (
     PRIMARY KEY (project_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS project_leads (
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    member_id BIGINT NOT NULL REFERENCES members(id),
+    appointed_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (project_id, member_id)
+);
+
 ALTER TABLE members ADD COLUMN IF NOT EXISTS github_login TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS github_user_id BIGINT;

@@ -28,9 +28,14 @@ export function Project() {
   return (
     <Stack gap="md">
       <Group justify="space-between" align="end" wrap="wrap">
-        <Title order={2} size="h4">
-          {projectId}
-        </Title>
+        <Group gap="sm" align="baseline">
+          <Title order={2} size="h4">
+            {projectId}
+          </Title>
+          <Anchor component={Link} to={`/projects/${encodeURIComponent(projectId)}/settings`} size="sm">
+            Settings
+          </Anchor>
+        </Group>
         <SegmentedControl
           size="xs"
           data={LEVELS}

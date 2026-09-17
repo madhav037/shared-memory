@@ -15,7 +15,7 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from shared_memory.audit import Audit
+from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.briefing import Briefing
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_sessions import ConsoleSessions
@@ -61,6 +61,7 @@ def _bearer(value: str | None) -> str | None:
 def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None) -> Starlette:
     db = Database(settings.database_url)
     identity = Identity(db, clock)
+    audit = Audit(db, clock, identity)
     index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
     store = MemoryStore(settings.memory_root, listeners=[index])
     challenges = Challenges(settings, db, store, identity, clock)
@@ -170,9 +171,14 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
         repository is this repository's short name. Merge the returned settings into the repository's committed
         .claude/settings.json: they install the Shared Memory plugin for everyone who opens the repository and
-        connect every session in it to the project.
+        connect every session in it to the project. You become the project's first project lead.
         """
-        return service.create_project(caller(ctx), name, repository)
+        current = caller(ctx)
+        created = service.create_project(current, name, repository)
+        audit.record(
+            PROJECT_CREATED, member=current.member, project_id=created["project_id"], detail={"name": created["name"]}
+        )
+        return created
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -317,7 +323,6 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
-    audit = Audit(db, clock)
     app.router.routes.extend(
         ConsoleApi(settings, ConsoleSessions(settings, db, identity, audit, clock), audit, identity, service).routes()
     )

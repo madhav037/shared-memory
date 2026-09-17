@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from shared_memory.clock import Clock
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Member
+from shared_memory.identity import Identity, Member
 
 SIGNED_IN = "signed_in"
 SIGN_IN_REFUSED = "sign_in_refused"
@@ -30,6 +30,12 @@ MEMBER_CHANGED = "member_changed"
 ADMIN_GRANTED = "admin_granted"
 ADMIN_REVOKED = "admin_revoked"
 OWNERSHIP_HANDED_OVER = "ownership_handed_over"
+PROJECT_CREATED = "project_created"
+PROJECT_RENAMED = "project_renamed"
+LEAD_APPOINTED = "lead_appointed"
+LEAD_REMOVED = "lead_removed"
+REPOSITORY_ADDED = "repository_added"
+REPOSITORY_REMOVED = "repository_removed"
 
 
 @dataclass(frozen=True)
@@ -50,9 +56,10 @@ class Page:
 
 
 class Audit:
-    def __init__(self, db: Database, clock: Clock) -> None:
+    def __init__(self, db: Database, clock: Clock, identity: Identity) -> None:
         self._db = db
         self._clock = clock
+        self._identity = identity
 
     def record(
         self,
@@ -93,11 +100,17 @@ class Audit:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> Page:
-        """The reader's team's log, newest first. One page, with where the next page starts."""
+        """The reader's team's log, newest first. One page, with where the next page starts.
+
+        A project lead who doesn't run the team sees their own projects' events and nothing else.
+        """
         self.require_reader(reader)
         limit = max(1, min(limit, 200))
         wheres = ["(e.team_id = %s OR e.team_id IS NULL)"]
         values: list[Any] = [reader.team_pk]
+        if not _runs_the_team(reader):
+            wheres = ["e.team_id = %s", "e.project_id = ANY(%s)"]
+            values = [reader.team_pk, self._identity.leads_of(reader)]
         if before is not None:
             wheres.append("e.id < %s")
             values.append(before)
@@ -134,11 +147,14 @@ class Audit:
         ]
         return Page(events, events[-1].id if len(rows) > limit and events else None)
 
-    @staticmethod
-    def may_read(member: Member) -> bool:
-        """Who may read the log. Admins join the owner in #32; project leads get their projects' in #33."""
-        return member.is_owner
+    def may_read(self, member: Member) -> bool:
+        """The owner and the admins read the whole log; a project lead reads their own projects'."""
+        return _runs_the_team(member) or bool(self._identity.leads_of(member))
 
     def require_reader(self, member: Member) -> None:
         if not self.may_read(member):
-            raise Refused("Only the team's owner can read the audit log.")
+            raise Refused("Only the team's owner, its admins and a project's leads can read the audit log.")
+
+
+def _runs_the_team(member: Member) -> bool:
+    return member.is_owner or member.is_admin

@@ -1,8 +1,8 @@
-import { Anchor, Button, Card, Group, Loader, Stack, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, Group, Loader, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
-import { fetchProjects, signInUrl, type ProjectSummary, type Status } from "../api/client";
+import { createProject, fetchProjects, signInUrl, type ProjectSummary, type Status } from "../api/client";
 
 /** The front door: sign in, then the projects whose memory you can read. */
 export function Home({ status }: { status: Status }) {
@@ -49,30 +49,89 @@ function Projects() {
 
   if (refused) return <Text c="red">{refused}</Text>;
   if (projects === null) return <Loader size="sm" />;
-  if (projects.length === 0)
-    return (
-      <Text c="dimmed" data-testid="no-projects">
-        No projects yet. Ask your Claude to create one with <code>create_project</code>.
-      </Text>
-    );
 
   return (
-    <Stack gap="xs" w="100%" maw={640} data-testid="projects">
-      <Title order={2} size="h4">
-        Projects
-      </Title>
-      {projects.map((project) => (
-        <Card withBorder key={project.project_id} padding="sm">
-          <Group justify="space-between" wrap="nowrap">
-            <Anchor component={Link} to={`/projects/${encodeURIComponent(project.project_id)}`}>
-              {project.name}
-            </Anchor>
-            <Text size="sm" c="dimmed">
-              {project.project_id}
-            </Text>
-          </Group>
-        </Card>
-      ))}
+    <Stack gap="md" w="100%" maw={720}>
+      <NewProject />
+      {projects.length === 0 ? (
+        <Text c="dimmed" data-testid="no-projects">
+          No projects yet. Create one here, or ask your Claude to with <code>create_project</code>.
+        </Text>
+      ) : (
+        <Stack gap="xs" data-testid="projects">
+          <Title order={2} size="h4">
+            Projects
+          </Title>
+          {projects.map((project) => (
+            <Card withBorder key={project.project_id} padding="sm" data-testid="project-card">
+              <Group justify="space-between" wrap="nowrap" align="start">
+                <div>
+                  <Group gap="xs">
+                    <Anchor component={Link} to={`/projects/${encodeURIComponent(project.project_id)}`}>
+                      {project.name}
+                    </Anchor>
+                    {project.you_lead && (
+                      <Badge size="xs" variant="light" color="teal">
+                        you lead this
+                      </Badge>
+                    )}
+                  </Group>
+                  <Text size="sm" c="dimmed" data-testid={`leads-${project.project_id}`}>
+                    {project.leads.length === 0
+                      ? "No project lead"
+                      : `Led by ${project.leads.map((lead) => lead.name).join(", ")}`}
+                  </Text>
+                </div>
+                <Anchor component={Link} to={`/projects/${encodeURIComponent(project.project_id)}/settings`} size="sm">
+                  Settings
+                </Anchor>
+              </Group>
+            </Card>
+          ))}
+        </Stack>
+      )}
     </Stack>
+  );
+}
+
+/** Creating a project here makes you its first project lead, exactly as create_project does in a session. */
+function NewProject() {
+  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const goTo = useNavigate();
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const project = await createProject(name);
+      goTo(`/projects/${encodeURIComponent(project.project_id)}/settings`);
+    } catch (problem) {
+      setRefused((problem as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Card withBorder padding="sm">
+      {refused && (
+        <Alert color="red" mb="sm" data-testid="new-project-refused">
+          {refused}
+        </Alert>
+      )}
+      <Group align="end" gap="sm">
+        <TextInput
+          label="New project"
+          placeholder="Billing"
+          value={name}
+          data-testid="new-project-name"
+          onChange={(event) => setName(event.currentTarget.value)}
+        />
+        <Button onClick={create} loading={creating} disabled={!name.trim()} data-testid="create-project">
+          Create
+        </Button>
+      </Group>
+    </Card>
   );
 }
