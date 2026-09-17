@@ -52,7 +52,7 @@ def test_reissuing_a_token_revokes_the_old_one(team: Team) -> None:
     assert new.call("remember", title="t", summary="s", type="gotcha", body="b")["path"]
 
 
-def test_only_the_owner_can_manage_members(team: Team) -> None:
+def test_a_plain_member_cannot_manage_members(team: Team) -> None:
     member = add(team, "emp-2", "Dana Dev")
 
     for tool, arguments in [
@@ -60,7 +60,7 @@ def test_only_the_owner_can_manage_members(team: Team) -> None:
         ("remove_member", {"employee_id": "owner-1"}),
         ("reissue_token", {"employee_id": "owner-1"}),
     ]:
-        assert "Only the team's owner" in member.refusal(tool, **arguments)
+        assert "owner and its admins" in member.refusal(tool, **arguments)
 
 
 def test_the_owner_cannot_remove_themselves(team: Team) -> None:

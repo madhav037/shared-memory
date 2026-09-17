@@ -191,6 +191,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everyone in the team, with their role and GitHub account. */
+        get: operations["members"];
+        put?: never;
+        /** Add a member and issue their first personal token. */
+        post: operations["add_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/members/{employee_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a member: their sessions end and their personal token stops working. */
+        post: operations["remove_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/members/{employee_id}/change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a member's name or the GitHub account they sign in with. */
+        post: operations["change_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/members/{employee_id}/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant admin to a member, or take it away. */
+        post: operations["set_admin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/members/{employee_id}/ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make another member the team's owner. */
+        post: operations["hand_over_ownership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/my-token": {
         parameters: {
             query?: never;
@@ -261,7 +347,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "owner" | "member";
+            role: "owner" | "admin" | "member";
         };
         /**
          * Status
@@ -493,6 +579,30 @@ export interface components {
             difference: string;
         };
         /**
+         * MemberSummary
+         * @description One member of the team, as an admin sees them.
+         */
+        MemberSummary: {
+            /** Employee Id */
+            employee_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+            /** Github Login */
+            github_login: string | null;
+            /** Removed */
+            removed: boolean;
+        };
+        /** Members */
+        Members: {
+            /** Members */
+            members: components["schemas"]["MemberSummary"][];
+        };
+        /**
          * IssuedToken
          * @description A personal token, shown the once. The console never shows it again.
          */
@@ -503,6 +613,45 @@ export interface components {
             personal_token: string;
             /** Server Url */
             server_url: string;
+        };
+        /**
+         * NewMember
+         * @description A member being added to the team.
+         */
+        NewMember: {
+            /** Employee Id */
+            employee_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Github
+             * @default null
+             */
+            github: string | null;
+        };
+        /**
+         * ChangedMember
+         * @description What to correct about a member. Anything left out stays as it was.
+         */
+        ChangedMember: {
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Github
+             * @default null
+             */
+            github: string | null;
+        };
+        /**
+         * AdminChange
+         * @description Whether this member should be an admin.
+         */
+        AdminChange: {
+            /** Admin */
+            admin: boolean;
         };
     };
     responses: never;
@@ -755,6 +904,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemoryDifference"];
+                };
+            };
+        };
+    };
+    members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everyone in the team, with their role and GitHub account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Members"];
+                };
+            };
+        };
+    };
+    add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewMember"];
+            };
+        };
+        responses: {
+            /** @description Add a member and issue their first personal token. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedToken"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove a member: their sessions end and their personal token stops working. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Members"];
+                };
+            };
+        };
+    };
+    change_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangedMember"];
+            };
+        };
+        responses: {
+            /** @description Correct a member's name or the GitHub account they sign in with. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Members"];
+                };
+            };
+        };
+    };
+    set_admin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminChange"];
+            };
+        };
+        responses: {
+            /** @description Grant admin to a member, or take it away. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Members"];
+                };
+            };
+        };
+    };
+    hand_over_ownership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Make another member the team's owner. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Members"];
                 };
             };
         };

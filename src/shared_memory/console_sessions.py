@@ -167,7 +167,7 @@ class ConsoleSessions:
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT s.id, s.created_at, s.used_at, s.ended_at,"
-                " m.id AS member_pk, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.removed_at"
+                " m.id AS member_pk, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
                 " FROM console_sessions s JOIN members m ON m.id = s.member_id JOIN teams t ON t.id = m.team_id"
                 " WHERE s.token_hash = %s",
                 (_hash(token),),
@@ -179,7 +179,19 @@ class ConsoleSessions:
             if now - row["created_at"] > timedelta(days=self._settings.console_session_days):
                 return None
             conn.execute("UPDATE console_sessions SET used_at = %s WHERE id = %s", (now, row["id"]))
-            return Member(row["member_pk"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"])
+            return Member(
+                row["member_pk"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
+                row["is_admin"],
+            )  # fmt: skip
+
+    def end_all_for(self, employee_id: str, team_pk: int) -> None:
+        """End every console session of one member, for when they are removed from the team."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id IN"
+                " (SELECT id FROM members WHERE team_id = %s AND member_id = %s)",
+                (self._clock(), team_pk, employee_id),
+            )
 
     def end(self, token: str | None) -> None:
         if not token:

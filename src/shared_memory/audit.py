@@ -24,6 +24,12 @@ from shared_memory.identity import Member
 SIGNED_IN = "signed_in"
 SIGN_IN_REFUSED = "sign_in_refused"
 TOKEN_ISSUED = "token_issued"
+MEMBER_ADDED = "member_added"
+MEMBER_REMOVED = "member_removed"
+MEMBER_CHANGED = "member_changed"
+ADMIN_GRANTED = "admin_granted"
+ADMIN_REVOKED = "admin_revoked"
+OWNERSHIP_HANDED_OVER = "ownership_handed_over"
 
 
 @dataclass(frozen=True)

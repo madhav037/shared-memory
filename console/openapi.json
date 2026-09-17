@@ -345,6 +345,182 @@
         }
       }
     },
+    "/api/members": {
+      "get": {
+        "operationId": "members",
+        "summary": "Everyone in the team, with their role and GitHub account.",
+        "responses": {
+          "200": {
+            "description": "Everyone in the team, with their role and GitHub account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "add_member",
+        "summary": "Add a member and issue their first personal token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add a member and issue their first personal token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedToken"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/{employee_id}/remove": {
+      "post": {
+        "operationId": "remove_member",
+        "summary": "Remove a member: their sessions end and their personal token stops working.",
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remove a member: their sessions end and their personal token stops working.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/{employee_id}/change": {
+      "post": {
+        "operationId": "change_member",
+        "summary": "Correct a member's name or the GitHub account they sign in with.",
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangedMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Correct a member's name or the GitHub account they sign in with.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/{employee_id}/admin": {
+      "post": {
+        "operationId": "set_admin",
+        "summary": "Grant admin to a member, or take it away.",
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grant admin to a member, or take it away.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members/{employee_id}/ownership": {
+      "post": {
+        "operationId": "hand_over_ownership",
+        "summary": "Make another member the team's owner.",
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Make another member the team's owner.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/my-token": {
       "post": {
         "operationId": "reissue_my_token",
@@ -430,6 +606,7 @@
           "role": {
             "enum": [
               "owner",
+              "admin",
               "member"
             ],
             "title": "Role",
@@ -1049,6 +1226,68 @@
         "title": "MemoryDifference",
         "type": "object"
       },
+      "MemberSummary": {
+        "description": "One member of the team, as an admin sees them.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "employee_id",
+          "name",
+          "role",
+          "github_login",
+          "removed"
+        ],
+        "title": "MemberSummary",
+        "type": "object"
+      },
+      "Members": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/MemberSummary"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "Members",
+        "type": "object"
+      },
       "IssuedToken": {
         "description": "A personal token, shown the once. The console never shows it again.",
         "properties": {
@@ -1071,6 +1310,82 @@
           "server_url"
         ],
         "title": "IssuedToken",
+        "type": "object"
+      },
+      "NewMember": {
+        "description": "A member being added to the team.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Github"
+          }
+        },
+        "required": [
+          "employee_id",
+          "name"
+        ],
+        "title": "NewMember",
+        "type": "object"
+      },
+      "ChangedMember": {
+        "description": "What to correct about a member. Anything left out stays as it was.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "github": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Github"
+          }
+        },
+        "title": "ChangedMember",
+        "type": "object"
+      },
+      "AdminChange": {
+        "description": "Whether this member should be an admin.",
+        "properties": {
+          "admin": {
+            "title": "Admin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin"
+        ],
+        "title": "AdminChange",
         "type": "object"
       }
     }

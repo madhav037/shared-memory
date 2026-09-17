@@ -15,6 +15,8 @@ export type MemoryHistory = components["schemas"]["MemoryHistory"];
 export type MemoryVersion = components["schemas"]["MemoryVersion"];
 export type MemoryAtVersion = components["schemas"]["MemoryAtVersion"];
 export type MemoryDifference = components["schemas"]["MemoryDifference"];
+export type Members = components["schemas"]["Members"];
+export type MemberSummary = components["schemas"]["MemberSummary"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -120,6 +122,40 @@ export function fetchDifference(
 /** Issue a new personal token for the signed-in member; the one they had stops working. */
 export function reissueMyToken(): Promise<IssuedToken> {
   return ask<IssuedToken>("/api/my-token", { method: "POST", headers: fromConsole });
+}
+
+function change<T>(path: string, body?: unknown): Promise<T> {
+  return ask<T>(path, {
+    method: "POST",
+    headers: { ...fromConsole, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
+/** Everyone in the team, with their role and GitHub account. */
+export function fetchMembers(signal?: AbortSignal): Promise<Members> {
+  return ask<Members>("/api/members", { signal });
+}
+
+/** Add a member; their personal token comes back once. */
+export function addMember(asked: { employee_id: string; name: string; github?: string }): Promise<IssuedToken> {
+  return change<IssuedToken>("/api/members", asked);
+}
+
+export function removeMember(employeeId: string): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/remove`);
+}
+
+export function changeMember(employeeId: string, asked: { name?: string; github?: string }): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/change`, asked);
+}
+
+export function setAdmin(employeeId: string, admin: boolean): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/admin`, { admin });
+}
+
+export function handOverOwnership(employeeId: string): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/ownership`);
 }
 
 export const signInUrl = "/api/sign-in/github";
