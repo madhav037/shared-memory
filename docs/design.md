@@ -268,6 +268,7 @@ flowchart LR
 | **2. Consistency** | Promote, contradiction check, challenges, supersede, retire, exceptions, team memory, git history, secret refusal, 600-word limit, leaving-member rules. Fixes pain #2 | v1 |
 | **3. Collisions** | Locks, takeover, activity, similar-activity warnings, activity in the briefing | v1.1 |
 | **4. Extras** | GitHub login, web page, outdated memory labels | later |
+| **5. Admin console** | Admins and project leads, restricted projects, GitHub sign-in, browsing memory with its history, audit log. Specified separately in issue #22 | later |
 
 ### 10.1 Success: a two-week trial with 2–3 members
 

@@ -25,8 +25,24 @@ A person who belongs to a team and uses Claude sessions connected to its memory.
 _Avoid_: User, developer, dev, employee
 
 **Owner**:
-The one member of a team who can add and remove members and revoke personal tokens; every other member has equal rights.
-_Avoid_: Admin, lead
+The one member of a team who can grant and revoke **admin** and hand ownership to another member; an owner can do everything an admin can.
+_Avoid_: Super admin, root
+
+**Admin**:
+A member who manages the team's members, roles, projects and personal tokens, and can reach every project.
+_Avoid_: Manager, superuser, moderator
+
+**Project lead**:
+A member who looks after one project: its access, its repositories and who else leads it.
+_Avoid_: Maintainer, project admin, project owner
+
+**Restricted project**:
+A project only its **access list**, its project leads and the team's admins can reach; every other project is open to the whole team.
+_Avoid_: Private project, locked project
+
+**Access list**:
+The members allowed into a restricted project.
+_Avoid_: ACL, allowlist, permissions
 
 **Personal token**:
 The secret that proves which member a session belongs to; issued once per member.
@@ -127,6 +143,16 @@ _Avoid_: Star, favorite
 **Recall**:
 Memories added to a prompt automatically because they match it.
 _Avoid_: Injection, auto-search
+
+### The console
+
+**Console**:
+The web app where members browse memory and admins run the team; members sign in to it with GitHub.
+_Avoid_: Dashboard, admin panel, web UI
+
+**Audit log**:
+The record of who changed members, roles, access, tokens or memory, and when. It is not the memory's git history, which holds what memory said.
+_Avoid_: History, activity, trail
 
 ### Sessions and collisions
 
