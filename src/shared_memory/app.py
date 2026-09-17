@@ -15,8 +15,9 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from shared_memory import console_api
 from shared_memory.briefing import Briefing
+from shared_memory.console_api import ConsoleApi
+from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
@@ -310,5 +311,5 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
-    app.router.routes.extend(console_api.routes())
+    app.router.routes.extend(ConsoleApi(settings, ConsoleSessions(settings, db, identity, clock)).routes())
     return app

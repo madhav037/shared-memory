@@ -22,10 +22,83 @@
           }
         }
       }
+    },
+    "/api/sign-in/github": {
+      "get": {
+        "operationId": "sign_in",
+        "summary": "Begin signing in: send the member to GitHub.",
+        "responses": {
+          "302": {
+            "description": "Begin signing in: send the member to GitHub."
+          }
+        }
+      }
+    },
+    "/api/sign-in/github/callback": {
+      "get": {
+        "operationId": "sign_in_callback",
+        "summary": "Finish signing in and return the member to the console.",
+        "responses": {
+          "302": {
+            "description": "Finish signing in and return the member to the console."
+          }
+        }
+      }
+    },
+    "/api/sign-out": {
+      "post": {
+        "operationId": "sign_out",
+        "summary": "End this console session.",
+        "responses": {
+          "200": {
+            "description": "End this console session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "SignedInMember": {
+        "description": "Who the console is signed in as.",
+        "properties": {
+          "employee_id": {
+            "title": "Employee Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "employee_id",
+          "name",
+          "team",
+          "role"
+        ],
+        "title": "SignedInMember",
+        "type": "object"
+      },
       "Status": {
         "description": "Whether the console has reached the server, and who it is signed in as.",
         "properties": {
@@ -36,6 +109,17 @@
           "github_sign_in": {
             "title": "Github Sign In",
             "type": "boolean"
+          },
+          "member": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedInMember"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [

@@ -49,6 +49,28 @@ CREATE TABLE IF NOT EXISTS repositories (
     name TEXT NOT NULL,
     PRIMARY KEY (project_id, name)
 );
+
+ALTER TABLE members ADD COLUMN IF NOT EXISTS github_login TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS github_user_id BIGINT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_login_per_team
+    ON members (team_id, lower(github_login)) WHERE github_login IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_account_per_team
+    ON members (team_id, github_user_id) WHERE github_user_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS console_sessions (
+    id BIGSERIAL PRIMARY KEY,
+    member_id BIGINT NOT NULL REFERENCES members(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ NOT NULL,
+    ended_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS console_sign_ins (
+    state_hash TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL
+);
 """
 
 

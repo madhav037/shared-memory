@@ -40,3 +40,25 @@ p {
 [role="alert"] {
   color: #b3261e;
 }
+
+.button,
+button {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover,
+button:hover {
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+
+strong {
+  color: var(--ink);
+}
