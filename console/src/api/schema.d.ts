@@ -329,6 +329,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Challenges waiting for this member's decision, and the ones they raised. */
+        get: operations["challenges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/challenges/{challenge_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a challenge or reject it. */
+        post: operations["decide_challenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire a memory that is no longer true; another author's raises a challenge they decide. */
+        post: operations["retire"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/memory/history": {
         parameters: {
             query?: never;
@@ -856,6 +907,111 @@ export interface components {
         MemoryPath: {
             /** Path */
             path: string;
+        };
+        /**
+         * ChallengeDetail
+         * @description A challenge waiting for a decision, with both memories to compare.
+         */
+        ChallengeDetail: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Raised By */
+            raised_by: string;
+            /**
+             * Raised At
+             * Format: date-time
+             */
+            raised_at: string;
+            /** Yours */
+            yours: boolean;
+            target: components["schemas"]["ChallengedMemory"];
+            challenger: components["schemas"]["ChallengedMemory"] | null;
+        };
+        /**
+         * ChallengedMemory
+         * @description One side of a challenge: a memory as it stands now.
+         */
+        ChallengedMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Body */
+            body: string;
+            /** Level */
+            level: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * RaisedChallenge
+         * @description A challenge this member raised, and how it ended.
+         */
+        RaisedChallenge: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Target Path */
+            target_path: string;
+            /** Challenger Path */
+            challenger_path: string | null;
+            /**
+             * Raised At
+             * Format: date-time
+             */
+            raised_at: string;
+            /** State */
+            state: string;
+            /** Decided By */
+            decided_by: string | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Explanation */
+            explanation: string | null;
+        };
+        /**
+         * ChallengeList
+         * @description What is waiting for this member's decision, and what they have asked of others.
+         */
+        ChallengeList: {
+            /** Waiting */
+            waiting: components["schemas"]["ChallengeDetail"][];
+            /** Raised */
+            raised: components["schemas"]["RaisedChallenge"][];
+        };
+        /**
+         * Decision
+         * @description Accept a challenge or reject it.
+         */
+        Decision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accept" | "reject";
+        };
+        /**
+         * Retired
+         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
+         */
+        Retired: {
+            /** Status */
+            status: string;
+            /** Path */
+            path: string;
+            /** Challenge Id */
+            challenge_id: number | null;
         };
         /**
          * MemoryVersion
@@ -1487,6 +1643,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Pins"];
+                };
+            };
+        };
+    };
+    challenges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Challenges waiting for this member's decision, and the ones they raised. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChallengeList"];
+                };
+            };
+        };
+    };
+    decide_challenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                challenge_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Accept a challenge or reject it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChallengeList"];
+                };
+            };
+        };
+    };
+    retire: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Retire a memory that is no longer true; another author's raises a challenge they decide. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retired"];
                 };
             };
         };

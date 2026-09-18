@@ -103,15 +103,16 @@ class Audit:
                 ),
             )
 
-    def memory(self, caller: Caller, change: str, path: str, **detail: Any) -> None:
+    def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: Any) -> None:
         """Note a change to one memory: who changed it, in which project, and at which path.
 
-        It records where the memory is, never what it says: the memory folder's git history holds that.
+        The project is the session's, or the memory's own when the change was made from somewhere that isn't in
+        one. It records where the memory is, never what it says: the memory folder's git history holds that.
         """
         self.record(
             change,
             member=caller.member,
-            project_id=caller.project.project_id if caller.project else None,
+            project_id=project_id or (caller.project.project_id if caller.project else None),
             target=path,
             detail=detail,
         )

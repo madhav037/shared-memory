@@ -90,6 +90,12 @@ The plugin's hooks call the server with `curl`, which ships with Windows 10 and 
 
 Open a project in the console and a memory shows whether it is **pinned**. Pinning a project or team memory — or a topic folder, which pins its index — puts it into the briefing every session in that project receives. The project page lists everything pinned in it with roughly how many tokens each one costs; when a pin would take the briefing over its cap, the console says so and shows what is already pinned, so you can choose what to unpin. The same thing can be done from a session with the `pin` and `unpin` tools.
 
-## 6. Repositories without a project
+## 6. Decide what the team no longer believes
+
+The console opens on the **challenges** waiting for your decision, with both memories side by side: what the memory says now, and what is offered in its place. Accepting one supersedes the memory; rejecting leaves it as it is and the challenger's memory stays personal memory. Several challenges against one memory are shown together, and accepting one closes the others, telling whoever raised them why. Until the fallback period passes the author decides; after it, or once the author has left the team, any member can.
+
+A memory that is no longer true and has nothing to replace it is **retired** from its own page. Retiring your own memory takes effect at once; retiring another member's raises a challenge for that author to decide. The **Challenges** page also shows every challenge you raised and how each one ended.
+
+## 7. Repositories without a project
 
 A repository whose settings don't name a project behaves exactly as before: hooks add nothing, and memory tools reply that the repository isn't connected to a project.

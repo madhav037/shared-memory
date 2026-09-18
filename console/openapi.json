@@ -725,6 +725,100 @@
         }
       }
     },
+    "/api/challenges": {
+      "get": {
+        "operationId": "challenges",
+        "summary": "Challenges waiting for this member's decision, and the ones they raised.",
+        "responses": {
+          "200": {
+            "description": "Challenges waiting for this member's decision, and the ones they raised.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/challenges/{challenge_id}/decide": {
+      "post": {
+        "operationId": "decide_challenge",
+        "summary": "Accept a challenge or reject it.",
+        "parameters": [
+          {
+            "name": "challenge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accept a challenge or reject it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/retire": {
+      "post": {
+        "operationId": "retire",
+        "summary": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retired"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/memory/history": {
       "get": {
         "operationId": "history",
@@ -1918,6 +2012,275 @@
           "path"
         ],
         "title": "MemoryPath",
+        "type": "object"
+      },
+      "ChallengeDetail": {
+        "description": "A challenge waiting for a decision, with both memories to compare.",
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "raised_by": {
+            "title": "Raised By",
+            "type": "string"
+          },
+          "raised_at": {
+            "format": "date-time",
+            "title": "Raised At",
+            "type": "string"
+          },
+          "yours": {
+            "title": "Yours",
+            "type": "boolean"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ChallengedMemory"
+          },
+          "challenger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChallengedMemory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "challenge_id",
+          "kind",
+          "project_id",
+          "raised_by",
+          "raised_at",
+          "yours",
+          "target",
+          "challenger"
+        ],
+        "title": "ChallengeDetail",
+        "type": "object"
+      },
+      "ChallengedMemory": {
+        "description": "One side of a challenge: a memory as it stands now.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "body",
+          "level",
+          "type",
+          "author",
+          "status"
+        ],
+        "title": "ChallengedMemory",
+        "type": "object"
+      },
+      "RaisedChallenge": {
+        "description": "A challenge this member raised, and how it ended.",
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "target_path": {
+            "title": "Target Path",
+            "type": "string"
+          },
+          "challenger_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenger Path"
+          },
+          "raised_at": {
+            "format": "date-time",
+            "title": "Raised At",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "kind",
+          "target_path",
+          "challenger_path",
+          "raised_at",
+          "state",
+          "decided_by",
+          "decided_at",
+          "explanation"
+        ],
+        "title": "RaisedChallenge",
+        "type": "object"
+      },
+      "ChallengeList": {
+        "description": "What is waiting for this member's decision, and what they have asked of others.",
+        "properties": {
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/ChallengeDetail"
+            },
+            "title": "Waiting",
+            "type": "array"
+          },
+          "raised": {
+            "items": {
+              "$ref": "#/components/schemas/RaisedChallenge"
+            },
+            "title": "Raised",
+            "type": "array"
+          }
+        },
+        "required": [
+          "waiting",
+          "raised"
+        ],
+        "title": "ChallengeList",
+        "type": "object"
+      },
+      "Decision": {
+        "description": "Accept a challenge or reject it.",
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "Retired": {
+        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "challenge_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenge Id"
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "challenge_id"
+        ],
+        "title": "Retired",
         "type": "object"
       },
       "MemoryVersion": {

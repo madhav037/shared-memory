@@ -2,7 +2,7 @@ import { Alert, Anchor, Badge, Button, Card, Group, Loader, Stack, Table, Text, 
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
-import { fetchMemory, pin, unpin, type MemoryDetail } from "../api/client";
+import { fetchMemory, pin, retire, unpin, type MemoryDetail } from "../api/client";
 import { History } from "./History";
 import { memoryUrl } from "./Project";
 
@@ -20,6 +20,7 @@ export function Memory() {
   const [memory, setMemory] = useState<MemoryDetail | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const [pinRefused, setPinRefused] = useState<string | null>(null);
+  const [retiring, setRetiring] = useState<string | null>(null);
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -86,6 +87,41 @@ export function Memory() {
         <Alert color="red" data-testid="pin-refused">
           {pinRefused}
         </Alert>
+      )}
+      {retiring && (
+        <Alert color="blue" data-testid="retired">
+          {retiring}
+        </Alert>
+      )}
+
+      {memory.level !== "personal" && memory.status === "active" && (
+        <Group>
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="orange"
+            data-testid="retire"
+            onClick={async () => {
+              try {
+                const done = await retire(projectId, memory.path);
+                setRetiring(
+                  done.status === "retired"
+                    ? "This memory is retired: it is no longer part of what the team believes."
+                    : `${memory.author} has been asked to retire it. Until they decide, it stays as it is.`,
+                );
+                setPinRefused(null);
+                setMemory(done.status === "retired" ? { ...memory, status: "retired" } : memory);
+              } catch (problem) {
+                setPinRefused((problem as Error).message);
+              }
+            }}
+          >
+            Retire it
+          </Button>
+          <Text size="xs" c="dimmed">
+            Retiring another member’s memory asks its author to decide.
+          </Text>
+        </Group>
       )}
 
       {memory.superseded_by && (
