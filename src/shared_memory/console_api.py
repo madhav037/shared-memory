@@ -42,10 +42,13 @@ from shared_memory.audit import (
     Audit,
 )
 from shared_memory.briefing import Briefing, pin_target
+from shared_memory.challenges import Challenge, Challenges, project_of
 from shared_memory.config import Settings
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
+from shared_memory.lifecycle import Lifecycle
+from shared_memory.memory import locate
 from shared_memory.service import MemoryService
 
 PREFIX = "/api"
@@ -58,6 +61,14 @@ def _plainly(wrong: Exception) -> str:
         missing = ", ".join(str(problem["loc"][-1]) for problem in wrong.errors())
         return f"That request was missing something: {missing}."
     return "That request wasn't understood."
+
+
+def _project_in(path: str) -> str | None:
+    """The project a memory path belongs to, or nothing for team memory and anything unreadable."""
+    try:
+        return locate(path).project_id
+    except Refused:
+        return None
 
 
 def _may_be_pinned(path: str) -> bool:
@@ -254,6 +265,67 @@ class MemoryPath(BaseModel):
     """The memory or topic folder this change is about."""
 
     path: str
+
+
+class ChallengedMemory(BaseModel):
+    """One side of a challenge: a memory as it stands now."""
+
+    path: str
+    title: str
+    summary: str
+    body: str
+    level: str
+    type: str
+    author: str
+    status: str
+
+
+class ChallengeDetail(BaseModel):
+    """A challenge waiting for a decision, with both memories to compare."""
+
+    challenge_id: int
+    kind: str
+    project_id: str | None
+    raised_by: str
+    raised_at: datetime
+    yours: bool
+    target: ChallengedMemory
+    challenger: ChallengedMemory | None
+
+
+class RaisedChallenge(BaseModel):
+    """A challenge this member raised, and how it ended."""
+
+    challenge_id: int
+    kind: str
+    target_path: str
+    challenger_path: str | None
+    raised_at: datetime
+    state: str
+    decided_by: str | None
+    decided_at: datetime | None
+    explanation: str | None
+
+
+class ChallengeList(BaseModel):
+    """What is waiting for this member's decision, and what they have asked of others."""
+
+    waiting: list[ChallengeDetail]
+    raised: list[RaisedChallenge]
+
+
+class Decision(BaseModel):
+    """Accept a challenge or reject it."""
+
+    decision: Literal["accept", "reject"]
+
+
+class Retired(BaseModel):
+    """What retiring did: the memory is retired, or its author has been asked to retire it."""
+
+    status: str
+    path: str
+    challenge_id: int | None
 
 
 class MemoryDetail(BaseModel):
@@ -555,6 +627,31 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=MemoryPath,
     ),
     Declaration(
+        path="/challenges",
+        method="GET",
+        operation_id="challenges",
+        summary="Challenges waiting for this member's decision, and the ones they raised.",
+        answers=ChallengeList,
+    ),
+    Declaration(
+        path="/challenges/{challenge_id}/decide",
+        method="POST",
+        operation_id="decide_challenge",
+        summary="Accept a challenge or reject it.",
+        answers=ChallengeList,
+        changes=True,
+        accepts=Decision,
+    ),
+    Declaration(
+        path="/projects/{project_id}/retire",
+        method="POST",
+        operation_id="retire",
+        summary="Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        answers=Retired,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
         path="/projects/{project_id}/memory/history",
         method="GET",
         operation_id="history",
@@ -723,6 +820,8 @@ class ConsoleApi:
         identity: Identity,
         service: MemoryService,
         briefing: Briefing,
+        lifecycle: Lifecycle,
+        challenges: Challenges,
     ) -> None:
         self._settings = settings
         self._sessions = sessions
@@ -730,6 +829,8 @@ class ConsoleApi:
         self._identity = identity
         self._service = service
         self._briefing = briefing
+        self._lifecycle = lifecycle
+        self._challenging = challenges
 
     def routes(self) -> list[Route]:
         handlers: Mapping[str, Callable[[Request], Response]] = {
@@ -752,6 +853,9 @@ class ConsoleApi:
             "pins": self._pins,
             "pin": self._pin,
             "unpin": self._unpin,
+            "challenges": self._challenges,
+            "decide_challenge": self._decide_challenge,
+            "retire": self._retire,
             "memory": self._memory,
             "search": self._search,
             "history": self._history,
@@ -1023,6 +1127,82 @@ class ConsoleApi:
             )
 
         return self._browse(request, read)
+
+    def _challenges(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return self._disputes(self._identity.caller_in(member, None))
+
+    def _decide_challenge(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked: Decision = request.state.asked
+        try:
+            challenge_id = int(request.path_params["challenge_id"])
+        except ValueError:
+            return JSONResponse({"message": "That isn't a challenge."}, status_code=422)
+        challenge = self._challenging.open_challenge(member.team_code, challenge_id)
+        if challenge is None:
+            return JSONResponse(
+                {"message": f"There is no open challenge {challenge_id} in your team."}, status_code=403
+            )
+        try:
+            self._lifecycle.decide_challenge(self._working_in(member, project_of(challenge)), challenge_id, asked.decision)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return self._disputes(self._identity.caller_in(member, None))
+
+    def _retire(self, request: Request) -> Response:
+        def retire(caller: Caller) -> Retired:
+            asked: MemoryPath = request.state.asked
+            done = self._lifecycle.retire(caller, asked.path)
+            return Retired(
+                status=done["status"],
+                path=asked.path,
+                challenge_id=done.get("challenge_id"),
+            )
+
+        return self._browse(request, retire)
+
+    def _disputes(self, caller: Caller) -> Response:
+        waiting = [self._dispute(caller, challenge) for challenge in self._challenging.waiting_for(caller)]
+        raised = [RaisedChallenge(**one) for one in self._challenging.raised_by(caller)]
+        return JSONResponse(ChallengeList(waiting=waiting, raised=raised).model_dump(mode="json"))
+
+    def _dispute(self, caller: Caller, challenge: Challenge) -> ChallengeDetail:
+        return ChallengeDetail(
+            challenge_id=challenge.id,
+            kind=challenge.kind,
+            project_id=project_of(challenge),
+            raised_by=challenge.raised_by,
+            raised_at=challenge.raised_at,
+            yours=challenge.target_author == caller.member_id,
+            target=self._side(caller, challenge.target_path),
+            challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
+        )
+
+    def _side(self, caller: Caller, path: str) -> ChallengedMemory:
+        """One memory of a challenge, or a stand-in when it is no longer where it was."""
+        try:
+            memory = self._service.read(self._working_in(caller.member, _project_in(path)), path)
+        except Refused:
+            return ChallengedMemory(
+                path=path, title=path, summary="", body="", level="", type="", author="", status="gone"
+            )
+        return ChallengedMemory(**{name: memory[name] for name in ChallengedMemory.model_fields})
+
+    def _working_in(self, member: Member, project_id: str | None) -> Caller:
+        """A caller placed in a project, as a session would be: the one asked for, or any the member can reach.
+
+        The console isn't in a project the way a session is, and team memory belongs to none, so anything about
+        team memory is done from a project its member can reach.
+        """
+        if project_id is None:
+            reachable = self._identity.projects(member)
+            project_id = reachable[0].project_id if reachable else None
+        return self._identity.caller_in(member, project_id)
 
     def _browse(self, request: Request, look: Callable[[Caller], BaseModel]) -> Response:
         """Everything a member reads about one project's memory, through the same services their Claude uses."""

@@ -14,7 +14,7 @@ from shared_memory.audit import (
     MEMORY_SUPERSEDED,
     Audit,
 )
-from shared_memory.challenges import Challenge, Challenges
+from shared_memory.challenges import Challenge, Challenges, project_of
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -208,9 +208,10 @@ class Lifecycle:
             if supersede is not None:
                 old = PurePosixPath(supersede)
                 change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
-        self._audit.memory(caller, MEMORY_PROMOTED, str(new_path), level=target, was=str(location.path))
+        where = location.project_id
+        self._audit.memory(caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path))
         if supersede is not None:
-            self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, by=str(new_path))
+            self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
         return {"status": "promoted", "path": str(new_path)}
 
     @staticmethod
@@ -288,8 +289,8 @@ class Lifecycle:
 
     def _decided(self, caller: Caller, challenge: Challenge, decision: str) -> None:
         self._audit.memory(
-            caller, CHALLENGE_DECIDED, challenge.target_path, challenge_id=challenge.id, decision=decision,
-            challenge=challenge.kind,
+            caller, CHALLENGE_DECIDED, challenge.target_path, project_id=project_of(challenge),
+            challenge_id=challenge.id, decision=decision, challenge=challenge.kind,
         )  # fmt: skip
 
     def _accept_supersede(self, caller: Caller, challenge: Challenge, challenger_path: str) -> tuple[dict[str, Any], str]:
@@ -320,6 +321,8 @@ class Lifecycle:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
         with self._store.change(caller.team, committer(caller), message) as change:
             change.write(target_path, replace(target, status="retired"))
-        self._audit.memory(caller, MEMORY_RETIRED, str(target_path), challenge_id=challenge.id)
+        self._audit.memory(
+            caller, MEMORY_RETIRED, str(target_path), project_id=project_of(challenge), challenge_id=challenge.id
+        )
         outcome = f"Your challenge {challenge.id} was accepted by {caller.member_id}: {challenge.target_path} is retired."
         return {"status": "accepted", "challenge_id": challenge.id, "retired": challenge.target_path}, outcome

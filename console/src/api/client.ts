@@ -21,6 +21,10 @@ export type MemoryDifference = components["schemas"]["MemoryDifference"];
 export type Members = components["schemas"]["Members"];
 export type Pins = components["schemas"]["Pins"];
 export type Pin = components["schemas"]["Pin"];
+export type ChallengeList = components["schemas"]["ChallengeList"];
+export type ChallengeDetail = components["schemas"]["ChallengeDetail"];
+export type RaisedChallenge = components["schemas"]["RaisedChallenge"];
+export type Retired = components["schemas"]["Retired"];
 export type MemberSummary = components["schemas"]["MemberSummary"];
 
 /** The header that tells the server a request came from the console, not from another site. */
@@ -114,6 +118,21 @@ export function pin(projectId: string, path: string): Promise<Pins> {
 
 export function unpin(projectId: string, path: string): Promise<Pins> {
   return change<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins/remove`, { path });
+}
+
+/** Challenges waiting for this member's decision, and the ones they raised. */
+export function fetchChallenges(signal?: AbortSignal): Promise<ChallengeList> {
+  return ask<ChallengeList>("/api/challenges", { signal });
+}
+
+/** Accept a challenge or reject it. */
+export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<ChallengeList> {
+  return change<ChallengeList>(`/api/challenges/${challengeId}/decide`, { decision });
+}
+
+/** Retire a memory that is no longer true; another author's raises a challenge they decide. */
+export function retire(projectId: string, path: string): Promise<Retired> {
+  return change<Retired>(`/api/projects/${encodeURIComponent(projectId)}/retire`, { path });
 }
 
 /** Every version of one memory, newest first. */

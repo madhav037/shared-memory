@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes, useNavigate } from "react-router";
 
 import { fetchStatus, signOut, type Status } from "./api/client";
 import { AuditLog } from "./pages/AuditLog";
+import { Challenges } from "./pages/Challenges";
 import { Home } from "./pages/Home";
 import { Memory } from "./pages/Memory";
 import { MyToken } from "./pages/MyToken";
@@ -54,9 +55,14 @@ export function App() {
               </Title>
             </Anchor>
             {member && (
-              <Anchor component={Link} to="/my-token" size="sm" data-testid="to-my-token">
-                My token
-              </Anchor>
+              <>
+                <Anchor component={Link} to="/challenges" size="sm" data-testid="to-challenges">
+                  Challenges
+                </Anchor>
+                <Anchor component={Link} to="/my-token" size="sm" data-testid="to-my-token">
+                  My token
+                </Anchor>
+              </>
             )}
             {(member?.role === "owner" || member?.role === "admin") && (
               <Anchor component={Link} to="/team" size="sm" data-testid="to-team">
@@ -103,6 +109,7 @@ export function App() {
               element={member ? <ProjectSettings me={member} /> : <Navigate to="/" replace />}
             />
             <Route path="/projects/:projectId/memory" element={member ? <Memory /> : <Navigate to="/" replace />} />
+            <Route path="/challenges" element={member ? <Challenges /> : <Navigate to="/" replace />} />
             <Route path="/my-token" element={member ? <MyToken member={member} /> : <Navigate to="/" replace />} />
             <Route path="/team" element={member ? <Team me={member} /> : <Navigate to="/" replace />} />
             <Route path="/audit" element={member ? <AuditLog member={member} /> : <Navigate to="/" replace />} />

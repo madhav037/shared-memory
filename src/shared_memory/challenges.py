@@ -14,6 +14,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity
+from shared_memory.memory import locate
 from shared_memory.store import MemoryStore
 
 SCHEMA = """
@@ -72,6 +73,18 @@ class Challenge:
             row["promoted_by"],
             row["raised_at"],
         )
+
+
+def project_of(challenge: Challenge) -> str | None:
+    """The project a challenge is about: the challenging memory's, or the challenged one's. Team memory has none."""
+    for path in (challenge.challenger_path, challenge.target_path):
+        if path is None:
+            continue
+        try:
+            return locate(path).project_id
+        except Refused:
+            continue
+    return None
 
 
 class Challenges:
@@ -173,6 +186,38 @@ class Challenges:
             for c in self.open_challenges(team, target_path=path)
         ]
 
+    def waiting_for(self, caller: Caller) -> list[Challenge]:
+        """Every open challenge this member may decide, in the projects they can reach."""
+        reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
+        return [
+            challenge
+            for challenge in self.open_challenges(caller.team)
+            if self.may_decide(caller, challenge) and project_of(challenge) in reachable
+        ]
+
+    def raised_by(self, caller: Caller) -> list[dict[str, Any]]:
+        """Every challenge this member raised, newest first, and how each one ended."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation"
+                " FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
+                (caller.team, caller.member_id),
+            ).fetchall()
+        return [
+            {
+                "challenge_id": row["id"],
+                "kind": row["kind"],
+                "target_path": row["target_path"],
+                "challenger_path": row["challenger_path"],
+                "raised_at": row["raised_at"],
+                "state": row["state"],
+                "decided_by": row["decided_by"],
+                "decided_at": row["decided_at"],
+                "explanation": row["explanation"],
+            }
+            for row in rows
+        ]
+
     # Who decides
 
     def may_decide(self, caller: Caller, challenge: Challenge) -> bool:
@@ -194,8 +239,7 @@ class Challenges:
 
     def briefing_notices(self, caller: Caller) -> list[str]:
         """Every open challenge the member can decide, and news not yet delivered."""
-        decidable = [c for c in self.open_challenges(caller.team) if self.may_decide(caller, c)]
-        return [part for part in (self._render(caller, decidable), self._news(caller)) if part]
+        return [part for part in (self._render(caller, self.waiting_for(caller)), self._news(caller)) if part]
 
     def prompt_notices(self, caller: Caller) -> str | None:
         """Challenges against the member's memories not yet shown on a prompt (with the others against the same

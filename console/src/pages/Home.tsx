@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { createProject, fetchProjects, signInUrl, type ProjectSummary, type Status } from "../api/client";
+import { Waiting, useChallenges } from "./Challenges";
 
 /** The front door: sign in, then the projects whose memory you can read. */
 export function Home({ status }: { status: Status }) {
@@ -28,8 +29,20 @@ export function Home({ status }: { status: Status }) {
         Signed in as <strong>{status.member.name}</strong> ({status.member.employee_id}), {status.member.role} of team{" "}
         <strong>{status.member.team}</strong>.
       </Text>
+      <Deciding />
       <Projects />
     </Stack>
+  );
+}
+
+/** The console opens on whatever is waiting for this member to decide. */
+function Deciding() {
+  const { answer, reload } = useChallenges();
+  if (answer === null) return null;
+  return (
+    <div style={{ width: "100%", maxWidth: 980 }}>
+      <Waiting waiting={answer.waiting} onDecided={reload} />
+    </div>
   );
 }
 

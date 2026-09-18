@@ -53,6 +53,37 @@ if __name__ == "__main__":
             body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
         )
         in_project.call("promote", path=saved["path"], level="project")
+
+        # A second project memory, and a challenge against it waiting for the owner to decide.
+        staging = in_project.call(
+            "remember",
+            title="Staging resets nightly",
+            summary="The staging database is wiped every night.",
+            type="gotcha",
+            body="The staging database is wiped and reseeded every night.",
+        )
+        challenged = in_project.call("promote", path=staging["path"], level="project")["path"]
+        dana_token = owner.call(
+            "add_member", employee_id="emp-dana", name="Raj Raiser", github="dana"
+        )["personal_token"]
+        dana = Session(server, dana_token).in_project(project, "billing-api")
+        offered = dana.call(
+            "remember",
+            title="Staging resets at 02:17 UTC",
+            summary="The staging database is wiped every night at 02:17 UTC.",
+            type="gotcha",
+            body="The staging database is wiped and reseeded every night at 02:17 UTC, not at midnight.",
+        )
+        similar = dana.call("promote", path=offered["path"], level="project")
+        dana.call(
+            "promote",
+            path=offered["path"],
+            level="project",
+            reference=similar["reference"],
+            resolutions={
+                one["path"]: ("supersede" if one["path"] == challenged else "keep_both") for one in similar["similar"]
+            },
+        )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
             server.join()
