@@ -324,6 +324,8 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         )
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(
-        ConsoleApi(settings, ConsoleSessions(settings, db, identity, audit, clock), audit, identity, service).routes()
+        ConsoleApi(
+            settings, ConsoleSessions(settings, db, identity, audit, clock), audit, identity, service, briefing
+        ).routes()
     )
     return app
