@@ -973,7 +973,8 @@ li[aria-expanded="true"] > .tree-row .twist {
 
 .view-switch {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 6px 24px;
   margin: 32px 0 0;
   border-bottom: 1px solid var(--rule);
 }
@@ -1496,6 +1497,40 @@ li[aria-expanded="true"] > .tree-row .twist {
   cursor: default;
   text-decoration: none;
 }
+/* Connecting an agent: numbered steps, then what it does by itself. */
+.steps {
+  margin: 18px 0 0;
+  padding: 0 0 0 1.4em;
+  display: grid;
+  gap: 8px;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: 68ch;
+}
+.steps li::marker {
+  font-weight: 700;
+  color: var(--ink-3);
+}
+.agent-automatic {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule-soft);
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+.agent-automatic .run-in {
+  font-style: italic;
+  color: var(--ink-3);
+  margin-right: 6px;
+}
+.connection-file-action {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--ink-3);
+}
+
 /* The files a repository commits to connect each coding agent, one agent at a time. */
 .connection-files .view-switch {
   margin-top: 14px;

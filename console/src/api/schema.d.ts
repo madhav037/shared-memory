@@ -795,24 +795,28 @@ export interface components {
             agent: string;
             /** Path */
             path: string;
-            /** Action */
-            action: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "merge";
             /** How */
             how: string;
             /** Contents */
             contents: string;
-            /** Scope */
-            scope: string;
+            /**
+             * Kept In
+             * @enum {string}
+             */
+            kept_in: "repository" | "machine";
         };
         /**
          * ProjectRepository
-         * @description A repository of a project, with what it commits to connect its sessions to the project.
+         * @description A repository of a project, with the files each coding agent commits to connect it to the project.
          */
         ProjectRepository: {
             /** Name */
             name: string;
-            /** Settings */
-            settings: string;
             /** Files */
             files: components["schemas"]["ConnectionFile"][];
         };

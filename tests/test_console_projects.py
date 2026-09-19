@@ -119,10 +119,10 @@ def test_a_project_shows_its_repositories_with_the_settings_to_commit(
 
     repositories = added.json()["repositories"]
     assert [one["name"] for one in repositories] == ["billing-api", "billing-web"]
-    settings = json.loads(repositories[1]["settings"])
+    files = {file["path"]: file for file in repositories[1]["files"]}
+    settings = json.loads(files[".claude/settings.json"]["contents"])
     assert settings["env"] == {"SHARED_MEMORY_PROJECT": billing, "SHARED_MEMORY_REPOSITORY": "billing-web"}
     assert settings["enabledPlugins"] == {"shared-memory@shared-memory": True}
-    files = {file["path"]: file for file in repositories[1]["files"]}
     assert files[".codex/config.toml"]["agent"] == "Codex"
     assert 'X-Shared-Memory-Repository" = "billing-web"' in files[".codex/config.toml"]["contents"]
 

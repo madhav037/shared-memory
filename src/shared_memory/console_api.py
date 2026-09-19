@@ -157,17 +157,16 @@ class ConnectionFile(BaseModel):
 
     agent: str
     path: str
-    action: str
+    action: Literal["create", "merge"]
     how: str
     contents: str
-    scope: str
+    kept_in: Literal["repository", "machine"]
 
 
 class ProjectRepository(BaseModel):
-    """A repository of a project, with what it commits to connect its sessions to the project."""
+    """A repository of a project, with the files each coding agent commits to connect it to the project."""
 
     name: str
-    settings: str
     files: list[ConnectionFile]
 
 
@@ -1207,11 +1206,8 @@ class ConsoleApi:
         return JSONResponse(detail.model_dump(mode="json"))
 
     def _repository(self, server_url: str, project_id: str, project_name: str, name: str) -> ProjectRepository:
-        settings = self._service.settings_for(project_id, name)
         files = self._service.connection_files(server_url, project_id, project_name, name)
-        return ProjectRepository(
-            name=name, settings=json.dumps(settings, indent=2), files=[ConnectionFile(**file) for file in files]
-        )
+        return ProjectRepository(name=name, files=[ConnectionFile(**file) for file in files])
 
     def _tree(self, request: Request) -> Response:
         def walk(caller: Caller) -> Tree:

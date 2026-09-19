@@ -52,8 +52,17 @@ export function inForce(versions: MemoryVersion[], place: number, standing = "ac
   return `In force from ${moment(version.at)} to ${until}`;
 }
 
+/** What the server records when a coding agent didn't say which one it is. */
+export const ANOTHER_AGENT = "another agent";
+
 /** Which coding agent a change came from, as a phrase to follow its author: " in Codex", " from another agent". */
 export function inAgent(agent: string | null | undefined): string {
   if (!agent) return "";
-  return agent === "another agent" ? " from another agent" : ` in ${agent}`;
+  return agent === ANOTHER_AGENT ? ` from ${ANOTHER_AGENT}` : ` in ${agent}`;
+}
+
+/** The same, standing on its own: "In Codex", "From another agent". */
+export function agentLabel(agent: string): string {
+  const phrase = inAgent(agent).trim();
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
 }

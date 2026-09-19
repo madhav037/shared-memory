@@ -6,6 +6,7 @@ import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } f
 import { Placeholder, Refusal } from "../components/Bits";
 import { useContents } from "../components/Contents";
 import { folderUrl, memoryUrl, moment, typeName } from "../lib/format";
+import { agentLabel } from "../lib/versions";
 
 /** What each kind of change is called, in the order they are offered as a filter. */
 const WORDS: Record<string, string> = {
@@ -63,7 +64,7 @@ function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: 
   };
   const said: React.ReactNode[] = [];
   const agent = text("agent");
-  if (agent) said.push(agent === "another agent" ? "From another agent" : `In ${agent}`);
+  if (agent) said.push(agentLabel(agent));
   const level = text("level");
   const challenge = text("challenge");
   if (text("type")) said.push(text("type") === "architecture" ? "As architecture" : `As a ${typeName(text("type")!).toLowerCase()}`);
@@ -144,7 +145,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       <h1 className="page-title wide">Audit log</h1>
       <p className="standfirst">
         {wholeTeam
-          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens and memory, from the console and from Claude.`
+          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens and memory, from the console and from every coding agent.`
           : "Every change in the projects you lead, newest first."}{" "}
         What a memory said lives in its history; this records who changed it and when.
       </p>

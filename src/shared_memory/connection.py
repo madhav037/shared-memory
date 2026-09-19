@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from importlib import resources
-from typing import Any
+from typing import Any, Literal
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"
 EVERY_AGENT = "Every agent"
@@ -23,12 +23,12 @@ class ConnectionFile:
 
     agent: str
     path: str
-    action: str  # "create" or "merge"
+    action: Literal["create", "merge"]
     how: str
     contents: str
-    # "repository": committed once for everyone. "machine": set up once on each member's machine (Cline keeps its
-    # MCP servers in one global file, never in the repository).
-    scope: str = "repository"
+    # "repository": committed once for everyone. "machine": set up once on each member's machine, because Cline keeps
+    # its MCP servers in one file per machine rather than in the repository (see ADR-0011).
+    kept_in: Literal["repository", "machine"] = "repository"
 
 
 def claude_settings(marketplace: str, project_id: str, repository: str) -> dict[str, Any]:
@@ -157,8 +157,8 @@ def connection_kit(
             agent="Devin Desktop",
             path=".devin/mcp_config.json",
             action="merge",
-            how="Merge the server into the file, keeping anything already there. If Devin doesn't pass your token "
-            "through, put the same entry with your token in .devin/mcp_config.local.json, which git ignores.",
+            how="Merge the server into the file, keeping anything already there. Devin reads each member's token "
+            "from SHARED_MEMORY_TOKEN.",
             contents=_json(
                 {
                     "mcpServers": {
@@ -176,14 +176,18 @@ def connection_kit(
             path="~/.cline/data/settings/cline_mcp_settings.json",
             action="merge",
             how="Cline keeps MCP servers in one file on each machine, not in the repository. Each member adds this "
-            "entry to it once for this project; other repositories of the project reach it through the same entry.",
+            "entry to it once for this project. It names the project only, so every repository of the project reaches "
+            "it through the same entry.",
             contents=_json(
                 {
                     "mcpServers": {
                         f"shared-memory-{project_id}": {
                             "type": "streamableHttp",
                             "url": endpoint,
-                            "headers": {"Authorization": f"Bearer ${{env:{TOKEN_VARIABLE}}}", **headers},
+                            "headers": {
+                                "Authorization": f"Bearer ${{env:{TOKEN_VARIABLE}}}",
+                                "X-Shared-Memory-Project": project_id,
+                            },
                             "timeout": 60,
                             "disabled": False,
                             "autoApprove": [],
@@ -191,7 +195,7 @@ def connection_kit(
                     }
                 }
             ),
-            scope="machine",
+            kept_in="machine",
         ),
         ConnectionFile(
             agent=EVERY_AGENT,

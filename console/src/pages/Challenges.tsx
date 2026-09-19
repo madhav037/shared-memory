@@ -205,7 +205,7 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (employeeId: 
       <h2 className="section-heading">Challenges you raised</h2>
       {raised.length === 0 ? (
         <p className="empty">
-          You haven’t raised any. A challenge is raised from Claude, when you promote a memory that should replace
+          You haven’t raised any. A challenge is raised from your coding agent, when you promote a memory that should replace
           someone else’s, or from a memory’s page here, when you retire one that isn’t yours.
         </p>
       ) : (

@@ -24,9 +24,9 @@ const MEANING: Record<string, string> = {
 
 const TEACHING: Record<string, string> = {
   team: "Team memory holds for every project. It arrives here when a member promotes one of their memories to team memory.",
-  project: "This project has no memory yet. Connect a repository from its settings; memory arrives when a member’s Claude saves something there.",
+  project: "This project has no memory yet. Connect a repository from its settings; memory arrives when a member’s coding agent saves something there.",
   shared: "Project memory is what everyone on this project follows. It arrives when a member promotes one of their memories.",
-  people: "Personal memory is what each member’s Claude has saved in this project. Nobody has saved anything here yet.",
+  people: "Personal memory is what each member’s coding agent has saved in this project. Nobody has saved anything here yet.",
 };
 
 /** One folder, set out as a part of the contents: every folder beneath it, and every memory in each. */

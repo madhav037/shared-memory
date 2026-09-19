@@ -95,7 +95,7 @@ export function MemoryPage() {
             onClick={() => setView("source")}
             data-testid="view-source"
           >
-            As Claude reads it
+            As your agent reads it
           </button>
         </div>
 
@@ -247,15 +247,15 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         {personal ? (
           <p data-testid="personal-banner">
             <b>Personal memory of {memory.author_name}.</b> The team can read it, but hasn’t accepted it: it becomes
-            project or team memory only when its author promotes it from Claude.
+            project or team memory only when its author promotes it from their coding agent.
           </p>
         ) : (
           !challenged && (
             <p data-testid="in-force">
               <b>In force.</b>{" "}
               {memory.level === "team"
-                ? "It holds for every project: Claude sessions anywhere in the team recall it."
-                : `It holds for everyone on ${project ?? "this project"}: their Claude sessions recall it.`}
+                ? "It holds for every project: coding agents anywhere in the team recall it."
+                : `It holds for everyone on ${project ?? "this project"}: their coding agents recall it.`}
               {memory.pinned && " It is pinned, so sessions start with it in their briefing."}
             </p>
           )

@@ -1,4 +1,4 @@
-"""Test harness: a running server and sessions that talk to it like Claude Code does."""
+"""Test harness: a running server and sessions that talk to it the way a coding agent does."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import os
 import threading
 import time
 import uuid
-from contextlib import AsyncExitStack
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -101,7 +102,7 @@ class RunningServer:
 
 @dataclass
 class Session:
-    """One Claude Code session of a member, as the server sees it."""
+    """One session of a member's coding agent, as the server sees it."""
 
     server: RunningServer
     token: str | None
@@ -136,10 +137,7 @@ class Session:
         return self.server.portal.call(self._call, tool, arguments)
 
     async def _call(self, tool: str, arguments: dict[str, Any]) -> Any:
-        async with AsyncExitStack() as stack:
-            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
-            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
-            client = await stack.enter_async_context(self._client(transport))
+        async with self._connected() as client:
             result = await client.call_tool(tool, arguments)
         text = "\n".join(getattr(part, "text", "") for part in result.content)
         if result.is_error:
@@ -156,10 +154,7 @@ class Session:
         return self.server.portal.call(self._run_prompt, name)
 
     async def _run_prompt(self, name: str) -> str:
-        async with AsyncExitStack() as stack:
-            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
-            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
-            client = await stack.enter_async_context(Client(transport))
+        async with self._connected() as client:
             result = await client.get_prompt(name)
         return "\n".join(getattr(message.content, "text", "") for message in result.messages)
 
@@ -168,13 +163,18 @@ class Session:
         return self.server.portal.call(self._on_connecting)
 
     async def _on_connecting(self) -> tuple[str, dict[str, str]]:
-        async with AsyncExitStack() as stack:
-            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
-            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
-            client = await stack.enter_async_context(Client(transport))
+        async with self._connected() as client:
             tools = await client.list_tools()
             instructions = client.instructions or ""
         return instructions, {tool.name: tool.description or "" for tool in tools.tools}
+
+    @asynccontextmanager
+    async def _connected(self) -> AsyncIterator[Client]:
+        """A connection to the server's MCP endpoint, made the way this member's agent makes it."""
+        async with AsyncExitStack() as stack:
+            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
+            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
+            yield await stack.enter_async_context(self._client(transport))
 
     def refusal(self, tool: str, **arguments: Any) -> str:
         """Call a tool that is expected to be refused; return the refusal message."""

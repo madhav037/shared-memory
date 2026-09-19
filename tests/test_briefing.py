@@ -139,10 +139,10 @@ def test_any_agent_can_fetch_the_briefing_its_session_would_start_with(owner: Se
 
 
 def test_a_session_outside_any_project_is_told_how_to_connect_instead_of_briefed(team: Team) -> None:
-    refusal = team.owner().refusal("briefing")
+    told = team.owner().call("briefing")
 
-    assert "isn't connected to a project" in refusal
-    assert "create_project" in refusal
+    assert "isn't connected to a project" in told
+    assert "create_project" in told
 
 
 def test_an_empty_briefing_says_so(owner: Session) -> None:
