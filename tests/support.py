@@ -163,6 +163,19 @@ class Session:
             result = await client.get_prompt(name)
         return "\n".join(getattr(message.content, "text", "") for message in result.messages)
 
+    def on_connecting(self) -> tuple[str, dict[str, str]]:
+        """What an agent is given when it connects: the server's instructions, and each tool's description."""
+        return self.server.portal.call(self._on_connecting)
+
+    async def _on_connecting(self) -> tuple[str, dict[str, str]]:
+        async with AsyncExitStack() as stack:
+            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
+            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
+            client = await stack.enter_async_context(Client(transport))
+            tools = await client.list_tools()
+            instructions = client.instructions or ""
+        return instructions, {tool.name: tool.description or "" for tool in tools.tools}
+
     def refusal(self, tool: str, **arguments: Any) -> str:
         """Call a tool that is expected to be refused; return the refusal message."""
         try:

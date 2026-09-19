@@ -1,6 +1,6 @@
 # Shared Memory
 
-A memory that every member's Claude sessions can read and write, so what one member's Claude learns reaches every other member's Claude and the team's ways of working stay consistent.
+A memory that every member's coding agent can read and write, so what one member's agent learns reaches every other member's agent and the team's ways of working stay consistent.
 
 ## Language
 
@@ -21,7 +21,7 @@ _Avoid_: Repo
 ### People and access
 
 **Member**:
-A person who belongs to a team and uses Claude sessions connected to its memory.
+A person who belongs to a team and whose coding agent's sessions are connected to its memory.
 _Avoid_: User, developer, dev, employee
 
 **Owner**:
@@ -67,7 +67,7 @@ Where a memory sits: local, personal, project or team.
 _Avoid_: Tier, scope, L1/L2/L3
 
 **Local memory**:
-Claude Code's built-in memory on one member's machine; it never reaches the team.
+A coding agent's own built-in memory on one member's machine, such as Claude Code's; it never reaches the team.
 _Avoid_: Private memory, auto memory
 
 **Personal memory**:
@@ -133,7 +133,7 @@ _Avoid_: Delete, archive
 ### Reading memory
 
 **Briefing**:
-What every session receives when it starts: pinned memories and current activity.
+What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: pinned memories and current activity.
 _Avoid_: Pinned set
 
 **Pin**:
@@ -156,8 +156,12 @@ _Avoid_: History, activity, trail
 
 ### Sessions and collisions
 
+**Coding agent**:
+The AI coding tool a member's sessions run in: Claude Code, Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop or Cline.
+_Avoid_: Client, IDE, assistant, bot
+
 **Session**:
-One running Claude Code conversation belonging to a member.
+One running conversation of a member's coding agent.
 _Avoid_: Chat, conversation, agent
 
 **Activity**:
@@ -165,7 +169,7 @@ A session's one-line statement of what it is working on.
 _Avoid_: Status, working-on line
 
 **Lock**:
-A session's claim on a file in a repository that its Claude is editing.
+A session's claim on a file in a repository that its coding agent is editing.
 
 **Holder**:
 The session holding a lock.

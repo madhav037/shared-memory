@@ -1,6 +1,6 @@
-# Contradiction checks run in the member's own Claude, not on the server
+# Contradiction checks run in the member's own coding agent, not on the server
 
-When a memory is promoted, the server only finds similar memories; the member's own Claude judges whether they contradict and asks the member whether to supersede, keep both, or cancel. The server runs no language model (only a small local embedding model for search), so it adds no model cost and sends memory content nowhere new.
+When a memory is promoted, the server only finds similar memories; the member's own coding agent (Claude Code when this was decided; now any, see ADR-0011) judges whether they contradict and asks the member whether to supersede, keep both, or cancel. The server runs no language model (only a small local embedding model for search), so it adds no model cost and sends memory content nowhere new.
 
 ## Consequences
 
