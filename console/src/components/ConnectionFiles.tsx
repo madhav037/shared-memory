@@ -30,7 +30,13 @@ export function ConnectionFiles({ files, testid }: { files: ConnectionFile[]; te
         <div key={file.path} className="connection-file">
           <div className="connection-file-head">
             <code className="path">{file.path}</code>
-            <span className="mark">{file.action === "merge" ? "Merge into it" : "Create it"}</span>
+            <span className="mark">
+              {file.scope === "machine"
+                ? "Once, on each member's machine"
+                : file.action === "merge"
+                  ? "Merge into it"
+                  : "Create it"}
+            </span>
             <CopyButton value={file.contents}>
               {({ copied, copy }) => (
                 <button type="button" className="quiet-link" onClick={copy} data-testid={`copy-${file.path}`}>

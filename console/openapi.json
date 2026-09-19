@@ -1665,6 +1665,10 @@
           "contents": {
             "title": "Contents",
             "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
           }
         },
         "required": [
@@ -1672,7 +1676,8 @@
           "path",
           "action",
           "how",
-          "contents"
+          "contents",
+          "scope"
         ],
         "title": "ConnectionFile",
         "type": "object"

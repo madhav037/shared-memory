@@ -56,3 +56,48 @@ def test_no_connection_file_carries_a_personal_token(team: Team) -> None:
     for file in created["files"]:
         assert team.owner_token not in file["contents"], file["path"]
         assert "smt_" not in file["contents"], file["path"]
+
+
+def mcp_server(file: dict[str, Any], section: str = "mcpServers", name: str = "shared-memory") -> dict[str, Any]:
+    server: dict[str, Any] = json.loads(file["contents"])[section][name]
+    return server
+
+
+def test_every_agent_with_a_repository_file_is_pointed_at_the_project(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    project = created["project_id"]
+    files = by_path(created["files"])
+    expected = {"X-Shared-Memory-Project": project, "X-Shared-Memory-Repository": "billing-api"}
+
+    vscode = mcp_server(files[".vscode/mcp.json"], section="servers")
+    copilot_cli = mcp_server(files[".github/mcp.json"])
+    gemini = json.loads(files[".gemini/settings.json"]["contents"])
+    cursor = mcp_server(files[".cursor/mcp.json"])
+    devin = mcp_server(files[".devin/mcp_config.json"])
+
+    for server in (vscode, copilot_cli, gemini["mcpServers"]["shared-memory"], cursor, devin):
+        assert server["url"] == f"{team.server.url}/mcp"
+        assert {name: value for name, value in server["headers"].items() if name != "Authorization"} == expected
+    assert vscode["headers"]["Authorization"] == "Bearer ${input:shared-memory-token}"
+    assert copilot_cli["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
+    assert gemini["mcpServers"]["shared-memory"]["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
+    assert cursor["headers"]["Authorization"] == "Bearer ${env:SHARED_MEMORY_TOKEN}"
+    assert devin["headers"]["Authorization"] == "Bearer ${env:SHARED_MEMORY_TOKEN}"
+    assert "AGENTS.md" in gemini["context"]["fileName"]
+    assert {files[path]["agent"] for path in files} >= {
+        "GitHub Copilot", "Gemini CLI", "Cursor", "Devin Desktop", "Cline"
+    }
+
+
+def test_cline_is_set_up_once_per_project_on_each_members_machine(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    project = created["project_id"]
+
+    cline = next(file for file in created["files"] if file["agent"] == "Cline")
+    server = mcp_server(cline, name=f"shared-memory-{project}")
+
+    assert cline["scope"] == "machine"
+    assert server["type"] == "streamableHttp"
+    assert server["headers"]["Authorization"] == "Bearer ${env:SHARED_MEMORY_TOKEN}"
+    assert server["headers"]["X-Shared-Memory-Project"] == project
+    assert all(file["scope"] == "repository" for file in created["files"] if file["agent"] != "Cline")
