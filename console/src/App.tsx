@@ -16,11 +16,11 @@ import { Refusal } from "./components/Bits";
 import { ContentsProvider, ContentsTree } from "./components/Contents";
 import { folderUrl, memoryUrl } from "./lib/format";
 import { AuditLog } from "./pages/AuditLog";
+import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
 import { Front, TitlePage } from "./pages/Front";
 import { MemoryPage } from "./pages/MemoryPage";
-import { MyToken } from "./pages/MyToken";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { Team } from "./pages/Team";
@@ -207,7 +207,8 @@ function SignedIn({
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/team" element={<Team me={member} />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
-            <Route path="/my-token" element={<MyToken member={member} />} />
+            <Route path="/connect" element={<ConnectAgent member={member} />} />
+            <Route path="/my-token" element={<Navigate to="/connect" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -282,8 +283,8 @@ function MemberMenu({
           ))}
           <Menu.Divider />
         </div>
-        <Menu.Item leftSection={<IconKey size={15} stroke={1.6} />} onClick={() => goTo("/my-token")} data-testid="to-my-token">
-          My personal token
+        <Menu.Item leftSection={<IconKey size={15} stroke={1.6} />} onClick={() => goTo("/connect")} data-testid="to-my-token">
+          Connect your agent
         </Menu.Item>
         <Menu.Divider />
         <Menu.Label>Appearance</Menu.Label>
