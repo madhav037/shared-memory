@@ -725,6 +725,314 @@
         }
       }
     },
+    "/api/files": {
+      "get": {
+        "operationId": "files",
+        "summary": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        "parameters": [
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deep",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Folder"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory": {
+      "get": {
+        "operationId": "memory_at",
+        "summary": "Any memory this member can reach, by its path, with its file exactly as Claude reads it.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Any memory this member can reach, by its path, with its file exactly as Claude reads it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/history": {
+      "get": {
+        "operationId": "history_at",
+        "summary": "Every version of a memory, by its path, newest first.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every version of a memory, by its path, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryHistory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/version": {
+      "get": {
+        "operationId": "version_at",
+        "summary": "A memory, by its path, as it was at one version.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A memory, by its path, as it was at one version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryAtVersion"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/difference": {
+      "get": {
+        "operationId": "difference_at",
+        "summary": "What changed in a memory, by its path, between two versions.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What changed in a memory, by its path, between two versions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDifference"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/pin": {
+      "post": {
+        "operationId": "pin_at",
+        "summary": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/unpin": {
+      "post": {
+        "operationId": "unpin_at",
+        "summary": "Remove a pin.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Remove a pin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PinState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/retire": {
+      "post": {
+        "operationId": "retire_at",
+        "summary": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryPath"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retired"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "operationId": "search_everywhere",
+        "summary": "Memories that match, across team memory and every project this member can reach.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memories that match, across team memory and every project this member can reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/challenges": {
       "get": {
         "operationId": "challenges",
@@ -1293,6 +1601,10 @@
             "title": "Name",
             "type": "string"
           },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
           "leads": {
             "items": {
               "$ref": "#/components/schemas/ProjectMember"
@@ -1308,6 +1620,7 @@
         "required": [
           "project_id",
           "name",
+          "restricted",
           "leads",
           "you_lead"
         ],
@@ -1726,6 +2039,14 @@
             "title": "Body",
             "type": "string"
           },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
           "pinned": {
             "title": "Pinned",
             "type": "boolean"
@@ -1760,6 +2081,8 @@
           "related_files",
           "promoted_by",
           "body",
+          "author_name",
+          "source",
           "pinned",
           "pending",
           "open_challenges"
@@ -1772,6 +2095,17 @@
           "path": {
             "title": "Path",
             "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
           },
           "title": {
             "title": "Title",
@@ -1811,6 +2145,7 @@
         },
         "required": [
           "path",
+          "project_id",
           "title",
           "heading",
           "level",
@@ -2014,6 +2349,424 @@
         "title": "MemoryPath",
         "type": "object"
       },
+      "Crumb": {
+        "description": "A folder on the way down to the one being looked at.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "name"
+        ],
+        "title": "Crumb",
+        "type": "object"
+      },
+      "FileEntry": {
+        "description": "A memory in the folder being looked at.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "challenged": {
+            "title": "Challenged",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "level",
+          "status",
+          "author",
+          "author_name",
+          "changed",
+          "pinned",
+          "challenged",
+          "waiting"
+        ],
+        "title": "FileEntry",
+        "type": "object"
+      },
+      "FolderEntry": {
+        "description": "A folder inside the one being looked at, and what it holds.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "memories": {
+            "title": "Memories",
+            "type": "integer"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          }
+        },
+        "required": [
+          "path",
+          "name",
+          "kind",
+          "memories",
+          "changed"
+        ],
+        "title": "FolderEntry",
+        "type": "object"
+      },
+      "FolderSection": {
+        "description": "A folder beneath the one being looked at, with the memories directly in it.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "name",
+          "kind",
+          "depth",
+          "count",
+          "changed",
+          "memories"
+        ],
+        "title": "FolderSection",
+        "type": "object"
+      },
+      "Folder": {
+        "description": "One folder of the team's memory: where it sits, the folders in it, and its memories.",
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "pinnable": {
+            "title": "Pinnable",
+            "type": "boolean"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "trail": {
+            "items": {
+              "$ref": "#/components/schemas/Crumb"
+            },
+            "title": "Trail",
+            "type": "array"
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/FolderEntry"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "inside": {
+            "items": {
+              "$ref": "#/components/schemas/FolderSection"
+            },
+            "title": "Inside",
+            "type": "array"
+          }
+        },
+        "required": [
+          "folder",
+          "name",
+          "kind",
+          "pinnable",
+          "pinned",
+          "trail",
+          "folders",
+          "memories",
+          "inside"
+        ],
+        "title": "Folder",
+        "type": "object"
+      },
+      "MemoryVersion": {
+        "description": "One version of a memory in the memory folder's history.",
+        "properties": {
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit",
+          "at",
+          "author",
+          "name",
+          "message"
+        ],
+        "title": "MemoryVersion",
+        "type": "object"
+      },
+      "MemoryHistory": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "versions"
+        ],
+        "title": "MemoryHistory",
+        "type": "object"
+      },
+      "MemoryAtVersion": {
+        "description": "A memory's text as it was at one version.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "commit",
+          "text"
+        ],
+        "title": "MemoryAtVersion",
+        "type": "object"
+      },
+      "MemoryDifference": {
+        "description": "What changed in a memory between two versions.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "difference": {
+            "title": "Difference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "before",
+          "after",
+          "difference"
+        ],
+        "title": "MemoryDifference",
+        "type": "object"
+      },
+      "PinState": {
+        "description": "Whether a memory or topic folder is pinned into every briefing it belongs in.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "pinned"
+        ],
+        "title": "PinState",
+        "type": "object"
+      },
+      "Retired": {
+        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "challenge_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenge Id"
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "challenge_id"
+        ],
+        "title": "Retired",
+        "type": "object"
+      },
       "ChallengeDetail": {
         "description": "A challenge waiting for a decision, with both memories to compare.",
         "properties": {
@@ -2140,6 +2893,10 @@
             "title": "Target Path",
             "type": "string"
           },
+          "target_title": {
+            "title": "Target Title",
+            "type": "string"
+          },
           "challenger_path": {
             "anyOf": [
               {
@@ -2199,6 +2956,7 @@
           "challenge_id",
           "kind",
           "target_path",
+          "target_title",
           "challenger_path",
           "raised_at",
           "state",
@@ -2250,146 +3008,6 @@
           "decision"
         ],
         "title": "Decision",
-        "type": "object"
-      },
-      "Retired": {
-        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "challenge_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Challenge Id"
-          }
-        },
-        "required": [
-          "status",
-          "path",
-          "challenge_id"
-        ],
-        "title": "Retired",
-        "type": "object"
-      },
-      "MemoryVersion": {
-        "description": "One version of a memory in the memory folder's history.",
-        "properties": {
-          "commit": {
-            "title": "Commit",
-            "type": "string"
-          },
-          "at": {
-            "format": "date-time",
-            "title": "At",
-            "type": "string"
-          },
-          "author": {
-            "title": "Author",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "commit",
-          "at",
-          "author",
-          "name",
-          "message"
-        ],
-        "title": "MemoryVersion",
-        "type": "object"
-      },
-      "MemoryHistory": {
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "versions": {
-            "items": {
-              "$ref": "#/components/schemas/MemoryVersion"
-            },
-            "title": "Versions",
-            "type": "array"
-          }
-        },
-        "required": [
-          "path",
-          "versions"
-        ],
-        "title": "MemoryHistory",
-        "type": "object"
-      },
-      "MemoryAtVersion": {
-        "description": "A memory's text as it was at one version.",
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "commit": {
-            "title": "Commit",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "commit",
-          "text"
-        ],
-        "title": "MemoryAtVersion",
-        "type": "object"
-      },
-      "MemoryDifference": {
-        "description": "What changed in a memory between two versions.",
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "before": {
-            "title": "Before",
-            "type": "string"
-          },
-          "after": {
-            "title": "After",
-            "type": "string"
-          },
-          "difference": {
-            "title": "Difference",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "before",
-          "after",
-          "difference"
-        ],
-        "title": "MemoryDifference",
         "type": "object"
       },
       "MemberSummary": {

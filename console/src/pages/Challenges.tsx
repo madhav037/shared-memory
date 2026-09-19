@@ -1,75 +1,74 @@
-import {
-  Alert,
-  Anchor,
-  Badge,
-  Button,
-  Card,
-  Code,
-  Group,
-  Loader,
-  SimpleGrid,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { Button, Checkbox } from "@mantine/core";
+import { IconScale } from "@tabler/icons-react";
+import { useState } from "react";
 import { Link } from "react-router";
 
 import {
   decideChallenge,
   fetchChallenges,
+  fetchMembers,
   type ChallengeDetail,
-  type ChallengeList,
   type RaisedChallenge,
 } from "../api/client";
-import { memoryUrl } from "./Project";
+import { Amended } from "../components/Amended";
+import { Placeholder, Rank, Refusal } from "../components/Bits";
+import { useContents } from "../components/Contents";
+import { changed, wordDiff } from "../lib/diff";
+import { day, memoryUrl, moment } from "../lib/format";
+import { useAsked } from "../lib/useAsked";
 
-function when(at: string): string {
-  return new Date(at).toLocaleString();
-}
-
-/** Everything disputed: what is waiting for this member, and what they have asked of others. */
+/** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
 export function Challenges() {
-  const { answer, refused, reload } = useChallenges();
-
-  if (refused) return <Alert color="red">{refused}</Alert>;
-  if (answer === null) return <Loader size="sm" />;
+  const { answer, refused, reload } = useAsked((signal) => fetchChallenges(signal), []);
+  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const names = new Map((team?.members ?? []).map((one) => [one.employee_id, one.name]));
+  const who = (employeeId: string) => (names.get(employeeId) ? `${names.get(employeeId)} (${employeeId})` : employeeId);
 
   return (
-    <Stack gap="lg" maw={980}>
-      <div>
-        <Title order={2} size="h3">
-          Challenges
-        </Title>
-        <Text c="dimmed" size="sm">
-          A challenge asks the author of a memory to let it be superseded or retired.
-        </Text>
-      </div>
-      <Waiting waiting={answer.waiting} onDecided={reload} empty="Nothing is waiting for your decision." />
-      <Raised raised={answer.raised} />
-    </Stack>
+    <div className="medium">
+      <h1 className="page-title wide">Challenges</h1>
+      <p className="standfirst">
+        A challenge asks a memory’s author to let it be superseded or retired. Its author decides; if they haven’t after a
+        few days, or they have left the team, anyone can.
+      </p>
+
+      {refused && <Refusal>{refused}</Refusal>}
+      {!answer && !refused && <Placeholder lines={8} />}
+      {answer && (
+        <>
+          <h2 className="section-heading">Waiting for your decision</h2>
+          {answer.waiting.length === 0 ? (
+            <p className="empty" data-testid="nothing-waiting">
+              Nothing is waiting for your decision.
+            </p>
+          ) : (
+            <Waiting waiting={answer.waiting} who={who} onDecided={reload} />
+          )}
+          <Raised raised={answer.raised} who={who} />
+        </>
+      )}
+    </div>
   );
 }
 
-/** What the console opens on: the challenges this member is being asked to decide. */
-export function Waiting({
+function Waiting({
   waiting,
+  who,
   onDecided,
-  empty,
 }: {
   waiting: ChallengeDetail[];
+  who: (employeeId: string) => string;
   onDecided: () => void;
-  empty?: string;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
-
-  if (waiting.length === 0) return empty ? <Text c="dimmed" data-testid="nothing-waiting">{empty}</Text> : null;
+  const [marked, setMarked] = useState(true);
+  const { refresh } = useContents();
 
   const decide = async (challengeId: number, decision: "accept" | "reject") => {
     try {
       await decideChallenge(challengeId, decision);
       setRefused(null);
+      refresh();
       onDecided();
     } catch (problem) {
       setRefused((problem as Error).message);
@@ -81,181 +80,171 @@ export function Waiting({
   for (const one of waiting) memories.set(one.target.path, [...(memories.get(one.target.path) ?? []), one]);
 
   return (
-    <Stack gap="md" data-testid="waiting">
-      <Title order={3} size="h5">
-        Waiting for your decision
-      </Title>
-      {refused && (
-        <Alert color="red" data-testid="decide-refused">
-          {refused}
-        </Alert>
-      )}
+    <div data-testid="waiting">
+      <Checkbox
+        radius={0}
+        size="xs"
+        label="Mark what each offer changes"
+        checked={marked}
+        onChange={(event) => setMarked(event.currentTarget.checked)}
+        style={{ margin: "4px 0 14px" }}
+      />
+      {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
       {[...memories].map(([path, against]) => {
         const first = against[0];
         if (!first) return null;
         return (
-          <Card withBorder key={path}>
-            <Group gap="xs" mb="xs">
-              <Text fw={500}>{first.target.title}</Text>
-              <Badge variant="light">{first.target.level} memory</Badge>
-              {against.length > 1 && (
-                <Badge color="orange" variant="light">
-                  {against.length} challenges
-                </Badge>
-              )}
-            </Group>
+          <section className="dispute" key={path} aria-label={`Challenges against ${first.target.title}`}>
+            <div className="dispute-head">
+              <h3>
+                <Link to={memoryUrl(first.target.path)}>{first.target.title}</Link>
+              </h3>
+              <Rank level={first.target.level} />
+              {against.length > 1 && <span className="mark alert">{against.length} challenges</span>}
+            </div>
             {against.length > 1 && (
-              <Text size="sm" c="dimmed" mb="sm">
-                Accepting one of these closes the others, and whoever raised them is told why.
-              </Text>
+              <p className="dispute-note">
+                Accept at most one: accepting it closes the others, and whoever raised them is told why.
+              </p>
             )}
-            <Stack gap="lg">
-              {against.map((challenge) => (
-                <div key={challenge.challenge_id}>
-                  <Text size="sm" c="dimmed" mb="xs">
-                    {challenge.raised_by} wants to {challenge.kind === "retire" ? "retire it" : "supersede it"} ·{" "}
-                    {when(challenge.raised_at)}
-                  </Text>
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    <Side title="Now" memory={challenge.target} projectId={challenge.project_id} />
-                    {challenge.challenger ? (
-                      <Side title="Offered instead" memory={challenge.challenger} projectId={challenge.project_id} />
-                    ) : (
-                      <Card withBorder h="100%" padding="sm">
-                        <Text size="sm" c="dimmed">
-                          Nothing replaces it: {challenge.raised_by} says it is no longer true.
-                        </Text>
-                      </Card>
-                    )}
-                  </SimpleGrid>
-                  <Group gap="xs" mt="sm">
-                    <Button
-                      size="xs"
-                      data-testid={`accept-${challenge.challenge_id}`}
-                      onClick={() => decide(challenge.challenge_id, "accept")}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="default"
-                      data-testid={`reject-${challenge.challenge_id}`}
-                      onClick={() => decide(challenge.challenge_id, "reject")}
-                    >
-                      Reject
-                    </Button>
-                  </Group>
-                </div>
-              ))}
-            </Stack>
-          </Card>
+            {against.map((challenge) => (
+              <Proposal key={challenge.challenge_id} challenge={challenge} who={who} marked={marked} onDecide={decide} />
+            ))}
+          </section>
         );
       })}
-    </Stack>
+    </div>
   );
 }
 
-function Side({
-  title,
-  memory,
-  projectId,
+function Proposal({
+  challenge,
+  who,
+  marked,
+  onDecide,
 }: {
-  title: string;
-  memory: ChallengeDetail["target"];
-  projectId: string | null;
+  challenge: ChallengeDetail;
+  who: (employeeId: string) => string;
+  marked: boolean;
+  onDecide: (challengeId: number, decision: "accept" | "reject") => void;
 }) {
+  const offered = challenge.challenger;
+  const pieces = offered ? wordDiff(challenge.target.body, offered.body) : null;
   return (
-    <Card withBorder h="100%" padding="sm">
-      <Text size="xs" tt="uppercase" c="dimmed" mb={4}>
-        {title}
-      </Text>
-      {projectId && memory.status !== "gone" ? (
-        <Anchor component={Link} to={memoryUrl(projectId, memory.path)} fw={500}>
-          {memory.title}
-        </Anchor>
-      ) : (
-        <Text fw={500}>{memory.title}</Text>
-      )}
-      <Text size="sm" c="dimmed" mb="xs">
-        by {memory.author || "someone who has left"}
-      </Text>
-      <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-        {memory.body}
-      </Text>
-    </Card>
-  );
-}
-
-function Raised({ raised }: { raised: RaisedChallenge[] }) {
-  if (raised.length === 0) return null;
-
-  return (
-    <Stack gap="xs">
-      <Title order={3} size="h5">
-        Challenges you raised
-      </Title>
-      <Table.ScrollContainer minWidth={640}>
-        <Table striped data-testid="raised">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Raised</Table.Th>
-              <Table.Th>Against</Table.Th>
-              <Table.Th>Asking</Table.Th>
-              <Table.Th>How it ended</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {raised.map((one) => (
-              <Table.Tr key={one.challenge_id}>
-                <Table.Td>{when(one.raised_at)}</Table.Td>
-                <Table.Td>
-                  <Code>{one.target_path}</Code>
-                </Table.Td>
-                <Table.Td>{one.kind === "retire" ? "to retire it" : "to supersede it"}</Table.Td>
-                <Table.Td>
-                  <Badge variant="light" color={STATES[one.state] ?? "gray"}>
-                    {one.state}
-                  </Badge>
-                  {one.decided_by && (
-                    <Text size="xs" c="dimmed">
-                      by {one.decided_by}
-                      {one.explanation ? ` — ${one.explanation}` : ""}
-                    </Text>
-                  )}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
-    </Stack>
+    <div className="proposal">
+      <p className="proposal-by">
+        <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
+        <b>{who(challenge.raised_by)}</b> wants to {challenge.kind === "retire" ? "retire it" : "supersede it"} ·{" "}
+        {moment(challenge.raised_at)}
+        {!challenge.yours && " · its author hasn’t decided in time, so anyone may"}
+      </p>
+      <div className="facing">
+        <div>
+          <Link className="title" to={memoryUrl(challenge.target.path)}>
+            {challenge.target.title}
+          </Link>
+          <p className="by">As it stands now, by {who(challenge.target.author)}</p>
+          <p className="body">{challenge.target.body}</p>
+        </div>
+        <div>
+          {offered ? (
+            <>
+              <Link className="title" to={memoryUrl(offered.path)}>
+                {offered.title}
+              </Link>
+              <p className="by">Offered in its place by {who(offered.author)}</p>
+              <div className="body">
+                {marked && pieces && changed(pieces) ? (
+                  <Amended pieces={pieces} source={`the offer from ${who(offered.author)} (${day(challenge.raised_at)})`} />
+                ) : (
+                  offered.body
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="title" style={{ color: "var(--ink-2)" }}>
+                Nothing in its place
+              </span>
+              <p className="by">Asked for by {who(challenge.raised_by)}</p>
+              <p className="body" style={{ color: "var(--ink-2)" }}>
+                Retire it: {who(challenge.raised_by)} says it is no longer true.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="decide">
+        <Button size="sm" onClick={() => onDecide(challenge.challenge_id, "accept")} data-testid={`accept-${challenge.challenge_id}`}>
+          {offered ? "Accept: supersede it" : "Accept: retire it"}
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
+          onClick={() => onDecide(challenge.challenge_id, "reject")}
+          data-testid={`reject-${challenge.challenge_id}`}
+        >
+          Reject: keep it as it is
+        </Button>
+      </div>
+    </div>
   );
 }
 
 const STATES: Record<string, string> = {
-  open: "blue",
-  accepted: "green",
-  rejected: "red",
-  closed: "gray",
-  withdrawn: "gray",
+  open: "Waiting",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  closed: "Closed",
+  withdrawn: "Withdrawn",
 };
 
-/** The challenges this member is part of, and a way to ask for them again after deciding one. */
-export function useChallenges() {
-  const [answer, setAnswer] = useState<ChallengeList | null>(null);
-  const [refused, setRefused] = useState<string | null>(null);
-  const [asked, setAsked] = useState(0);
-
-  useEffect(() => {
-    const attempt = new AbortController();
-    fetchChallenges(attempt.signal)
-      .then(setAnswer)
-      .catch((problem: Error) => {
-        if (!attempt.signal.aborted) setRefused(problem.message);
-      });
-    return () => attempt.abort();
-  }, [asked]);
-
-  const reload = useCallback(() => setAsked((times) => times + 1), []);
-  return { answer, refused, reload };
+function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (employeeId: string) => string }) {
+  return (
+    <>
+      <h2 className="section-heading">Challenges you raised</h2>
+      {raised.length === 0 ? (
+        <p className="empty">
+          You haven’t raised any. A challenge is raised from Claude, when you promote a memory that should replace
+          someone else’s, or from a memory’s page here, when you retire one that isn’t yours.
+        </p>
+      ) : (
+        <div className="scroll-x">
+          <table className="register" data-testid="raised">
+            <thead>
+              <tr>
+                <th scope="col">Raised</th>
+                <th scope="col">Against</th>
+                <th scope="col">Asking</th>
+                <th scope="col">How it ended</th>
+              </tr>
+            </thead>
+            <tbody>
+              {raised.map((one) => (
+                <tr key={one.challenge_id}>
+                  <td style={{ whiteSpace: "nowrap" }}>{day(one.raised_at)}</td>
+                  <td className="primary">
+                    <Link to={memoryUrl(one.target_path)} style={{ color: "inherit" }}>
+                      {one.target_title}
+                    </Link>
+                  </td>
+                  <td>{one.kind === "retire" ? "to retire it" : "to supersede it"}</td>
+                  <td>
+                    <b style={{ color: one.state === "accepted" ? "var(--accent)" : "var(--ink)" }}>{STATES[one.state] ?? one.state}</b>
+                    {one.decided_by && (
+                      <div style={{ fontSize: "0.8125rem", color: "var(--ink-3)" }}>
+                        by {who(one.decided_by)}
+                        {one.decided_at ? `, ${day(one.decided_at)}` : ""}
+                        {one.explanation ? ` — ${one.explanation}` : ""}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
 }

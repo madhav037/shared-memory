@@ -1,0 +1,1353 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-19T11:14:34.606Z",
+  "title": "Design System: Shared Memory",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper (light)",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "cssVar": "--paper",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.000 0.0)",
+          "oklch(26% 0.000 0.0)",
+          "oklch(37% 0.000 0.0)",
+          "oklch(48% 0.000 0.0)",
+          "oklch(59% 0.000 0.0)",
+          "oklch(70% 0.000 0.0)",
+          "oklch(82% 0.000 0.0)",
+          "oklch(95% 0.000 0.0)"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Panel (light)",
+        "canonical": "#f6f7f7",
+        "oklch": "oklch(97.5% 0.001 0.0)",
+        "cssVar": "--paper-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.001 0.0)",
+          "oklch(26% 0.001 0.0)",
+          "oklch(37% 0.001 0.0)",
+          "oklch(48% 0.001 0.0)",
+          "oklch(59% 0.001 0.0)",
+          "oklch(70% 0.001 0.0)",
+          "oklch(82% 0.001 0.0)",
+          "oklch(95% 0.001 0.0)"
+        ]
+      },
+      "paper-3": {
+        "role": "neutral",
+        "displayName": "Hover Paper (light)",
+        "canonical": "#eceeef",
+        "oklch": "oklch(94.8% 0.003 228.8)",
+        "cssVar": "--paper-3",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.003 228.8)",
+          "oklch(26% 0.003 228.8)",
+          "oklch(37% 0.003 228.8)",
+          "oklch(48% 0.003 228.8)",
+          "oklch(59% 0.003 228.8)",
+          "oklch(70% 0.003 228.8)",
+          "oklch(82% 0.003 228.8)",
+          "oklch(95% 0.003 228.8)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink (light)",
+        "canonical": "#111415",
+        "oklch": "oklch(18.8% 0.005 219.7)",
+        "cssVar": "--ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.005 219.7)",
+          "oklch(26% 0.005 219.7)",
+          "oklch(37% 0.005 219.7)",
+          "oklch(48% 0.005 219.7)",
+          "oklch(59% 0.005 219.7)",
+          "oklch(70% 0.005 219.7)",
+          "oklch(82% 0.005 219.7)",
+          "oklch(95% 0.005 219.7)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Second Ink (light)",
+        "canonical": "#3c4346",
+        "oklch": "oklch(37.8% 0.011 225.3)",
+        "cssVar": "--ink-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.011 225.3)",
+          "oklch(26% 0.011 225.3)",
+          "oklch(37% 0.011 225.3)",
+          "oklch(48% 0.011 225.3)",
+          "oklch(59% 0.011 225.3)",
+          "oklch(70% 0.011 225.3)",
+          "oklch(82% 0.011 225.3)",
+          "oklch(95% 0.011 225.3)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Third Ink (light)",
+        "canonical": "#5e676b",
+        "oklch": "oklch(50.7% 0.013 226.2)",
+        "cssVar": "--ink-3",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.013 226.2)",
+          "oklch(26% 0.013 226.2)",
+          "oklch(37% 0.013 226.2)",
+          "oklch(48% 0.013 226.2)",
+          "oklch(59% 0.013 226.2)",
+          "oklch(70% 0.013 226.2)",
+          "oklch(82% 0.013 226.2)",
+          "oklch(95% 0.013 226.2)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule (light)",
+        "canonical": "#d8dcde",
+        "oklch": "oklch(89.2% 0.005 228.8)",
+        "cssVar": "--rule",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.005 228.8)",
+          "oklch(26% 0.005 228.8)",
+          "oklch(37% 0.005 228.8)",
+          "oklch(48% 0.005 228.8)",
+          "oklch(59% 0.005 228.8)",
+          "oklch(70% 0.005 228.8)",
+          "oklch(82% 0.005 228.8)",
+          "oklch(95% 0.005 228.8)"
+        ]
+      },
+      "rule-soft": {
+        "role": "neutral",
+        "displayName": "Soft Rule (light)",
+        "canonical": "#e8ebec",
+        "oklch": "oklch(93.8% 0.004 219.5)",
+        "cssVar": "--rule-soft",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.004 219.5)",
+          "oklch(26% 0.004 219.5)",
+          "oklch(37% 0.004 219.5)",
+          "oklch(48% 0.004 219.5)",
+          "oklch(59% 0.004 219.5)",
+          "oklch(70% 0.004 219.5)",
+          "oklch(82% 0.004 219.5)",
+          "oklch(95% 0.004 219.5)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Green (light)",
+        "canonical": "#00703c",
+        "oklch": "oklch(47.8% 0.121 154.1)",
+        "cssVar": "--accent",
+        "scheme": "light",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Deep Signal (light)",
+        "canonical": "#005a30",
+        "oklch": "oklch(41.1% 0.102 154.5)",
+        "cssVar": "--accent-hover",
+        "scheme": "light",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-edge": {
+        "role": "primary",
+        "displayName": "Signal Edge (light)",
+        "canonical": "#002d18",
+        "oklch": "oklch(26.2% 0.062 157.4)",
+        "cssVar": "--accent-edge",
+        "scheme": "light",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Signal Ink (light)",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "cssVar": "--accent-ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.000 0.0)",
+          "oklch(26% 0.000 0.0)",
+          "oklch(37% 0.000 0.0)",
+          "oklch(48% 0.000 0.0)",
+          "oklch(59% 0.000 0.0)",
+          "oklch(70% 0.000 0.0)",
+          "oklch(82% 0.000 0.0)",
+          "oklch(95% 0.000 0.0)"
+        ]
+      },
+      "accent-wash": {
+        "role": "primary",
+        "displayName": "Signal Wash (light)",
+        "canonical": "#e8f4ed",
+        "oklch": "oklch(95.6% 0.016 160.6)",
+        "cssVar": "--accent-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.016 160.6)",
+          "oklch(26% 0.016 160.6)",
+          "oklch(37% 0.016 160.6)",
+          "oklch(48% 0.016 160.6)",
+          "oklch(59% 0.016 160.6)",
+          "oklch(70% 0.016 160.6)",
+          "oklch(82% 0.016 160.6)",
+          "oklch(95% 0.016 160.6)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Challenge Red (light)",
+        "canonical": "#d4351c",
+        "oklch": "oklch(57.3% 0.199 31.7)",
+        "cssVar": "--danger",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.199 31.7)",
+          "oklch(26% 0.199 31.7)",
+          "oklch(37% 0.199 31.7)",
+          "oklch(48% 0.199 31.7)",
+          "oklch(59% 0.199 31.7)",
+          "oklch(70% 0.199 31.7)",
+          "oklch(82% 0.199 31.7)",
+          "oklch(95% 0.199 31.7)"
+        ]
+      },
+      "danger-hover": {
+        "role": "secondary",
+        "displayName": "Deep Challenge Red (light)",
+        "canonical": "#aa2a16",
+        "oklch": "oklch(48.8% 0.168 31.7)",
+        "cssVar": "--danger-hover",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.168 31.7)",
+          "oklch(26% 0.168 31.7)",
+          "oklch(37% 0.168 31.7)",
+          "oklch(48% 0.168 31.7)",
+          "oklch(59% 0.168 31.7)",
+          "oklch(70% 0.168 31.7)",
+          "oklch(82% 0.168 31.7)",
+          "oklch(95% 0.168 31.7)"
+        ]
+      },
+      "danger-edge": {
+        "role": "secondary",
+        "displayName": "Challenge Edge (light)",
+        "canonical": "#55150b",
+        "oklch": "oklch(30.3% 0.096 31.7)",
+        "cssVar": "--danger-edge",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.096 31.7)",
+          "oklch(26% 0.096 31.7)",
+          "oklch(37% 0.096 31.7)",
+          "oklch(48% 0.096 31.7)",
+          "oklch(59% 0.096 31.7)",
+          "oklch(70% 0.096 31.7)",
+          "oklch(82% 0.096 31.7)",
+          "oklch(95% 0.096 31.7)"
+        ]
+      },
+      "danger-wash": {
+        "role": "secondary",
+        "displayName": "Challenge Wash (light)",
+        "canonical": "#fbeae7",
+        "oklch": "oklch(95.0% 0.019 29.5)",
+        "cssVar": "--danger-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.019 29.5)",
+          "oklch(26% 0.019 29.5)",
+          "oklch(37% 0.019 29.5)",
+          "oklch(48% 0.019 29.5)",
+          "oklch(59% 0.019 29.5)",
+          "oklch(70% 0.019 29.5)",
+          "oklch(82% 0.019 29.5)",
+          "oklch(95% 0.019 29.5)"
+        ]
+      },
+      "past": {
+        "role": "tertiary",
+        "displayName": "Point-in-Time Amber (ink) (light)",
+        "canonical": "#7a4f00",
+        "oklch": "oklch(46.4% 0.099 73.2)",
+        "cssVar": "--past",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.099 73.2)",
+          "oklch(26% 0.099 73.2)",
+          "oklch(37% 0.099 73.2)",
+          "oklch(48% 0.099 73.2)",
+          "oklch(59% 0.099 73.2)",
+          "oklch(70% 0.099 73.2)",
+          "oklch(82% 0.099 73.2)",
+          "oklch(95% 0.099 73.2)"
+        ]
+      },
+      "past-rule": {
+        "role": "tertiary",
+        "displayName": "Point-in-Time Amber (rule) (light)",
+        "canonical": "#e09a1b",
+        "oklch": "oklch(73.7% 0.150 75.0)",
+        "cssVar": "--past-rule",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.150 75.0)",
+          "oklch(26% 0.150 75.0)",
+          "oklch(37% 0.150 75.0)",
+          "oklch(48% 0.150 75.0)",
+          "oklch(59% 0.150 75.0)",
+          "oklch(70% 0.150 75.0)",
+          "oklch(82% 0.150 75.0)",
+          "oklch(95% 0.150 75.0)"
+        ]
+      },
+      "past-wash": {
+        "role": "tertiary",
+        "displayName": "Point-in-Time Wash (light)",
+        "canonical": "#fff5e1",
+        "oklch": "oklch(97.3% 0.028 84.6)",
+        "cssVar": "--past-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.028 84.6)",
+          "oklch(26% 0.028 84.6)",
+          "oklch(37% 0.028 84.6)",
+          "oklch(48% 0.028 84.6)",
+          "oklch(59% 0.028 84.6)",
+          "oklch(70% 0.028 84.6)",
+          "oklch(82% 0.028 84.6)",
+          "oklch(95% 0.028 84.6)"
+        ]
+      },
+      "highlight": {
+        "role": "tertiary",
+        "displayName": "Highlighter Yellow (light)",
+        "canonical": "#ffdd00",
+        "oklch": "oklch(89.9% 0.186 97.9)",
+        "cssVar": "--highlight",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.186 97.9)",
+          "oklch(26% 0.186 97.9)",
+          "oklch(37% 0.186 97.9)",
+          "oklch(48% 0.186 97.9)",
+          "oklch(59% 0.186 97.9)",
+          "oklch(70% 0.186 97.9)",
+          "oklch(82% 0.186 97.9)",
+          "oklch(95% 0.186 97.9)"
+        ]
+      },
+      "highlight-ink": {
+        "role": "tertiary",
+        "displayName": "Highlighter Ink (light)",
+        "canonical": "#0b0c0c",
+        "oklch": "oklch(15.3% 0.002 0.0)",
+        "cssVar": "--highlight-ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.002 0.0)",
+          "oklch(26% 0.002 0.0)",
+          "oklch(37% 0.002 0.0)",
+          "oklch(48% 0.002 0.0)",
+          "oklch(59% 0.002 0.0)",
+          "oklch(70% 0.002 0.0)",
+          "oklch(82% 0.002 0.0)",
+          "oklch(95% 0.002 0.0)"
+        ]
+      },
+      "highlight-soft": {
+        "role": "tertiary",
+        "displayName": "Soft Highlight (light)",
+        "canonical": "#fff1a8",
+        "oklch": "oklch(95.3% 0.093 98.6)",
+        "cssVar": "--highlight-soft",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.093 98.6)",
+          "oklch(26% 0.093 98.6)",
+          "oklch(37% 0.093 98.6)",
+          "oklch(48% 0.093 98.6)",
+          "oklch(59% 0.093 98.6)",
+          "oklch(70% 0.093 98.6)",
+          "oklch(82% 0.093 98.6)",
+          "oklch(95% 0.093 98.6)"
+        ]
+      },
+      "field-edge": {
+        "role": "neutral",
+        "displayName": "Field Edge (light)",
+        "canonical": "#6f787c",
+        "oklch": "oklch(56.6% 0.012 226.1)",
+        "cssVar": "--field-edge",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.012 226.1)",
+          "oklch(26% 0.012 226.1)",
+          "oklch(37% 0.012 226.1)",
+          "oklch(48% 0.012 226.1)",
+          "oklch(59% 0.012 226.1)",
+          "oklch(70% 0.012 226.1)",
+          "oklch(82% 0.012 226.1)",
+          "oklch(95% 0.012 226.1)"
+        ]
+      },
+      "band": {
+        "role": "neutral",
+        "displayName": "Band (light)",
+        "canonical": "#111415",
+        "oklch": "oklch(18.8% 0.005 219.7)",
+        "cssVar": "--band",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.005 219.7)",
+          "oklch(26% 0.005 219.7)",
+          "oklch(37% 0.005 219.7)",
+          "oklch(48% 0.005 219.7)",
+          "oklch(59% 0.005 219.7)",
+          "oklch(70% 0.005 219.7)",
+          "oklch(82% 0.005 219.7)",
+          "oklch(95% 0.005 219.7)"
+        ]
+      },
+      "band-2": {
+        "role": "neutral",
+        "displayName": "Band Divider (light)",
+        "canonical": "#2a2f31",
+        "oklch": "oklch(30.1% 0.008 223.7)",
+        "cssVar": "--band-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.008 223.7)",
+          "oklch(26% 0.008 223.7)",
+          "oklch(37% 0.008 223.7)",
+          "oklch(48% 0.008 223.7)",
+          "oklch(59% 0.008 223.7)",
+          "oklch(70% 0.008 223.7)",
+          "oklch(82% 0.008 223.7)",
+          "oklch(95% 0.008 223.7)"
+        ]
+      },
+      "band-ink": {
+        "role": "neutral",
+        "displayName": "Band Ink (light)",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 0.0)",
+        "cssVar": "--band-ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.000 0.0)",
+          "oklch(26% 0.000 0.0)",
+          "oklch(37% 0.000 0.0)",
+          "oklch(48% 0.000 0.0)",
+          "oklch(59% 0.000 0.0)",
+          "oklch(70% 0.000 0.0)",
+          "oklch(82% 0.000 0.0)",
+          "oklch(95% 0.000 0.0)"
+        ]
+      },
+      "band-ink-2": {
+        "role": "neutral",
+        "displayName": "Second Band Ink (light)",
+        "canonical": "#c9cfd1",
+        "oklch": "oklch(85.0% 0.007 219.6)",
+        "cssVar": "--band-ink-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.007 219.6)",
+          "oklch(26% 0.007 219.6)",
+          "oklch(37% 0.007 219.6)",
+          "oklch(48% 0.007 219.6)",
+          "oklch(59% 0.007 219.6)",
+          "oklch(70% 0.007 219.6)",
+          "oklch(82% 0.007 219.6)",
+          "oklch(95% 0.007 219.6)"
+        ]
+      },
+      "band-accent": {
+        "role": "primary",
+        "displayName": "Band Green (light)",
+        "canonical": "#4cc38a",
+        "oklch": "oklch(73.5% 0.136 159.3)",
+        "cssVar": "--band-accent",
+        "scheme": "light",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Paper (dark)",
+        "canonical": "#0f1112",
+        "oklch": "oklch(17.6% 0.004 229.0)",
+        "cssVar": "--paper",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.004 229.0)",
+          "oklch(26% 0.004 229.0)",
+          "oklch(37% 0.004 229.0)",
+          "oklch(48% 0.004 229.0)",
+          "oklch(59% 0.004 229.0)",
+          "oklch(70% 0.004 229.0)",
+          "oklch(82% 0.004 229.0)",
+          "oklch(95% 0.004 229.0)"
+        ]
+      },
+      "paper-2-dark": {
+        "role": "neutral",
+        "displayName": "Panel (dark)",
+        "canonical": "#151819",
+        "oklch": "oklch(20.6% 0.005 219.7)",
+        "cssVar": "--paper-2",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.005 219.7)",
+          "oklch(26% 0.005 219.7)",
+          "oklch(37% 0.005 219.7)",
+          "oklch(48% 0.005 219.7)",
+          "oklch(59% 0.005 219.7)",
+          "oklch(70% 0.005 219.7)",
+          "oklch(82% 0.005 219.7)",
+          "oklch(95% 0.005 219.7)"
+        ]
+      },
+      "paper-3-dark": {
+        "role": "neutral",
+        "displayName": "Hover Paper (dark)",
+        "canonical": "#1f2325",
+        "oklch": "oklch(25.3% 0.007 229.1)",
+        "cssVar": "--paper-3",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.007 229.1)",
+          "oklch(26% 0.007 229.1)",
+          "oklch(37% 0.007 229.1)",
+          "oklch(48% 0.007 229.1)",
+          "oklch(59% 0.007 229.1)",
+          "oklch(70% 0.007 229.1)",
+          "oklch(82% 0.007 229.1)",
+          "oklch(95% 0.007 229.1)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark)",
+        "canonical": "#eef1f2",
+        "oklch": "oklch(95.6% 0.003 219.5)",
+        "cssVar": "--ink",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.003 219.5)",
+          "oklch(26% 0.003 219.5)",
+          "oklch(37% 0.003 219.5)",
+          "oklch(48% 0.003 219.5)",
+          "oklch(59% 0.003 219.5)",
+          "oklch(70% 0.003 219.5)",
+          "oklch(82% 0.003 219.5)",
+          "oklch(95% 0.003 219.5)"
+        ]
+      },
+      "ink-2-dark": {
+        "role": "neutral",
+        "displayName": "Second Ink (dark)",
+        "canonical": "#c3c9cc",
+        "oklch": "oklch(83.2% 0.008 228.9)",
+        "cssVar": "--ink-2",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.008 228.9)",
+          "oklch(26% 0.008 228.9)",
+          "oklch(37% 0.008 228.9)",
+          "oklch(48% 0.008 228.9)",
+          "oklch(59% 0.008 228.9)",
+          "oklch(70% 0.008 228.9)",
+          "oklch(82% 0.008 228.9)",
+          "oklch(95% 0.008 228.9)"
+        ]
+      },
+      "ink-3-dark": {
+        "role": "neutral",
+        "displayName": "Third Ink (dark)",
+        "canonical": "#98a1a5",
+        "oklch": "oklch(70.3% 0.012 226.1)",
+        "cssVar": "--ink-3",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.012 226.1)",
+          "oklch(26% 0.012 226.1)",
+          "oklch(37% 0.012 226.1)",
+          "oklch(48% 0.012 226.1)",
+          "oklch(59% 0.012 226.1)",
+          "oklch(70% 0.012 226.1)",
+          "oklch(82% 0.012 226.1)",
+          "oklch(95% 0.012 226.1)"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Rule (dark)",
+        "canonical": "#2e3336",
+        "oklch": "oklch(31.7% 0.009 234.0)",
+        "cssVar": "--rule",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.009 234.0)",
+          "oklch(26% 0.009 234.0)",
+          "oklch(37% 0.009 234.0)",
+          "oklch(48% 0.009 234.0)",
+          "oklch(59% 0.009 234.0)",
+          "oklch(70% 0.009 234.0)",
+          "oklch(82% 0.009 234.0)",
+          "oklch(95% 0.009 234.0)"
+        ]
+      },
+      "rule-soft-dark": {
+        "role": "neutral",
+        "displayName": "Soft Rule (dark)",
+        "canonical": "#222628",
+        "oklch": "oklch(26.5% 0.007 229.1)",
+        "cssVar": "--rule-soft",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.007 229.1)",
+          "oklch(26% 0.007 229.1)",
+          "oklch(37% 0.007 229.1)",
+          "oklch(48% 0.007 229.1)",
+          "oklch(59% 0.007 229.1)",
+          "oklch(70% 0.007 229.1)",
+          "oklch(82% 0.007 229.1)",
+          "oklch(95% 0.007 229.1)"
+        ]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Signal Green (dark)",
+        "canonical": "#4cc38a",
+        "oklch": "oklch(73.5% 0.136 159.3)",
+        "cssVar": "--accent",
+        "scheme": "dark",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-hover-dark": {
+        "role": "primary",
+        "displayName": "Deep Signal (dark)",
+        "canonical": "#6fd3a3",
+        "oklch": "oklch(79.3% 0.118 161.2)",
+        "cssVar": "--accent-hover",
+        "scheme": "dark",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-edge-dark": {
+        "role": "primary",
+        "displayName": "Signal Edge (dark)",
+        "canonical": "#1d6b45",
+        "oklch": "oklch(47.1% 0.097 157.6)",
+        "cssVar": "--accent-edge",
+        "scheme": "dark",
+        "tonalRamp": [
+          "#002d18",
+          "#004526",
+          "#005a30",
+          "#00703c",
+          "#118a4f",
+          "#26a766",
+          "#4cc38a",
+          "#c6e5d2"
+        ]
+      },
+      "accent-ink-dark": {
+        "role": "primary",
+        "displayName": "Signal Ink (dark)",
+        "canonical": "#0b0d0e",
+        "oklch": "oklch(15.7% 0.004 229.1)",
+        "cssVar": "--accent-ink",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.004 229.1)",
+          "oklch(26% 0.004 229.1)",
+          "oklch(37% 0.004 229.1)",
+          "oklch(48% 0.004 229.1)",
+          "oklch(59% 0.004 229.1)",
+          "oklch(70% 0.004 229.1)",
+          "oklch(82% 0.004 229.1)",
+          "oklch(95% 0.004 229.1)"
+        ]
+      },
+      "accent-wash-dark": {
+        "role": "primary",
+        "displayName": "Signal Wash (dark)",
+        "canonical": "#122a1e",
+        "oklch": "oklch(26.1% 0.038 160.4)",
+        "cssVar": "--accent-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.038 160.4)",
+          "oklch(26% 0.038 160.4)",
+          "oklch(37% 0.038 160.4)",
+          "oklch(48% 0.038 160.4)",
+          "oklch(59% 0.038 160.4)",
+          "oklch(70% 0.038 160.4)",
+          "oklch(82% 0.038 160.4)",
+          "oklch(95% 0.038 160.4)"
+        ]
+      },
+      "danger-dark": {
+        "role": "secondary",
+        "displayName": "Challenge Red (dark)",
+        "canonical": "#ff7a66",
+        "oklch": "oklch(73.1% 0.166 30.3)",
+        "cssVar": "--danger",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.166 30.3)",
+          "oklch(26% 0.166 30.3)",
+          "oklch(37% 0.166 30.3)",
+          "oklch(48% 0.166 30.3)",
+          "oklch(59% 0.166 30.3)",
+          "oklch(70% 0.166 30.3)",
+          "oklch(82% 0.166 30.3)",
+          "oklch(95% 0.166 30.3)"
+        ]
+      },
+      "danger-hover-dark": {
+        "role": "secondary",
+        "displayName": "Deep Challenge Red (dark)",
+        "canonical": "#ff9989",
+        "oklch": "oklch(78.5% 0.125 29.7)",
+        "cssVar": "--danger-hover",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.125 29.7)",
+          "oklch(26% 0.125 29.7)",
+          "oklch(37% 0.125 29.7)",
+          "oklch(48% 0.125 29.7)",
+          "oklch(59% 0.125 29.7)",
+          "oklch(70% 0.125 29.7)",
+          "oklch(82% 0.125 29.7)",
+          "oklch(95% 0.125 29.7)"
+        ]
+      },
+      "danger-edge-dark": {
+        "role": "secondary",
+        "displayName": "Challenge Edge (dark)",
+        "canonical": "#7a2417",
+        "oklch": "oklch(39.3% 0.122 31.4)",
+        "cssVar": "--danger-edge",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.122 31.4)",
+          "oklch(26% 0.122 31.4)",
+          "oklch(37% 0.122 31.4)",
+          "oklch(48% 0.122 31.4)",
+          "oklch(59% 0.122 31.4)",
+          "oklch(70% 0.122 31.4)",
+          "oklch(82% 0.122 31.4)",
+          "oklch(95% 0.122 31.4)"
+        ]
+      },
+      "danger-wash-dark": {
+        "role": "secondary",
+        "displayName": "Challenge Wash (dark)",
+        "canonical": "#2e1612",
+        "oklch": "oklch(23.3% 0.040 30.4)",
+        "cssVar": "--danger-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.040 30.4)",
+          "oklch(26% 0.040 30.4)",
+          "oklch(37% 0.040 30.4)",
+          "oklch(48% 0.040 30.4)",
+          "oklch(59% 0.040 30.4)",
+          "oklch(70% 0.040 30.4)",
+          "oklch(82% 0.040 30.4)",
+          "oklch(95% 0.040 30.4)"
+        ]
+      },
+      "past-dark": {
+        "role": "tertiary",
+        "displayName": "Point-in-Time Amber (ink) (dark)",
+        "canonical": "#f2b544",
+        "oklch": "oklch(81.0% 0.144 79.3)",
+        "cssVar": "--past",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.144 79.3)",
+          "oklch(26% 0.144 79.3)",
+          "oklch(37% 0.144 79.3)",
+          "oklch(48% 0.144 79.3)",
+          "oklch(59% 0.144 79.3)",
+          "oklch(70% 0.144 79.3)",
+          "oklch(82% 0.144 79.3)",
+          "oklch(95% 0.144 79.3)"
+        ]
+      },
+      "past-wash-dark": {
+        "role": "tertiary",
+        "displayName": "Point-in-Time Wash (dark)",
+        "canonical": "#291f0c",
+        "oklch": "oklch(24.6% 0.035 82.0)",
+        "cssVar": "--past-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.035 82.0)",
+          "oklch(26% 0.035 82.0)",
+          "oklch(37% 0.035 82.0)",
+          "oklch(48% 0.035 82.0)",
+          "oklch(59% 0.035 82.0)",
+          "oklch(70% 0.035 82.0)",
+          "oklch(82% 0.035 82.0)",
+          "oklch(95% 0.035 82.0)"
+        ]
+      },
+      "highlight-soft-dark": {
+        "role": "tertiary",
+        "displayName": "Soft Highlight (dark)",
+        "canonical": "#574a00",
+        "oklch": "oklch(41.0% 0.085 97.6)",
+        "cssVar": "--highlight-soft",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.085 97.6)",
+          "oklch(26% 0.085 97.6)",
+          "oklch(37% 0.085 97.6)",
+          "oklch(48% 0.085 97.6)",
+          "oklch(59% 0.085 97.6)",
+          "oklch(70% 0.085 97.6)",
+          "oklch(82% 0.085 97.6)",
+          "oklch(95% 0.085 97.6)"
+        ]
+      },
+      "field-dark": {
+        "role": "neutral",
+        "displayName": "Field (dark)",
+        "canonical": "#0b0d0e",
+        "oklch": "oklch(15.7% 0.004 229.1)",
+        "cssVar": "--field",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.004 229.1)",
+          "oklch(26% 0.004 229.1)",
+          "oklch(37% 0.004 229.1)",
+          "oklch(48% 0.004 229.1)",
+          "oklch(59% 0.004 229.1)",
+          "oklch(70% 0.004 229.1)",
+          "oklch(82% 0.004 229.1)",
+          "oklch(95% 0.004 229.1)"
+        ]
+      },
+      "field-edge-dark": {
+        "role": "neutral",
+        "displayName": "Field Edge (dark)",
+        "canonical": "#7c868a",
+        "oklch": "oklch(61.3% 0.013 223.6)",
+        "cssVar": "--field-edge",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.013 223.6)",
+          "oklch(26% 0.013 223.6)",
+          "oklch(37% 0.013 223.6)",
+          "oklch(48% 0.013 223.6)",
+          "oklch(59% 0.013 223.6)",
+          "oklch(70% 0.013 223.6)",
+          "oklch(82% 0.013 223.6)",
+          "oklch(95% 0.013 223.6)"
+        ]
+      },
+      "band-dark": {
+        "role": "neutral",
+        "displayName": "Band (dark)",
+        "canonical": "#050606",
+        "oklch": "oklch(12.0% 0.003 196.8)",
+        "cssVar": "--band",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.003 196.8)",
+          "oklch(26% 0.003 196.8)",
+          "oklch(37% 0.003 196.8)",
+          "oklch(48% 0.003 196.8)",
+          "oklch(59% 0.003 196.8)",
+          "oklch(70% 0.003 196.8)",
+          "oklch(82% 0.003 196.8)",
+          "oklch(95% 0.003 196.8)"
+        ]
+      },
+      "band-field-dark": {
+        "role": "neutral",
+        "displayName": "Band Field (dark)",
+        "canonical": "#1b1f21",
+        "oklch": "oklch(23.6% 0.007 229.2)",
+        "cssVar": "--band-field",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.007 229.2)",
+          "oklch(26% 0.007 229.2)",
+          "oklch(37% 0.007 229.2)",
+          "oklch(48% 0.007 229.2)",
+          "oklch(59% 0.007 229.2)",
+          "oklch(70% 0.007 229.2)",
+          "oklch(82% 0.007 229.2)",
+          "oklch(95% 0.007 229.2)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The title page only: before sign-in and when the server can't be reached."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "One page title per page, balanced, 24ch cap; 2rem at 900px and below."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings and table-of-contents part names; 1.375rem for a disputed memory's head, 1.25rem for part heads in a folder."
+      },
+      "standfirst": {
+        "displayName": "Standfirst",
+        "purpose": "The paragraph under a page title, second ink, 60ch."
+      },
+      "summary": {
+        "displayName": "Summary",
+        "purpose": "A memory's summary under its title, set as its text is, 58ch."
+      },
+      "body": {
+        "displayName": "Memory text",
+        "purpose": "A memory's text and the text as it stood, 68ch, hanging punctuation."
+      },
+      "memory-name": {
+        "displayName": "Memory name",
+        "purpose": "A memory's name in lists, results, notices and facing texts (1.0625 to 1.1875rem); regular 0.9375rem as a contents leaf."
+      },
+      "ui": {
+        "displayName": "UI",
+        "purpose": "Nav, tree rows, status boxes, registers, margin values (400 to 500)."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button text."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Dates, counts, authors, trails, currency lines; tabular figures, third ink."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Italic regular: margin terms, register column heads, form labels, filter names. Never uppercase or tracked."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Paths, citation stamps, employee ids, settings blocks; 0.875rem in the source view."
+      }
+    },
+    "fonts": [
+      {
+        "family": "Cooper Hewitt",
+        "source": "@fontsource/cooper-hewitt 400, 400i, 500, 500i, 600, 700, 700i",
+        "role": "sans: titles, labels, controls, metadata"
+      },
+      {
+        "family": "Charis SIL",
+        "source": "@fontsource/charis-sil 400, 400i, 700, 700i",
+        "role": "serif: a memory's text, summary and name"
+      },
+      {
+        "family": "Source Code Pro Variable",
+        "source": "@fontsource-variable/source-code-pro",
+        "role": "mono: paths, source view, citation stamps"
+      }
+    ],
+    "references": [
+      {
+        "name": "GOV.UK Design System",
+        "year": 2020,
+        "devices": "Masthead band with coloured foot; signal green and red; solid square button on a darker 2px edge; yellow focus highlighter with ink bar; 'Last updated' currency."
+      },
+      {
+        "name": "legislation.gov.uk",
+        "year": 2019,
+        "devices": "The status box with a heavier foot and its point-in-time variant; amendment brackets, numbered markers and repeal dots keyed to notes."
+      },
+      {
+        "name": "Justice Laws Website Canada",
+        "year": 2019,
+        "devices": "'Current to … last amended on …'; point-in-time index with closed date ranges."
+      },
+      {
+        "name": "Stanford Encyclopedia of Philosophy",
+        "year": 2019,
+        "devices": "'First published …; substantive revision …' in the currency line."
+      },
+      {
+        "name": "Cooper Hewitt collection site",
+        "year": 2016,
+        "devices": "The Cooper Hewitt typeface; history told in sentences."
+      },
+      {
+        "name": "EUR-Lex",
+        "year": 2020,
+        "devices": "The copyable citation stamp, path at a version."
+      },
+      {
+        "name": "Cornell LII",
+        "year": 2019,
+        "devices": "Cross-references with a dotted underline that turns solid."
+      },
+      {
+        "name": "Tufte CSS",
+        "year": 2018,
+        "devices": "Italic labels in place of uppercase tracking."
+      },
+      {
+        "name": "Hyphen Press",
+        "year": 2014,
+        "devices": "Italic for the current place."
+      },
+      {
+        "name": "eCFR (2021), GPO Style Manual (2016), Practical Typography (2019), iA (2019), Craig Mod (2018), Stripe API reference (2017), Public Books (2015), Harvard Law Review (2015)",
+        "devices": "Consulted for measure, rules and restraint."
+      }
+    ],
+    "shadows": [
+      {
+        "name": "button-edge",
+        "value": "0 2px 0 var(--edge)",
+        "purpose": "GOV.UK's button edge in the button's darker shade (accent-edge, danger-edge, field-edge). Removed on press (translateY(2px)) and when disabled. Buttons only."
+      },
+      {
+        "name": "floating-menu",
+        "value": "Mantine shadow md",
+        "purpose": "Member and row menus, the only things that float above the page."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one easing curve (--ease) for every state change."
+      },
+      {
+        "name": "state",
+        "value": "150ms",
+        "purpose": "Nav link colour and underline."
+      },
+      {
+        "name": "twist",
+        "value": "180ms",
+        "purpose": "A contents folder's chevron turning 90 degrees as it opens in place."
+      },
+      {
+        "name": "appear",
+        "value": "220ms",
+        "purpose": "A notice, refusal or issued slip arriving: fade from 0 and a 4px rise."
+      },
+      {
+        "name": "breathe",
+        "value": "1.6s ease-in-out infinite alternate",
+        "purpose": "Loading bars breathing to 45% opacity."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "prefers-reduced-motion collapses every animation and transition to 1ms."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "versions-hang",
+        "value": "1181px",
+        "purpose": "At and above: version numbers hang in the gutter left of the text column."
+      },
+      {
+        "name": "margin-folds",
+        "value": "1180px",
+        "purpose": "At and below: the margin folds under the text into a grid; the standing line appears."
+      },
+      {
+        "name": "frame-collapses",
+        "value": "900px",
+        "purpose": "At and below: contents column becomes a drawer, nav and search collapse to icons, page insets 16px, headline 2rem, facing texts stack."
+      },
+      {
+        "name": "leaders-drop",
+        "value": "600px",
+        "purpose": "At and below: dot leaders drop, figures wrap under names, the history slider takes its own row."
+      }
+    ],
+    "rules": [
+      {
+        "name": "hairline",
+        "value": "1px solid var(--rule)",
+        "purpose": "Divides parts, rules off the margin and the contents column."
+      },
+      {
+        "name": "soft",
+        "value": "1px solid var(--rule-soft)",
+        "purpose": "Divides entries, versions and register rows."
+      },
+      {
+        "name": "dotted",
+        "value": "1px dotted var(--ink-3)",
+        "purpose": "Dot leaders (40 to 50% opacity) and cross-reference underlines."
+      },
+      {
+        "name": "dashed",
+        "value": "1px dashed var(--rule)",
+        "purpose": "Personal memory the team hasn't accepted."
+      },
+      {
+        "name": "list-head",
+        "value": "2px solid var(--ink)",
+        "purpose": "Opens a list, the history, a register's header, the title page's uses."
+      },
+      {
+        "name": "foot",
+        "value": "4px (border-bottom-width)",
+        "purpose": "The status box, refusal and issued slip; the masthead's green foot."
+      },
+      {
+        "name": "notice",
+        "value": "4px solid var(--danger) (top)",
+        "purpose": "Sets off the front-page notice of challenges waiting."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one decisive action (sign in, search, accept a challenge): signal green, square, standing on its 2px darker edge and pressing down into it (GOV.UK).",
+      "html": "<button class=\"ds-btn ds-btn-primary\" type=\"button\">Accept: supersede it</button>",
+      "css": ".ds-btn { font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.9375rem; font-weight: 600; letter-spacing: 0.005em; height: 36px; padding: 0 18px; border: 0; border-radius: 0; cursor: pointer; } .ds-btn-primary { background: var(--accent, #00703c); color: var(--accent-ink, #ffffff); box-shadow: 0 2px 0 var(--accent-edge, #002d18); } .ds-btn-primary:hover { background: var(--accent-hover, #005a30); } .ds-btn-primary:active { box-shadow: none; transform: translateY(2px); } .ds-btn-primary:focus-visible { outline: 3px solid var(--highlight, #ffdd00); outline-offset: 0; box-shadow: inset 0 0 0 2px var(--highlight-ink, #0b0c0c); }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "The second choice beside a primary (Reject, Keep it, Pin, Unpin): hover paper on a field-edge 2px edge.",
+      "html": "<button class=\"ds-btn-default\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4\"/><path d=\"M9 15l-4.5 4.5\"/><path d=\"M14.5 4l5.5 5.5\"/></svg>Pin into every briefing</button>",
+      "css": ".ds-btn-default { display: inline-flex; align-items: center; gap: 8px; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.875rem; font-weight: 600; letter-spacing: 0.005em; height: 30px; padding: 0 14px; border: 0; border-radius: 0; background: var(--paper-3, #eceeef); color: var(--ink, #111415); box-shadow: 0 2px 0 var(--field-edge, #6f787c); cursor: pointer; } .ds-btn-default:hover { background: var(--rule-soft, #e8ebec); } .ds-btn-default:active { box-shadow: none; transform: translateY(2px); } .ds-btn-default:focus-visible { outline: 3px solid var(--highlight, #ffdd00); outline-offset: 0; box-shadow: inset 0 0 0 2px var(--highlight-ink, #0b0c0c); }"
+    },
+    {
+      "name": "Danger Button and Quiet Links",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Taking something away: a red quiet link opens a confirmation whose red button confirms it. Quiet links are underlined text with a 14px outline icon.",
+      "html": "<span class=\"ds-row\"><button class=\"ds-quiet\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 14l-4 -4l4 -4\"/><path d=\"M5 10h11a4 4 0 1 1 0 8h-1\"/></svg>Back to the current text</button><button class=\"ds-quiet ds-quiet-danger\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z\"/><path d=\"M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10\"/><path d=\"M10 12l4 0\"/></svg>Retire it…</button><button class=\"ds-btn-danger\" type=\"button\">Retire it</button></span>",
+      "css": ".ds-row { display: inline-flex; align-items: center; gap: 20px; } .ds-quiet { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.875rem; font-weight: 500; color: var(--accent, #00703c); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em; cursor: pointer; } .ds-quiet:hover { color: var(--accent-hover, #005a30); text-decoration-thickness: 2px; } .ds-quiet:focus-visible { outline: none; background: var(--highlight, #ffdd00); color: var(--highlight-ink, #0b0c0c); box-shadow: 0 -2px var(--highlight, #ffdd00), 0 4px var(--highlight-ink, #0b0c0c); text-decoration: none; } .ds-quiet-danger { color: var(--danger, #d4351c); } .ds-btn-danger { font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.875rem; font-weight: 600; height: 30px; padding: 0 14px; border: 0; border-radius: 0; background: var(--danger, #d4351c); color: var(--danger-ink, #ffffff); box-shadow: 0 2px 0 var(--danger-edge, #55150b); cursor: pointer; } .ds-btn-danger:hover { background: var(--danger-hover, #aa2a16); } .ds-btn-danger:active { box-shadow: none; transform: translateY(2px); } .ds-btn-danger:focus-visible { outline: 3px solid var(--highlight, #ffdd00); outline-offset: 0; box-shadow: inset 0 0 0 2px var(--highlight-ink, #0b0c0c); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Square white field with a field-edge border at 4.5:1 and an italic label; focus is the yellow highlighter around an ink inset.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Search memory</span><span class=\"ds-field-box\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0\"/><path d=\"M21 21l-6 -6\"/></svg><input type=\"search\" placeholder=\"Search memory\"></span></label>",
+      "css": ".ds-field { display: grid; gap: 4px; width: 300px; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-field-label { font-size: 0.9375rem; font-style: italic; color: var(--ink-2, #3c4346); } .ds-field-box { position: relative; color: var(--ink-3, #5e676b); } .ds-field-box svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); } .ds-field input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px 0 34px; border: 1px solid var(--field-edge, #6f787c); border-radius: 0; background: var(--field, #ffffff); color: var(--ink, #111415); font: inherit; font-size: 0.9375rem; } .ds-field input::placeholder { color: var(--ink-3, #5e676b); } .ds-field input:focus-visible { outline: 3px solid var(--highlight, #ffdd00); outline-offset: 0; border-color: var(--ink, #111415); box-shadow: inset 0 0 0 1px var(--ink, #111415); }"
+    },
+    {
+      "name": "Masthead",
+      "kind": "nav",
+      "refersTo": "masthead",
+      "description": "The near-black band with a 4px green foot (GOV.UK): wordmark with its green square, nav links, the current one bold italic over a 4px green underline, and the red waiting count.",
+      "html": "<header class=\"ds-mast\"><a class=\"ds-mark\" href=\"#\"><span class=\"ds-sq\"></span><b>Shared Memory</b><span class=\"ds-team\">acme</span></a><nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Contents</a><a href=\"#\">Search</a><a href=\"#\">Challenges <span class=\"ds-count\">1</span></a><a href=\"#\">Team</a></nav></header>",
+      "css": ".ds-mast { display: flex; align-items: stretch; gap: 28px; height: 60px; padding: 0 24px; background: var(--band, #111415); color: var(--band-ink, #ffffff); border-bottom: 4px solid var(--band-accent, #4cc38a); font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-mark { display: flex; align-items: center; gap: 10px; color: var(--band-ink, #ffffff); text-decoration: none; white-space: nowrap; } .ds-sq { width: 14px; height: 14px; background: var(--band-accent, #4cc38a); } .ds-mark b { font-size: 1.1875rem; font-weight: 700; letter-spacing: -0.015em; } .ds-team { font-size: 0.875rem; color: var(--band-ink-2, #c9cfd1); padding-left: 10px; border-left: 1px solid var(--band-2, #2a2f31); } .ds-nav { display: flex; gap: 2px; } .ds-nav a { display: flex; align-items: center; gap: 7px; padding: 0 12px; color: var(--band-ink-2, #c9cfd1); font-size: 0.9375rem; font-weight: 500; text-decoration: none; transition: color 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-nav a:hover { color: var(--band-ink, #ffffff); box-shadow: inset 0 -4px 0 var(--band-2, #2a2f31); } .ds-nav a[aria-current='page'] { color: var(--band-ink, #ffffff); font-weight: 700; font-style: italic; box-shadow: inset 0 -4px 0 var(--band-accent, #4cc38a); } .ds-nav a:focus-visible { outline: none; background: var(--highlight, #ffdd00); color: var(--highlight-ink, #0b0c0c); box-shadow: inset 0 -4px 0 var(--highlight-ink, #0b0c0c); } .ds-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; background: var(--danger, #d4351c); color: var(--danger-ink, #ffffff); font-size: 0.75rem; font-weight: 700; font-style: normal; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Contents Tree",
+      "kind": "nav",
+      "refersTo": "tree-row",
+      "description": "The 304px contents column on the panel: folders with tallies, memory leaves in Charis SIL, the current leaf bold italic on the signal wash, cancelled leaves struck.",
+      "html": "<ul class=\"ds-tree\"><li><div class=\"ds-tr ds-top\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6l-6 6\"/></svg><span class=\"ds-l\">Billing</span><span class=\"ds-t\">10</span></div></li><li><div class=\"ds-tr\" style=\"--depth:1\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6l-6 6\"/></svg><span class=\"ds-l\">Gotchas</span><span class=\"ds-t\">1</span></div></li><li><div class=\"ds-tr ds-leaf\" style=\"--depth:2\" aria-current=\"page\"><span></span><span class=\"ds-l\">Staging resets nightly</span><span class=\"ds-t\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 20l10 0\"/><path d=\"M6 6l6 -1l6 1\"/><path d=\"M12 3l0 17\"/><path d=\"M9 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/><path d=\"M21 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/></svg></span></div></li><li><div class=\"ds-tr ds-leaf ds-cancel\" style=\"--depth:2\"><span></span><span class=\"ds-l\">Staging resets weekly</span><span class=\"ds-t\"></span></div></li></ul>",
+      "css": ".ds-tree { list-style: none; margin: 0; padding: 16px 0; width: 304px; background: var(--paper-2, #f6f7f7); border-right: 1px solid var(--rule, #d8dcde); font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-tr { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 32px; padding: 0 16px 0 calc(12px + var(--depth, 0) * 14px); color: var(--ink-2, #3c4346); font-size: 0.9375rem; cursor: pointer; } .ds-tr > svg { color: var(--ink-3, #5e676b); } .ds-tr:hover { background: var(--paper-3, #eceeef); color: var(--ink, #111415); } .ds-top { font-weight: 700; color: var(--ink, #111415); } .ds-t { font-size: 0.8125rem; color: var(--ink-3, #5e676b); font-variant-numeric: tabular-nums; } .ds-leaf .ds-l { font-family: var(--serif, \"Charis SIL\", Charter, Georgia, serif); } .ds-tr[aria-current='page'] { background: var(--accent-wash, #e8f4ed); color: var(--ink, #111415); font-weight: 700; font-style: italic; } .ds-cancel .ds-l { text-decoration: line-through; color: var(--ink-3, #5e676b); }"
+    },
+    {
+      "name": "State Marks",
+      "kind": "chip",
+      "refersTo": "marks",
+      "description": "State as a mark and a word, never a pill: the level in bold, Pinned in green, Challenged in red, the dagger for Superseded, Retired as a word, Restricted with a lock.",
+      "html": "<span class=\"ds-marks\"><span class=\"ds-rank\">Project memory</span><span class=\"ds-m ds-strong\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4\"/><path d=\"M9 15l-4.5 4.5\"/><path d=\"M14.5 4l5.5 5.5\"/></svg>Pinned</span><span class=\"ds-m ds-alert\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 20l10 0\"/><path d=\"M6 6l6 -1l6 1\"/><path d=\"M12 3l0 17\"/><path d=\"M9 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/><path d=\"M21 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/></svg>Challenged</span><span class=\"ds-m\"><span class=\"ds-dagger\" aria-hidden=\"true\">†</span>Superseded</span><span class=\"ds-m\">Retired</span><span class=\"ds-m\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z\"/><path d=\"M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0\"/><path d=\"M8 11v-4a4 4 0 1 1 8 0v4\"/></svg>Restricted</span><span class=\"ds-rank ds-personal\">Personal memory</span></span>",
+      "css": ".ds-marks { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-m { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 500; color: var(--ink-2, #3c4346); white-space: nowrap; } .ds-strong { color: var(--accent, #00703c); font-weight: 700; } .ds-alert { color: var(--danger, #d4351c); font-weight: 700; } .ds-dagger { font-family: var(--serif, \"Charis SIL\", Charter, Georgia, serif); font-weight: 700; color: var(--ink-3, #5e676b); } .ds-rank { font-size: 0.875rem; font-weight: 700; color: var(--ink-2, #3c4346); } .ds-personal { font-weight: 500; color: var(--ink-3, #5e676b); }"
+    },
+    {
+      "name": "Status Box",
+      "kind": "card",
+      "refersTo": "status-in-force",
+      "description": "Signature (legislation.gov.uk): the one tinted element in a memory's head, a rule in the state's colour with a 4px foot, an icon and a bold state word. In force, challenged, cancelled, and as it stood.",
+      "html": "<div class=\"ds-statuses\"><div class=\"ds-status\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06\"/><path d=\"M15 19l2 2l4 -4\"/></svg><p><b>In force.</b> It holds for everyone on Billing: their Claude sessions recall it.</p></div><div class=\"ds-status ds-challenged\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 20l10 0\"/><path d=\"M6 6l6 -1l6 1\"/><path d=\"M12 3l0 17\"/><path d=\"M9 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/><path d=\"M21 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/></svg><p><b>Challenged.</b> Dana Dev wants to supersede it. Until its author decides, it stands as it is. <a href=\"#\">Compare and decide</a></p></div><div class=\"ds-status ds-cancelled\"><span class=\"ds-dg\" aria-hidden=\"true\">†</span><p><b>Superseded.</b> Another memory has taken its place; this one stays for the record.</p></div><div class=\"ds-status ds-past\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0\"/><path d=\"M12 7v5l3 3\"/></svg><p><b>As it stood: version 2 of 3.</b> Amended by Olive Owner. In force from 29 Apr 2026 to 4 May 2026.</p></div></div>",
+      "css": ".ds-statuses { display: grid; gap: 16px; max-width: 68ch; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-status { --r: var(--accent, #00703c); --i: var(--accent, #00703c); --w: var(--accent-wash, #e8f4ed); display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px 12px; border: 1px solid var(--r); border-bottom-width: 4px; background: var(--w); color: var(--ink, #111415); font-size: 0.9375rem; line-height: 1.5; } .ds-status > svg, .ds-dg { flex: none; margin-top: 2px; color: var(--i); } .ds-dg { font-family: var(--serif, \"Charis SIL\", Charter, Georgia, serif); font-weight: 700; font-size: 1.125rem; line-height: 1.2; width: 18px; text-align: center; } .ds-status p { margin: 0; } .ds-status a { color: var(--accent, #00703c); text-underline-offset: 0.2em; } .ds-challenged { --r: var(--danger, #d4351c); --i: var(--danger, #d4351c); --w: var(--danger-wash, #fbeae7); } .ds-cancelled { --r: var(--ink-3, #5e676b); --i: var(--ink-2, #3c4346); --w: var(--paper-2, #f6f7f7); } .ds-past { --r: var(--past-rule, #e09a1b); --i: var(--past, #7a4f00); --w: var(--past-wash, #fff5e1); }"
+    },
+    {
+      "name": "Amendment Markup",
+      "kind": "custom",
+      "refersTo": "amended",
+      "description": "Signature (legislation.gov.uk): the text as a version left it, insertions in bold square brackets with a green numbered marker, removed words as red spaced dots, each keyed to a note under a rule.",
+      "html": "<div class=\"ds-then\"><p class=\"ds-amended\">The staging database is wiped and reseeded every <ins><span class=\"ds-br\" aria-hidden=\"true\">[</span><sup class=\"ds-mk\"><a href=\"#ds-a1\">A1</a></sup>night at 02:17 UTC.<span class=\"ds-br\" aria-hidden=\"true\">]</span></ins> <del><span class=\"ds-repeal\" aria-hidden=\"true\">. . .</span><sup class=\"ds-mk\"><a href=\"#ds-a2\">A2</a></sup></del></p><ol class=\"ds-notes\"><li id=\"ds-a1\"><a href=\"#\">A1</a><span>Words substituted by version 3, in place of <q>night.</q></span></li><li id=\"ds-a2\"><a href=\"#\">A2</a><span>Words removed by version 3: <q>Yarn is not used either.</q></span></li></ol></div>",
+      "css": ".ds-then { max-width: 68ch; font-family: var(--serif, \"Charis SIL\", Charter, Georgia, serif); font-size: 1.1875rem; line-height: 1.68; color: var(--ink, #111415); } .ds-amended { margin: 0; } .ds-amended ins, .ds-amended del { text-decoration: none; } .ds-br { font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-weight: 700; font-size: 1.25em; line-height: 0; } .ds-repeal { font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-weight: 700; letter-spacing: 0.08em; color: var(--danger, #d4351c); } .ds-mk { font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.6em; font-weight: 700; line-height: 0; margin: 0 2px; } .ds-mk a { color: var(--accent, #00703c); text-decoration: none; } .ds-amended del .ds-mk a { color: var(--danger, #d4351c); } .ds-notes { list-style: none; display: grid; gap: 6px; margin: 22px 0 0; padding: 12px 0 0; border-top: 1px solid var(--rule, #d8dcde); font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.9375rem; line-height: 1.5; color: var(--ink-2, #3c4346); } .ds-notes li { display: grid; grid-template-columns: 2.75em minmax(0, 1fr); } .ds-notes li:target { background: var(--highlight-soft, #fff1a8); } .ds-notes a { font-weight: 700; color: var(--accent, #00703c); text-decoration: none; } .ds-notes q { font-family: var(--serif, \"Charis SIL\", Charter, Georgia, serif); color: var(--ink, #111415); }"
+    },
+    {
+      "name": "Table of Contents",
+      "kind": "custom",
+      "refersTo": "toc-line",
+      "description": "Each part under a rule, its name in Title type, a dotted leader to its count and last change in tabular figures, folders indented beneath.",
+      "html": "<ol class=\"ds-toc\"><li class=\"ds-part\"><a class=\"ds-line ds-line-part\" href=\"#\"><span class=\"ds-name\">Billing</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-fig\">10 memories · 18 Sept 2026</span></a><p class=\"ds-note\">Led by Olive Owner, Leo Lead.</p><ul class=\"ds-sub\"><li><a class=\"ds-line\" href=\"#\"><span class=\"ds-name\">Project memory</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-fig\">8 · 5 Sept 2026</span></a></li><li class=\"ds-deeper\"><a class=\"ds-line\" href=\"#\"><span class=\"ds-name\">Conventions</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-fig\">3 · 12 May 2026</span></a></li></ul></li></ol>",
+      "css": ".ds-toc { list-style: none; margin: 0; padding: 0; max-width: 74ch; font-family: var(--sans, \"Cooper Hewitt\", \"Helvetica Neue\", Arial, sans-serif); } .ds-part { padding: 20px 0 16px; border-top: 2px solid var(--ink, #111415); border-bottom: 1px solid var(--rule, #d8dcde); } .ds-line { display: flex; align-items: baseline; gap: 10px; color: var(--ink, #111415); text-decoration: none; } .ds-line:hover .ds-name { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.18em; } .ds-line:focus-visible { outline: none; background: var(--highlight, #ffdd00); box-shadow: 0 4px var(--highlight-ink, #0b0c0c); } .ds-name { white-space: nowrap; font-size: 1rem; font-weight: 600; } .ds-line-part .ds-name { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.018em; } .ds-leader { flex: 1; min-width: 24px; border-bottom: 1px dotted var(--ink-3, #5e676b); transform: translateY(-5px); opacity: 0.5; } .ds-fig { font-size: 0.875rem; color: var(--ink-3, #5e676b); font-variant-numeric: tabular-nums; white-space: nowrap; } .ds-note { margin: 4px 0 0; font-size: 0.875rem; color: var(--ink-3, #5e676b); } .ds-sub { list-style: none; margin: 10px 0 0; padding: 0 0 0 22px; } .ds-sub li { padding: 3px 0; } .ds-deeper { padding-left: 22px !important; } .ds-deeper .ds-name { font-weight: 400; color: var(--ink-2, #3c4346); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Consolidated Code, as a Modern Public Register",
+    "overview": "The console publishes the team's memory the way a government publishes its consolidated law online: a contents of everything a member can reach, each memory set as a citable section, and its standing, author and history in a ruled right margin. It is a modern public register rather than an antique book. Crisp white paper and near-black ink carry nearly everything; one signal green marks what is in force, the current place and the action to take. Red, amber and highlighter yellow appear only where they carry state. Dark is the same register at night, with no tint of its own.\n\nThe density is that of a reference site, not a dashboard. A dark masthead band with the signal green along its foot, a contents column on a barely grey panel, and a reading column held to a book measure with the margin beside it. Weight is carried by typographic rank (bold against regular, upright against italic, whole against struck through) and by rules, never by colour fields, cards or badges. Hairline rules, heavier ink rules at the head of a list, dot leaders and version numbers hanging in the gutter do the structural work that boxes and shadows do elsewhere.\n\nEvery device carries information and comes from a named public source (see References below). The system refuses the admin-dashboard arrangement (no sidebar of features, no stat cards, no badge soup) and the antique look it replaced: no tinted paper, no book greens, no uppercase-tracked labels. Nothing disappears; superseded and retired memory keeps its place, visibly cancelled. Motion is limited to state changes on one ease-out, and reduced motion is honoured.",
+    "keyCharacteristics": [
+      "White paper and near-black ink; light and dark are the same neutral register, not tinted.",
+      "One signal green for in force, the current place, links and primary actions; red, amber and yellow only where they carry state.",
+      "Cooper Hewitt for everything operated and every title; Charis SIL for a memory's own words; Source Code Pro for paths, sources and citations.",
+      "Square corners, hairline rules, heavier ink rules heading lists, dot leaders, a ruled right margin.",
+      "State is a mark and a word; a memory's weight is type rank.",
+      "Flat: depth is a step of paper or a rule. The only raised things are buttons on their edge and menus that float."
+    ],
+    "rules": [
+      {
+        "name": "The One Meaning Rule",
+        "body": "Each hue means one thing. Green is in force, here, and go; red is challenged or taken away; amber is an earlier point in time; yellow is focus or a match. Nothing else on the page is coloured.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mark-and-Word Rule",
+        "body": "State is a mark and a word, never a hue alone. Every coloured status box leads with an icon or the dagger and a bold word (\"In force.\", \"Challenged.\", \"Superseded.\", \"Retired.\", \"As it stood: version 2 of 3.\").",
+        "section": "colors"
+      },
+      {
+        "name": "The Third-Ink Rule",
+        "body": "Third ink is the lowest text rank and stays on paper, panel, hover paper and the washes (4.97:1 at worst). Nothing lighter carries text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Charis SIL carries a memory's own words: its text, its summary, and its name wherever it is listed. Cooper Hewitt carries everything else: titles, labels, controls, metadata and tables.",
+        "section": "typography"
+      },
+      {
+        "name": "The Italic Label Rule",
+        "body": "Labels are italic in the regular weight, and the current place is bold italic (the masthead's current item, the contents tree's current leaf). Uppercase tracking is not part of this world.",
+        "section": "typography"
+      },
+      {
+        "name": "The Rank-Not-Hue Rule",
+        "body": "Accepted memory is named in bold; personal memory in regular over a dashed rule and in third ink in the tree; superseded and retired memory is struck through in third ink, superseded with a dagger (†). No colour does this work.",
+        "section": "typography"
+      },
+      {
+        "name": "The Figures Rule",
+        "body": "Counts, dates, times and version numbers take tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Measure Rule",
+        "body": "Memory text never runs wider than 68ch; lists of contents read at 74ch. Wide registers scroll sideways inside their own container, never the page.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hanging Head Rule",
+        "body": "Part heads in a folder hang 18px into the left margin and each level below steps in 18px (12px at 900px and below), so the structure reads from the left edge like a code's numbered divisions.",
+        "section": "layout"
+      },
+      {
+        "name": "The Leader Rule",
+        "body": "A name and its figures are joined by a dotted leader: 1px dotted third ink at 40 to 50% opacity, lifted 5px onto the baseline.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Page Rule",
+        "body": "Nothing on the page casts a shadow. The only raised things are a button on its edge and a menu that floats.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reference colour through the custom properties (`var(--paper)`, `var(--ink-2)`, `var(--accent)`) so both schemes follow, and point framework components at them rather than at the framework's own palette.",
+      "**Do** give every state a mark and a word: the dagger, \"Superseded\" and a struck title; \"Retired\" and a struck title; the scales and \"Challenged\"; the pin and \"Pinned\"; the lock and \"Restricted\"; a dashed rule and \"Personal memory\".",
+      "**Do** pair the yellow focus highlight with ink: an ink inset on fields and controls, an ink bar under links, tree rows and nav items.",
+      "**Do** keep cancelled memory in its place, after current memory, struck through in third ink.",
+      "**Do** set a memory's text in Charis SIL at 1.1875rem and 1.68 within 68ch, exactly as stored, and offer its source file in Source Code Pro beside it.",
+      "**Do** tell history in sentences with closed date ranges, newest first.",
+      "**Do** keep motion to state changes on `cubic-bezier(0.16, 1, 0.3, 1)`: 150ms for nav colour and underlines, 180ms for a folder's chevron, 220ms for a notice or slip to appear (fade and a 4px rise), and honour reduced motion."
+    ],
+    "donts": [
+      "**Don't** build the admin-dashboard arrangement: no sidebar of features, no stat cards, no badge soup. The waiting count on Challenges is the only filled chip.",
+      "**Don't** let colour alone carry a state, or use a hue for anything outside its one meaning.",
+      "**Don't** return to the antique world: no tinted paper, no book greens or oxbloods, no uppercase-tracked labels, no kickers above titles.",
+      "**Don't** round corners, shadow cards, or box content that a rule could separate. The button edge belongs to buttons only.",
+      "**Don't** set text in `past-rule` or `highlight`; they are rule and fill colours.",
+      "**Don't** use a Unicode symbol as an icon. Icons are Tabler outline icons at stroke 1.6, 14 to 18px; the dagger, the amendment brackets and the repeal dots are the only typographic marks, each carrying meaning in the text.",
+      "**Don't** restyle, truncate or paraphrase a memory's words on its own page; summaries belong to lists."
+    ]
+  }
+}

@@ -1,19 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-const fakeGitHub = "http://127.0.0.1:8124";
+import { signInAs } from "./helpers";
 
 test("the owner signs in and finds that sign-in in the audit log", async ({ page }) => {
-  await page.request.post(`${fakeGitHub}/as-account`, { data: { id: 1, login: "olive" } });
-
-  await page.goto("/");
-  await page.getByTestId("sign-in").click();
+  await signInAs(page, 1, "olive");
   await page.getByTestId("to-audit").click();
 
   const rows = page.getByTestId("audit-table").locator("tbody tr");
-  await expect(rows.first()).toContainText("E1001");
-  await expect(rows.first()).toContainText("signed in");
+  await expect(rows.first()).toContainText("Olive Owner");
+  await expect(rows.first()).toContainText("Signed in");
 
-  await page.getByTestId("filter-kind").fill("sign_in_refused");
+  await page.getByTestId("filter-kind").click();
+  await page.getByRole("option", { name: "Sign-in refused" }).click();
 
   await expect(page.getByTestId("audit-empty")).toBeVisible();
 });

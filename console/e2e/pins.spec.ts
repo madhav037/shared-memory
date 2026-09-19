@@ -1,21 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-test("a member pins a memory, sees it in the project's pins, and unpins it", async ({ page }) => {
-  await page.request.post("http://127.0.0.1:8124/as-account", { data: { id: 1, login: "olive" } });
+import { openInContents, signInAs } from "./helpers";
 
-  await page.goto("/");
-  await page.getByTestId("sign-in").click();
-  await page.getByTestId("projects").getByRole("link", { name: "Billing" }).click();
-  await page.getByRole("link", { name: "Use pnpm, not npm" }).first().click();
+test("a member pins a memory, sees it in the project's briefing, and unpins it", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await openInContents(page, "Billing", "Project memory", "Conventions", "Use pnpm, not npm");
 
   await page.getByTestId("pin").click();
-  await expect(page.getByTestId("pinned")).toBeVisible();
+  await expect(page.getByTestId("memory-details")).toContainText("Pinned");
 
-  await page.goBack();
+  await page.getByRole("navigation", { name: "Where this is" }).getByRole("link", { name: "Billing" }).click();
   const pins = page.getByTestId("pins");
   await expect(pins).toContainText("Use pnpm, not npm");
   await expect(pins).toContainText("tokens");
 
   await pins.getByTestId("unpin-memory").click();
-  await expect(page.getByTestId("pins")).toHaveCount(0);
+  await expect(page.getByTestId("pins")).toContainText("Nothing is pinned");
 });
