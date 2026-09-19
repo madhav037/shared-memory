@@ -141,6 +141,18 @@ class Session:
             return structured
         return text
 
+    def run_prompt(self, name: str) -> str:
+        """Fetch an MCP prompt the way an agent offers it as a command; return its text."""
+        return self.server.portal.call(self._run_prompt, name)
+
+    async def _run_prompt(self, name: str) -> str:
+        async with AsyncExitStack() as stack:
+            http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
+            transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
+            client = await stack.enter_async_context(Client(transport))
+            result = await client.get_prompt(name)
+        return "\n".join(getattr(message.content, "text", "") for message in result.messages)
+
     def refusal(self, tool: str, **arguments: Any) -> str:
         """Call a tool that is expected to be refused; return the refusal message."""
         try:
