@@ -21,7 +21,7 @@ _KNOWN: list[tuple[tuple[str, ...], str]] = [
 
 
 def agent_named(reported: str | None) -> str:
-    """The coding agent a reported client name belongs to, or "another agent" for any name not known."""
+    """The coding agent a name an agent reported for itself belongs to, or "another agent" for any name not known."""
     name = (reported or "").strip().lower()
     for markers, known in _KNOWN:
         if any(marker in name for marker in markers):

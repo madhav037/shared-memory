@@ -157,7 +157,7 @@ _Avoid_: History, activity, trail
 ### Sessions and collisions
 
 **Coding agent**:
-The AI coding tool a member's sessions run in: Claude Code, Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop or Cline.
+The AI coding tool a member's sessions run in: Claude Code, Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop or Cline. Called simply the *agent* where the meaning is plain; a session is never called an agent.
 _Avoid_: Client, IDE, assistant, bot
 
 **Session**:

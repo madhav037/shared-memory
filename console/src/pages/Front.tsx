@@ -16,8 +16,8 @@ export function TitlePage({ status, refused }: { status: Status; refused: string
       <div className="title-page-inner">
         <h1>Shared Memory</h1>
         <p className="long-title">
-          The memory every Claude session on your team reads and writes, so that what one member’s Claude learns
-          reaches every other member’s Claude.
+          The memory every coding agent on your team reads and writes, so that what one member’s agent learns
+          reaches every other member’s agent.
         </p>
         {refused && (
           <Refusal testid="sign-in-error">
@@ -38,10 +38,10 @@ export function TitlePage({ status, refused }: { status: Status; refused: string
         ) : (
           <p className="fine">Signing in with GitHub isn’t set up on this server yet. Whoever runs it sets the GitHub app’s details.</p>
         )}
-        <p className="fine" data-testid="status">Connected to the server. Your personal token stays in Claude Code; the console never asks for it.</p>
+        <p className="fine" data-testid="status">Connected to the server. Your personal token stays with your coding agent; the console never asks for it.</p>
         <ul className="title-page-uses">
           <li>
-            <b>Read it as Claude does.</b> Every memory your team and your projects hold, word for word.
+            <b>Read it as your agent does.</b> Every memory your team and your projects hold, word for word.
           </li>
           <li>
             <b>See how it came to say that.</b> Every version, who made it and when, with each amendment marked.
@@ -78,8 +78,8 @@ export function Front({ member }: { member: SignedInMember }) {
         </p>
       )}
       <p className="standfirst">
-        Everything the Claude sessions of team {member.team} read, set out folder by folder. Open a memory to read it
-        exactly as Claude does, and to see who changed it and when.
+        Everything the coding agents of team {member.team} read, set out folder by folder. Open a memory to read it
+        exactly as they do, and to see who changed it and when.
       </p>
 
       <div style={{ marginTop: 32 }}>
@@ -143,7 +143,7 @@ function PartContents({ path, kind }: { path: string; kind: string }) {
   if (sections.length === 0)
     return kind === "project" ? (
       <p className="toc-part-note">
-        Nothing remembered yet. Connect a repository from its settings; memory arrives when a member’s Claude saves
+        Nothing remembered yet. Connect a repository from its settings; memory arrives when a member’s coding agent saves
         something.
       </p>
     ) : null;
@@ -199,7 +199,7 @@ function Waiting() {
   );
 }
 
-/** Any member can start a project; they become its first project lead, as with create_project in Claude. */
+/** Any member can start a project; they become its first project lead, as with create_project from a coding agent. */
 function NewProject() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);

@@ -24,7 +24,7 @@ const TYPES = [
   { value: "gotcha", label: "Gotchas" },
 ];
 
-/** Search every memory this member can reach, by meaning and by exact words, the way their Claude does. */
+/** Search every memory this member can reach, by meaning and by exact words, the way their coding agent does. */
 export function SearchPage() {
   const [asked, setAsked] = useSearchParams();
   const query = asked.get("q") ?? "";
@@ -46,7 +46,7 @@ export function SearchPage() {
       <h1 className="page-title wide">Search</h1>
       <p className="standfirst">
         By meaning as well as exact words, across team memory and every project you can reach. Retired and superseded
-        memory is left out, as it is for Claude.
+        memory is left out, as it is for every coding agent.
       </p>
 
       <form

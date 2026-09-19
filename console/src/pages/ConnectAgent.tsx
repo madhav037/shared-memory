@@ -1,15 +1,15 @@
 import { Button, CopyButton, Select } from "@mantine/core";
 import { IconCheck, IconCopy, IconKey } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { fetchProject, reissueMyToken, type IssuedToken, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
-import { ConnectionFiles } from "../components/ConnectionFiles";
+import { ConnectionFiles, EVERY_AGENT } from "../components/ConnectionFiles";
 import { useContents } from "../components/Contents";
 import { useAsked } from "../lib/useAsked";
 
 /** What a member does in each coding agent, and what that agent then does with the team's memory by itself. */
-const AGENTS: { name: string; steps: React.ReactNode[]; automatic: React.ReactNode }[] = [
+const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
   {
     name: "Claude Code",
     steps: [
@@ -93,10 +93,7 @@ const AGENTS: { name: string; steps: React.ReactNode[]; automatic: React.ReactNo
       <>
         Commit the repository’s <code>.devin/mcp_config.json</code>, <code>AGENTS.md</code> section and skill.
       </>,
-      <>
-        If Devin doesn’t pass your token through, put the same entry with your token in{" "}
-        <code>.devin/mcp_config.local.json</code>, which git ignores.
-      </>,
+      <>Devin reads your token from <code>SHARED_MEMORY_TOKEN</code>.</>,
     ],
     automatic: (
       <>
@@ -162,7 +159,7 @@ export function ConnectAgent({ member }: { member: SignedInMember }) {
         ))}
       </ol>
       <p className="agent-automatic">
-        <b>What happens by itself.</b> {chosen.automatic}
+        <span className="run-in">What happens by itself</span> {chosen.automatic}
       </p>
 
       <RepositoryFiles agent={chosen.name} />
@@ -198,8 +195,9 @@ function Token({ member }: { member: SignedInMember }) {
       </h2>
       <p className="section-lede">
         It proves which member a session belongs to. Set it once on each machine, in the{" "}
-        <code>SHARED_MEMORY_TOKEN</code> environment variable, and every agent there reads it; it never goes in a file.
-        This server is at <code data-testid="server-url">{serverUrl}</code>.
+        <code>SHARED_MEMORY_TOKEN</code> environment variable, which most coding agents read; Claude Code and VS Code
+        ask for it instead and keep it themselves. It never goes in a committed file. This server is at{" "}
+        <code data-testid="server-url">{serverUrl}</code>.
       </p>
       {refused && <Refusal testid="token-refused">{refused}</Refusal>}
 
@@ -299,7 +297,7 @@ function RepositoryFiles({ agent }: { agent: string }) {
       ) : (
         <ConnectionFiles
           key={`${chosen.name}-${agent}`}
-          files={chosen.files.filter((file) => file.agent === agent || file.agent === "Every agent")}
+          files={chosen.files.filter((file) => file.agent === agent || file.agent === EVERY_AGENT)}
           testid="agent-files"
         />
       )}

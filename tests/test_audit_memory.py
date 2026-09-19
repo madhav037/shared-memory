@@ -206,7 +206,7 @@ def test_each_coding_agent_is_named_the_way_members_know_it(console: Console, si
         assert saved[file] == known_as, name
 
 
-def test_an_agent_that_does_not_say_what_it_is_changes_nothing_about_what_it_may_do(
+def test_an_agent_that_does_not_say_what_it_is_is_recorded_as_another_agent(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     _, project, in_project = a_project(console, signed_out, "olive-changes-silent", 913)

@@ -6,10 +6,10 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
-from shared_memory.connection import claude_settings, connection_kit
 from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Audit
 from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
+from shared_memory.connection import claude_settings, connection_kit
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections

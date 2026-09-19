@@ -4,6 +4,9 @@ import { useState } from "react";
 
 import type { ConnectionFile } from "../api/client";
 
+/** The files every coding agent shares, listed with each agent's own. */
+export const EVERY_AGENT = "Every agent";
+
 /** The files one repository commits, one coding agent at a time: where each goes, how, and what it says. */
 export function ConnectionFiles({ files, testid }: { files: ConnectionFile[]; testid?: string }) {
   const agents = [...new Set(files.map((file) => file.agent))];
@@ -30,8 +33,8 @@ export function ConnectionFiles({ files, testid }: { files: ConnectionFile[]; te
         <div key={file.path} className="connection-file">
           <div className="connection-file-head">
             <code className="path">{file.path}</code>
-            <span className="mark">
-              {file.scope === "machine"
+            <span className="connection-file-action">
+              {file.kept_in === "machine"
                 ? "Once, on each member's machine"
                 : file.action === "merge"
                   ? "Merge into it"

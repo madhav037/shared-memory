@@ -89,15 +89,14 @@ def test_every_agent_with_a_repository_file_is_pointed_at_the_project(team: Team
     }
 
 
-def test_cline_is_set_up_once_per_project_on_each_members_machine(team: Team) -> None:
+def test_cline_is_set_up_once_per_project_on_each_members_machine_for_every_repository(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     project = created["project_id"]
 
     cline = next(file for file in created["files"] if file["agent"] == "Cline")
     server = mcp_server(cline, name=f"shared-memory-{project}")
 
-    assert cline["scope"] == "machine"
+    assert cline["kept_in"] == "machine"
     assert server["type"] == "streamableHttp"
-    assert server["headers"]["Authorization"] == "Bearer ${env:SHARED_MEMORY_TOKEN}"
-    assert server["headers"]["X-Shared-Memory-Project"] == project
-    assert all(file["scope"] == "repository" for file in created["files"] if file["agent"] != "Cline")
+    assert server["headers"] == {"Authorization": "Bearer ${env:SHARED_MEMORY_TOKEN}", "X-Shared-Memory-Project": project}
+    assert all(file["kept_in"] == "repository" for file in created["files"] if file["agent"] != "Cline")

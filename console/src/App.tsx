@@ -283,7 +283,7 @@ function MemberMenu({
           ))}
           <Menu.Divider />
         </div>
-        <Menu.Item leftSection={<IconKey size={15} stroke={1.6} />} onClick={() => goTo("/connect")} data-testid="to-my-token">
+        <Menu.Item leftSection={<IconKey size={15} stroke={1.6} />} onClick={() => goTo("/connect")} data-testid="to-connect">
           Connect your agent
         </Menu.Item>
         <Menu.Divider />

@@ -973,7 +973,8 @@ li[aria-expanded="true"] > .tree-row .twist {
 
 .view-switch {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 6px 24px;
   margin: 32px 0 0;
   border-bottom: 1px solid var(--rule);
 }
@@ -1519,8 +1520,15 @@ li[aria-expanded="true"] > .tree-row .twist {
   color: var(--ink-2);
   max-width: 68ch;
 }
-.agent-automatic b {
-  color: var(--ink);
+.agent-automatic .run-in {
+  font-style: italic;
+  color: var(--ink-3);
+  margin-right: 6px;
+}
+.connection-file-action {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--ink-3);
 }
 
 /* The files a repository commits to connect each coding agent, one agent at a time. */

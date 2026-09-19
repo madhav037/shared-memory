@@ -94,7 +94,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </h2>
         <p className="section-lede">
           {project.restricted
-            ? "Restricted: only the members below, this project’s leads and the team’s admins can reach its memory — in the console and in every Claude session."
+            ? "Restricted: only the members below, this project’s leads and the team’s admins can reach its memory — in the console and in every coding agent session."
             : "Open to the whole team. Restricting it keeps its memory to the members below, its leads and the team’s admins."}
         </p>
         {project.you_may_change && (

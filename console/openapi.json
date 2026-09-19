@@ -1655,6 +1655,10 @@
             "type": "string"
           },
           "action": {
+            "enum": [
+              "create",
+              "merge"
+            ],
             "title": "Action",
             "type": "string"
           },
@@ -1666,8 +1670,12 @@
             "title": "Contents",
             "type": "string"
           },
-          "scope": {
-            "title": "Scope",
+          "kept_in": {
+            "enum": [
+              "repository",
+              "machine"
+            ],
+            "title": "Kept In",
             "type": "string"
           }
         },
@@ -1677,20 +1685,16 @@
           "action",
           "how",
           "contents",
-          "scope"
+          "kept_in"
         ],
         "title": "ConnectionFile",
         "type": "object"
       },
       "ProjectRepository": {
-        "description": "A repository of a project, with what it commits to connect its sessions to the project.",
+        "description": "A repository of a project, with the files each coding agent commits to connect it to the project.",
         "properties": {
           "name": {
             "title": "Name",
-            "type": "string"
-          },
-          "settings": {
-            "title": "Settings",
             "type": "string"
           },
           "files": {
@@ -1703,7 +1707,6 @@
         },
         "required": [
           "name",
-          "settings",
           "files"
         ],
         "title": "ProjectRepository",

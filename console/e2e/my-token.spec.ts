@@ -5,7 +5,7 @@ import { signInAs } from "./helpers";
 test("a member issues their own personal token and sees it once", async ({ page }) => {
   await signInAs(page, 1, "olive");
   await page.getByTestId("member-menu").click();
-  await page.getByTestId("to-my-token").click();
+  await page.getByTestId("to-connect").click();
 
   await expect(page.getByRole("heading", { name: "Connect your agent" })).toBeVisible();
   await page.getByTestId("issue-token").click();
