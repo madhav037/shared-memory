@@ -160,6 +160,7 @@ class ConnectionFile(BaseModel):
     action: str
     how: str
     contents: str
+    scope: str
 
 
 class ProjectRepository(BaseModel):

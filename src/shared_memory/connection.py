@@ -26,6 +26,9 @@ class ConnectionFile:
     action: str  # "create" or "merge"
     how: str
     contents: str
+    # "repository": committed once for everyone. "machine": set up once on each member's machine (Cline keeps its
+    # MCP servers in one global file, never in the repository).
+    scope: str = "repository"
 
 
 def claude_settings(marketplace: str, project_id: str, repository: str) -> dict[str, Any]:
@@ -54,7 +57,7 @@ def connection_kit(
             path=".claude/settings.json",
             action="merge",
             how="Merge these keys into the file, keeping any keys already there.",
-            contents=json.dumps(claude_settings(marketplace, project_id, repository), indent=2) + "\n",
+            contents=_json(claude_settings(marketplace, project_id, repository)),
         ),
         ConnectionFile(
             agent="Codex",
@@ -69,6 +72,126 @@ def connection_kit(
                 + ", ".join(f"{json.dumps(name)} = {json.dumps(value)}" for name, value in headers.items())
                 + " }\n"
             ),
+        ),
+        ConnectionFile(
+            agent="GitHub Copilot",
+            path=".vscode/mcp.json",
+            action="merge",
+            how="Merge the input and the server into the file, keeping anything already there. VS Code asks each "
+            "member for their personal token the first time and keeps it, and asks once to trust the server.",
+            contents=_json(
+                {
+                    "inputs": [
+                        {
+                            "type": "promptString",
+                            "id": "shared-memory-token",
+                            "description": "Your Shared Memory personal token",
+                            "password": True,
+                        }
+                    ],
+                    "servers": {
+                        "shared-memory": {
+                            "type": "http",
+                            "url": endpoint,
+                            "headers": {"Authorization": "Bearer ${input:shared-memory-token}", **headers},
+                        }
+                    },
+                }
+            ),
+        ),
+        ConnectionFile(
+            agent="GitHub Copilot",
+            path=".github/mcp.json",
+            action="merge",
+            how="For Copilot CLI: merge the server into the file, keeping anything already there. The CLI reads it in "
+            "folders you trust.",
+            contents=_json(
+                {
+                    "mcpServers": {
+                        "shared-memory": {
+                            "type": "http",
+                            "url": endpoint,
+                            "headers": {"Authorization": f"Bearer ${{{TOKEN_VARIABLE}}}", **headers},
+                        }
+                    }
+                }
+            ),
+        ),
+        ConnectionFile(
+            agent="Gemini CLI",
+            path=".gemini/settings.json",
+            action="merge",
+            how="Merge these keys into the file, keeping anything already there; add AGENTS.md to any context file "
+            "names already listed. Gemini CLI reads it in folders you trust.",
+            contents=_json(
+                {
+                    "mcpServers": {
+                        "shared-memory": {
+                            "type": "http",
+                            "url": endpoint,
+                            "headers": {"Authorization": f"Bearer ${{{TOKEN_VARIABLE}}}", **headers},
+                        }
+                    },
+                    "context": {"fileName": ["AGENTS.md", "GEMINI.md"]},
+                }
+            ),
+        ),
+        ConnectionFile(
+            agent="Cursor",
+            path=".cursor/mcp.json",
+            action="merge",
+            how="Merge the server into the file, keeping anything already there. Cursor asks each member once to "
+            "approve it.",
+            contents=_json(
+                {
+                    "mcpServers": {
+                        "shared-memory": {
+                            "url": endpoint,
+                            "headers": {"Authorization": f"Bearer ${{env:{TOKEN_VARIABLE}}}", **headers},
+                        }
+                    }
+                }
+            ),
+        ),
+        ConnectionFile(
+            agent="Devin Desktop",
+            path=".devin/mcp_config.json",
+            action="merge",
+            how="Merge the server into the file, keeping anything already there. If Devin doesn't pass your token "
+            "through, put the same entry with your token in .devin/mcp_config.local.json, which git ignores.",
+            contents=_json(
+                {
+                    "mcpServers": {
+                        "shared-memory": {
+                            "url": endpoint,
+                            "transport": "http",
+                            "headers": {"Authorization": f"Bearer ${{env:{TOKEN_VARIABLE}}}", **headers},
+                        }
+                    }
+                }
+            ),
+        ),
+        ConnectionFile(
+            agent="Cline",
+            path="~/.cline/data/settings/cline_mcp_settings.json",
+            action="merge",
+            how="Cline keeps MCP servers in one file on each machine, not in the repository. Each member adds this "
+            "entry to it once for this project; other repositories of the project reach it through the same entry.",
+            contents=_json(
+                {
+                    "mcpServers": {
+                        f"shared-memory-{project_id}": {
+                            "type": "streamableHttp",
+                            "url": endpoint,
+                            "headers": {"Authorization": f"Bearer ${{env:{TOKEN_VARIABLE}}}", **headers},
+                            "timeout": 60,
+                            "disabled": False,
+                            "autoApprove": [],
+                        }
+                    }
+                }
+            ),
+            scope="machine",
         ),
         ConnectionFile(
             agent=EVERY_AGENT,
@@ -87,6 +210,10 @@ def connection_kit(
         ),
     ]
     return [asdict(file) for file in files]
+
+
+def _json(value: dict[str, Any]) -> str:
+    return json.dumps(value, indent=2) + "\n"
 
 
 def _agents_section(project_id: str, project_name: str, repository: str) -> str:

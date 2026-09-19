@@ -801,6 +801,8 @@ export interface components {
             how: string;
             /** Contents */
             contents: string;
+            /** Scope */
+            scope: string;
         };
         /**
          * ProjectRepository
