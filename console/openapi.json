@@ -1643,6 +1643,40 @@
         "title": "Projects",
         "type": "object"
       },
+      "ConnectionFile": {
+        "description": "One file a repository commits to connect a coding agent's sessions to its project.",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "how": {
+            "title": "How",
+            "type": "string"
+          },
+          "contents": {
+            "title": "Contents",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "path",
+          "action",
+          "how",
+          "contents"
+        ],
+        "title": "ConnectionFile",
+        "type": "object"
+      },
       "ProjectRepository": {
         "description": "A repository of a project, with what it commits to connect its sessions to the project.",
         "properties": {
@@ -1653,11 +1687,19 @@
           "settings": {
             "title": "Settings",
             "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionFile"
+            },
+            "title": "Files",
+            "type": "array"
           }
         },
         "required": [
           "name",
-          "settings"
+          "settings",
+          "files"
         ],
         "title": "ProjectRepository",
         "type": "object"

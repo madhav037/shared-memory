@@ -9,6 +9,7 @@ export type ProjectSummary = components["schemas"]["ProjectSummary"];
 export type ProjectDetail = components["schemas"]["ProjectDetail"];
 export type ProjectMember = components["schemas"]["ProjectMember"];
 export type ProjectRepository = components["schemas"]["ProjectRepository"];
+export type ConnectionFile = components["schemas"]["ConnectionFile"];
 export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
 export type SearchHit = components["schemas"]["SearchHit"];

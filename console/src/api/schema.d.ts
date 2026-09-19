@@ -787,6 +787,22 @@ export interface components {
             projects: components["schemas"]["ProjectSummary"][];
         };
         /**
+         * ConnectionFile
+         * @description One file a repository commits to connect a coding agent's sessions to its project.
+         */
+        ConnectionFile: {
+            /** Agent */
+            agent: string;
+            /** Path */
+            path: string;
+            /** Action */
+            action: string;
+            /** How */
+            how: string;
+            /** Contents */
+            contents: string;
+        };
+        /**
          * ProjectRepository
          * @description A repository of a project, with what it commits to connect its sessions to the project.
          */
@@ -795,6 +811,8 @@ export interface components {
             name: string;
             /** Settings */
             settings: string;
+            /** Files */
+            files: components["schemas"]["ConnectionFile"][];
         };
         /**
          * ProjectDetail

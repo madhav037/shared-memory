@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory.connection import claude_settings, connection_kit
 from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Audit
 from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
@@ -106,7 +107,7 @@ class MemoryService:
         self._challenges = challenges
         self._audit = audit
 
-    def create_project(self, caller: Caller, name: str, repository: str) -> dict[str, Any]:
+    def create_project(self, caller: Caller, name: str, repository: str, server_url: str) -> dict[str, Any]:
         check_name("Repository name", repository)
         project = self._identity.create_project(caller, name)
         self._identity.add_repository(caller, project.project_id, repository)
@@ -114,20 +115,28 @@ class MemoryService:
             "project_id": project.project_id,
             "name": project.name,
             "settings": self.settings_for(project.project_id, repository),
-            "next": "Merge these settings into this repository's committed .claude/settings.json (keep any existing "
-            "keys), then ask the member to commit it. Other repositories of the same product can use the same "
-            "project ID with their own repository name.",
+            "files": self.connection_files(server_url, project.project_id, project.name, repository),
+            "next": "Write the files for the coding agents this team uses, creating or merging each as its `how` "
+            "says and keeping anything already there, then ask the member to commit them. Each member sets their "
+            "personal token once in the SHARED_MEMORY_TOKEN environment variable. Other repositories of the same "
+            "product use the same project ID with their own repository name.",
         }
 
     def settings_for(self, project_id: str, repository: str) -> dict[str, Any]:
-        """What one repository commits into .claude/settings.json to connect its sessions to a project."""
-        return {
-            "extraKnownMarketplaces": {
-                "shared-memory": {"source": {"source": "github", "repo": self._settings.plugin_marketplace}}
-            },
-            "enabledPlugins": {"shared-memory@shared-memory": True},
-            "env": {"SHARED_MEMORY_PROJECT": project_id, "SHARED_MEMORY_REPOSITORY": repository},
-        }
+        """What one repository commits into .claude/settings.json to connect its Claude Code sessions to a project."""
+        return claude_settings(self._settings.plugin_marketplace, project_id, repository)
+
+    def connection_files(
+        self, server_url: str, project_id: str, project_name: str, repository: str
+    ) -> list[dict[str, Any]]:
+        """Every file that connects one repository to its project, for each coding agent."""
+        return connection_kit(
+            server_url=self._settings.console_url or server_url,
+            marketplace=self._settings.plugin_marketplace,
+            project_id=project_id,
+            project_name=project_name,
+            repository=repository,
+        )
 
     def remember(
         self,

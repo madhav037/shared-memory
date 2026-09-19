@@ -70,6 +70,12 @@ def _reported_client(ctx: Context) -> str | None:
     return params.client_info.name if params is not None and params.client_info is not None else None
 
 
+def _server_url(ctx: Context) -> str:
+    """Where this server was reached, for the files that point other sessions at it."""
+    request = ctx.request_context.request
+    return str(request.base_url).rstrip("/") if request is not None else ""
+
+
 def _bearer(value: str | None) -> str | None:
     if value and value.lower().startswith("bearer "):
         return value[7:].strip() or None
@@ -209,12 +215,12 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     def create_project(name: str, ctx: Context, repository: str = "app") -> dict[str, Any]:
         """Create a project in your team.
 
-        repository is this repository's short name. Merge the returned settings into the repository's committed
-        .claude/settings.json: they install the Shared Memory plugin for everyone who opens the repository and
-        connect every session in it to the project. You become the project's first project lead.
+        repository is this repository's short name. Write the returned files for the coding agents your team uses and
+        commit them: they connect every session in the repository to the project, whichever agent it runs in. You
+        become the project's first project lead.
         """
         current = caller(ctx)
-        created = service.create_project(current, name, repository)
+        created = service.create_project(current, name, repository, _server_url(ctx))
         audit.record(
             PROJECT_CREATED, member=current.member, project_id=created["project_id"], detail={"name": created["name"]}
         )

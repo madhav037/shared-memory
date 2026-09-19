@@ -152,11 +152,22 @@ class Projects(BaseModel):
     projects: list[ProjectSummary]
 
 
+class ConnectionFile(BaseModel):
+    """One file a repository commits to connect a coding agent's sessions to its project."""
+
+    agent: str
+    path: str
+    action: str
+    how: str
+    contents: str
+
+
 class ProjectRepository(BaseModel):
     """A repository of a project, with what it commits to connect its sessions to the project."""
 
     name: str
     settings: str
+    files: list[ConnectionFile]
 
 
 class ProjectDetail(BaseModel):
@@ -1098,13 +1109,13 @@ class ConsoleApi:
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         self._audit.record(PROJECT_CREATED, member=member, project_id=project.project_id, detail={"name": project.name})
-        return self._project_now(member, project.project_id)
+        return self._project_now(request, member, project.project_id)
 
     def _project(self, request: Request) -> Response:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        return self._project_now(member, request.path_params["project_id"])
+        return self._project_now(request, member, request.path_params["project_id"])
 
     def _rename_project(self, request: Request) -> Response:
         def rename(member: Member, caller: Caller, project_id: str) -> None:
@@ -1182,21 +1193,24 @@ class ConsoleApi:
             change(member, self._identity.caller_in(member, project_id), project_id)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        return self._project_now(member, project_id)
+        return self._project_now(request, member, project_id)
 
-    def _project_now(self, member: Member, project_id: str) -> Response:
+    def _project_now(self, request: Request, member: Member, project_id: str) -> Response:
         try:
             found = self._identity.project_detail(member, project_id)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        detail = ProjectDetail(
-            **{**found, "repositories": [self._repository(project_id, name) for name in found["repositories"]]}
-        )
+        server_url = str(request.base_url).rstrip("/")
+        repositories = [self._repository(server_url, project_id, found["name"], name) for name in found["repositories"]]
+        detail = ProjectDetail(**{**found, "repositories": repositories})
         return JSONResponse(detail.model_dump(mode="json"))
 
-    def _repository(self, project_id: str, name: str) -> ProjectRepository:
+    def _repository(self, server_url: str, project_id: str, project_name: str, name: str) -> ProjectRepository:
         settings = self._service.settings_for(project_id, name)
-        return ProjectRepository(name=name, settings=json.dumps(settings, indent=2))
+        files = self._service.connection_files(server_url, project_id, project_name, name)
+        return ProjectRepository(
+            name=name, settings=json.dumps(settings, indent=2), files=[ConnectionFile(**file) for file in files]
+        )
 
     def _tree(self, request: Request) -> Response:
         def walk(caller: Caller) -> Tree:
