@@ -107,8 +107,9 @@ export function App() {
 function Wordmark({ team }: { team: string | null }) {
   return (
     <Link to="/" className="wordmark" aria-label="Shared Memory, contents">
+      <i className="wordmark-mark" aria-hidden />
       <b>Shared Memory</b>
-      {team && <span>{team}</span>}
+      {team && <span className="wordmark-team">{team}</span>}
     </Link>
   );
 }
@@ -257,7 +258,7 @@ function MemberMenu({
         <UnstyledButton
           data-testid="member-menu"
           aria-label={`${member.name}: your token, appearance and signing out`}
-          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.875rem", fontWeight: 550 }}
+          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9375rem", fontWeight: 600 }}
         >
           <span className="only-small" aria-hidden style={{ display: "inline-flex" }}>
             <IconMenu2 size={20} stroke={1.6} />

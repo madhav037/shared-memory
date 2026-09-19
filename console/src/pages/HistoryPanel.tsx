@@ -1,11 +1,12 @@
-import { Slider, Switch } from "@mantine/core";
-import { IconArrowForwardUp } from "@tabler/icons-react";
+import { Slider } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchHistoryAt, fetchVersionAt, type MemoryVersion } from "../api/client";
+import { Amended } from "../components/Amended";
 import { changed, wordDiff } from "../lib/diff";
 import { bodyOf, day, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
+import { inForce, whatHappened } from "../lib/versions";
 
 /** What the header of a memory file says, line by line, so a change to its standing can be named. */
 function headerOf(text: string): Map<string, string> {
@@ -93,138 +94,142 @@ export function useHistory(path: string): History | null {
   };
 }
 
-/** The slider over a memory's versions, set right under its text so moving it changes what you read. */
-export function Timeline({ history }: { history: History }) {
+/** Which parts of the header the version being read changed, in words. */
+export function headerChanges(history: History): string[] {
+  const { now, then } = history;
+  if (now === undefined || then === undefined) return [];
+  const was = headerOf(then);
+  const is = headerOf(now);
+  return [...new Set([...was.keys(), ...is.keys()])]
+    .filter((key) => was.get(key) !== is.get(key))
+    .map((key) => FIELD_NAMES[key] ?? key);
+}
+
+/** The point in time the memory is read at: from when it was first written to now, one stop per version. */
+export function Timeline({ history, standing }: { history: History; standing: string }) {
   if (history.versions.length < 2) return null;
   const last = history.versions.length - 1;
+  const cancelled = standing === "retired" || standing === "superseded";
+  const ink = !history.current ? "var(--past)" : cancelled ? "var(--ink-3)" : "var(--accent)";
   return (
-    <div className="timeline" data-testid="timeline">
-      <span>{day(history.versions[0]?.at)}</span>
+    <div className={history.current ? (cancelled ? "timeline cancelled" : "timeline") : "timeline past"} data-testid="timeline">
+      <span className="timeline-end">
+        First written
+        <small>{day(history.versions[0]?.at)}</small>
+      </span>
       <Slider
         min={0}
         max={last}
         step={1}
         value={history.position}
         onChange={(value) => history.moveTo(value === last ? null : value)}
-        label={(value) => `${day(history.versions[value]?.at)} · ${history.versions[value]?.message ?? ""}`}
+        label={(value) => `Version ${value + 1} · ${day(history.versions[value]?.at)}`}
         marks={history.versions.map((_, place) => ({ value: place }))}
         size="sm"
         aria-label="Read it as it stood at"
         data-testid="history-slider"
         styles={{
           track: { "--slider-track-bg": "var(--rule)" } as React.CSSProperties,
+          bar: { background: ink },
+          thumb: { borderColor: ink, background: "var(--paper)" },
           mark: { borderColor: "var(--rule)", background: "var(--paper)" },
         }}
       />
-      <span>{history.current ? "Now" : `Version ${history.position + 1} of ${history.versions.length}`}</span>
-    </div>
-  );
-}
-
-/** Above the text while it shows an earlier version: when it stood like that, and the way back. */
-export function AsItStood({ history }: { history: History }) {
-  if (history.current || !history.version) return null;
-  const { now, then } = history;
-  const headerChanges =
-    now !== undefined && then !== undefined
-      ? [...new Set([...headerOf(then).keys(), ...headerOf(now).keys()])].filter(
-          (key) => headerOf(then).get(key) !== headerOf(now).get(key),
-        )
-      : [];
-  return (
-    <div className="as-it-stood" data-testid="history-stamp" role="status">
-      <span>
-        As it stood on <b>{moment(history.version.at)}</b>, after “{history.version.message}” by {history.version.name}.
+      <span className="timeline-end now">
+        {!history.current
+          ? `Version ${history.position + 1} of ${history.versions.length}`
+          : standing === "retired"
+            ? "Retired"
+            : standing === "superseded"
+              ? "Superseded"
+              : "Current"}
+        <small>{history.current && !cancelled ? "as in force" : day(history.version?.at)}</small>
       </span>
-      <button type="button" className="quiet-link" onClick={() => history.moveTo(null)} data-testid="back-to-now">
-        <IconArrowForwardUp size={14} stroke={1.6} aria-hidden />
-        Back to the current text
-      </button>
-      {history.position > 0 && (
-        <Switch
-          size="xs"
-          label="Mark what this version changed"
-          checked={history.marked}
-          onChange={(event) => history.setMarked(event.currentTarget.checked)}
-        />
-      )}
-      {history.marked && headerChanges.length > 0 && (
-        <span className="note">This version also changed {headerChanges.map((key) => FIELD_NAMES[key] ?? key).join(", ")}.</span>
-      )}
     </div>
   );
 }
 
-/** The memory's text as it stood at an earlier version, with what that version took out and put in marked. */
+/** The memory's text as it stood at an earlier version, with what that version put in and took out marked up. */
 export function ThenText({ history }: { history: History }) {
   const { now, then, marked } = history;
-  if (now === undefined) return <p className="then-text" aria-busy="true" style={{ color: "var(--ink-3)" }}>…</p>;
+  if (now === undefined)
+    return (
+      <p className="then-text" aria-busy="true" style={{ color: "var(--ink-3)" }}>
+        …
+      </p>
+    );
   const pieces = marked && then !== undefined ? wordDiff(bodyOf(then), bodyOf(now)) : null;
+  const source = history.version
+    ? `version ${history.position + 1} (${history.version.name}, ${moment(history.version.at)})`
+    : "this version";
   return (
     <div className="then-text" data-testid="version-text" aria-live="polite">
-      {pieces && changed(pieces)
-        ? pieces.map((piece, place) =>
-            piece.kind === "insert" ? (
-              <ins key={place}>{piece.text}</ins>
-            ) : piece.kind === "delete" ? (
-              <del key={place}>{piece.text}</del>
-            ) : (
-              <span key={place}>{piece.text}</span>
-            ),
-          )
-        : bodyOf(now)}
-      {pieces && !changed(pieces) && <span className="unchanged">Its text didn’t change in this version.</span>}
+      {pieces && changed(pieces) ? (
+        <Amended pieces={pieces} source={source} />
+      ) : (
+        <div className="amended">{bodyOf(now)}</div>
+      )}
+      {pieces && !changed(pieces) && <p className="unchanged">This version didn’t change its text.</p>}
     </div>
   );
 }
 
-/** Every version, newest first: the record, and a way to open any of them. */
-export function HistoryLedger({ history, onPick }: { history: History; onPick: () => void }) {
+/** Every version, newest first, in words: what it did, who did it, and when it was the text. */
+export function HistoryLedger({
+  history,
+  title,
+  standing,
+  onPick,
+}: {
+  history: History;
+  title: string;
+  standing: string;
+  onPick: () => void;
+}) {
   const newestFirst = [...history.versions].reverse();
   return (
     <section className="history" aria-labelledby="history-heading" id="history">
-      <h2 className="section-heading" id="history-heading" style={{ marginTop: 0 }}>
-        History
+      <h2 className="section-heading" id="history-heading">
+        Versions
       </h2>
       <p className="section-lede">
-        Every version of this memory, from the server’s record, back to when it was first written. Open one to read the
-        memory as it stood then.
+        Every version of this memory from the server’s record, newest first. Open one to read the memory as it stood.
       </p>
-      <table className="ledger" data-testid="versions">
-        <caption className="visually-hidden">Every version, newest first</caption>
-        <thead>
-          <tr>
-            <th scope="col">When</th>
-            <th scope="col">Who</th>
-            <th scope="col">What happened</th>
-          </tr>
-        </thead>
-        <tbody>
-          {newestFirst.map((one) => {
-            const place = history.versions.indexOf(one);
-            const latest = place === history.versions.length - 1;
-            return (
-              <tr key={one.commit} aria-selected={place === history.position}>
-                <td style={{ whiteSpace: "nowrap" }}>{moment(one.at)}</td>
-                <td>{one.name}</td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      history.moveTo(latest ? null : place);
-                      onPick();
-                    }}
-                    data-testid="version-row"
-                  >
-                    {one.message}
-                  </button>
-                  {latest && <span style={{ color: "var(--ink-3)" }}> · current</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <ol className="versions" data-testid="versions" reversed>
+        {newestFirst.map((one) => {
+          const place = history.versions.indexOf(one);
+          const latest = place === history.versions.length - 1;
+          const reading = place === history.position;
+          return (
+            <li key={one.commit} aria-current={reading ? "true" : undefined}>
+              <span className="version-number" aria-hidden>
+                {place + 1}
+              </span>
+              <div>
+                <p className="version-what">{whatHappened(one, title)}.</p>
+                <p className="version-when">
+                  {inForce(history.versions, place, standing)}.{" "}
+                  {reading ? (
+                    <span className="version-reading">{latest ? "The text above." : "You’re reading it."}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="quiet-link"
+                      onClick={() => {
+                        history.moveTo(latest ? null : place);
+                        onPick();
+                      }}
+                      data-testid="version-row"
+                    >
+                      {latest ? "Back to the current text" : `Read version ${place + 1}`}
+                    </button>
+                  )}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

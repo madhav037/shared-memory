@@ -13,7 +13,7 @@ test("the owner decides a challenge waiting for them and the memory is supersede
 
   await page.getByTestId("decide-them").click();
   const dispute = page.getByTestId("waiting");
-  await expect(dispute.locator("del").first()).toBeVisible();
+  await expect(dispute.getByRole("list", { name: "Amendments" })).toContainText("Words substituted by the offer from");
   await expect(dispute.locator("ins").first()).toContainText("02:17 UTC");
   await dispute.getByRole("button", { name: "Accept: supersede it" }).click();
   await expect(page.getByTestId("nothing-waiting")).toBeVisible();

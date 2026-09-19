@@ -40,6 +40,12 @@ const WORDS: Record<string, string> = {
   access_revoked: "Access taken away",
 };
 
+/** Which level a memory path sits at: team memory, a project's accepted memory, or a member's personal memory. */
+function levelOf(path: string): string {
+  if (path.startsWith("team/")) return "team";
+  return path.split("/")[2] === "people" ? "personal" : "project";
+}
+
 /** A memory file, named the way the contents name it, linked to where it can be read. */
 function FileLink({ path }: { path: string }) {
   return (
@@ -61,10 +67,10 @@ function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: 
   if (text("type")) said.push(text("type") === "architecture" ? "As architecture" : `As a ${typeName(text("type")!).toLowerCase()}`);
   if (text("was"))
     said.push(
-      <>
-        From <FileLink path={text("was")!} />
+      <span title={text("was")!}>
+        From {levelOf(text("was")!)} memory
         {level ? ` into ${level} memory` : ""}
-      </>,
+      </span>,
     );
   else if (level && !text("pinned")) said.push(`Into ${level} memory`);
   if (text("pinned")) said.push(text("pinned") === "topic" ? "A whole topic" : level ? `A ${level} memory` : "A memory");
@@ -213,8 +219,10 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                       <td className="primary who-cell" title={event.actor}>
                         {nameOf(event.actor)}
                       </td>
-                      <td style={{ color: "var(--ink)" }}>{WORDS[event.kind] ?? event.kind}</td>
-                      <td>
+                      <td className="what-cell" style={{ color: "var(--ink)" }}>
+                        {WORDS[event.kind] ?? event.kind}
+                      </td>
+                      <td className="where-cell">
                         {projectName(event.project_id)}
                         {event.target && (
                           <div style={{ overflowWrap: "anywhere" }}>

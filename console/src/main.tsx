@@ -6,9 +6,18 @@ import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { theme } from "./theme";
 
-import "@fontsource-variable/public-sans";
-import "@fontsource-variable/source-serif-4/opsz.css";
-import "@fontsource-variable/source-serif-4/opsz-italic.css";
+import "@fontsource/charis-sil/400.css";
+import "@fontsource/charis-sil/400-italic.css";
+import "@fontsource/charis-sil/700.css";
+import "@fontsource/charis-sil/700-italic.css";
+import "@fontsource/cooper-hewitt/400.css";
+import "@fontsource/cooper-hewitt/400-italic.css";
+import "@fontsource/cooper-hewitt/500.css";
+import "@fontsource/cooper-hewitt/500-italic.css";
+import "@fontsource/cooper-hewitt/600.css";
+import "@fontsource/cooper-hewitt/700.css";
+import "@fontsource/cooper-hewitt/700-italic.css";
+import "@fontsource-variable/source-code-pro";
 import "@mantine/core/styles.css";
 import "./styles.css";
 

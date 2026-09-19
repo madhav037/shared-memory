@@ -1,42 +1,51 @@
 import { Button, createTheme, type MantineColorsTuple } from "@mantine/core";
 
 /**
- * The Consolidated Code: the team's memory published like a code of practice.
- * Buckram green is the binding colour of the volume; everything else is paper and ink.
+ * A modern public register: white paper, near-black ink, and one signal green for what is in force,
+ * the current place and the action to take. Buttons are solid, with a darker edge beneath them.
  */
-const buckram: MantineColorsTuple = [
-  "#e8f2ed",
-  "#d2e5db",
-  "#a6cbb8",
-  "#7cc4a0",
-  "#509874",
-  "#3a8a63",
-  "#2c7353",
-  "#1e5b46",
-  "#154a39",
-  "#0a3a2b",
+const signal: MantineColorsTuple = [
+  "#e7f3ec",
+  "#c6e5d2",
+  "#93d0ad",
+  "#4cc38a",
+  "#26a766",
+  "#118a4f",
+  "#00703c",
+  "#005a30",
+  "#004526",
+  "#002d18",
 ];
 
 export const theme = createTheme({
-  primaryColor: "buckram",
-  primaryShade: { light: 7, dark: 3 },
-  colors: { buckram },
-  fontFamily: '"Public Sans Variable", "Public Sans", ui-sans-serif, system-ui, sans-serif',
-  fontFamilyMonospace: 'ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace',
+  primaryColor: "signal",
+  primaryShade: { light: 6, dark: 3 },
+  colors: { signal },
+  fontFamily: '"Cooper Hewitt", "Helvetica Neue", Arial, sans-serif',
+  fontFamilyMonospace: '"Source Code Pro Variable", "Source Code Pro", ui-monospace, Menlo, Consolas, monospace',
   headings: {
-    fontFamily: '"Source Serif 4 Variable", "Source Serif 4", Georgia, serif',
-    fontWeight: "600",
+    fontFamily: '"Cooper Hewitt", "Helvetica Neue", Arial, sans-serif',
+    fontWeight: "700",
   },
   defaultRadius: 0,
-  radius: { xs: "0px", sm: "1px", md: "2px", lg: "2px", xl: "2px" },
-  fontSizes: { xs: "0.8125rem", sm: "0.875rem", md: "1rem", lg: "1.125rem", xl: "1.375rem" },
+  radius: { xs: "0px", sm: "0px", md: "0px", lg: "0px", xl: "0px" },
+  fontSizes: { xs: "0.8125rem", sm: "0.9375rem", md: "1rem", lg: "1.125rem", xl: "1.375rem" },
   focusRing: "auto",
   cursorType: "pointer",
   components: {
-    // Filled buttons take the binding colour with its own ink, so they read in both themes.
+    // Filled buttons take the signal colour with its own ink; the edge beneath them is drawn in styles.css.
     Button: Button.extend({
       defaultProps: { radius: 0 },
       vars: (_theme, props) => {
+        if (props.variant === "default")
+          return {
+            root: {
+              "--button-bg": "var(--paper-3)",
+              "--button-hover": "var(--rule-soft)",
+              "--button-color": "var(--ink)",
+              "--button-bd": "1px solid transparent",
+            },
+          };
         if (props.variant && props.variant !== "filled") return { root: {} };
         const danger = props.color === "red";
         return {
@@ -47,10 +56,21 @@ export const theme = createTheme({
           },
         };
       },
+      // The edge each button stands on: darker than its face, the way GOV.UK draws them.
+      styles: (_theme, props) => ({
+        root: {
+          "--edge":
+            props.variant === "default"
+              ? "var(--field-edge)"
+              : props.color === "red"
+                ? "var(--danger-edge)"
+                : "var(--accent-edge)",
+        } as React.CSSProperties,
+      }),
     }),
     TextInput: { defaultProps: { radius: 0 } },
     Select: { defaultProps: { radius: 0 } },
-    Menu: { defaultProps: { radius: 0, shadow: "sm" } },
+    Menu: { defaultProps: { radius: 0, shadow: "md" } },
     Drawer: { defaultProps: { radius: 0 } },
     Tooltip: { defaultProps: { radius: 0, withArrow: false, openDelay: 250 } },
     Switch: { defaultProps: { radius: 0 } },

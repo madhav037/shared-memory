@@ -196,7 +196,7 @@ function MemberRow({
           <span style={{ color: "var(--ink-3)" }}>not linked</span>
         )}
       </td>
-      <td style={{ fontWeight: member.role === "member" ? 400 : 650, color: member.role === "member" ? undefined : "var(--ink)" }}>
+      <td style={{ fontWeight: member.role === "member" ? 400 : 700, color: member.role === "member" ? undefined : "var(--ink)" }}>
         {ROLE_WORDS[member.role] ?? member.role}
       </td>
     </>

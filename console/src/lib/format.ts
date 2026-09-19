@@ -7,6 +7,13 @@ const momentFormat = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
+const longDayFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" });
+
+/** "17 September 2026" */
+export function longDay(at: string | null | undefined): string {
+  return at ? longDayFormat.format(new Date(at)) : "";
+}
+
 /** "17 Sep 2026" */
 export function day(at: string | null | undefined): string {
   return at ? dayFormat.format(new Date(at)) : "";

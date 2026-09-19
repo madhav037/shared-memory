@@ -1,5 +1,16 @@
-import { Button, CopyButton, Tooltip } from "@mantine/core";
-import { IconArchive, IconCopy, IconCheck, IconPin, IconPinnedOff, IconScale, IconUser } from "@tabler/icons-react";
+import { Button, Checkbox, CopyButton, Tooltip } from "@mantine/core";
+import {
+  IconArchive,
+  IconArrowBackUp,
+  IconCheck,
+  IconClockHour4,
+  IconCopy,
+  IconPin,
+  IconPinnedOff,
+  IconScale,
+  IconShieldCheck,
+  IconUser,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -7,9 +18,10 @@ import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../a
 import { PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../components/Contents";
 import { Prose } from "../components/Prose";
-import { day, memoryUrl, plural, typeName } from "../lib/format";
+import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
-import { AsItStood, HistoryLedger, ThenText, Timeline, useHistory, type History } from "./HistoryPanel";
+import { inForce, whatHappened } from "../lib/versions";
+import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "./HistoryPanel";
 
 /** One memory, set as printed text, with its standing in the margin and its history below. */
 export function MemoryPage() {
@@ -51,7 +63,8 @@ export function MemoryPage() {
           )}
           <span className={cancelled ? "cancelled-title" : undefined}>{memory.title}</span>
         </h1>
-        <p className="standfirst">{memory.summary}</p>
+        <p className="standfirst summary">{memory.summary}</p>
+        {history && <Currency history={history} />}
         <p className="standing-line" aria-hidden>
           <Rank level={memory.level} />
           <StatusMark status={memory.status} />
@@ -59,7 +72,7 @@ export function MemoryPage() {
           <span>by {memory.author_name}</span>
         </p>
 
-        <Banners memory={memory} />
+        <Status memory={memory} history={history} />
       </header>
 
       <Margin memory={memory} history={history} onChanged={reload} />
@@ -86,8 +99,7 @@ export function MemoryPage() {
           </button>
         </div>
 
-        {history && <Timeline history={history} />}
-        {history && <AsItStood history={history} />}
+        {history && <Timeline history={history} standing={memory.status} />}
 
         {history && !history.current ? (
           view === "text" ? (
@@ -110,6 +122,8 @@ export function MemoryPage() {
         {history && (
           <HistoryLedger
             history={history}
+            title={memory.title}
+            standing={memory.status}
             onPick={() => text.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
           />
         )}
@@ -118,46 +132,108 @@ export function MemoryPage() {
   );
 }
 
-function Banners({ memory }: { memory: MemoryDetail }) {
-  const { nameOf } = useContents();
+/** When it was first written and last amended, and by whom: how current the text in front of you is. */
+function Currency({ history }: { history: History }) {
+  const first = history.versions[0];
+  const last = history.versions[history.versions.length - 1];
+  if (!first || !last) return null;
   return (
-    <>
-      {memory.status === "superseded" && memory.superseded_by && (
-        <p className="banner" data-testid="superseded-by">
-          <span className="dagger" aria-hidden>
-            †
-          </span>
-          <span>
-            <b>Superseded.</b> Another memory has taken its place; this one stays for the record.{" "}
-            <Link to={memoryUrl(memory.superseded_by)}>Read what replaced it</Link>
-            <span className="visually-hidden"> ({memory.superseded_by})</span>
-          </span>
-        </p>
+    <p className="currency" data-testid="currency">
+      <span>First written {day(first.at)}</span>
+      {history.versions.length > 1 && (
+        <span>
+          Last amended {moment(last.at)} by {last.name}
+        </span>
       )}
-      {memory.status === "retired" && (
-        <p className="banner" data-testid="retired-banner">
-          <IconArchive size={16} stroke={1.6} aria-hidden />
-          <span>
-            <b>Retired.</b> It is no longer true, so no session is briefed with it or recalls it. It stays for the record.
-          </span>
-        </p>
-      )}
-      {memory.level === "personal" && (
-        <p className="banner dashed" data-testid="personal-banner">
-          <IconUser size={16} stroke={1.6} aria-hidden />
-          <span>
-            <b>Personal memory of {memory.author_name}.</b> The team can read it, but hasn’t accepted it: it becomes project
-            or team memory only when its author promotes it from Claude.
-          </span>
-        </p>
-      )}
-      {memory.open_challenges.length > 0 && (
-        <p className="banner" data-testid="open-challenges">
-          <IconScale size={16} stroke={1.6} aria-hidden />
-          <span>
+      <a href="#history">{plural(history.versions.length, "version")}</a>
+    </p>
+  );
+}
+
+/**
+ * The one box that says where this text stands: in force, challenged, cancelled, personal,
+ * or, while an earlier version is open, the point in time it is being read at.
+ */
+function Status({ memory, history }: { memory: MemoryDetail; history: History | null }) {
+  const { nameOf, projects } = useContents();
+
+  if (history && !history.current && history.version) {
+    const changes = history.marked ? headerChanges(history) : [];
+    return (
+      <div className="status past" role="status" data-testid="history-stamp">
+        <IconClockHour4 size={18} stroke={1.6} aria-hidden />
+        <div>
+          <p>
             <b>
-              {memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}
+              As it stood: version {history.position + 1} of {history.versions.length}.
             </b>{" "}
+            {whatHappened(history.version, memory.title)}. {inForce(history.versions, history.position)}.
+            {changes.length > 0 && ` This version also changed ${changes.join(", ")}.`}
+          </p>
+          <div className="status-actions">
+            <button type="button" className="quiet-link" onClick={() => history.moveTo(null)} data-testid="back-to-now">
+              <IconArrowBackUp size={15} stroke={1.6} aria-hidden />
+              Back to the current text
+            </button>
+            {history.position > 0 && (
+              <Checkbox
+                size="xs"
+                radius={0}
+                label="Mark what this version changed"
+                checked={history.marked}
+                onChange={(event) => history.setMarked(event.currentTarget.checked)}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (memory.status === "superseded")
+    return (
+      <div className="status cancelled">
+        <span className="dagger" aria-hidden>
+          †
+        </span>
+        <p data-testid="superseded-by">
+          <b>Superseded.</b> Another memory has taken its place; this one stays for the record.{" "}
+          {memory.superseded_by && (
+            <>
+              <Link to={memoryUrl(memory.superseded_by)}>Read what replaced it</Link>
+              <span className="visually-hidden"> ({memory.superseded_by})</span>
+            </>
+          )}
+        </p>
+      </div>
+    );
+
+  if (memory.status === "retired")
+    return (
+      <div className="status cancelled">
+        <IconArchive size={18} stroke={1.6} aria-hidden />
+        <p data-testid="retired-banner">
+          <b>Retired.</b> It is no longer true, so no session is briefed with it or recalls it. It stays for the record.
+        </p>
+      </div>
+    );
+
+  const challenged = memory.open_challenges.length > 0;
+  const personal = memory.level === "personal";
+  const project = projects.get(projectIn(memory.path) ?? "")?.name;
+  return (
+    <div className={challenged ? "status challenged" : personal ? "status personal" : "status in-force"}>
+      {challenged ? (
+        <IconScale size={18} stroke={1.6} aria-hidden />
+      ) : personal ? (
+        <IconUser size={18} stroke={1.6} aria-hidden />
+      ) : (
+        <IconShieldCheck size={18} stroke={1.6} aria-hidden />
+      )}
+      <div>
+        {challenged && (
+          <p data-testid="open-challenges">
+            <b>{memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}</b>{" "}
             {memory.open_challenges
               .map((challenge) =>
                 challenge.kind === "retire"
@@ -165,14 +241,27 @@ function Banners({ memory }: { memory: MemoryDetail }) {
                   : `${nameOf(challenge.raised_by)} wants to supersede it`,
               )
               .join("; ")}
-            . Until its author decides, it stands as it is. <Link to="/challenges">See the challenges</Link>
-          </span>
-        </p>
-      )}
-      {memory.pending.length > 0 && (
-        <p className="banner" data-testid="pending">
-          <IconScale size={16} stroke={1.6} aria-hidden />
-          <span>
+            . Until its author decides, it stands as it is. <Link to="/challenges">Compare and decide</Link>
+          </p>
+        )}
+        {personal ? (
+          <p data-testid="personal-banner">
+            <b>Personal memory of {memory.author_name}.</b> The team can read it, but hasn’t accepted it: it becomes
+            project or team memory only when its author promotes it from Claude.
+          </p>
+        ) : (
+          !challenged && (
+            <p data-testid="in-force">
+              <b>In force.</b>{" "}
+              {memory.level === "team"
+                ? "It holds for every project: Claude sessions anywhere in the team recall it."
+                : `It holds for everyone on ${project ?? "this project"}: their Claude sessions recall it.`}
+              {memory.pinned && " It is pinned, so sessions start with it in their briefing."}
+            </p>
+          )
+        )}
+        {memory.pending.length > 0 && (
+          <p data-testid="pending">
             <b>Waiting on a challenge.</b> Offered in place of{" "}
             {memory.pending.map((challenge, place) => (
               <span key={challenge.challenge_id}>
@@ -181,10 +270,10 @@ function Banners({ memory }: { memory: MemoryDetail }) {
               </span>
             ))}
             ; its author decides.
-          </span>
-        </p>
-      )}
-    </>
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -282,30 +371,9 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
             </dd>
           </>
         )}
-        {history && history.versions.length > 0 && (
-          <>
-            <dt>History</dt>
-            <dd>
-              <a href="#history">{plural(history.versions.length, "version")}</a>
-              <span style={{ color: "var(--ink-3)" }}>
-                , last changed {day(history.versions[history.versions.length - 1]?.at)} by{" "}
-                {history.versions[history.versions.length - 1]?.name}
-              </span>
-            </dd>
-          </>
-        )}
-        <dt>Path</dt>
-        <dd style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-          <span className="path">{memory.path}</span>
-          <CopyButton value={memory.path}>
-            {({ copied, copy }) => (
-              <Tooltip label={copied ? "Copied" : "Copy the path"}>
-                <button type="button" className="quiet-link" onClick={copy} aria-label="Copy the path">
-                  {copied ? <IconCheck size={14} stroke={1.8} /> : <IconCopy size={14} stroke={1.6} />}
-                </button>
-              </Tooltip>
-            )}
-          </CopyButton>
+        <dt>Cite as</dt>
+        <dd>
+          <Citation memory={memory} history={history} />
         </dd>
       </dl>
 
@@ -378,5 +446,40 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
         </div>
       )}
     </aside>
+  );
+}
+
+/**
+ * The memory at the version on the page, the way a pull request or an issue can point at it exactly:
+ * its path, then the commit that version was made in.
+ */
+function Citation({ memory, history }: { memory: MemoryDetail; history: History | null }) {
+  const commit = history?.version?.commit;
+  const stamp = commit ? `${memory.path}@${commit.slice(0, 7)}` : memory.path;
+  return (
+    <span className="citation">
+      <code data-testid="citation">
+        {memory.path.split("/").map((part, place, parts) => (
+          <span key={place}>
+            {part}
+            {place < parts.length - 1 && (
+              <>
+                /<wbr />
+              </>
+            )}
+          </span>
+        ))}
+        {commit && <b>@{commit.slice(0, 7)}</b>}
+      </code>
+      <CopyButton value={stamp}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? "Copied" : "Copy the citation"}>
+            <button type="button" className="quiet-link" onClick={copy} aria-label="Copy the citation">
+              {copied ? <IconCheck size={14} stroke={1.8} /> : <IconCopy size={14} stroke={1.6} />}
+            </button>
+          </Tooltip>
+        )}
+      </CopyButton>
+    </span>
   );
 }

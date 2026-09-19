@@ -6,13 +6,14 @@ test("a member moves through a memory's history, back past its promotion", async
   await signInAs(page, 1, "olive");
   await openInContents(page, "Billing", "Project memory", "Conventions", "Use pnpm, not npm");
 
-  const versions = page.getByTestId("versions").locator("tbody tr");
-  await expect(versions.first()).toContainText("Promote");
-  await expect(versions.last()).toContainText("Remember");
+  const versions = page.getByTestId("versions").locator("li");
+  await expect(versions.first()).toContainText("Promoted by Olive Owner");
+  await expect(versions.last()).toContainText("First written by Olive Owner");
 
   await page.getByTestId("version-row").last().click();
 
-  await expect(page.getByTestId("history-stamp")).toContainText("Remember: Use pnpm, not npm");
+  await expect(page.getByTestId("history-stamp")).toContainText("As it stood: version 1");
+  await expect(page.getByTestId("history-stamp")).toContainText("First written by Olive Owner");
   await expect(page.getByTestId("version-text")).toContainText("second lockfile");
   await expect(page.getByTestId("memory-body")).toHaveCount(0);
 

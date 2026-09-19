@@ -50,7 +50,7 @@ export function MyToken({ member }: { member: SignedInMember }) {
           </>,
         ].map((step, place) => (
           <li key={place} className="entry" style={{ display: "grid", gridTemplateColumns: "28px 1fr", gap: 8 }}>
-            <span style={{ fontFamily: "var(--serif)", fontWeight: 620, color: "var(--accent)" }}>{place + 1}.</span>
+            <span style={{ fontWeight: 700, color: "var(--accent)" }}>{place + 1}.</span>
             <span style={{ fontSize: "0.9375rem", lineHeight: 1.6, color: "var(--ink)" }}>{step}</span>
           </li>
         ))}

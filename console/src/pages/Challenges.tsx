@@ -1,4 +1,4 @@
-import { Button, Switch } from "@mantine/core";
+import { Button, Checkbox } from "@mantine/core";
 import { IconScale } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -10,6 +10,7 @@ import {
   type ChallengeDetail,
   type RaisedChallenge,
 } from "../api/client";
+import { Amended } from "../components/Amended";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
 import { useContents } from "../components/Contents";
 import { changed, wordDiff } from "../lib/diff";
@@ -80,7 +81,8 @@ function Waiting({
 
   return (
     <div data-testid="waiting">
-      <Switch
+      <Checkbox
+        radius={0}
         size="xs"
         label="Mark what each offer changes"
         checked={marked}
@@ -151,19 +153,13 @@ function Proposal({
                 {offered.title}
               </Link>
               <p className="by">Offered in its place by {who(offered.author)}</p>
-              <p className="body">
-                {marked && pieces && changed(pieces)
-                  ? pieces.map((piece, place) =>
-                      piece.kind === "insert" ? (
-                        <ins key={place}>{piece.text}</ins>
-                      ) : piece.kind === "delete" ? (
-                        <del key={place}>{piece.text}</del>
-                      ) : (
-                        <span key={place}>{piece.text}</span>
-                      ),
-                    )
-                  : offered.body}
-              </p>
+              <div className="body">
+                {marked && pieces && changed(pieces) ? (
+                  <Amended pieces={pieces} source={`the offer from ${who(offered.author)} (${day(challenge.raised_at)})`} />
+                ) : (
+                  offered.body
+                )}
+              </div>
             </>
           ) : (
             <>

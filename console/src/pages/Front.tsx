@@ -1,22 +1,23 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconBrandGithub, IconScale } from "@tabler/icons-react";
+import { IconArrowRight, IconBrandGithub, IconScale } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { createProject, fetchChallenges, fetchFolder, signInUrl, type SignedInMember, type Status } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { useContents } from "../components/Contents";
-import { day, folderUrl, memoryUrl, plural } from "../lib/format";
+import { day, folderUrl, longDay, memoryUrl, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
-/** Before signing in: the title page of the team's code. */
+/** Before signing in: the title page of the team's memory, and what the console is for. */
 export function TitlePage({ status, refused }: { status: Status; refused: string | null }) {
   return (
     <div className="title-page">
       <div className="title-page-inner">
         <h1>Shared Memory</h1>
-        <p data-testid="status">
-          The memory every Claude session on your team reads and writes. Connected to the server; sign in to read it.
+        <p className="long-title">
+          The memory every Claude session on your team reads and writes, so that what one member’s Claude learns
+          reaches every other member’s Claude.
         </p>
         {refused && (
           <Refusal testid="sign-in-error">
@@ -27,8 +28,9 @@ export function TitlePage({ status, refused }: { status: Status; refused: string
           <Button
             component="a"
             href={signInUrl}
-            size="md"
-            leftSection={<IconBrandGithub size={18} stroke={1.6} />}
+            size="lg"
+            leftSection={<IconBrandGithub size={20} stroke={1.6} />}
+            rightSection={<IconArrowRight size={18} stroke={2} />}
             data-testid="sign-in"
           >
             Sign in with GitHub
@@ -36,7 +38,18 @@ export function TitlePage({ status, refused }: { status: Status; refused: string
         ) : (
           <p className="fine">Signing in with GitHub isn’t set up on this server yet. Whoever runs it sets the GitHub app’s details.</p>
         )}
-        <p className="fine">Your personal token stays in Claude Code. The console never asks for it.</p>
+        <p className="fine" data-testid="status">Connected to the server. Your personal token stays in Claude Code; the console never asks for it.</p>
+        <ul className="title-page-uses">
+          <li>
+            <b>Read it as Claude does.</b> Every memory your team and your projects hold, word for word.
+          </li>
+          <li>
+            <b>See how it came to say that.</b> Every version, who made it and when, with each amendment marked.
+          </li>
+          <li>
+            <b>Decide what stands.</b> Challenges waiting for you, side by side with what is offered in their place.
+          </li>
+        </ul>
       </div>
     </div>
   );
@@ -46,6 +59,11 @@ export function TitlePage({ status, refused }: { status: Status; refused: string
 export function Front({ member }: { member: SignedInMember }) {
   const { folders, projects, load } = useContents();
   const root = folders.get("");
+  const newest = root?.folders
+    .map((folder) => folder.changed)
+    .filter((changed): changed is string => Boolean(changed))
+    .sort()
+    .pop();
 
   useEffect(() => {
     if (!root) load("");
@@ -54,6 +72,11 @@ export function Front({ member }: { member: SignedInMember }) {
   return (
     <div className="column">
       <h1 className="page-title">Contents</h1>
+      {newest && (
+        <p className="currency" data-testid="current-to">
+          <span>Current to {longDay(newest)}</span>
+        </p>
+      )}
       <p className="standfirst">
         Everything the Claude sessions of team {member.team} read, set out folder by folder. Open a memory to read it
         exactly as Claude does, and to see who changed it and when.
@@ -100,6 +123,14 @@ export function Front({ member }: { member: SignedInMember }) {
       )}
 
       <NewProject />
+
+      <footer className="colophon">
+        <p>
+          Kept by the Shared Memory server in a git repository. Memory the team has accepted is never deleted: it is
+          superseded or retired, and every version stays in its history.
+        </p>
+        <p>Set in Cooper Hewitt, Charis SIL and Source Code Pro.</p>
+      </footer>
     </div>
   );
 }

@@ -148,10 +148,12 @@ function Results({ query, level, type }: { query: string; level: string; type: s
         {unique.map((hit) => (
           <li className={hit.level === "personal" ? "entry personal" : "entry"} key={hit.path}>
             <Link className="entry-title" to={memoryUrl(hit.path)}>
-              {hit.title}
+              <Marked text={hit.title} query={query} />
             </Link>
             {hit.heading !== hit.title && <p className="matched">Matched in “{hit.heading}”</p>}
-            <p className="entry-summary">{hit.summary}</p>
+            <p className="entry-summary">
+              <Marked text={hit.summary} query={query} />
+            </p>
             <div className="entry-meta">
               {hit.level !== "team" && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
               <Rank level={hit.level} />
@@ -164,5 +166,29 @@ function Results({ query, level, type }: { query: string; level: string; type: s
         ))}
       </ol>
     </div>
+  );
+}
+
+/** Words too common to be worth marking in a result. */
+const COMMON = new Set(["the", "and", "for", "how", "what", "why", "who", "when", "where", "our", "does", "with", "this", "that"]);
+
+/**
+ * A result's words that the question used, marked as with a highlighter. Search goes by meaning, so a result can
+ * match without sharing a word; then nothing is marked.
+ */
+function Marked({ text, query }: { text: string; query: string }) {
+  const words = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= 3 && !COMMON.has(word));
+  if (words.length === 0) return <>{text}</>;
+  // The words are letters and digits only, so they need no escaping.
+  const pattern = new RegExp(`(${words.join("|")})`, "giu");
+  return (
+    <>
+      {text.split(pattern).map((part, place) =>
+        place % 2 === 1 ? <mark key={place}>{part}</mark> : <span key={place}>{part}</span>,
+      )}
+    </>
   );
 }
