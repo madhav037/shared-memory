@@ -76,6 +76,7 @@ class Briefing:
     def pin(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
         target = pin_target(path)
+        caller.require_reach(target.path)
         rendered = self._render(caller.team, target)
         if rendered is None:
             raise Refused(f"There is no active memory or topic at {target.path!r} to pin.")
@@ -110,6 +111,7 @@ class Briefing:
     def unpin(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
         cleaned = path.replace("\\", "/").strip("/")
+        caller.require_reach(cleaned)
         with self._db.transaction() as conn:
             deleted = conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (caller.team, cleaned)).rowcount
         if not deleted:

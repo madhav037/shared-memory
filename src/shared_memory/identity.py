@@ -6,6 +6,7 @@ import hashlib
 import re
 import secrets
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory.clock import Clock
@@ -45,6 +46,18 @@ class Caller:
     member: Member
     project: Project | None
     repository: str | None
+    # The restricted projects this member isn't allowed into, worked out when the call was authenticated.
+    unreachable: frozenset[str] = frozenset()
+
+    def require_reach(self, path: str | None) -> None:
+        """Refuse a memory or folder inside a restricted project this member isn't allowed into.
+
+        A session is authenticated for the project it works in, but a path can point into any project, so every
+        call that takes one checks it too.
+        """
+        project_id = project_in(path) if path else None
+        if project_id is not None and project_id in self.unreachable:
+            raise restricted_project(project_id)
 
     @property
     def team(self) -> str:
@@ -70,6 +83,12 @@ def _hash(token: str) -> str:
 def _github_login(login: str | None) -> str | None:
     cleaned = (login or "").strip().lstrip("@")
     return cleaned or None
+
+
+def project_in(path: str) -> str | None:
+    """The project a memory path or folder is inside, or nothing for team memory."""
+    parts = PurePosixPath(path.replace("\\", "/").strip("/")).parts
+    return parts[1] if len(parts) >= 2 and parts[0] == "projects" else None
 
 
 def restricted_project(project_id: str) -> Refused:
@@ -153,7 +172,7 @@ class Identity:
                         "INSERT INTO repositories (project_id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                         (project.project_id, repository),
                     )
-            return Caller(member, project, repository or None)
+            return Caller(member, project, repository or None, self._unreachable(conn, member))
 
     def _require_admin(self, caller: Caller) -> None:
         if not (caller.member.is_owner or caller.member.is_admin):
@@ -401,6 +420,19 @@ class Identity:
             raise restricted_project(project_id)
         return Project(found["project_id"], found["name"])
 
+    @staticmethod
+    def _unreachable(conn: Conn, member: Member) -> frozenset[str]:
+        """The restricted projects of this member's team that they aren't allowed into."""
+        if member.is_owner or member.is_admin:
+            return frozenset()
+        rows = conn.execute(
+            "SELECT p.project_id FROM projects p WHERE p.team_id = %s AND p.restricted"
+            " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = %s)"
+            " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = %s)",
+            (member.team_pk, member.pk, member.pk),
+        ).fetchall()
+        return frozenset(row["project_id"] for row in rows)
+
     def _allowed_in(self, conn: Conn, member: Member, project_id: str) -> bool:
         """Who a restricted project lets in: the team's owner and admins, its leads, and its access list."""
         if member.is_owner or member.is_admin or self._leads_it(conn, member.pk, project_id):
@@ -412,10 +444,11 @@ class Identity:
 
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
         """The member as a caller of the memory services, working in one of their team's projects."""
-        if project_id is None:
-            return Caller(member, None, None)
         with self._db.transaction() as conn:
-            return Caller(member, self._reachable(conn, member, project_id), None)
+            unreachable = self._unreachable(conn, member)
+            if project_id is None:
+                return Caller(member, None, None, unreachable)
+            return Caller(member, self._reachable(conn, member, project_id), None, unreachable)
 
     def create_project(self, caller: Caller, name: str) -> Project:
         """Create a project. Whoever creates it is its first project lead."""

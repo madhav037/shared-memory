@@ -203,3 +203,102 @@ def test_a_briefing_still_reaches_a_member_who_is_allowed_in(console: Console, s
     started = it.dana.in_project(it.billing, "billing-api").start()
 
     assert "Staging resets nightly" in added_context(started)
+
+
+def a_secret_in(it: ARestrictedProject) -> str:
+    """A project memory inside the restricted project."""
+    in_billing = it.owner.in_project(it.billing, "billing-api")
+    saved = remembered(in_billing, "Salary bands", "SECRET-BODY lives here.")
+    path: str = in_billing.call("promote", path=saved["path"], level="project")["path"]
+    return path
+
+
+def test_a_restricted_projects_memory_cant_be_reached_by_path_from_another_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-twelve", 815)
+    payments = create(signed_out, "Payments")["project_id"]
+    secret = a_secret_in(it)
+    from_payments = it.dana.in_project(payments, "payments-api")
+    remembered(from_payments, "Refunds are asynchronous", "Refunds settle within five days.")
+
+    refusals = {
+        "read": from_payments.refusal("read", path=secret),
+        "list": from_payments.refusal("list", folder=f"projects/{it.billing}/shared"),
+        "retire": from_payments.refusal("retire", path=secret),
+        "pin": from_payments.refusal("pin", path=secret),
+    }
+    everything = from_payments.call("list", folder="projects")
+
+    assert all("is restricted" in refusal for refusal in refusals.values()), refusals
+    assert f"projects/{it.billing}" not in everything["folders"]
+    assert f"projects/{payments}" in everything["folders"]
+
+
+def test_the_console_cant_reach_a_restricted_projects_memory_through_another_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-thirteen", 816)
+    payments = create(signed_out, "Payments")["project_id"]
+    secret = a_secret_in(it)
+    dana = signed_in(console, "dana-olive-closed-thirteen", 817)
+    through = f"/api/projects/{payments}"
+
+    answers = [
+        dana.get(f"{through}/memory?path={secret}"),
+        dana.get(f"{through}/memory/history?path={secret}"),
+        dana.get(f"{through}/memory/version?path={secret}&commit=abc1234"),
+        dana.get(f"{through}/memory/difference?path={secret}&before=abc1234&after=def5678"),
+        dana.post_json(f"{through}/pins", {"path": secret}),
+        dana.post_json(f"{through}/retire", {"path": secret}),
+    ]
+
+    assert [answer.status_code for answer in answers] == [403] * len(answers)
+    assert all("is restricted" in answer.json()["message"] for answer in answers)
+    assert not any("SECRET-BODY" in answer.text for answer in answers)
+    dana.close()
+
+
+def test_a_challenge_in_a_restricted_project_cant_be_decided_from_outside_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-fourteen", 818)
+    payments = create(signed_out, "Payments")["project_id"]
+    in_billing = it.owner.in_project(it.billing, "billing-api")
+    mine = in_billing.call(
+        "promote",
+        path=remembered(in_billing, "Staging resets nightly", "The staging database is wiped every night.")["path"],
+        level="project",
+    )["path"]
+    ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev", "ash-closed-fourteen")["personal_token"])
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-3"})
+    ash_in_billing = ash.in_project(it.billing, "billing-api")
+    offered = remembered(ash_in_billing, "Staging resets at 02:17 UTC", "The staging database is wiped at 02:17 UTC.")
+    similar = ash_in_billing.call("promote", path=offered["path"], level="project")
+    raised = ash_in_billing.call(
+        "promote",
+        path=offered["path"],
+        level="project",
+        reference=similar["reference"],
+        resolutions={one["path"]: ("supersede" if one["path"] == mine else "keep_both") for one in similar["similar"]},
+    )
+    console.clock.advance(days=4)  # past the fallback, when anyone who can reach it may decide
+
+    refused = it.dana.in_project(payments, "payments-api").refusal(
+        "decide_challenge", challenge_id=raised["challenge_id"], decision="accept"
+    )
+
+    assert "is restricted" in refused
+
+
+def test_someone_allowed_in_still_reaches_it_by_path_from_another_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-fifteen", 819)
+    payments = create(signed_out, "Payments")["project_id"]
+    secret = a_secret_in(it)
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+
+    read = it.dana.in_project(payments, "payments-api").call("read", path=secret)
+
+    assert "SECRET-BODY" in read["body"]

@@ -10,7 +10,7 @@ from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Aud
 from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, check_name
+from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import SearchIndex, split_sections
 from shared_memory.memory import Location, Memory, level_folder, locate, slugify
 from shared_memory.store import Committer, MemoryStore
@@ -125,6 +125,7 @@ class MemoryService:
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         memory = describe(location.path, self._store.read(caller.team, location.path))
         memory["pending"] = self._challenges.pending(caller.team, [memory["path"]])[memory["path"]]
@@ -134,6 +135,7 @@ class MemoryService:
     def history(self, caller: Caller, path: str) -> dict[str, Any]:
         """Every version of one memory, newest first."""
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         self._store.read(caller.team, location.path)  # refuses a memory that isn't there
         versions = self._store.history(caller.team, location.path)
@@ -154,12 +156,14 @@ class MemoryService:
     def version(self, caller: Caller, path: str, commit: str) -> dict[str, Any]:
         """One memory as it was at one version."""
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         return {"path": str(location.path), "commit": commit, "text": self._store.version(caller.team, location.path, commit)}
 
     def difference(self, caller: Caller, path: str, before: str, after: str) -> dict[str, Any]:
         """What changed in one memory between two versions."""
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         return {
             "path": str(location.path),
@@ -170,6 +174,7 @@ class MemoryService:
 
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
         caller.require_project()
+        caller.require_reach(folder)
         pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
         memories, folders = self._store.list_folder(caller.team, pure)
         pending = self._challenges.pending(caller.team, [str(path) for path, _ in memories])
@@ -187,7 +192,8 @@ class MemoryService:
                 }
                 for path, m in memories
             ],
-            "folders": [str(sub) for sub in folders],
+            # Listing the projects folder names every project; a restricted one stays out of sight.
+            "folders": [str(sub) for sub in folders if project_in(str(sub)) not in caller.unreachable],
         }
 
     def tree(self, caller: Caller, level: str | None = None) -> dict[str, Any]:
@@ -261,6 +267,7 @@ class MemoryService:
 
     def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         memory = self._store.read(caller.team, location.path)
         if location.level != "personal" or location.member_id != caller.member_id:
