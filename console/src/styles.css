@@ -1496,6 +1496,31 @@ li[aria-expanded="true"] > .tree-row .twist {
   cursor: default;
   text-decoration: none;
 }
+/* The files a repository commits to connect each coding agent, one agent at a time. */
+.connection-files .view-switch {
+  margin-top: 14px;
+}
+.connection-file {
+  margin-top: 16px;
+}
+.connection-file-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+.connection-file-head .path {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.connection-file-how {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  max-width: 70ch;
+}
 .settings-block {
   font-family: var(--mono);
   font-size: 0.8125rem;

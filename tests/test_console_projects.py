@@ -122,6 +122,9 @@ def test_a_project_shows_its_repositories_with_the_settings_to_commit(
     settings = json.loads(repositories[1]["settings"])
     assert settings["env"] == {"SHARED_MEMORY_PROJECT": billing, "SHARED_MEMORY_REPOSITORY": "billing-web"}
     assert settings["enabledPlugins"] == {"shared-memory@shared-memory": True}
+    files = {file["path"]: file for file in repositories[1]["files"]}
+    assert files[".codex/config.toml"]["agent"] == "Codex"
+    assert 'X-Shared-Memory-Repository" = "billing-web"' in files[".codex/config.toml"]["contents"]
 
 
 def test_a_lead_adds_and_removes_repositories_and_a_plain_member_cannot(

@@ -1,5 +1,5 @@
-import { Button, CopyButton, TextInput } from "@mantine/core";
-import { IconCheck, IconCopy, IconLock, IconLockOpen } from "@tabler/icons-react";
+import { Button, TextInput } from "@mantine/core";
+import { IconLock, IconLockOpen } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
@@ -17,6 +17,7 @@ import {
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
+import { ConnectionFiles } from "../components/ConnectionFiles";
 import { useContents } from "../components/Contents";
 import { folderUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -192,12 +193,12 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           Repositories
         </h2>
         <p className="section-lede">
-          Each repository commits its settings into <code>.claude/settings.json</code>, which installs the plugin and
-          connects every Claude session opened in it to this project.
+          Each repository commits a few small files that connect it to this project, one set per coding agent your team
+          uses. They name the project, never a token: each member sets theirs once in <code>SHARED_MEMORY_TOKEN</code>.
         </p>
         <div data-testid="repositories">
           {project.repositories.length === 0 && (
-            <p className="empty">No repositories yet. Add one to get the settings it commits.</p>
+            <p className="empty">No repositories yet. Add one to get the files it commits.</p>
           )}
           {project.repositories.map((repository) => (
             <div key={repository.name} className="entry">
@@ -206,14 +207,6 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
                   {repository.name}
                 </span>
                 <span style={{ display: "flex", gap: 14 }}>
-                  <CopyButton value={repository.settings}>
-                    {({ copied, copy }) => (
-                      <button type="button" className="quiet-link" onClick={copy}>
-                        {copied ? <IconCheck size={14} stroke={1.8} /> : <IconCopy size={14} stroke={1.6} />}
-                        {copied ? "Copied" : "Copy settings"}
-                      </button>
-                    )}
-                  </CopyButton>
                   {project.you_may_change && (
                     <button
                       type="button"
@@ -226,7 +219,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
                   )}
                 </span>
               </div>
-              <pre className="settings-block">{repository.settings}</pre>
+              <ConnectionFiles files={repository.files} testid={`files-${repository.name}`} />
             </div>
           ))}
         </div>
