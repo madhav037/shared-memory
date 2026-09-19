@@ -24,6 +24,10 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
   {
     name: "Codex",
     steps: [
+      <>
+        Use Codex 0.78 or later (<code>codex --version</code>); earlier versions ignore a repository’s own
+        configuration.
+      </>,
       <>Set your personal token in <code>SHARED_MEMORY_TOKEN</code>, above.</>,
       <>
         Commit the repository’s <code>.codex/config.toml</code>, <code>AGENTS.md</code> section and skill.

@@ -11,6 +11,7 @@ test("a member picks their coding agent and gets its steps and the repository's 
   await page.getByTestId("connect-Codex").click();
 
   await expect(page.getByTestId("agent-steps")).toContainText(".codex/config.toml");
+  await expect(page.getByTestId("agent-steps")).toContainText("Codex 0.78 or later");
   const files = page.getByTestId("agent-files");
   await expect(files.getByTestId("agent-Codex")).toBeVisible();
   await expect(files).toContainText("bearer_token_env_var");
