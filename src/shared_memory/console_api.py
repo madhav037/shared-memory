@@ -481,6 +481,7 @@ class MemoryVersion(BaseModel):
     author: str
     name: str
     message: str
+    agent: str | None
 
 
 class MemoryHistory(BaseModel):

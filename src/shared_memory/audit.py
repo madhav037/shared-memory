@@ -109,6 +109,8 @@ class Audit:
         The project is the session's, or the memory's own when the change was made from somewhere that isn't in
         one. It records where the memory is, never what it says: the memory folder's git history holds that.
         """
+        if caller.agent is not None:
+            detail = {**detail, "agent": caller.agent}
         self.record(
             change,
             member=caller.member,

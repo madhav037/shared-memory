@@ -20,7 +20,7 @@ import psycopg
 import pytest
 import uvicorn
 from anyio.from_thread import BlockingPortal
-from mcp import Client
+from mcp import Client, types
 from mcp.client.streamable_http import streamable_http_client
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -107,6 +107,8 @@ class Session:
     token: str | None
     project: str | None = None
     repository: str | None = None
+    # The name the session's coding agent reports for itself when it connects, e.g. "codex-mcp-client".
+    agent: str | None = None
 
     def headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -119,7 +121,15 @@ class Session:
         return headers
 
     def in_project(self, project: str, repository: str = "app") -> Session:
-        return Session(self.server, self.token, project, repository)
+        return Session(self.server, self.token, project, repository, self.agent)
+
+    def as_agent(self, name: str) -> Session:
+        """The same member and project, from a coding agent that reports itself by this name."""
+        return Session(self.server, self.token, self.project, self.repository, name)
+
+    def _client(self, transport: Any) -> Client:
+        info = types.Implementation(name=self.agent, version="1.0") if self.agent else None
+        return Client(transport, client_info=info)
 
     def call(self, tool: str, **arguments: Any) -> Any:
         """Call an MCP tool; return its structured result or raise ToolRefused with its message."""
@@ -129,7 +139,7 @@ class Session:
         async with AsyncExitStack() as stack:
             http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.headers(), timeout=60))
             transport = streamable_http_client(f"{self.server.url}/mcp", http_client=http)
-            client = await stack.enter_async_context(Client(transport))
+            client = await stack.enter_async_context(self._client(transport))
             result = await client.call_tool(tool, arguments)
         text = "\n".join(getattr(part, "text", "") for part in result.content)
         if result.is_error:

@@ -2631,6 +2631,17 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
           }
         },
         "required": [
@@ -2638,7 +2649,8 @@
           "at",
           "author",
           "name",
-          "message"
+          "message",
+          "agent"
         ],
         "title": "MemoryVersion",
         "type": "object"

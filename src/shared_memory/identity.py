@@ -48,6 +48,8 @@ class Caller:
     repository: str | None
     # The restricted projects this member isn't allowed into, worked out when the call was authenticated.
     unreachable: frozenset[str] = frozenset()
+    # The coding agent the session runs in, as it reported itself; None for changes made from the console.
+    agent: str | None = None
 
     def require_reach(self, path: str | None) -> None:
         """Refuse a memory or folder inside a restricted project this member isn't allowed into.

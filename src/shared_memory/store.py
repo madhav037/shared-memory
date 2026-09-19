@@ -21,6 +21,8 @@ from shared_memory.memory import INDEX_NAME, Memory, slugify
 class Committer:
     member_id: str
     name: str
+    # The coding agent the change came from, kept with the version as a Coding-Agent trailer.
+    agent: str | None = None
 
 
 @dataclass
@@ -65,6 +67,7 @@ class Version:
     author: str
     name: str
     message: str
+    agent: str | None = None
 
 
 def _check_commit(commit: str) -> None:
@@ -181,16 +184,22 @@ class MemoryStore:
             revision = [f"{until}^"] if until else []
             printed = self._git(
                 "log", *revision, "--no-renames", "--name-status",
-                "--format=%x1e%H%x1f%aI%x1f%ae%x1f%an%x1f%s", "--", where,
+                "--format=%x1e%H%x1f%aI%x1f%ae%x1f%an%x1f%s%x1f%(trailers:key=Coding-Agent,valueonly,separator=%x2C)",
+                "--", where,
             )  # fmt: skip
             born: str | None = None
             for record in printed.split("\x1e"):
                 lines = [line for line in record.splitlines() if line.strip()]
                 if not lines:
                     continue
-                commit, at, email, name, message = lines[0].split("\x1f")
+                commit, at, email, name, message, agent = lines[0].split("\x1f")
                 version = Version(
-                    commit=commit, at=datetime.fromisoformat(at), author=email.split("@")[0], name=name, message=message
+                    commit=commit,
+                    at=datetime.fromisoformat(at),
+                    author=email.split("@")[0],
+                    name=name,
+                    message=message,
+                    agent=agent.strip() or None,
                 )
                 trail.append((version, where))
                 if any(line.startswith("A\t") for line in lines[1:]):
@@ -298,7 +307,8 @@ class MemoryStore:
                 self._write_index(team, folder)
             self._git("add", "-A", "--", str(self._file(team, PurePosixPath())))
             if self._git_has_staged_changes():
-                self._git("commit", "-q", "-m", message, committer=committer)
+                trailer = f"\n\nCoding-Agent: {committer.agent}" if committer.agent else ""
+                self._git("commit", "-q", "-m", message + trailer, committer=committer)
             for listener in self._listeners:
                 listener.on_change(team, dict(change.writes), set(change.deletes))
 

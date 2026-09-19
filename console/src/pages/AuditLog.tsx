@@ -62,6 +62,8 @@ function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: 
     return value === null || value === undefined || value === "" ? null : String(value);
   };
   const said: React.ReactNode[] = [];
+  const agent = text("agent");
+  if (agent) said.push(agent === "another agent" ? "From another agent" : `In ${agent}`);
   const level = text("level");
   const challenge = text("challenge");
   if (text("type")) said.push(text("type") === "architecture" ? "As architecture" : `As a ${typeName(text("type")!).toLowerCase()}`);
