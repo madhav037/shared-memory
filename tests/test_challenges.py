@@ -98,6 +98,18 @@ def test_the_author_sees_the_challenge_in_their_briefing_and_next_prompt(owner: 
         assert "decide_challenge" in context
 
 
+def test_an_author_whose_agent_has_no_hooks_finds_the_challenge_in_the_briefing_it_fetches(
+    owner: Session, dana: Session
+) -> None:
+    target = promote_now(owner, NPM)
+    raised = challenge(dana, PNPM, target)
+
+    briefing = owner.call("briefing")
+
+    assert f"Challenge {raised['challenge_id']} by emp-2" in briefing
+    assert "decide_challenge" in briefing
+
+
 def test_accepting_a_challenge_promotes_the_challenging_memory_over_the_old_one(owner: Session, dana: Session) -> None:
     target = promote_now(owner, NPM)
     raised = challenge(dana, PNPM, target)

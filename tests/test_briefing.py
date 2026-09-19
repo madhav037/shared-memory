@@ -126,3 +126,31 @@ def test_the_briefing_stays_within_the_cap_when_a_pin_moves_to_a_longer_memory(o
 
     assert len(briefing) // 4 <= 1500
     assert "did not fit" in briefing
+
+
+def test_any_agent_can_fetch_the_briefing_its_session_would_start_with(owner: Session) -> None:
+    path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
+    owner.call("pin", path=path)
+
+    briefing = owner.call("briefing")
+
+    assert briefing == added_context(owner.start())
+    assert f"[project memory] Use pnpm, not npm ({path})" in briefing
+
+
+def test_a_session_outside_any_project_is_told_how_to_connect_instead_of_briefed(team: Team) -> None:
+    refusal = team.owner().refusal("briefing")
+
+    assert "isn't connected to a project" in refusal
+    assert "create_project" in refusal
+
+
+def test_an_empty_briefing_says_so(owner: Session) -> None:
+    assert "nothing is pinned" in owner.call("briefing")
+
+
+def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Session) -> None:
+    path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
+    owner.call("pin", path=path)
+
+    assert owner.run_prompt("briefing") == owner.call("briefing")

@@ -149,6 +149,28 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
         return await hook(request, "SessionStart", briefed, report_refusals=True)
 
+    def briefing_for(current: Caller) -> str:
+        """What a session starts with: its project's pins and any notices for this member. One source for the hook and
+        for agents that fetch it themselves."""
+        current.require_project()
+        briefed = briefing.for_session(current, extra=challenges.briefing_notices(current))
+        return briefed or "The briefing is empty: nothing is pinned in this project and nothing is waiting for you."
+
+    @server.tool(name="briefing")
+    @_refusals_as_tool_errors
+    def the_briefing(ctx: Context) -> str:
+        """Fetch this session's briefing: the memories pinned for its project and anything waiting for you, such as
+        challenges to decide. Call it at the start of a task, before anything else, if your session wasn't given it."""
+        return briefing_for(caller(ctx))
+
+    @server.prompt(name="briefing", description="Bring this session's Shared Memory briefing into the conversation.")
+    def briefing_prompt(ctx: Context) -> str:
+        """The briefing as a prompt, for agents that offer server prompts as commands."""
+        try:
+            return briefing_for(caller(ctx))
+        except Refused as refused:
+            return str(refused)
+
     @server.tool()
     @_refusals_as_tool_errors
     def pin(path: str, ctx: Context) -> dict[str, Any]:
