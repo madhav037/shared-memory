@@ -1,7 +1,8 @@
 """The files that connect a repository to its project, for each coding agent the team uses.
 
 Every file names the project and the repository, which are not secrets (ADR-0005). None carries a personal token:
-each member sets theirs once, in the SHARED_MEMORY_TOKEN environment variable, and every agent reads it from there.
+each member keeps theirs on their own machine, in the SHARED_MEMORY_TOKEN environment variable, or with the agent itself
+where it asks for the token (Claude Code, VS Code).
 """
 
 from __future__ import annotations
@@ -157,8 +158,9 @@ def connection_kit(
             agent="Devin Desktop",
             path=".devin/mcp_config.json",
             action="merge",
-            how="Merge the server into the file, keeping anything already there. Devin reads each member's token "
-            "from SHARED_MEMORY_TOKEN.",
+            how="Merge the server into the file, keeping anything already there. Devin's documentation doesn't yet "
+            "say it reads environment variables in headers: if it connects without your token, put the same entry, "
+            "with your own token, in .devin/mcp_config.local.json, which Devin keeps out of git.",
             contents=_json(
                 {
                     "mcpServers": {

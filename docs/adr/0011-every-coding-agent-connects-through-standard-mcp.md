@@ -9,5 +9,4 @@ We rejected a plugin per agent (each would duplicate the server's rules and drif
 - An agent without hooks only uses memory when it chooses to, guided by the instructions, the tool descriptions and the repository's AGENTS.md section. That is weaker than a hook, and is why hooks stay wherever an agent has them.
 - The server offers no OAuth discovery. Cursor ignores configured headers when a server offers OAuth, so signing in through the browser is a separate, later decision.
 - The name an agent reports for itself is recorded with each change for the audit log, but never trusted for access.
-- Cline is the exception to committed files: it keeps MCP servers in one file per machine. Each member adds one entry
-per project, which names the project but no repository, so every repository of the project shares it.
+- Cline is the exception to committed files: it keeps MCP servers in one file per machine. Each member adds one entry per project, which names the project but no repository, so every repository of the project shares it.
