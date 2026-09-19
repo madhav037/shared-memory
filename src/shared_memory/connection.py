@@ -64,7 +64,8 @@ def connection_kit(
             agent="Codex",
             path=".codex/config.toml",
             action="merge",
-            how="Add this table to the file, keeping anything already there. Codex reads it once the project is trusted.",
+            how="Add this table to the file, keeping anything already there. Codex 0.78 or later reads it once the "
+            "project is trusted; earlier versions ignore a repository's own configuration.",
             contents=(
                 "[mcp_servers.shared-memory]\n"
                 f"url = {json.dumps(endpoint)}\n"

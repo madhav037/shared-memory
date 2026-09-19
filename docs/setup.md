@@ -108,8 +108,9 @@ The plugin's hooks call the server with `curl`, which ships with Windows 10 and 
 
 1. Set your personal token once on your machine, in the `SHARED_MEMORY_TOKEN` environment variable (on Windows, `setx SHARED_MEMORY_TOKEN <token>`), then restart the agent. VS Code asks for the token the first time instead, and keeps it.
 2. Open the repository. Trust the folder or approve the server when the agent asks; most agents ignore a repository's own settings until you do.
-3. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project.
-4. **Devin Desktop**: its documentation doesn't yet say it reads environment variables in headers. If it connects without your token, put the same entry, with your own token, in `.devin/mcp_config.local.json`, which git never commits.
+3. **Codex**: use version 0.78 or later (`codex --version`). Earlier versions ignore a repository's own `.codex/config.toml`, and before 0.47 they also drop the token and the project headers.
+4. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project.
+5. **Devin Desktop**: its documentation doesn't yet say it reads environment variables in headers. If it connects without your token, put the same entry, with your own token, in `.devin/mcp_config.local.json`, which git never commits.
 
 These agents don't get the briefing and recall by themselves yet. The server's instructions and the `AGENTS.md` section ask them to call `briefing` at the start of a task and `search` before answering, and each change they make is recorded with the agent it came from.
 
