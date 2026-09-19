@@ -73,7 +73,8 @@ class Caller:
         if self.project is None:
             raise Refused(
                 "This repository isn't connected to a project, so memory isn't available here. "
-                "Create one with create_project, or set the project ID in the repository's settings."
+                "Create one with create_project and commit the files it returns, or, if the product already has a "
+                "project, commit its connection files from the console's project settings."
             )
         return self.project
 
@@ -144,7 +145,10 @@ class Identity:
 
     def authenticate(self, token: str | None, project_id: str | None, repository: str | None) -> Caller:
         if not token:
-            raise Refused("No personal token was sent. Enter your personal token in the Shared Memory plugin settings.")
+            raise Refused(
+                "No personal token was sent. Set your personal token in the SHARED_MEMORY_TOKEN environment variable "
+                "(in Claude Code, in the Shared Memory settings), then start a new session."
+            )
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at,"
@@ -155,7 +159,8 @@ class Identity:
             ).fetchone()
             if row is None:
                 raise Refused(
-                    "This personal token is not recognised. Check the token in the Shared Memory plugin settings."
+                    "This personal token is not recognised. Check SHARED_MEMORY_TOKEN (in Claude Code, the Shared "
+                    "Memory settings), or issue yourself a new token from the console."
                 )
             if row["removed_at"] is not None:
                 raise Refused("This personal token belongs to a member who has been removed from the team.")
