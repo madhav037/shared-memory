@@ -4,7 +4,7 @@ test("the console shows that it reached the server and offers to sign in", async
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Shared Memory" })).toBeVisible();
-  await expect(page.getByTestId("status")).toContainText(/connected to the shared memory server/i);
+  await expect(page.getByTestId("status")).toContainText(/connected to the server/i);
   await expect(page.getByTestId("sign-in")).toBeVisible();
 });
 

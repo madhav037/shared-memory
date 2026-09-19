@@ -159,35 +159,84 @@ class MemoryStore:
         index.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
     def history(self, team: str, path: PurePosixPath) -> list[Version]:
-        """Every version of one memory, newest first: who wrote it, when, and what the change was called."""
-        inside = self._inside_team(team, path)
-        printed = self._git("log", "--format=%H%x1f%aI%x1f%ae%x1f%an%x1f%s", "--", inside)
-        versions = []
-        for line in printed.splitlines():
-            if not line.strip():
-                continue
-            commit, at, email, name, message = line.split("")
-            versions.append(
-                Version(commit=commit, at=datetime.fromisoformat(at), author=email.split("@")[0], name=name, message=message)
-            )
-        return versions
+        """Every version of one memory, newest first: who wrote it, when, and what the change was called.
+
+        It follows the memory back through promotion, when its file moved from a member's folder to the shared one,
+        so the trail starts where the memory was first written rather than where it now lives.
+        """
+        return [version for version, _ in self._trail(team, path)]
+
+    def _trail(self, team: str, path: PurePosixPath) -> list[tuple[Version, str]]:
+        """Each version of a memory with the path its file had at that version.
+
+        Promotion moves a memory's file to another folder under the same name, in one commit. So where a file came
+        into being in a commit that also removed a file of the same name from the team's folder, that file is where
+        the memory was before, and its history continues there. Git's own rename guessing is not used: memory files
+        are short and alike, and it would join the histories of different memories.
+        """
+        trail: list[tuple[Version, str]] = []
+        where: str | None = self._inside_team(team, path)
+        until: str | None = None
+        while where is not None:
+            revision = [f"{until}^"] if until else []
+            printed = self._git(
+                "log", *revision, "--no-renames", "--name-status",
+                "--format=%x1e%H%x1f%aI%x1f%ae%x1f%an%x1f%s", "--", where,
+            )  # fmt: skip
+            born: str | None = None
+            for record in printed.split("\x1e"):
+                lines = [line for line in record.splitlines() if line.strip()]
+                if not lines:
+                    continue
+                commit, at, email, name, message = lines[0].split("\x1f")
+                version = Version(
+                    commit=commit, at=datetime.fromisoformat(at), author=email.split("@")[0], name=name, message=message
+                )
+                trail.append((version, where))
+                if any(line.startswith("A\t") for line in lines[1:]):
+                    born = commit
+                    break
+            if born is None:
+                break
+            where, until = self._moved_from(team, born, where), born
+        return trail
+
+    def _moved_from(self, team: str, commit: str, where: str) -> str | None:
+        """The file a memory was moved from when this commit created it, if it was moved rather than written."""
+        name = PurePosixPath(where).name
+        changes = self._git("show", "--no-renames", "--name-status", "--format=", commit)
+        for line in changes.splitlines():
+            status, _, changed = line.partition("\t")
+            if status == "D" and changed.startswith(f"{team}/") and PurePosixPath(changed).name == name:
+                return changed
+        return None
+
+    def _where_then(self, team: str, path: PurePosixPath, commit: str) -> str:
+        """The path this memory's file had at one version, which is not where it lives now once it was promoted."""
+        for version, where in self._trail(team, path):
+            if version.commit.startswith(commit):
+                return where
+        return self._inside_team(team, path)
 
     def version(self, team: str, path: PurePosixPath, commit: str) -> str:
         """The memory's text as it was at one version."""
-        inside = self._inside_team(team, path)
         _check_commit(commit)
+        where = self._where_then(team, path, commit)
         try:
-            return self._git("show", f"{commit}:{inside}")
+            return self._git("show", f"{commit}:{where}")
         except RuntimeError:
             raise Refused(f"There is no version {commit!r} of {str(path)!r}.") from None
 
     def difference(self, team: str, path: PurePosixPath, before: str, after: str) -> str:
         """What changed in this memory between two versions, as a unified difference."""
-        inside = self._inside_team(team, path)
         _check_commit(before)
         _check_commit(after)
+        then = self._where_then(team, path, before)
+        now = self._where_then(team, path, after)
         try:
-            return self._git("diff", "--unified=3", before, after, "--", inside)
+            if then == now:
+                return self._git("diff", "--unified=3", before, after, "--", now)
+            return self._git("diff", "--unified=3", f"{before}:{then}", f"{after}:{now}")
         except RuntimeError:
             raise Refused("Those versions can't be compared.") from None
 
@@ -195,6 +244,29 @@ class MemoryStore:
         """The path git knows this memory by, confined to the team's own folder."""
         self._file(team, path)  # refuses anything outside the team's folder
         return str(PurePosixPath(team) / path)
+
+    def text(self, team: str, path: PurePosixPath) -> str:
+        """The memory file exactly as it is on disk: its header and its body, as every Claude reads it."""
+        file = self._file(team, path)
+        if not file.is_file():
+            raise Refused(f"There is no memory at {str(path)!r}.")
+        return file.read_text(encoding="utf-8")
+
+    def extent(self, team: str, folder: PurePosixPath) -> tuple[int, datetime | None]:
+        """How many memories a folder holds at any depth, and when the newest of them last changed."""
+        directory = self._file(team, folder)
+        if not directory.is_dir():
+            return 0, None
+        files = [file for file in directory.rglob("*.md") if file.name != INDEX_NAME]
+        if not files:
+            return 0, None
+        newest = max(file.stat().st_mtime for file in files)
+        return len(files), datetime.fromtimestamp(newest).astimezone()
+
+    def changed(self, team: str, path: PurePosixPath) -> datetime | None:
+        """When one memory file last changed on disk."""
+        file = self._file(team, path)
+        return datetime.fromtimestamp(file.stat().st_mtime).astimezone() if file.is_file() else None
 
     def read(self, team: str, path: PurePosixPath) -> Memory:
         file = self._file(team, path)

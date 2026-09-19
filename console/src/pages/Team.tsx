@@ -1,164 +1,322 @@
-import { Alert, Badge, Button, Card, Code, CopyButton, Group, Loader, Menu, Table, Text, TextInput, Title } from "@mantine/core";
-import { useEffect, useState } from "react";
+import { Button, CopyButton, Menu, TextInput, UnstyledButton } from "@mantine/core";
+import { IconCheck, IconCopy, IconDots, IconUserPlus } from "@tabler/icons-react";
+import { useState } from "react";
 
 import {
   addMember,
   changeMember,
   fetchMembers,
   handOverOwnership,
+  reissueToken,
   removeMember,
   setAdmin,
   type IssuedToken,
   type MemberSummary,
   type SignedInMember,
 } from "../api/client";
+import { Placeholder, Refusal } from "../components/Bits";
+import { useAsked } from "../lib/useAsked";
 
-/** Who is in the team, and everything an admin does about that. */
+const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
+
+type Editing =
+  | { kind: "name" | "github"; employeeId: string; value: string }
+  | { kind: "remove" | "ownership"; employeeId: string }
+  | null;
+
+/** Who is in the team, what each of them may do, and everything an admin does about that. */
 export function Team({ me }: { me: SignedInMember }) {
-  const [members, setMembers] = useState<MemberSummary[] | null>(null);
+  const { answer, refused: notListed, setAnswer } = useAsked((signal) => fetchMembers(signal), []);
   const [refused, setRefused] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedToken | null>(null);
-
-  useEffect(() => {
-    const attempt = new AbortController();
-    fetchMembers(attempt.signal)
-      .then((answer) => setMembers(answer.members))
-      .catch((problem: Error) => {
-        if (!attempt.signal.aborted) setRefused(problem.message);
-      });
-    return () => attempt.abort();
-  }, []);
+  const [editing, setEditing] = useState<Editing>(null);
+  const runs = me.role === "owner" || me.role === "admin";
 
   const attempt = async (what: () => Promise<{ members: MemberSummary[] }>) => {
     try {
-      setMembers((await what()).members);
+      const after = await what();
+      setAnswer(after);
+      setRefused(null);
+      setEditing(null);
+    } catch (problem) {
+      setRefused((problem as Error).message);
+    }
+  };
+
+  const issue = async (employeeId: string) => {
+    try {
+      setIssued(await reissueToken(employeeId));
       setRefused(null);
     } catch (problem) {
       setRefused((problem as Error).message);
     }
   };
 
-  if (refused && members === null) return <Alert color="red">{refused}</Alert>;
-  if (members === null) return <Loader size="sm" />;
+  if (notListed) return <Refusal>{notListed}</Refusal>;
+  if (!answer) return <Placeholder lines={8} />;
+  const members = answer.members;
+  const owner = members.find((one) => one.role === "owner");
+  const admins = members.filter((one) => one.role === "admin" && !one.removed);
+
+  return (
+    <div className="column">
+      <h1 className="page-title wide">Team {me.team}</h1>
+      <p className="standfirst">
+        {owner ? `${owner.name} owns the team` : "The team has an owner"}
+        {admins.length > 0 ? `, with ${admins.map((one) => one.name).join(", ")} as admin${admins.length > 1 ? "s" : ""}` : ""}.{" "}
+        {runs
+          ? "Admins add and remove members and issue their tokens; only the owner decides who is an admin."
+          : "Ask them to add someone, change access or issue a token."}
+      </p>
+
+      {refused && (
+        <div style={{ marginTop: 20 }}>
+          <Refusal testid="team-refused">{refused}</Refusal>
+        </div>
+      )}
+      {issued && (
+        <div className="issued appear" style={{ marginTop: 24 }} data-testid="new-member-token" role="status">
+          <b>{issued.employee_id}’s personal token</b>
+          <code data-testid="new-member-token-value">{issued.personal_token}</code>
+          <CopyButton value={issued.personal_token}>
+            {({ copied, copy }) => (
+              <Button
+                size="xs"
+                variant="default"
+                onClick={copy}
+                leftSection={copied ? <IconCheck size={14} stroke={1.8} /> : <IconCopy size={14} stroke={1.6} />}
+              >
+                {copied ? "Copied" : "Copy it"}
+              </Button>
+            )}
+          </CopyButton>
+          <p style={{ marginTop: 10 }}>
+            Give it to them privately; it is shown only now. They can issue themselves a new one here in the console.
+          </p>
+        </div>
+      )}
+
+      {runs && (
+        <AddMember
+          onAdded={(token, everyone) => {
+            setIssued(token);
+            setAnswer({ members: everyone });
+          }}
+          onRefused={setRefused}
+        />
+      )}
+
+      <h2 className="section-heading">Members</h2>
+      <div className="scroll-x">
+        <table className="register" data-testid="members">
+          <thead>
+            <tr>
+              <th scope="col">Member</th>
+              <th scope="col">Employee ID</th>
+              <th scope="col">GitHub</th>
+              <th scope="col">Role</th>
+              {runs && (
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((member) => (
+              <MemberRow
+                key={member.employee_id}
+                member={member}
+                me={me}
+                runs={runs}
+                editing={editing?.employeeId === member.employee_id ? editing : null}
+                setEditing={setEditing}
+                attempt={attempt}
+                issue={issue}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function MemberRow({
+  member,
+  me,
+  runs,
+  editing,
+  setEditing,
+  attempt,
+  issue,
+}: {
+  member: MemberSummary;
+  me: SignedInMember;
+  runs: boolean;
+  editing: Editing;
+  setEditing: (editing: Editing) => void;
+  attempt: (what: () => Promise<{ members: MemberSummary[] }>) => Promise<void>;
+  issue: (employeeId: string) => Promise<void>;
+}) {
+  const id = member.employee_id;
+  const actionable = runs && !member.removed && id !== me.employee_id;
+  const cells = (
+    <>
+      <td className="primary">
+        {editing?.kind === "name" ? (
+          <InlineEdit
+            label="Name"
+            value={editing.value}
+            onChange={(value) => setEditing({ ...editing, value })}
+            onSave={() => attempt(() => changeMember(id, { name: editing.value }))}
+            onCancel={() => setEditing(null)}
+          />
+        ) : (
+          <>
+            {member.name}
+            {id === me.employee_id && <span style={{ color: "var(--ink-3)", fontWeight: 400 }}> (you)</span>}
+            {member.removed && <span style={{ color: "var(--ink-3)", fontWeight: 400 }}> · removed</span>}
+          </>
+        )}
+      </td>
+      <td style={{ fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{id}</td>
+      <td>
+        {editing?.kind === "github" ? (
+          <InlineEdit
+            label="GitHub username"
+            value={editing.value}
+            onChange={(value) => setEditing({ ...editing, value })}
+            onSave={() => attempt(() => changeMember(id, { github: editing.value }))}
+            onCancel={() => setEditing(null)}
+          />
+        ) : member.github_login ? (
+          `@${member.github_login}`
+        ) : (
+          <span style={{ color: "var(--ink-3)" }}>not linked</span>
+        )}
+      </td>
+      <td style={{ fontWeight: member.role === "member" ? 400 : 650, color: member.role === "member" ? undefined : "var(--ink)" }}>
+        {ROLE_WORDS[member.role] ?? member.role}
+      </td>
+    </>
+  );
 
   return (
     <>
-      <Title order={2} size="h3" mb="xs">
-        Team {me.team}
-      </Title>
-      <Text c="dimmed" size="sm" mb="md">
-        Admins add and remove members and issue their tokens. The owner decides who is an admin.
-      </Text>
-
-      {refused && (
-        <Alert color="red" mb="md" data-testid="team-refused">
-          {refused}
-        </Alert>
-      )}
-      {issued && (
-        <Alert color="green" title={`${issued.employee_id}’s personal token`} mb="md" data-testid="new-member-token">
-          <Group gap="xs" align="center">
-            <Code data-testid="new-member-token-value">{issued.personal_token}</Code>
-            <CopyButton value={issued.personal_token}>
-              {({ copied, copy }) => (
-                <Button size="xs" variant="light" onClick={copy}>
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-              )}
-            </CopyButton>
-          </Group>
-          <Text size="sm" mt="xs">
-            Give it to them privately. It is shown only now — they can issue themselves a new one in the console.
-          </Text>
-        </Alert>
-      )}
-
-      <AddMember
-        onAdded={(token, everyone) => {
-          setIssued(token);
-          setMembers(everyone);
-        }}
-        onRefused={setRefused}
-      />
-
-      <Table.ScrollContainer minWidth={640}>
-        <Table striped highlightOnHover data-testid="members">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Member</Table.Th>
-              <Table.Th>Employee ID</Table.Th>
-              <Table.Th>GitHub</Table.Th>
-              <Table.Th>Role</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {members.map((member) => (
-              <Table.Tr key={member.employee_id} opacity={member.removed ? 0.55 : 1}>
-                <Table.Td>
-                  {member.name} {member.removed && <Badge size="xs">removed</Badge>}
-                </Table.Td>
-                <Table.Td>
-                  <Code>{member.employee_id}</Code>
-                </Table.Td>
-                <Table.Td>{member.github_login ? `@${member.github_login}` : <Text c="dimmed">—</Text>}</Table.Td>
-                <Table.Td>
-                  <Badge variant="light" color={member.role === "owner" ? "indigo" : member.role === "admin" ? "teal" : "gray"}>
-                    {member.role}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>
-                  {!member.removed && member.employee_id !== me.employee_id && (
-                    <Menu position="bottom-end" withinPortal>
-                      <Menu.Target>
-                        <Button size="compact-xs" variant="subtle" data-testid={`actions-${member.employee_id}`}>
-                          Actions
-                        </Button>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        {me.role === "owner" && member.role !== "owner" && (
-                          <Menu.Item onClick={() => attempt(() => setAdmin(member.employee_id, member.role !== "admin"))}>
-                            {member.role === "admin" ? "Take admin away" : "Make an admin"}
-                          </Menu.Item>
-                        )}
-                        {me.role === "owner" && (
-                          <Menu.Item onClick={() => attempt(() => handOverOwnership(member.employee_id))}>
-                            Hand over ownership
-                          </Menu.Item>
-                        )}
-                        <Menu.Item
-                          onClick={() => {
-                            const name = window.prompt("New name", member.name);
-                            if (name) void attempt(() => changeMember(member.employee_id, { name }));
-                          }}
-                        >
-                          Correct their name
-                        </Menu.Item>
-                        <Menu.Item
-                          onClick={() => {
-                            const github = window.prompt("GitHub username", member.github_login ?? "");
-                            if (github !== null) void attempt(() => changeMember(member.employee_id, { github }));
-                          }}
-                        >
-                          Change their GitHub account
-                        </Menu.Item>
-                        <Menu.Item
-                          color="red"
-                          data-testid={`remove-${member.employee_id}`}
-                          onClick={() => attempt(() => removeMember(member.employee_id))}
-                        >
-                          Remove from the team
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
+      <tr className={member.removed ? "cancelled" : undefined}>
+        {cells}
+        {runs && (
+          <td style={{ textAlign: "right", paddingRight: 0 }}>
+            {actionable && (
+              <Menu position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <UnstyledButton
+                    className="quiet-link"
+                    aria-label={`What to do about ${member.name}`}
+                    data-testid={`actions-${id}`}
+                  >
+                    <IconDots size={18} stroke={1.6} />
+                  </UnstyledButton>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {me.role === "owner" && member.role !== "owner" && (
+                    <Menu.Item onClick={() => attempt(() => setAdmin(id, member.role !== "admin"))}>
+                      {member.role === "admin" ? "Take admin away" : "Make an admin"}
+                    </Menu.Item>
                   )}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
+                  {me.role === "owner" && (
+                    <Menu.Item onClick={() => setEditing({ kind: "ownership", employeeId: id })}>Hand over ownership…</Menu.Item>
+                  )}
+                  <Menu.Item onClick={() => issue(id)} data-testid={`reissue-${id}`}>
+                    Issue a new personal token
+                  </Menu.Item>
+                  <Menu.Item onClick={() => setEditing({ kind: "name", employeeId: id, value: member.name })}>
+                    Correct their name
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setEditing({ kind: "github", employeeId: id, value: member.github_login ?? "" })}
+                  >
+                    Change their GitHub account
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    className="danger-item"
+                    onClick={() => setEditing({ kind: "remove", employeeId: id })}
+                    data-testid={`remove-${id}`}
+                  >
+                    Remove from the team…
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
+          </td>
+        )}
+      </tr>
+      {(editing?.kind === "remove" || editing?.kind === "ownership") && (
+        <tr>
+          <td colSpan={5} style={{ background: "var(--paper-2)", padding: "12px 14px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--ink)" }}>
+                {editing.kind === "remove"
+                  ? `Remove ${member.name}? Their token and console sessions stop working at once; their memories stay, credited to them.`
+                  : `Make ${member.name} the owner? You stay an admin.`}
+              </span>
+              <Button
+                size="xs"
+                color={editing.kind === "remove" ? "red" : undefined}
+                onClick={() => attempt(() => (editing.kind === "remove" ? removeMember(id) : handOverOwnership(id)))}
+                data-testid={editing.kind === "remove" ? `remove-confirm-${id}` : `ownership-confirm-${id}`}
+              >
+                {editing.kind === "remove" ? "Remove them" : "Hand it over"}
+              </Button>
+              <Button size="xs" variant="default" onClick={() => setEditing(null)}>
+                Keep things as they are
+              </Button>
+            </div>
+          </td>
+        </tr>
+      )}
     </>
+  );
+}
+
+function InlineEdit({
+  label,
+  value,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form
+      style={{ display: "flex", gap: 6, alignItems: "center" }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave();
+      }}
+    >
+      <TextInput
+        size="xs"
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        autoFocus
+        onKeyDown={(event) => event.key === "Escape" && onCancel()}
+      />
+      <Button size="xs" type="submit">
+        Save
+      </Button>
+      <Button size="xs" variant="subtle" onClick={onCancel}>
+        Cancel
+      </Button>
+    </form>
   );
 }
 
@@ -177,7 +335,7 @@ function AddMember({
   const add = async () => {
     setAdding(true);
     try {
-      const token = await addMember({ employee_id: employeeId, name, github: github || undefined });
+      const token = await addMember({ employee_id: employeeId.trim(), name: name.trim(), github: github.trim() || undefined });
       const everyone = await fetchMembers();
       onAdded(token, everyone.members);
       setEmployeeId("");
@@ -191,25 +349,55 @@ function AddMember({
   };
 
   return (
-    <Card withBorder mb="md">
-      <Group align="end" gap="sm">
+    <section aria-labelledby="add-heading">
+      <h2 className="section-heading" id="add-heading">
+        Add a member
+      </h2>
+      <p className="section-lede">
+        Their personal token is shown once, here, to pass on privately. Their GitHub username lets them sign in to the
+        console.
+      </p>
+      <form
+        className="form-line"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (employeeId.trim() && name.trim()) void add();
+        }}
+      >
         <TextInput
           label="Employee ID"
+          placeholder="E1042"
           value={employeeId}
           data-testid="new-employee-id"
           onChange={(event) => setEmployeeId(event.currentTarget.value)}
+          style={{ flex: "1 1 130px" }}
         />
-        <TextInput label="Name" value={name} data-testid="new-name" onChange={(event) => setName(event.currentTarget.value)} />
+        <TextInput
+          label="Name"
+          placeholder="Dana Dev"
+          value={name}
+          data-testid="new-name"
+          onChange={(event) => setName(event.currentTarget.value)}
+          style={{ flex: "2 1 180px" }}
+        />
         <TextInput
           label="GitHub username"
+          placeholder="dana-dev"
           value={github}
           data-testid="new-github"
           onChange={(event) => setGithub(event.currentTarget.value)}
+          style={{ flex: "2 1 160px" }}
         />
-        <Button onClick={add} loading={adding} disabled={!employeeId || !name} data-testid="add-member">
+        <Button
+          type="submit"
+          loading={adding}
+          disabled={!employeeId.trim() || !name.trim()}
+          leftSection={<IconUserPlus size={16} stroke={1.6} />}
+          data-testid="add-member"
+        >
           Add member
         </Button>
-      </Group>
-    </Card>
+      </form>
+    </section>
   );
 }

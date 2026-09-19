@@ -515,10 +515,17 @@ class Identity:
         ids = [project.project_id for project in projects]
         with self._db.transaction() as conn:
             leads = self._leads_listed(conn, ids)
+            closed = {
+                row["project_id"]
+                for row in conn.execute(
+                    "SELECT project_id FROM projects WHERE project_id = ANY(%s) AND restricted", (ids,)
+                ).fetchall()
+            }
         return [
             {
                 "project_id": project.project_id,
                 "name": project.name,
+                "restricted": project.project_id in closed,
                 "leads": leads[project.project_id],
                 "you_lead": any(one["employee_id"] == member.member_id for one in leads[project.project_id]),
             }

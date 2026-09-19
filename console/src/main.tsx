@@ -6,6 +6,9 @@ import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { theme } from "./theme";
 
+import "@fontsource-variable/public-sans";
+import "@fontsource-variable/source-serif-4/opsz.css";
+import "@fontsource-variable/source-serif-4/opsz-italic.css";
 import "@mantine/core/styles.css";
 import "./styles.css";
 

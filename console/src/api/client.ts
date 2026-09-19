@@ -9,7 +9,6 @@ export type ProjectSummary = components["schemas"]["ProjectSummary"];
 export type ProjectDetail = components["schemas"]["ProjectDetail"];
 export type ProjectMember = components["schemas"]["ProjectMember"];
 export type ProjectRepository = components["schemas"]["ProjectRepository"];
-export type Tree = components["schemas"]["Tree"];
 export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
 export type SearchHit = components["schemas"]["SearchHit"];
@@ -19,6 +18,11 @@ export type MemoryVersion = components["schemas"]["MemoryVersion"];
 export type MemoryAtVersion = components["schemas"]["MemoryAtVersion"];
 export type MemoryDifference = components["schemas"]["MemoryDifference"];
 export type Members = components["schemas"]["Members"];
+export type Folder = components["schemas"]["Folder"];
+export type FolderEntry = components["schemas"]["FolderEntry"];
+export type FileEntry = components["schemas"]["FileEntry"];
+export type FolderSection = components["schemas"]["FolderSection"];
+export type PinState = components["schemas"]["PinState"];
 export type Pins = components["schemas"]["Pins"];
 export type Pin = components["schemas"]["Pin"];
 export type ChallengeList = components["schemas"]["ChallengeList"];
@@ -89,21 +93,53 @@ export function fetchProject(projectId: string, signal?: AbortSignal): Promise<P
   return ask<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}`, { signal });
 }
 
-/** A project's memory, folder by folder. */
-export function fetchTree(projectId: string, level?: string, signal?: AbortSignal): Promise<Tree> {
-  return ask<Tree>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/tree`, { level }), { signal });
-}
-
-/** One memory in full. */
-export function fetchMemory(projectId: string, path: string, signal?: AbortSignal): Promise<MemoryDetail> {
-  return ask<MemoryDetail>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory`, { path }), { signal });
-}
-
-export type SearchAsked = { query: string; level?: string; type?: string };
+export type SearchAsked = { query: string; level?: string; type?: string; limit?: number };
 
 /** Memories that match, by meaning and by exact words. */
 export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
+}
+
+/** One folder of the team's memory: its folders, with what they hold, and its memories. "" is the top. */
+export function fetchFolder(folder: string, signal?: AbortSignal, deep = false): Promise<Folder> {
+  return ask<Folder>(withQuery("/api/files", { folder, deep: deep ? "1" : undefined }), { signal });
+}
+
+/** Any memory this member can reach, by its path, with its file exactly as Claude reads it. */
+export function fetchMemoryAt(path: string, signal?: AbortSignal): Promise<MemoryDetail> {
+  return ask<MemoryDetail>(withQuery("/api/memory", { path }), { signal });
+}
+
+export function fetchHistoryAt(path: string, signal?: AbortSignal): Promise<MemoryHistory> {
+  return ask<MemoryHistory>(withQuery("/api/memory/history", { path }), { signal });
+}
+
+export function fetchVersionAt(path: string, commit: string, signal?: AbortSignal): Promise<MemoryAtVersion> {
+  return ask<MemoryAtVersion>(withQuery("/api/memory/version", { path, commit }), { signal });
+}
+
+/** Pin a project or team memory, or a topic folder, by its path. */
+export function pinAt(path: string): Promise<PinState> {
+  return change<PinState>("/api/memory/pin", { path });
+}
+
+export function unpinAt(path: string): Promise<PinState> {
+  return change<PinState>("/api/memory/unpin", { path });
+}
+
+/** Retire a memory by its path; another author's raises a challenge they decide. */
+export function retireAt(path: string): Promise<Retired> {
+  return change<Retired>("/api/memory/retire", { path });
+}
+
+/** Memories that match, across team memory and every project this member can reach. */
+export function searchEverywhere(asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
+  return ask<SearchResults>(withQuery("/api/search", asked), { signal });
+}
+
+/** Issue a new personal token for a member of the team; theirs stops working. */
+export function reissueToken(employeeId: string): Promise<IssuedToken> {
+  return change<IssuedToken>(`/api/members/${encodeURIComponent(employeeId)}/token`);
 }
 
 /** Everything pinned that this project's sessions are briefed with. */
@@ -133,40 +169,6 @@ export function decideChallenge(challengeId: number, decision: "accept" | "rejec
 /** Retire a memory that is no longer true; another author's raises a challenge they decide. */
 export function retire(projectId: string, path: string): Promise<Retired> {
   return change<Retired>(`/api/projects/${encodeURIComponent(projectId)}/retire`, { path });
-}
-
-/** Every version of one memory, newest first. */
-export function fetchHistory(projectId: string, path: string, signal?: AbortSignal): Promise<MemoryHistory> {
-  return ask<MemoryHistory>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/history`, { path }), {
-    signal,
-  });
-}
-
-/** A memory as it was at one version. */
-export function fetchVersion(
-  projectId: string,
-  path: string,
-  commit: string,
-  signal?: AbortSignal,
-): Promise<MemoryAtVersion> {
-  return ask<MemoryAtVersion>(
-    withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/version`, { path, commit }),
-    { signal },
-  );
-}
-
-/** What changed in a memory between two versions. */
-export function fetchDifference(
-  projectId: string,
-  path: string,
-  before: string,
-  after: string,
-  signal?: AbortSignal,
-): Promise<MemoryDifference> {
-  return ask<MemoryDifference>(
-    withQuery(`/api/projects/${encodeURIComponent(projectId)}/memory/difference`, { path, before, after }),
-    { signal },
-  );
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */

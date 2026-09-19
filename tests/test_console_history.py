@@ -71,7 +71,7 @@ def test_two_versions_can_be_compared(console: Console, signed_out: ConsoleClien
     assert "+The staging database is wiped every night at 02:17 UTC." in compared["difference"]
 
 
-def test_promoting_a_memory_shows_in_the_history_of_the_memory_it_became(
+def test_a_promoted_memory_keeps_its_history_from_before_it_was_promoted(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     owner = signed_in_owner(console, signed_out, "olive-history-four", 504)
@@ -84,7 +84,9 @@ def test_promoting_a_memory_shows_in_the_history_of_the_memory_it_became(
 
     versions = history(signed_out, project, path=promoted)["versions"]
 
-    assert [version["message"].split(":")[0] for version in versions] == ["Promote"]
+    assert [version["message"].split(":")[0] for version in versions] == ["Promote", "Remember"]
+    first = ask(signed_out, f"/api/projects/{project}/memory/version", path=promoted, commit=versions[-1]["commit"])
+    assert "We use pnpm." in first["text"]
 
 
 def test_history_is_refused_for_a_memory_that_is_not_there(console: Console, signed_out: ConsoleClient) -> None:
@@ -111,3 +113,30 @@ def test_a_made_up_version_is_refused(console: Console, signed_out: ConsoleClien
 
     assert refused.status_code == 403
     assert "not a version" in refused.json()["message"]
+
+
+def test_history_reads_and_compares_versions_from_before_a_promotion(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-history-seven", 507)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    in_project = owner.in_project(project, "billing-api")
+    personal = in_project.call(
+        "remember", title="Deploys go out on Tuesdays", summary="Tuesdays.", type="decision", body="We deploy on Tuesdays."
+    )["path"]
+    in_project.call("edit_memory", path=personal, body="We deploy on Tuesdays and Thursdays.")
+    promoted = in_project.call("promote", path=personal, level="project")["path"]
+
+    versions = history(signed_out, project, path=promoted)["versions"]
+    first = ask(signed_out, f"/api/projects/{project}/memory/version", path=promoted, commit=versions[-1]["commit"])
+    compared = ask(
+        signed_out,
+        f"/api/projects/{project}/memory/difference",
+        path=promoted,
+        before=versions[-1]["commit"],
+        after=versions[0]["commit"],
+    )
+
+    assert [version["message"].split(":")[0] for version in versions] == ["Promote", "Edit", "Remember"]
+    assert "We deploy on Tuesdays." in first["text"]
+    assert "+We deploy on Tuesdays and Thursdays." in compared["difference"]

@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-test("a member issues their own personal token and sees it once", async ({ page }) => {
-  await page.request.post("http://127.0.0.1:8124/as-account", { data: { id: 1, login: "olive" } });
+import { signInAs } from "./helpers";
 
-  await page.goto("/");
-  await page.getByTestId("sign-in").click();
+test("a member issues their own personal token and sees it once", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("member-menu").click();
   await page.getByTestId("to-my-token").click();
 
-  await expect(page.getByText("Connect your Claude Code")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect your Claude Code" })).toBeVisible();
   await page.getByTestId("issue-token").click();
+  await page.getByTestId("issue-token-confirm").click();
 
   const shown = page.getByTestId("token-value");
   await expect(shown).toContainText("smt_");

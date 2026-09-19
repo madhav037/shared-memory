@@ -1,14 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-const fakeGitHub = "http://127.0.0.1:8124";
-
-async function signInAs(page: import("@playwright/test").Page, id: number, login: string) {
-  await page.request.post(`${fakeGitHub}/as-account`, { data: { id, login } });
-  await page.getByTestId("sign-in").click();
-}
+import { signInAs, signOut } from "./helpers";
 
 test("a project is restricted, a member is let in, and then loses access", async ({ page }) => {
-  await page.goto("/");
   await signInAs(page, 1, "olive");
 
   // Someone to let in, and a project to keep from everyone else.
@@ -19,7 +13,7 @@ test("a project is restricted, a member is let in, and then loses access", async
   await page.getByTestId("add-member").click();
   await expect(page.getByTestId("members")).toContainText("Ray Reader");
 
-  await page.getByRole("link", { name: "Shared Memory" }).click();
+  await page.getByTestId("to-contents").click();
   await page.getByTestId("new-project-name").fill("Vault");
   await page.getByTestId("create-project").click();
   const projectId = ((await page.getByTestId("project-id").textContent()) ?? "").trim();
@@ -31,22 +25,24 @@ test("a project is restricted, a member is let in, and then loses access", async
   await expect(page.getByTestId("restricted")).toBeVisible();
 
   // Ray is on the access list, so the project is theirs to read.
-  await page.getByTestId("sign-out").click();
+  await signOut(page);
   await signInAs(page, 78, "ray-reader");
   await expect(page.getByTestId("project-card").filter({ hasText: "Vault" })).toBeVisible();
 
   // The lead takes that access away again.
-  await page.getByTestId("sign-out").click();
+  await signOut(page);
   await signInAs(page, 1, "olive");
   await page.goto(`/projects/${projectId}/settings`);
-  await page.getByTestId("revoke-emp-ray").click();
+  await page.getByTestId(`revoke-emp-ray`).click();
   await expect(page.getByTestId("access")).toContainText("Nobody has been let in yet");
 
-  // Now Ray can neither see it listed nor open it.
-  await page.getByTestId("sign-out").click();
+  // Now Ray can neither see it listed nor open it, nor read it by its path.
+  await signOut(page);
   await signInAs(page, 78, "ray-reader");
   await expect(page.getByTestId("project-card").filter({ hasText: "Vault" })).toHaveCount(0);
 
   await page.goto(`/projects/${projectId}`);
-  await expect(page.getByText(/is restricted/)).toBeVisible();
+  await expect(page.getByTestId("folder-refused")).toContainText("is restricted");
+  await page.goto(`/memory?path=projects/${projectId}/shared/conventions/anything.md`);
+  await expect(page.getByTestId("memory-refused")).toContainText("is restricted");
 });

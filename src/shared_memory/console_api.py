@@ -143,6 +143,7 @@ class ProjectSummary(BaseModel):
 
     project_id: str
     name: str
+    restricted: bool
     leads: list[ProjectMember]
     you_lead: bool
 
@@ -261,6 +262,13 @@ class Pins(BaseModel):
     cap: int
 
 
+class PinState(BaseModel):
+    """Whether a memory or topic folder is pinned into every briefing it belongs in."""
+
+    path: str
+    pinned: bool
+
+
 class MemoryPath(BaseModel):
     """The memory or topic folder this change is about."""
 
@@ -299,6 +307,7 @@ class RaisedChallenge(BaseModel):
     challenge_id: int
     kind: str
     target_path: str
+    target_title: str
     challenger_path: str | None
     raised_at: datetime
     state: str
@@ -345,6 +354,8 @@ class MemoryDetail(BaseModel):
     related_files: list[str]
     promoted_by: str | None
     body: str
+    author_name: str
+    source: str
     pinned: bool
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
@@ -352,6 +363,7 @@ class MemoryDetail(BaseModel):
 
 class SearchHit(BaseModel):
     path: str
+    project_id: str | None
     title: str
     heading: str
     level: str
@@ -364,6 +376,66 @@ class SearchHit(BaseModel):
 
 class SearchResults(BaseModel):
     results: list[SearchHit]
+
+
+class FolderEntry(BaseModel):
+    """A folder inside the one being looked at, and what it holds."""
+
+    path: str
+    name: str
+    kind: str
+    memories: int
+    changed: datetime | None
+
+
+class FileEntry(BaseModel):
+    """A memory in the folder being looked at."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    level: str
+    status: str
+    author: str
+    author_name: str
+    changed: datetime | None
+    pinned: bool
+    challenged: int
+    waiting: bool
+
+
+class FolderSection(BaseModel):
+    """A folder beneath the one being looked at, with the memories directly in it."""
+
+    path: str
+    name: str
+    kind: str
+    depth: int
+    count: int
+    changed: datetime | None
+    memories: list[FileEntry]
+
+
+class Crumb(BaseModel):
+    """A folder on the way down to the one being looked at."""
+
+    path: str
+    name: str
+
+
+class Folder(BaseModel):
+    """One folder of the team's memory: where it sits, the folders in it, and its memories."""
+
+    folder: str
+    name: str
+    kind: str
+    pinnable: bool
+    pinned: bool
+    trail: list[Crumb]
+    folders: list[FolderEntry]
+    memories: list[FileEntry]
+    inside: list[FolderSection]
 
 
 class MemberSummary(BaseModel):
@@ -627,6 +699,81 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=MemoryPath,
     ),
     Declaration(
+        path="/files",
+        method="GET",
+        operation_id="files",
+        summary="One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        answers=Folder,
+        query=("folder", "deep"),
+    ),
+    Declaration(
+        path="/memory",
+        method="GET",
+        operation_id="memory_at",
+        summary="Any memory this member can reach, by its path, with its file exactly as Claude reads it.",
+        answers=MemoryDetail,
+        query=("path",),
+    ),
+    Declaration(
+        path="/memory/history",
+        method="GET",
+        operation_id="history_at",
+        summary="Every version of a memory, by its path, newest first.",
+        answers=MemoryHistory,
+        query=("path",),
+    ),
+    Declaration(
+        path="/memory/version",
+        method="GET",
+        operation_id="version_at",
+        summary="A memory, by its path, as it was at one version.",
+        answers=MemoryAtVersion,
+        query=("path", "commit"),
+    ),
+    Declaration(
+        path="/memory/difference",
+        method="GET",
+        operation_id="difference_at",
+        summary="What changed in a memory, by its path, between two versions.",
+        answers=MemoryDifference,
+        query=("path", "before", "after"),
+    ),
+    Declaration(
+        path="/memory/pin",
+        method="POST",
+        operation_id="pin_at",
+        summary="Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        answers=PinState,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/memory/unpin",
+        method="POST",
+        operation_id="unpin_at",
+        summary="Remove a pin.",
+        answers=PinState,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/memory/retire",
+        method="POST",
+        operation_id="retire_at",
+        summary="Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        answers=Retired,
+        changes=True,
+        accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/search",
+        method="GET",
+        operation_id="search_everywhere",
+        summary="Memories that match, across team memory and every project this member can reach.",
+        answers=SearchResults,
+        query=("query", "level", "type", "limit"),
+    ),
+    Declaration(
         path="/challenges",
         method="GET",
         operation_id="challenges",
@@ -853,6 +1000,15 @@ class ConsoleApi:
             "pins": self._pins,
             "pin": self._pin,
             "unpin": self._unpin,
+            "files": self._files,
+            "memory_at": self._memory_at,
+            "history_at": self._history_at,
+            "version_at": self._version_at,
+            "difference_at": self._difference_at,
+            "pin_at": self._pin_at,
+            "unpin_at": self._unpin_at,
+            "retire_at": self._retire_at,
+            "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
             "decide_challenge": self._decide_challenge,
             "retire": self._retire,
@@ -1055,12 +1211,113 @@ class ConsoleApi:
         return self._browse(request, walk)
 
     def _memory(self, request: Request) -> Response:
-        def read(caller: Caller) -> MemoryDetail:
-            memory = self._service.read(caller, request.query_params.get("path", ""))
-            memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
-            return MemoryDetail(**memory)
+        return self._browse(request, lambda caller: self._detail(caller, request.query_params.get("path", "")))
 
-        return self._browse(request, read)
+    def _detail(self, caller: Caller, path: str) -> MemoryDetail:
+        """One memory in full: what it says, its file as Claude reads it, and whether it is pinned."""
+        memory = self._service.read(caller, path)
+        memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
+        memory["source"] = self._service.source(caller, path)
+        memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
+        return MemoryDetail(**memory)
+
+    def _names(self, member: Member) -> dict[str, str]:
+        return {one["employee_id"]: one["name"] for one in self._identity.members(member)}
+
+    # --- memory by its path, wherever it lives ---
+
+    def _files(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            caller = self._identity.caller_in(member, None)
+            found = self._service.explore(
+                caller, request.query_params.get("folder", ""), deep=request.query_params.get("deep") == "1"
+            )
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        pinned = self._briefing.pinned_paths(caller.team)
+        for memory in [*found["memories"], *(one for section in found["inside"] for one in section["memories"])]:
+            memory["pinned"] = memory["path"] in pinned
+        found["pinnable"] = bool(found["folder"]) and _may_be_pinned(found["folder"])
+        found["pinned"] = found["folder"] in pinned
+        return JSONResponse(Folder(**found).model_dump(mode="json"))
+
+    def _memory_at(self, request: Request) -> Response:
+        return self._at(request, self._detail)
+
+    def _history_at(self, request: Request) -> Response:
+        return self._at(request, lambda caller, path: MemoryHistory(**self._service.history(caller, path)))
+
+    def _version_at(self, request: Request) -> Response:
+        def read(caller: Caller, path: str) -> MemoryAtVersion:
+            return MemoryAtVersion(**self._service.version(caller, path, request.query_params.get("commit", "")))
+
+        return self._at(request, read)
+
+    def _difference_at(self, request: Request) -> Response:
+        def read(caller: Caller, path: str) -> MemoryDifference:
+            asked = request.query_params
+            return MemoryDifference(
+                **self._service.difference(caller, path, asked.get("before", ""), asked.get("after", ""))
+            )
+
+        return self._at(request, read)
+
+    def _pin_at(self, request: Request) -> Response:
+        def pin(caller: Caller, path: str) -> PinState:
+            return PinState(path=self._briefing.pin(caller, path)["pinned"], pinned=True)
+
+        return self._at(request, pin, request.state.asked.path)
+
+    def _unpin_at(self, request: Request) -> Response:
+        def unpin(caller: Caller, path: str) -> PinState:
+            return PinState(path=self._briefing.unpin(caller, path)["unpinned"], pinned=False)
+
+        return self._at(request, unpin, request.state.asked.path)
+
+    def _retire_at(self, request: Request) -> Response:
+        def retire(caller: Caller, path: str) -> Retired:
+            done = self._lifecycle.retire(caller, path)
+            return Retired(status=done["status"], path=path, challenge_id=done.get("challenge_id"))
+
+        return self._at(request, retire, request.state.asked.path)
+
+    def _search_everywhere(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked = request.query_params
+        try:
+            found = self._service.search_everywhere(
+                self._identity.caller_in(member, None),
+                asked.get("query", ""),
+                level=asked.get("level") or None,
+                type=asked.get("type") or None,
+                limit=int(asked.get("limit", 20)),
+            )
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        except ValueError:
+            return JSONResponse({"message": "That search wasn't understood."}, status_code=422)
+        results = [SearchHit(**{**hit, "project_id": _project_in(hit["path"])}) for hit in found["results"]]
+        return JSONResponse(SearchResults(results=results).model_dump(mode="json"))
+
+    def _at(
+        self, request: Request, look: Callable[[Caller, str], BaseModel], path: str | None = None
+    ) -> Response:
+        """Anything done to one memory by its path, placed in the project it lives in (or any, for team memory)."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        where = request.query_params.get("path", "") if path is None else path
+        try:
+            return JSONResponse(look(self._working_in(member, _project_in(where)), where).model_dump(mode="json"))
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        except ValueError:
+            return JSONResponse({"message": "That request wasn't understood."}, status_code=422)
 
     def _pins(self, request: Request) -> Response:
         return self._browse(request, self._pinned)
@@ -1090,14 +1347,15 @@ class ConsoleApi:
     def _search(self, request: Request) -> Response:
         def search(caller: Caller) -> SearchResults:
             asked = request.query_params
+            found = self._service.search(
+                caller,
+                asked.get("query", ""),
+                level=asked.get("level") or None,
+                type=asked.get("type") or None,
+                limit=int(asked.get("limit", 10)),
+            )
             return SearchResults(
-                **self._service.search(
-                    caller,
-                    asked.get("query", ""),
-                    level=asked.get("level") or None,
-                    type=asked.get("type") or None,
-                    limit=int(asked.get("limit", 10)),
-                )
+                results=[SearchHit(**{**hit, "project_id": _project_in(hit["path"])}) for hit in found["results"]]
             )
 
         return self._browse(request, search)
@@ -1168,7 +1426,10 @@ class ConsoleApi:
 
     def _disputes(self, caller: Caller) -> Response:
         waiting = [self._dispute(caller, challenge) for challenge in self._challenging.waiting_for(caller)]
-        raised = [RaisedChallenge(**one) for one in self._challenging.raised_by(caller)]
+        raised = [
+            RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
+            for one in self._challenging.raised_by(caller)
+        ]
         return JSONResponse(ChallengeList(waiting=waiting, raised=raised).model_dump(mode="json"))
 
     def _dispute(self, caller: Caller, challenge: Challenge) -> ChallengeDetail:

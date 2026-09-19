@@ -6,3 +6,7 @@ __pycache__/
 .cache/
 .env
 backup_key
+
+# Impeccable working files: review screenshots and question logs from a design session
+.impeccable/review/
+.impeccable/questions/

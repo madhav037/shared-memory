@@ -1,0 +1,946 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-19T07:18:43+00:00",
+  "title": "Design System: Shared Memory",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Printed Paper (printed page)",
+        "canonical": "#f7f8f6",
+        "oklch": "oklch(97.8% 0.003 128.5)",
+        "cssVar": "--paper",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.003 128.5)",
+          "oklch(26% 0.003 128.5)",
+          "oklch(37% 0.003 128.5)",
+          "oklch(48% 0.003 128.5)",
+          "oklch(59% 0.003 128.5)",
+          "oklch(70% 0.003 128.5)",
+          "oklch(82% 0.003 128.5)",
+          "oklch(95% 0.003 128.5)"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Contents Paper (printed page)",
+        "canonical": "#eef1ee",
+        "oklch": "oklch(95.5% 0.005 145.5)",
+        "cssVar": "--paper-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.005 145.5)",
+          "oklch(26% 0.005 145.5)",
+          "oklch(37% 0.005 145.5)",
+          "oklch(48% 0.005 145.5)",
+          "oklch(59% 0.005 145.5)",
+          "oklch(70% 0.005 145.5)",
+          "oklch(82% 0.005 145.5)",
+          "oklch(95% 0.005 145.5)"
+        ]
+      },
+      "paper-3": {
+        "role": "neutral",
+        "displayName": "Hover Paper (printed page)",
+        "canonical": "#e4e9e5",
+        "oklch": "oklch(92.9% 0.008 151.9)",
+        "cssVar": "--paper-3",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.008 151.9)",
+          "oklch(26% 0.008 151.9)",
+          "oklch(37% 0.008 151.9)",
+          "oklch(48% 0.008 151.9)",
+          "oklch(59% 0.008 151.9)",
+          "oklch(70% 0.008 151.9)",
+          "oklch(82% 0.008 151.9)",
+          "oklch(95% 0.008 151.9)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink (printed page)",
+        "canonical": "#17211c",
+        "oklch": "oklch(23.6% 0.017 163.1)",
+        "cssVar": "--ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.017 163.1)",
+          "oklch(26% 0.017 163.1)",
+          "oklch(37% 0.017 163.1)",
+          "oklch(48% 0.017 163.1)",
+          "oklch(59% 0.017 163.1)",
+          "oklch(70% 0.017 163.1)",
+          "oklch(82% 0.017 163.1)",
+          "oklch(95% 0.017 163.1)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Second Ink (printed page)",
+        "canonical": "#44544b",
+        "oklch": "oklch(42.9% 0.025 160.5)",
+        "cssVar": "--ink-2",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.025 160.5)",
+          "oklch(26% 0.025 160.5)",
+          "oklch(37% 0.025 160.5)",
+          "oklch(48% 0.025 160.5)",
+          "oklch(59% 0.025 160.5)",
+          "oklch(70% 0.025 160.5)",
+          "oklch(82% 0.025 160.5)",
+          "oklch(95% 0.025 160.5)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Third Ink (printed page)",
+        "canonical": "#5d6d64",
+        "oklch": "oklch(51.9% 0.024 160.8)",
+        "cssVar": "--ink-3",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.024 160.8)",
+          "oklch(26% 0.024 160.8)",
+          "oklch(37% 0.024 160.8)",
+          "oklch(48% 0.024 160.8)",
+          "oklch(59% 0.024 160.8)",
+          "oklch(70% 0.024 160.8)",
+          "oklch(82% 0.024 160.8)",
+          "oklch(95% 0.024 160.8)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule (printed page)",
+        "canonical": "#cdd5cf",
+        "oklch": "oklch(86.5% 0.012 153.6)",
+        "cssVar": "--rule",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.012 153.6)",
+          "oklch(26% 0.012 153.6)",
+          "oklch(37% 0.012 153.6)",
+          "oklch(48% 0.012 153.6)",
+          "oklch(59% 0.012 153.6)",
+          "oklch(70% 0.012 153.6)",
+          "oklch(82% 0.012 153.6)",
+          "oklch(95% 0.012 153.6)"
+        ]
+      },
+      "rule-soft": {
+        "role": "neutral",
+        "displayName": "Soft Rule (printed page)",
+        "canonical": "#dfe5e0",
+        "oklch": "oklch(91.6% 0.009 150.7)",
+        "cssVar": "--rule-soft",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.009 150.7)",
+          "oklch(26% 0.009 150.7)",
+          "oklch(37% 0.009 150.7)",
+          "oklch(48% 0.009 150.7)",
+          "oklch(59% 0.009 150.7)",
+          "oklch(70% 0.009 150.7)",
+          "oklch(82% 0.009 150.7)",
+          "oklch(95% 0.009 150.7)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Buckram Green (printed page)",
+        "canonical": "#1e5b46",
+        "oklch": "oklch(42.6% 0.072 166.8)",
+        "cssVar": "--accent",
+        "scheme": "light",
+        "tonalRamp": [
+          "#0a3a2b",
+          "#154a39",
+          "#1e5b46",
+          "#2c7353",
+          "#509874",
+          "#7cc4a0",
+          "#d2e5db",
+          "#e8f2ed"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Deep Buckram (printed page)",
+        "canonical": "#154a39",
+        "oklch": "oklch(36.9% 0.063 168.0)",
+        "cssVar": "--accent-hover",
+        "scheme": "light",
+        "tonalRamp": [
+          "#0a3a2b",
+          "#154a39",
+          "#1e5b46",
+          "#2c7353",
+          "#509874",
+          "#7cc4a0",
+          "#d2e5db",
+          "#e8f2ed"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Accent Ink (printed page)",
+        "canonical": "#f7f8f6",
+        "oklch": "oklch(97.8% 0.003 128.5)",
+        "cssVar": "--accent-ink",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.003 128.5)",
+          "oklch(26% 0.003 128.5)",
+          "oklch(37% 0.003 128.5)",
+          "oklch(48% 0.003 128.5)",
+          "oklch(59% 0.003 128.5)",
+          "oklch(70% 0.003 128.5)",
+          "oklch(82% 0.003 128.5)",
+          "oklch(95% 0.003 128.5)"
+        ]
+      },
+      "accent-wash": {
+        "role": "primary",
+        "displayName": "Binding Wash (printed page)",
+        "canonical": "#e1ebe5",
+        "oklch": "oklch(93.1% 0.013 159.9)",
+        "cssVar": "--accent-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.013 159.9)",
+          "oklch(26% 0.013 159.9)",
+          "oklch(37% 0.013 159.9)",
+          "oklch(48% 0.013 159.9)",
+          "oklch(59% 0.013 159.9)",
+          "oklch(70% 0.013 159.9)",
+          "oklch(82% 0.013 159.9)",
+          "oklch(95% 0.013 159.9)"
+        ]
+      },
+      "insert-wash": {
+        "role": "primary",
+        "displayName": "Insertion Wash (printed page)",
+        "canonical": "#d7e8dd",
+        "oklch": "oklch(91.5% 0.023 157.6)",
+        "cssVar": "--insert-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.023 157.6)",
+          "oklch(26% 0.023 157.6)",
+          "oklch(37% 0.023 157.6)",
+          "oklch(48% 0.023 157.6)",
+          "oklch(59% 0.023 157.6)",
+          "oklch(70% 0.023 157.6)",
+          "oklch(82% 0.023 157.6)",
+          "oklch(95% 0.023 157.6)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Oxide Red (printed page)",
+        "canonical": "#9b2c1f",
+        "oklch": "oklch(46.3% 0.149 30.2)",
+        "cssVar": "--danger",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.149 30.2)",
+          "oklch(26% 0.149 30.2)",
+          "oklch(37% 0.149 30.2)",
+          "oklch(48% 0.149 30.2)",
+          "oklch(59% 0.149 30.2)",
+          "oklch(70% 0.149 30.2)",
+          "oklch(82% 0.149 30.2)",
+          "oklch(95% 0.149 30.2)"
+        ]
+      },
+      "danger-hover": {
+        "role": "secondary",
+        "displayName": "Deep Oxide (printed page)",
+        "canonical": "#7f2419",
+        "oklch": "oklch(40.3% 0.127 30.3)",
+        "cssVar": "--danger-hover",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.127 30.3)",
+          "oklch(26% 0.127 30.3)",
+          "oklch(37% 0.127 30.3)",
+          "oklch(48% 0.127 30.3)",
+          "oklch(59% 0.127 30.3)",
+          "oklch(70% 0.127 30.3)",
+          "oklch(82% 0.127 30.3)",
+          "oklch(95% 0.127 30.3)"
+        ]
+      },
+      "danger-wash": {
+        "role": "secondary",
+        "displayName": "Oxide Wash (printed page)",
+        "canonical": "#f5e4e0",
+        "oklch": "oklch(93.1% 0.019 33.4)",
+        "cssVar": "--danger-wash",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.019 33.4)",
+          "oklch(26% 0.019 33.4)",
+          "oklch(37% 0.019 33.4)",
+          "oklch(48% 0.019 33.4)",
+          "oklch(59% 0.019 33.4)",
+          "oklch(70% 0.019 33.4)",
+          "oklch(82% 0.019 33.4)",
+          "oklch(95% 0.019 33.4)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection (printed page)",
+        "canonical": "#c9dfd2",
+        "oklch": "oklch(88.4% 0.029 159.9)",
+        "cssVar": "--selection",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(15% 0.029 159.9)",
+          "oklch(26% 0.029 159.9)",
+          "oklch(37% 0.029 159.9)",
+          "oklch(48% 0.029 159.9)",
+          "oklch(59% 0.029 159.9)",
+          "oklch(70% 0.029 159.9)",
+          "oklch(82% 0.029 159.9)",
+          "oklch(95% 0.029 159.9)"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Cloth (bound volume)",
+        "canonical": "#101814",
+        "oklch": "oklch(19.9% 0.014 163.1)",
+        "cssVar": "--paper",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.014 163.1)",
+          "oklch(26% 0.014 163.1)",
+          "oklch(37% 0.014 163.1)",
+          "oklch(48% 0.014 163.1)",
+          "oklch(59% 0.014 163.1)",
+          "oklch(70% 0.014 163.1)",
+          "oklch(82% 0.014 163.1)",
+          "oklch(95% 0.014 163.1)"
+        ]
+      },
+      "paper-2-dark": {
+        "role": "neutral",
+        "displayName": "Contents Paper (bound volume)",
+        "canonical": "#0b120f",
+        "oklch": "oklch(17.4% 0.012 166.8)",
+        "cssVar": "--paper-2",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.012 166.8)",
+          "oklch(26% 0.012 166.8)",
+          "oklch(37% 0.012 166.8)",
+          "oklch(48% 0.012 166.8)",
+          "oklch(59% 0.012 166.8)",
+          "oklch(70% 0.012 166.8)",
+          "oklch(82% 0.012 166.8)",
+          "oklch(95% 0.012 166.8)"
+        ]
+      },
+      "paper-3-dark": {
+        "role": "neutral",
+        "displayName": "Hover Paper (bound volume)",
+        "canonical": "#18221d",
+        "oklch": "oklch(24.0% 0.017 163.1)",
+        "cssVar": "--paper-3",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.017 163.1)",
+          "oklch(26% 0.017 163.1)",
+          "oklch(37% 0.017 163.1)",
+          "oklch(48% 0.017 163.1)",
+          "oklch(59% 0.017 163.1)",
+          "oklch(70% 0.017 163.1)",
+          "oklch(82% 0.017 163.1)",
+          "oklch(95% 0.017 163.1)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (bound volume)",
+        "canonical": "#e4ebe6",
+        "oklch": "oklch(93.3% 0.010 155.1)",
+        "cssVar": "--ink",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.010 155.1)",
+          "oklch(26% 0.010 155.1)",
+          "oklch(37% 0.010 155.1)",
+          "oklch(48% 0.010 155.1)",
+          "oklch(59% 0.010 155.1)",
+          "oklch(70% 0.010 155.1)",
+          "oklch(82% 0.010 155.1)",
+          "oklch(95% 0.010 155.1)"
+        ]
+      },
+      "ink-2-dark": {
+        "role": "neutral",
+        "displayName": "Second Ink (bound volume)",
+        "canonical": "#b4c1b9",
+        "oklch": "oklch(79.9% 0.018 159.0)",
+        "cssVar": "--ink-2",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.018 159.0)",
+          "oklch(26% 0.018 159.0)",
+          "oklch(37% 0.018 159.0)",
+          "oklch(48% 0.018 159.0)",
+          "oklch(59% 0.018 159.0)",
+          "oklch(70% 0.018 159.0)",
+          "oklch(82% 0.018 159.0)",
+          "oklch(95% 0.018 159.0)"
+        ]
+      },
+      "ink-3-dark": {
+        "role": "neutral",
+        "displayName": "Third Ink (bound volume)",
+        "canonical": "#93a39a",
+        "oklch": "oklch(70.0% 0.022 161.2)",
+        "cssVar": "--ink-3",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.022 161.2)",
+          "oklch(26% 0.022 161.2)",
+          "oklch(37% 0.022 161.2)",
+          "oklch(48% 0.022 161.2)",
+          "oklch(59% 0.022 161.2)",
+          "oklch(70% 0.022 161.2)",
+          "oklch(82% 0.022 161.2)",
+          "oklch(95% 0.022 161.2)"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Rule (bound volume)",
+        "canonical": "#2b3831",
+        "oklch": "oklch(32.6% 0.021 161.4)",
+        "cssVar": "--rule",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.021 161.4)",
+          "oklch(26% 0.021 161.4)",
+          "oklch(37% 0.021 161.4)",
+          "oklch(48% 0.021 161.4)",
+          "oklch(59% 0.021 161.4)",
+          "oklch(70% 0.021 161.4)",
+          "oklch(82% 0.021 161.4)",
+          "oklch(95% 0.021 161.4)"
+        ]
+      },
+      "rule-soft-dark": {
+        "role": "neutral",
+        "displayName": "Soft Rule (bound volume)",
+        "canonical": "#1f2a24",
+        "oklch": "oklch(27.2% 0.019 161.0)",
+        "cssVar": "--rule-soft",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.019 161.0)",
+          "oklch(26% 0.019 161.0)",
+          "oklch(37% 0.019 161.0)",
+          "oklch(48% 0.019 161.0)",
+          "oklch(59% 0.019 161.0)",
+          "oklch(70% 0.019 161.0)",
+          "oklch(82% 0.019 161.0)",
+          "oklch(95% 0.019 161.0)"
+        ]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Buckram Green (bound volume)",
+        "canonical": "#7cc4a0",
+        "oklch": "oklch(76.3% 0.090 161.5)",
+        "cssVar": "--accent",
+        "scheme": "dark",
+        "tonalRamp": [
+          "#0a3a2b",
+          "#154a39",
+          "#1e5b46",
+          "#2c7353",
+          "#509874",
+          "#7cc4a0",
+          "#d2e5db",
+          "#e8f2ed"
+        ]
+      },
+      "accent-hover-dark": {
+        "role": "primary",
+        "displayName": "Deep Buckram (bound volume)",
+        "canonical": "#93d3b3",
+        "oklch": "oklch(81.5% 0.080 162.2)",
+        "cssVar": "--accent-hover",
+        "scheme": "dark",
+        "tonalRamp": [
+          "#0a3a2b",
+          "#154a39",
+          "#1e5b46",
+          "#2c7353",
+          "#509874",
+          "#7cc4a0",
+          "#d2e5db",
+          "#e8f2ed"
+        ]
+      },
+      "accent-ink-dark": {
+        "role": "primary",
+        "displayName": "Accent Ink (bound volume)",
+        "canonical": "#0b120f",
+        "oklch": "oklch(17.4% 0.012 166.8)",
+        "cssVar": "--accent-ink",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.012 166.8)",
+          "oklch(26% 0.012 166.8)",
+          "oklch(37% 0.012 166.8)",
+          "oklch(48% 0.012 166.8)",
+          "oklch(59% 0.012 166.8)",
+          "oklch(70% 0.012 166.8)",
+          "oklch(82% 0.012 166.8)",
+          "oklch(95% 0.012 166.8)"
+        ]
+      },
+      "accent-wash-dark": {
+        "role": "primary",
+        "displayName": "Binding Wash (bound volume)",
+        "canonical": "#16291f",
+        "oklch": "oklch(26.1% 0.031 160.2)",
+        "cssVar": "--accent-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.031 160.2)",
+          "oklch(26% 0.031 160.2)",
+          "oklch(37% 0.031 160.2)",
+          "oklch(48% 0.031 160.2)",
+          "oklch(59% 0.031 160.2)",
+          "oklch(70% 0.031 160.2)",
+          "oklch(82% 0.031 160.2)",
+          "oklch(95% 0.031 160.2)"
+        ]
+      },
+      "insert-wash-dark": {
+        "role": "primary",
+        "displayName": "Insertion Wash (bound volume)",
+        "canonical": "#1d3a2b",
+        "oklch": "oklch(32.1% 0.045 159.9)",
+        "cssVar": "--insert-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.045 159.9)",
+          "oklch(26% 0.045 159.9)",
+          "oklch(37% 0.045 159.9)",
+          "oklch(48% 0.045 159.9)",
+          "oklch(59% 0.045 159.9)",
+          "oklch(70% 0.045 159.9)",
+          "oklch(82% 0.045 159.9)",
+          "oklch(95% 0.045 159.9)"
+        ]
+      },
+      "danger-dark": {
+        "role": "secondary",
+        "displayName": "Oxide Red (bound volume)",
+        "canonical": "#ec8a76",
+        "oklch": "oklch(73.3% 0.124 32.4)",
+        "cssVar": "--danger",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.124 32.4)",
+          "oklch(26% 0.124 32.4)",
+          "oklch(37% 0.124 32.4)",
+          "oklch(48% 0.124 32.4)",
+          "oklch(59% 0.124 32.4)",
+          "oklch(70% 0.124 32.4)",
+          "oklch(82% 0.124 32.4)",
+          "oklch(95% 0.124 32.4)"
+        ]
+      },
+      "danger-hover-dark": {
+        "role": "secondary",
+        "displayName": "Deep Oxide (bound volume)",
+        "canonical": "#f2a292",
+        "oklch": "oklch(78.7% 0.099 31.8)",
+        "cssVar": "--danger-hover",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.099 31.8)",
+          "oklch(26% 0.099 31.8)",
+          "oklch(37% 0.099 31.8)",
+          "oklch(48% 0.099 31.8)",
+          "oklch(59% 0.099 31.8)",
+          "oklch(70% 0.099 31.8)",
+          "oklch(82% 0.099 31.8)",
+          "oklch(95% 0.099 31.8)"
+        ]
+      },
+      "danger-wash-dark": {
+        "role": "secondary",
+        "displayName": "Oxide Wash (bound volume)",
+        "canonical": "#2e1814",
+        "oklch": "oklch(23.8% 0.037 31.0)",
+        "cssVar": "--danger-wash",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.037 31.0)",
+          "oklch(26% 0.037 31.0)",
+          "oklch(37% 0.037 31.0)",
+          "oklch(48% 0.037 31.0)",
+          "oklch(59% 0.037 31.0)",
+          "oklch(70% 0.037 31.0)",
+          "oklch(82% 0.037 31.0)",
+          "oklch(95% 0.037 31.0)"
+        ]
+      },
+      "selection-dark": {
+        "role": "neutral",
+        "displayName": "Selection (bound volume)",
+        "canonical": "#24493a",
+        "oklch": "oklch(37.3% 0.050 165.5)",
+        "cssVar": "--selection",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(15% 0.050 165.5)",
+          "oklch(26% 0.050 165.5)",
+          "oklch(37% 0.050 165.5)",
+          "oklch(48% 0.050 165.5)",
+          "oklch(59% 0.050 165.5)",
+          "oklch(70% 0.050 165.5)",
+          "oklch(82% 0.050 165.5)",
+          "oklch(95% 0.050 165.5)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The title page only: before sign-in and when the server can't be reached. 2.25rem at 900px and below."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "One page title per page, balanced, 28ch cap unless a single word. 1.75rem at 900px and below."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings, table-of-contents part names, a disputed memory's name, h2 in memory text."
+      },
+      "standfirst": {
+        "displayName": "Standfirst",
+        "purpose": "The serif paragraph under every page title, second ink, 58ch."
+      },
+      "body": {
+        "displayName": "Memory text",
+        "purpose": "A memory's text as Claude reads it, 68ch measure, oldstyle proportional figures, hanging punctuation."
+      },
+      "memory-name": {
+        "displayName": "Memory name",
+        "purpose": "A memory's name in lists, results and pins; 1.03rem/600 on folder lines."
+      },
+      "ui": {
+        "displayName": "UI",
+        "purpose": "Nav, notices, banners, register cells, form labels (weights 400 to 550)."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button text."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Dates, counts, authors, trails, margin values; tabular figures."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase margin terms and table heads; a 0.75rem/0.06em cut names the contents column and small sub-sections. Never a kicker above a title."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "The source view; paths at 0.75rem in the margin and audit log."
+      }
+    },
+    "fonts": [
+      {
+        "family": "Public Sans Variable",
+        "source": "@fontsource-variable/public-sans",
+        "role": "sans: controls, labels, metadata"
+      },
+      {
+        "family": "Source Serif 4 Variable",
+        "source": "@fontsource-variable/source-serif-4 (opsz, opsz-italic)",
+        "role": "serif: memory text, names, headings, wordmark"
+      },
+      {
+        "family": "system monospace",
+        "source": "ui-monospace stack",
+        "role": "paths and the source view"
+      }
+    ],
+    "shadows": [
+      {
+        "name": "floating-menu",
+        "value": "0 1px 3px rgba(0,0,0,0.05), rgba(0,0,0,0.05) 0 10px 15px -5px, rgba(0,0,0,0.04) 0 7px 7px -5px",
+        "purpose": "The member menu and the team register's row menus: the only things that float above the page. Mantine's shadow sm via Menu defaultProps."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one easing curve (--ease) for every state change."
+      },
+      {
+        "name": "state",
+        "value": "150ms",
+        "purpose": "Colour and underline changes on nav links."
+      },
+      {
+        "name": "twist",
+        "value": "180ms",
+        "purpose": "A contents folder's chevron turning 90 degrees as it opens in place."
+      },
+      {
+        "name": "appear",
+        "value": "220ms",
+        "purpose": "A notice or an issued-token slip arriving: fade from 0 and a 4px rise."
+      },
+      {
+        "name": "shimmer",
+        "value": "1.4s linear infinite",
+        "purpose": "Loading bars sweeping from hover paper to contents paper."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "prefers-reduced-motion collapses every animation and transition to 1ms."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "margin-folds",
+        "value": "1180px",
+        "purpose": "At and below: the memory margin folds under the text; the standing line appears."
+      },
+      {
+        "name": "frame-collapses",
+        "value": "900px",
+        "purpose": "At and below: contents column becomes a drawer, nav and search collapse, page insets drop to 16px, facing pages stack."
+      },
+      {
+        "name": "leaders-drop",
+        "value": "600px",
+        "purpose": "At and below: dot leaders drop and figures wrap under names."
+      }
+    ],
+    "rules": [
+      {
+        "name": "hairline",
+        "value": "1px solid var(--rule)",
+        "purpose": "Divides parts."
+      },
+      {
+        "name": "soft",
+        "value": "1px solid var(--rule-soft)",
+        "purpose": "Divides entries and register rows."
+      },
+      {
+        "name": "dotted",
+        "value": "1px dotted var(--rule) / var(--ink-3)",
+        "purpose": "Items within a set; dot leaders."
+      },
+      {
+        "name": "dashed",
+        "value": "1px dashed var(--rule)",
+        "purpose": "Personal memory the team hasn't accepted."
+      },
+      {
+        "name": "binding",
+        "value": "2px solid var(--accent)",
+        "purpose": "Sets off a notice or the title page; underlines the current place."
+      },
+      {
+        "name": "register-head",
+        "value": "1px solid var(--ink)",
+        "purpose": "Closes a register's header row."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one decisive action on a surface: sign in, create, search, accept a challenge. Buckram fill, square.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Accept: supersede it</button>",
+      "css": ".ds-btn-primary { background: var(--accent, #1e5b46); color: var(--accent-ink, #f7f8f6); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; font-weight: 600; height: 36px; padding: 0 18px; border: 0; border-radius: 0; cursor: pointer; } .ds-btn-primary:hover { background: var(--accent-hover, #154a39); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "The second choice beside a primary (Reject, Keep it, Unpin, Pin into every briefing). Paper with a hairline rule.",
+      "html": "<button class=\"ds-btn-default\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4\"/><path d=\"M9 15l-4.5 4.5\"/><path d=\"M14.5 4l5.5 5.5\"/></svg>Pin into every briefing</button>",
+      "css": ".ds-btn-default { display: inline-flex; align-items: center; gap: 8px; background: var(--paper, #f7f8f6); color: var(--ink, #17211c); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; font-weight: 600; height: 36px; padding: 0 18px; border: 1px solid var(--rule, #cdd5cf); border-radius: 0; cursor: pointer; } .ds-btn-default:hover { background: var(--paper-3, #e4e9e5); } .ds-btn-default:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet Link",
+      "kind": "button",
+      "refersTo": "quiet-link",
+      "description": "Tertiary and take-away actions as bare text with a 14px icon; the danger variant opens a confirmation before anything is removed.",
+      "html": "<span class=\"ds-quiet-row\"><button class=\"ds-quiet\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 14l4 -4l-4 -4\"/><path d=\"M19 10h-11a4 4 0 1 0 0 8h1\"/></svg>Back to the current text</button><button class=\"ds-quiet ds-quiet-danger\" type=\"button\">Retire it…</button></span>",
+      "css": ".ds-quiet-row { display: inline-flex; gap: 18px; } .ds-quiet { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.8125rem; color: var(--accent, #1e5b46); cursor: pointer; text-decoration: none; } .ds-quiet:hover { text-decoration: underline; text-underline-offset: 0.18em; } .ds-quiet:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; } .ds-quiet-danger { color: var(--danger, #9b2c1f); }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Mantine TextInput as built: square, 36px, search icon inside, buckram border and outline on focus. Its white field and grey border are Mantine defaults, not palette tokens (recorded drift, not a rule).",
+      "html": "<label class=\"ds-search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0\"/><path d=\"M21 21l-6 -6\"/></svg><input type=\"search\" placeholder=\"Search memory\" aria-label=\"Search memory\"></label>",
+      "css": ".ds-search { position: relative; display: inline-block; width: 280px; color: var(--ink-3, #5d6d64); } .ds-search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); } .ds-search input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px 0 34px; border-radius: 0; border: 1px solid #ced4da; background: #ffffff; color: var(--ink, #17211c); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; caret-color: var(--accent, #1e5b46); } .ds-search input::placeholder { color: var(--ink-3, #5d6d64); } .ds-search input:focus-visible { border-color: var(--accent, #1e5b46); outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; }"
+    },
+    {
+      "name": "Masthead Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "The 56px masthead: serif wordmark with the team, sans nav links, the current one ink over a 2px buckram underline, and the waiting count on Challenges.",
+      "html": "<header class=\"ds-masthead\"><a class=\"ds-wordmark\" href=\"#\"><b>Shared Memory</b><span>acme</span></a><nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Contents</a><a href=\"#\">Search</a><a href=\"#\">Challenges<span class=\"ds-count\" aria-label=\"1 waiting\">1</span></a><a href=\"#\">Team</a></nav></header>",
+      "css": ".ds-masthead { display: flex; align-items: center; gap: 24px; height: 56px; padding: 0 20px; background: var(--paper, #f7f8f6); border-bottom: 1px solid var(--rule, #cdd5cf); } .ds-wordmark { display: flex; align-items: baseline; gap: 10px; color: var(--ink, #17211c); text-decoration: none; white-space: nowrap; } .ds-wordmark b { font-family: var(--serif, \"Source Serif 4 Variable\", \"Source Serif 4\", Georgia, serif); font-size: 1.1875rem; font-weight: 650; letter-spacing: -0.01em; } .ds-wordmark span { font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.8125rem; color: var(--ink-3, #5d6d64); } .ds-nav { display: flex; align-items: stretch; gap: 4px; height: 100%; } .ds-nav a { display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--ink-2, #44544b); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; font-weight: 500; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 150ms var(--ease, cubic-bezier(0.16, 1, 0.3, 1)), border-color 150ms var(--ease, cubic-bezier(0.16, 1, 0.3, 1)); } .ds-nav a:hover { color: var(--ink, #17211c); } .ds-nav a:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; } .ds-nav a[aria-current='page'] { color: var(--ink, #17211c); border-bottom-color: var(--accent, #1e5b46); } .ds-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; background: var(--accent, #1e5b46); color: var(--accent-ink, #f7f8f6); font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Contents Tree",
+      "kind": "nav",
+      "refersTo": "tree-row",
+      "description": "The 304px contents column: folders with tallies, memory leaves in the serif, personal italic, cancelled struck, the current row in the binding wash.",
+      "html": "<ul class=\"ds-tree\"><li><div class=\"ds-row ds-top\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6l-6 6\"/></svg><span>Billing</span><span class=\"ds-tally\">8</span></div></li><li><div class=\"ds-row\" style=\"--depth:1\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 6l6 6l-6 6\"/></svg><span>Gotchas</span><span class=\"ds-tally\">1</span></div></li><li><div class=\"ds-row ds-leaf\" style=\"--depth:2\" aria-current=\"page\"><span></span><span>Staging resets nightly</span><span class=\"ds-tally\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 20l10 0\"/><path d=\"M6 6l6 -1l6 1\"/><path d=\"M12 3l0 17\"/><path d=\"M9 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/><path d=\"M21 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/></svg></span></div></li><li><div class=\"ds-row ds-leaf ds-personal\" style=\"--depth:2\"><span></span><span>Seed data lives in fixtures</span><span class=\"ds-tally\"></span></div></li><li><div class=\"ds-row ds-leaf ds-cancelled\" style=\"--depth:2\"><span></span><span>Staging resets weekly</span><span class=\"ds-tally\"></span></div></li></ul>",
+      "css": ".ds-tree { list-style: none; margin: 0; padding: 12px 0; width: 304px; background: var(--paper-2, #eef1ee); border-right: 1px solid var(--rule, #cdd5cf); } .ds-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 30px; padding: 0 14px 0 calc(12px + var(--depth, 0) * 14px); color: var(--ink-2, #44544b); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; cursor: pointer; } .ds-row > svg { color: var(--ink-3, #5d6d64); } .ds-row:hover { background: var(--paper-3, #e4e9e5); color: var(--ink, #17211c); } .ds-row[aria-current='page'] { background: var(--accent-wash, #e1ebe5); color: var(--ink, #17211c); font-weight: 600; } .ds-top { color: var(--ink, #17211c); font-weight: 600; } .ds-tally { display: flex; gap: 4px; font-size: 0.75rem; color: var(--ink-3, #5d6d64); font-variant-numeric: tabular-nums; } .ds-leaf span:nth-child(2) { font-family: var(--serif, \"Source Serif 4 Variable\", \"Source Serif 4\", Georgia, serif); font-size: 0.9375rem; } .ds-personal span:nth-child(2) { font-style: italic; } .ds-cancelled span:nth-child(2) { text-decoration: line-through; text-decoration-color: var(--ink-3, #5d6d64); color: var(--ink-3, #5d6d64); }"
+    },
+    {
+      "name": "State Marks",
+      "kind": "chip",
+      "refersTo": "marks",
+      "description": "State as a mark and a word: pinned (strong), challenged (alert), superseded with the serif dagger, retired, and a level in the label style.",
+      "html": "<span class=\"ds-marks\"><span class=\"ds-rank\">Project memory</span><span class=\"ds-mark ds-strong\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4\"/><path d=\"M9 15l-4.5 4.5\"/><path d=\"M14.5 4l5.5 5.5\"/></svg>Pinned</span><span class=\"ds-mark ds-alert\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 20l10 0\"/><path d=\"M6 6l6 -1l6 1\"/><path d=\"M12 3l0 17\"/><path d=\"M9 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/><path d=\"M21 12l-3 -6l-3 6a3 3 0 0 0 6 0\"/></svg>Challenged</span><span class=\"ds-mark\"><span class=\"ds-dagger\" aria-hidden=\"true\">†</span>Superseded</span><span class=\"ds-mark\">Retired</span><span class=\"ds-rank ds-rank-personal\">Personal memory</span></span>",
+      "css": ".ds-marks { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; } .ds-mark { display: inline-flex; align-items: center; gap: 4px; font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.8125rem; font-weight: 500; color: var(--ink-2, #44544b); white-space: nowrap; } .ds-strong { color: var(--accent, #1e5b46); font-weight: 600; } .ds-alert { color: var(--danger, #9b2c1f); font-weight: 600; } .ds-dagger { font-family: var(--serif, \"Source Serif 4 Variable\", \"Source Serif 4\", Georgia, serif); font-weight: 600; color: var(--ink-3, #5d6d64); } .ds-rank { font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.75rem; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2, #44544b); } .ds-rank-personal { font-weight: 500; letter-spacing: 0.02em; text-transform: none; font-style: italic; }"
+    },
+    {
+      "name": "Table of Contents",
+      "kind": "custom",
+      "refersTo": "toc-line",
+      "description": "Signature: each part between rules, its name in the serif, a dotted leader to count and last change, folders indented beneath.",
+      "html": "<ol class=\"ds-toc\"><li class=\"ds-part\"><a class=\"ds-line ds-line-part\" href=\"#\"><span class=\"ds-name\">Billing</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-figures\">8 memories · 19 Sept 2026</span></a><p class=\"ds-note\">Led by Olive Owner, Leo Lead.</p><ul class=\"ds-sub\"><li><a class=\"ds-line\" href=\"#\"><span class=\"ds-name\">Project memory</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-figures\">6 · 19 Sept 2026</span></a></li><li class=\"ds-deeper\"><a class=\"ds-line\" href=\"#\"><span class=\"ds-name\">Conventions</span><span class=\"ds-leader\" aria-hidden=\"true\"></span><span class=\"ds-figures\">3 · 19 Sept 2026</span></a></li></ul></li></ol>",
+      "css": ".ds-toc { list-style: none; margin: 0; padding: 0; max-width: 72ch; font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); } .ds-part { padding: 18px 0 14px; border-top: 1px solid var(--rule, #cdd5cf); border-bottom: 1px solid var(--rule, #cdd5cf); } .ds-line { display: flex; align-items: baseline; gap: 8px; color: var(--ink, #17211c); text-decoration: none; } .ds-line:hover .ds-name { color: var(--accent, #1e5b46); text-decoration: underline; } .ds-line:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; } .ds-name { white-space: nowrap; font-size: 0.9375rem; } .ds-line-part .ds-name { font-family: var(--serif, \"Source Serif 4 Variable\", \"Source Serif 4\", Georgia, serif); font-size: 1.3125rem; font-weight: 620; } .ds-leader { flex: 1; min-width: 24px; border-bottom: 1px dotted var(--ink-3, #5d6d64); transform: translateY(-4px); opacity: 0.6; } .ds-figures { font-size: 0.8125rem; color: var(--ink-3, #5d6d64); font-variant-numeric: tabular-nums; white-space: nowrap; } .ds-note { margin: 4px 0 0; font-size: 0.8125rem; color: var(--ink-3, #5d6d64); } .ds-sub { list-style: none; margin: 8px 0 0; padding: 0 0 0 22px; } .ds-sub li { padding: 3px 0; } .ds-deeper { padding-left: 22px !important; } .ds-deeper .ds-name { color: var(--ink-2, #44544b); }"
+    },
+    {
+      "name": "Standing Banner",
+      "kind": "card",
+      "refersTo": "banner",
+      "description": "Set-off statement of a memory's standing under its title: hairline box on contents paper, bold lead word; dashed for personal memory. The refusal is its oxide sibling.",
+      "html": "<div class=\"ds-banners\"><p class=\"ds-banner ds-banner-dashed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0\"/><path d=\"M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2\"/></svg><span><b>Personal memory of Dana Dev.</b> The team can read it, but hasn’t accepted it.</span></p><p class=\"ds-banner ds-refusal\" role=\"alert\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 9v4\"/><path d=\"M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0\"/><path d=\"M12 16h.01\"/></svg><span>Only its author can retire it yet.</span></p></div>",
+      "css": ".ds-banners { display: grid; gap: 12px; max-width: 68ch; } .ds-banner { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border: 1px solid var(--rule, #cdd5cf); background: var(--paper-2, #eef1ee); color: var(--ink-2, #44544b); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; line-height: 1.5; } .ds-banner svg { flex: none; margin-top: 2px; } .ds-banner b { color: var(--ink, #17211c); } .ds-banner-dashed { border-style: dashed; } .ds-refusal { border-color: var(--danger, #9b2c1f); background: var(--danger-wash, #f5e4e0); color: var(--ink, #17211c); } .ds-refusal svg { color: var(--danger, #9b2c1f); }"
+    },
+    {
+      "name": "As It Stood",
+      "kind": "custom",
+      "refersTo": "as-it-stood",
+      "description": "Signature: the point-in-time history. A binding-wash strip names the version; the text below is set as it stood, insertions underlined in buckram, deletions struck.",
+      "html": "<div class=\"ds-history\"><div class=\"ds-stood\" role=\"status\"><span>As it stood on <b>19 Sept 2026, 12:03</b>, after “Edit: Staging resets nightly” by Olive Owner.</span><button class=\"ds-back\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 14l4 -4l-4 -4\"/><path d=\"M19 10h-11a4 4 0 1 0 0 8h1\"/></svg>Back to the current text</button></div><p class=\"ds-then\">The staging database is wiped and reseeded every <del>night.</del> <ins>night at 02:17 UTC.</ins> Don’t keep test accounts there.</p></div>",
+      "css": ".ds-history { max-width: 68ch; } .ds-stood { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 10px 14px; border: 1px solid var(--accent, #1e5b46); background: var(--accent-wash, #e1ebe5); color: var(--ink, #17211c); font-family: var(--sans, \"Public Sans Variable\", \"Public Sans\", ui-sans-serif, system-ui, sans-serif); font-size: 0.875rem; font-variant-numeric: tabular-nums; } .ds-back { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font: inherit; font-size: 0.8125rem; color: var(--accent, #1e5b46); cursor: pointer; } .ds-back:hover { text-decoration: underline; } .ds-back:focus-visible { outline: 2px solid var(--accent, #1e5b46); outline-offset: 2px; } .ds-then { margin: 22px 0 0; font-family: var(--serif, \"Source Serif 4 Variable\", \"Source Serif 4\", Georgia, serif); font-size: 1.125rem; line-height: 1.65; color: var(--ink, #17211c); } .ds-then ins { text-decoration: underline; text-decoration-color: var(--accent, #1e5b46); text-decoration-thickness: 2px; text-underline-offset: 0.2em; background: var(--insert-wash, #d7e8dd); } .ds-then del { text-decoration: line-through; text-decoration-thickness: 1.5px; color: var(--ink-3, #5d6d64); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Consolidated Code",
+    "overview": "The console publishes the team's memory the way a consolidated code of practice is published: a contents of everything a member can reach, each memory set as a citable section, and its standing, author and history annotated in a ruled margin. Light is the printed page; dark is the bound volume. Paper and ink carry nearly everything, and a single buckram green is the binding: it draws the rules that set things off, marks the current place, and carries links and primary actions.\n\nThe density is that of a reference book, not a dashboard. A slim masthead, a contents column in a slightly deeper paper, and a reading column held to a book measure. Weight is carried by typographic rank (serif against sans, upright against italic, whole against struck through), never by colour fields, cards or badges. Hairline rules, dot leaders and heads hanging into the margin do the structural work that boxes and shadows do elsewhere.\n\nThe system refuses the admin-dashboard arrangement: no sidebar of features, no stat cards, no badge soup. Nothing disappears; superseded and retired memory keeps its place, visibly cancelled. Motion is limited to state changes on one soft ease-out, and reduced motion is honoured.",
+    "keyCharacteristics": [
+      "Paper and ink in two bindings, the printed page (light) and the bound volume (dark), both tinted toward green and never neutral grey.",
+      "One structural accent, buckram green, for rules, the current place, links and primary actions.",
+      "Source Serif 4 for what is read, Public Sans for what is operated, the system monospace for paths and source.",
+      "Square corners, hairline rules, dot leaders, part heads hanging into the margin.",
+      "State is a mark and a word; the weight of a memory is type rank.",
+      "Flat: depth comes from steps of paper and from rules, not from shadow."
+    ],
+    "rules": [
+      {
+        "name": "The Binding Rule",
+        "body": "Buckram green is the binding, not a paint: it draws rules, marks the current place and carries links and primary actions. It fills nothing larger than a button or the waiting count; the only green surfaces are the pale washes that mark where you are, what was inserted, or a token just issued.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mark-and-Word Rule",
+        "body": "State is a mark and a word, never a hue alone. Red never appears without an icon and a sentence, and green never signals a status by itself.",
+        "section": "colors"
+      },
+      {
+        "name": "The Third-Ink Rule",
+        "body": "Third ink is for text on paper and paper-2 only (5.1:1 and 4.8:1 on the printed page). On paper-3 or a wash it falls under 4.5:1, so text set on those steps up to second ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "The serif carries what is read: memory text, the names of memories, folders and parts, page titles, standfirsts and the wordmark. The sans carries what is operated: controls, labels, metadata and tables. A memory's name is serif wherever it appears, even as a leaf in the contents column.",
+        "section": "typography"
+      },
+      {
+        "name": "The Rank-Not-Hue Rule",
+        "body": "A memory's weight is set in type. Accepted memory is upright at 620; personal memory is italic at 450 over a dashed rule; superseded and retired memory is struck through at 450 in third ink. No colour does this work.",
+        "section": "typography"
+      },
+      {
+        "name": "The Figures Rule",
+        "body": "Counts, dates and times take tabular figures; figures inside memory text are oldstyle and proportional.",
+        "section": "typography"
+      },
+      {
+        "name": "The Measure Rule",
+        "body": "Memory text never runs wider than 68ch, and lists of contents read at 72ch. Wide registers scroll sideways inside their own container, never the page.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hanging Head Rule",
+        "body": "Part heads in a folder hang 18px into the left margin, and every level below steps in 18px (12px at 900px and below), so the structure reads from the left edge like a code's numbered divisions.",
+        "section": "layout"
+      },
+      {
+        "name": "The Leader Rule",
+        "body": "A name and its figures are joined by a dotted leader (1px dotted third ink at 45 to 60% opacity, lifted 4px onto the baseline). Under 600px the leader drops and the figures wrap beneath the name.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Page Rule",
+        "body": "Nothing on the page casts a shadow. Separation is a hairline rule or a step of paper; a shadow is reserved for a menu that floats above the page.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Square Corner Rule",
+        "body": "Every corner is square. A framework part that insists on a radius gets no more than 2px.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Line Weights Rule",
+        "body": "A 1px solid rule divides parts; a 1px dotted rule divides items within a set and draws leaders; a 1px dashed rule marks personal memory the team hasn't accepted; a 2px buckram rule sets off a notice or the title page and underlines the current place; a 1px ink rule closes a register's header.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** reference colour through the custom properties (`var(--paper)`, `var(--ink-2)`, `var(--accent)`) so both bindings follow, and point framework components at them rather than at the framework's own palette.",
+      "**Do** set memory text in Source Serif 4 at 1.125rem and 1.65 within 68ch, exactly as stored.",
+      "**Do** give every state a mark and a word: a dagger, \"Superseded\" and a struck title; \"Retired\" and a struck title; the scales icon and \"Challenged\"; the pin and \"Pinned\"; the lock and \"Restricted\"; italic, a dashed rule and a banner for personal memory.",
+      "**Do** keep cancelled memory in its place, after current memory, struck through in third ink.",
+      "**Do** join a name to its figures with a dotted leader and set counts and dates in tabular figures.",
+      "**Do** show loading as the shape of what is coming, in shimmering bars of paper.",
+      "**Do** keep motion to state changes on `cubic-bezier(0.16, 1, 0.3, 1)`: 150ms for colour and underlines, 180ms for a folder's chevron, 220ms for a notice or slip to appear (fade and a 4px rise), and honour reduced motion."
+    ],
+    "donts": [
+      "**Don't** build the admin-dashboard arrangement: no sidebar of features, no stat cards, no badge soup. The waiting count on Challenges is the only filled chip.",
+      "**Don't** let colour alone carry a state, and don't use oxide red for anything but refusals, challenges and actions that take something away.",
+      "**Don't** round corners, add shadows to cards, or box content that a rule could separate.",
+      "**Don't** use neutral greys: every paper, ink and rule leans green (OKLCH hue roughly 130 to 170).",
+      "**Don't** set the uppercase label style above a title as a kicker; labels name data (margin terms, table columns, the contents column), they never announce a heading.",
+      "**Don't** use a Unicode symbol as an icon. Icons are drawn outline icons; the dagger is the one typographic mark, set in the serif beside a struck title and the word Superseded.",
+      "**Don't** restyle, truncate or paraphrase a memory's words on its own page; summaries belong to lists."
+    ]
+  }
+}

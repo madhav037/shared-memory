@@ -1,0 +1,382 @@
+import { Button, CopyButton, Tooltip } from "@mantine/core";
+import { IconArchive, IconCopy, IconCheck, IconPin, IconPinnedOff, IconScale, IconUser } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
+
+import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
+import { PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
+import { useContents } from "../components/Contents";
+import { Prose } from "../components/Prose";
+import { day, memoryUrl, plural, typeName } from "../lib/format";
+import { useAsked } from "../lib/useAsked";
+import { AsItStood, HistoryLedger, ThenText, Timeline, useHistory, type History } from "./HistoryPanel";
+
+/** One memory, set as printed text, with its standing in the margin and its history below. */
+export function MemoryPage() {
+  const [asked] = useSearchParams();
+  const path = asked.get("path") ?? "";
+  const { answer: memory, refused, reload } = useAsked((signal) => fetchMemoryAt(path, signal), [path]);
+  const { folders, load } = useContents();
+  const [view, setView] = useState<"text" | "source">("text");
+  const history = useHistory(path);
+  const text = useRef<HTMLDivElement>(null);
+  const parent = path.split("/").slice(0, -1).join("/");
+  const folder = folders.get(parent);
+
+  useEffect(() => {
+    if (parent && !folder) load(parent);
+  }, [parent, folder, load]);
+
+  if (refused)
+    return (
+      <div className="narrow">
+        <Trail steps={[]} />
+        <Refusal testid="memory-refused">{refused}</Refusal>
+      </div>
+    );
+  if (!memory) return <Placeholder lines={12} />;
+
+  const steps = folder ? [...folder.trail, { path: parent, name: folder.name }] : [];
+  const cancelled = memory.status !== "active";
+
+  return (
+    <article className="reading" data-testid="memory">
+      <header className="reading-head">
+        <Trail steps={steps} />
+        <h1 className="page-title" data-testid="memory-title">
+          {memory.status === "superseded" && (
+            <span className="dagger" aria-hidden>
+              †{" "}
+            </span>
+          )}
+          <span className={cancelled ? "cancelled-title" : undefined}>{memory.title}</span>
+        </h1>
+        <p className="standfirst">{memory.summary}</p>
+        <p className="standing-line" aria-hidden>
+          <Rank level={memory.level} />
+          <StatusMark status={memory.status} />
+          <span>{typeName(memory.type)}</span>
+          <span>by {memory.author_name}</span>
+        </p>
+
+        <Banners memory={memory} />
+      </header>
+
+      <Margin memory={memory} history={history} onChanged={reload} />
+
+      <div className="reading-text" ref={text}>
+        <div className="view-switch" role="tablist" aria-label="How to read it">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "text"}
+            onClick={() => setView("text")}
+            data-testid="view-text"
+          >
+            Text
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "source"}
+            onClick={() => setView("source")}
+            data-testid="view-source"
+          >
+            As Claude reads it
+          </button>
+        </div>
+
+        {history && <Timeline history={history} />}
+        {history && <AsItStood history={history} />}
+
+        {history && !history.current ? (
+          view === "text" ? (
+            <ThenText history={history} />
+          ) : history.now === undefined ? (
+            <p className="then-text" aria-busy="true" style={{ color: "var(--ink-3)" }}>
+              …
+            </p>
+          ) : (
+            <Source text={history.now} />
+          )
+        ) : view === "text" ? (
+          <Prose testid="memory-body">{memory.body}</Prose>
+        ) : (
+          <Source text={memory.source} />
+        )}
+      </div>
+
+      <div className="reading-history">
+        {history && (
+          <HistoryLedger
+            history={history}
+            onPick={() => text.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function Banners({ memory }: { memory: MemoryDetail }) {
+  const { nameOf } = useContents();
+  return (
+    <>
+      {memory.status === "superseded" && memory.superseded_by && (
+        <p className="banner" data-testid="superseded-by">
+          <span className="dagger" aria-hidden>
+            †
+          </span>
+          <span>
+            <b>Superseded.</b> Another memory has taken its place; this one stays for the record.{" "}
+            <Link to={memoryUrl(memory.superseded_by)}>Read what replaced it</Link>
+            <span className="visually-hidden"> ({memory.superseded_by})</span>
+          </span>
+        </p>
+      )}
+      {memory.status === "retired" && (
+        <p className="banner" data-testid="retired-banner">
+          <IconArchive size={16} stroke={1.6} aria-hidden />
+          <span>
+            <b>Retired.</b> It is no longer true, so no session is briefed with it or recalls it. It stays for the record.
+          </span>
+        </p>
+      )}
+      {memory.level === "personal" && (
+        <p className="banner dashed" data-testid="personal-banner">
+          <IconUser size={16} stroke={1.6} aria-hidden />
+          <span>
+            <b>Personal memory of {memory.author_name}.</b> The team can read it, but hasn’t accepted it: it becomes project
+            or team memory only when its author promotes it from Claude.
+          </span>
+        </p>
+      )}
+      {memory.open_challenges.length > 0 && (
+        <p className="banner" data-testid="open-challenges">
+          <IconScale size={16} stroke={1.6} aria-hidden />
+          <span>
+            <b>
+              {memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}
+            </b>{" "}
+            {memory.open_challenges
+              .map((challenge) =>
+                challenge.kind === "retire"
+                  ? `${nameOf(challenge.raised_by)} wants to retire it`
+                  : `${nameOf(challenge.raised_by)} wants to supersede it`,
+              )
+              .join("; ")}
+            . Until its author decides, it stands as it is. <Link to="/challenges">See the challenges</Link>
+          </span>
+        </p>
+      )}
+      {memory.pending.length > 0 && (
+        <p className="banner" data-testid="pending">
+          <IconScale size={16} stroke={1.6} aria-hidden />
+          <span>
+            <b>Waiting on a challenge.</b> Offered in place of{" "}
+            {memory.pending.map((challenge, place) => (
+              <span key={challenge.challenge_id}>
+                {place > 0 ? ", " : ""}
+                {challenge.replaces ? <Link to={memoryUrl(challenge.replaces)}>another memory</Link> : "another memory"}
+              </span>
+            ))}
+            ; its author decides.
+          </span>
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The file as it is on disk: its header, then its body. */
+function Source({ text }: { text: string }) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const closing = lines.indexOf("---", 1);
+  return (
+    <pre className="source" data-testid="memory-source">
+      {lines.map((line, number) => (
+        <span key={number} className={number <= closing ? "header-line" : undefined}>
+          {line}
+          {"\n"}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
+function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history: History | null; onChanged: () => void }) {
+  const { refresh } = useContents();
+  const [refused, setRefused] = useState<string | null>(null);
+  const [retiring, setRetiring] = useState(false);
+  const [told, setTold] = useState<string | null>(null);
+  const accepted = memory.level !== "personal";
+  const active = memory.status === "active";
+
+  const act = async (what: () => Promise<unknown>, after?: string) => {
+    try {
+      await what();
+      setRefused(null);
+      if (after) setTold(after);
+      refresh();
+      onChanged();
+    } catch (problem) {
+      setRefused((problem as Error).message);
+    }
+  };
+
+  return (
+    <aside className="margin" aria-label="About this memory" data-testid="memory-details">
+      <dl>
+        <dt>Standing</dt>
+        <dd style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
+          <Rank level={memory.level} />
+          <StatusMark status={memory.status} />
+          {memory.status === "active" && <span className="mark">Current</span>}
+          {memory.pinned && <PinnedMark />}
+        </dd>
+        <dt>Type</dt>
+        <dd>{typeName(memory.type)}</dd>
+        <dt>Author</dt>
+        <dd>
+          {memory.author_name} <span style={{ color: "var(--ink-3)" }}>({memory.author})</span>
+        </dd>
+        {memory.promoted_by && (
+          <>
+            <dt>Promoted by</dt>
+            <dd>{memory.promoted_by}</dd>
+          </>
+        )}
+        {memory.replaces && (
+          <>
+            <dt>Replaces</dt>
+            <dd>
+              <Link to={memoryUrl(memory.replaces)}>the memory it superseded</Link>
+            </dd>
+          </>
+        )}
+        {memory.superseded_by && (
+          <>
+            <dt>Superseded by</dt>
+            <dd>
+              <Link to={memoryUrl(memory.superseded_by)}>the memory that replaced it</Link>
+            </dd>
+          </>
+        )}
+        {memory.exception_to && (
+          <>
+            <dt>Exception to</dt>
+            <dd>
+              <Link to={memoryUrl(memory.exception_to)}>a team memory</Link>, for this project only
+            </dd>
+          </>
+        )}
+        {memory.related_files.length > 0 && (
+          <>
+            <dt>Related files</dt>
+            <dd>
+              {memory.related_files.map((file) => (
+                <div key={file} className="path">
+                  {file}
+                </div>
+              ))}
+            </dd>
+          </>
+        )}
+        {history && history.versions.length > 0 && (
+          <>
+            <dt>History</dt>
+            <dd>
+              <a href="#history">{plural(history.versions.length, "version")}</a>
+              <span style={{ color: "var(--ink-3)" }}>
+                , last changed {day(history.versions[history.versions.length - 1]?.at)} by{" "}
+                {history.versions[history.versions.length - 1]?.name}
+              </span>
+            </dd>
+          </>
+        )}
+        <dt>Path</dt>
+        <dd style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+          <span className="path">{memory.path}</span>
+          <CopyButton value={memory.path}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? "Copied" : "Copy the path"}>
+                <button type="button" className="quiet-link" onClick={copy} aria-label="Copy the path">
+                  {copied ? <IconCheck size={14} stroke={1.8} /> : <IconCopy size={14} stroke={1.6} />}
+                </button>
+              </Tooltip>
+            )}
+          </CopyButton>
+        </dd>
+      </dl>
+
+      {accepted && active && (
+        <div className="margin-actions">
+          {refused && <Refusal testid="pin-refused">{refused}</Refusal>}
+          {told && (
+            <p className="margin-help" data-testid="retired" role="status">
+              {told}
+            </p>
+          )}
+          {memory.pinned ? (
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconPinnedOff size={14} stroke={1.6} />}
+              onClick={() => act(() => unpinAt(memory.path))}
+              data-testid="unpin"
+            >
+              Unpin
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconPin size={14} stroke={1.6} />}
+              onClick={() => act(() => pinAt(memory.path))}
+              data-testid="pin"
+            >
+              Pin into every briefing
+            </Button>
+          )}
+          {!retiring ? (
+            <button type="button" className="quiet-link danger" onClick={() => setRetiring(true)} data-testid="retire">
+              <IconArchive size={14} stroke={1.6} aria-hidden />
+              Retire it…
+            </button>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              <p className="margin-help">
+                Retire it if it is no longer true. Sessions stop being briefed with it and recalling it. If someone else
+                wrote it, they are asked to decide instead.
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button
+                  size="xs"
+                  color="red"
+                  onClick={() =>
+                    act(async () => {
+                      const done = await retireAt(memory.path);
+                      setRetiring(false);
+                      setTold(
+                        done.status === "retired"
+                          ? "Retired. It stays here for the record."
+                          : `${memory.author_name} has been asked to retire it. Until they decide, it stands.`,
+                      );
+                    })
+                  }
+                  data-testid="retire-confirm"
+                >
+                  Retire it
+                </Button>
+                <Button size="xs" variant="default" onClick={() => setRetiring(false)}>
+                  Keep it
+                </Button>
+              </div>
+            </div>
+          )}
+          <p className="margin-help">Pinned memory goes into the briefing every session in this project starts with.</p>
+        </div>
+      )}
+    </aside>
+  );
+}

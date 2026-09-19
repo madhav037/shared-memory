@@ -1,17 +1,23 @@
 import { expect, test } from "@playwright/test";
 
-test("a member sees a memory's versions and what changed between them", async ({ page }) => {
-  await page.request.post("http://127.0.0.1:8124/as-account", { data: { id: 1, login: "olive" } });
+import { openInContents, signInAs } from "./helpers";
 
-  await page.goto("/");
-  await page.getByTestId("sign-in").click();
-  await page.getByTestId("projects").getByRole("link", { name: "Billing" }).click();
-  await page.getByRole("link", { name: "Use pnpm, not npm" }).first().click();
+test("a member moves through a memory's history, back past its promotion", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await openInContents(page, "Billing", "Project memory", "Conventions", "Use pnpm, not npm");
 
-  const versions = page.getByTestId("history").locator("> div");
+  const versions = page.getByTestId("versions").locator("tbody tr");
   await expect(versions.first()).toContainText("Promote");
+  await expect(versions.last()).toContainText("Remember");
 
-  await versions.first().getByRole("button", { name: "Read it" }).click();
+  await page.getByTestId("version-row").last().click();
 
+  await expect(page.getByTestId("history-stamp")).toContainText("Remember: Use pnpm, not npm");
   await expect(page.getByTestId("version-text")).toContainText("second lockfile");
+  await expect(page.getByTestId("memory-body")).toHaveCount(0);
+
+  await page.getByTestId("back-to-now").click();
+
+  await expect(page.getByTestId("memory-body")).toContainText("second lockfile");
+  await expect(page.getByTestId("version-text")).toHaveCount(0);
 });

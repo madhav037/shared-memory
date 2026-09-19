@@ -1,56 +1,109 @@
-import { Alert, Button, Card, Group, Loader, Table, Text, TextInput, Title } from "@mantine/core";
+import { Button, Select, TextInput } from "@mantine/core";
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 
 import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
+import { Placeholder, Refusal } from "../components/Bits";
+import { useContents } from "../components/Contents";
+import { folderUrl, memoryUrl, moment, typeName } from "../lib/format";
 
+/** What each kind of change is called, in the order they are offered as a filter. */
 const WORDS: Record<string, string> = {
-  signed_in: "signed in",
-  sign_in_refused: "sign-in refused",
-  token_issued: "token issued",
-  member_added: "member added",
-  member_removed: "member removed",
-  member_changed: "member changed",
-  admin_granted: "admin granted",
-  admin_revoked: "admin taken away",
-  ownership_handed_over: "ownership handed over",
-  project_created: "project created",
-  project_renamed: "project renamed",
-  lead_appointed: "project lead appointed",
-  lead_removed: "project lead taken off",
-  repository_added: "repository added",
-  repository_removed: "repository forgotten",
-  project_restricted: "project restricted",
-  project_opened: "project opened to the team",
-  access_granted: "access granted",
-  access_revoked: "access taken away",
-  memory_saved: "memory saved",
-  memory_edited: "memory edited",
-  memory_deleted: "memory deleted",
-  memory_promoted: "memory promoted",
-  memory_superseded: "memory superseded",
-  memory_retired: "memory retired",
-  memory_pinned: "memory pinned",
-  memory_unpinned: "memory unpinned",
-  challenge_raised: "challenge raised",
-  challenge_decided: "challenge decided",
+  memory_saved: "Memory saved",
+  memory_edited: "Memory edited",
+  memory_deleted: "Memory deleted",
+  memory_promoted: "Memory promoted",
+  memory_superseded: "Memory superseded",
+  memory_retired: "Memory retired",
+  memory_pinned: "Memory pinned",
+  memory_unpinned: "Memory unpinned",
+  challenge_raised: "Challenge raised",
+  challenge_decided: "Challenge decided",
+  signed_in: "Signed in",
+  sign_in_refused: "Sign-in refused",
+  token_issued: "Token issued",
+  member_added: "Member added",
+  member_removed: "Member removed",
+  member_changed: "Member changed",
+  admin_granted: "Admin granted",
+  admin_revoked: "Admin taken away",
+  ownership_handed_over: "Ownership handed over",
+  project_created: "Project created",
+  project_renamed: "Project renamed",
+  lead_appointed: "Project lead appointed",
+  lead_removed: "Project lead taken off",
+  repository_added: "Repository added",
+  repository_removed: "Repository forgotten",
+  project_restricted: "Project restricted",
+  project_opened: "Project opened to the team",
+  access_granted: "Access granted",
+  access_revoked: "Access taken away",
 };
 
-function when(at: string): string {
-  return new Date(at).toLocaleString();
+/** A memory file, named the way the contents name it, linked to where it can be read. */
+function FileLink({ path }: { path: string }) {
+  return (
+    <Link to={memoryUrl(path)} title={path} className="path">
+      {path.split("/").pop()}
+    </Link>
+  );
 }
 
-function describe(detail: Record<string, unknown>): string {
-  return Object.entries(detail)
-    .map(([name, value]) => `${name}: ${String(value)}`)
-    .join(", ");
+/** What else the record says about a change, in words rather than field names. */
+function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: (employeeId: string) => string }) {
+  const text = (name: string) => {
+    const value = detail[name];
+    return value === null || value === undefined || value === "" ? null : String(value);
+  };
+  const said: React.ReactNode[] = [];
+  const level = text("level");
+  const challenge = text("challenge");
+  if (text("type")) said.push(text("type") === "architecture" ? "As architecture" : `As a ${typeName(text("type")!).toLowerCase()}`);
+  if (text("was"))
+    said.push(
+      <>
+        From <FileLink path={text("was")!} />
+        {level ? ` into ${level} memory` : ""}
+      </>,
+    );
+  else if (level && !text("pinned")) said.push(`Into ${level} memory`);
+  if (text("pinned")) said.push(text("pinned") === "topic" ? "A whole topic" : level ? `A ${level} memory` : "A memory");
+  if (text("by"))
+    said.push(
+      <>
+        Replaced by <FileLink path={text("by")!} />
+      </>,
+    );
+  if (text("challenge_id"))
+    said.push(
+      `Challenge ${text("challenge_id")}${challenge ? `, to ${challenge === "retire" ? "retire it" : "supersede it"}` : ""}` +
+        (text("decision") ? `: ${text("decision") === "accept" ? "accepted" : "rejected"}` : ""),
+    );
+  if (text("author")) said.push(`Its author, ${nameOf(text("author")!)}, decides`);
+  if (text("name")) said.push(`Named ${text("name")}`);
+  if (text("github")) said.push(`GitHub @${text("github")}`);
+  if (text("for")) said.push(text("for") === "themselves" ? "Their own token" : `For ${nameOf(text("for")!)}`);
+  if (text("reason")) said.push(text("reason"));
+  return (
+    <>
+      {said.map((one, place) => (
+        <span key={place}>
+          {place > 0 ? " · " : ""}
+          {one}
+        </span>
+      ))}
+    </>
+  );
 }
 
-/** Who changed what across the team, newest first. */
+/** Who changed what, and when: the team's register, newest first. */
 export function AuditLog({ member }: { member: SignedInMember }) {
+  const { projects, nameOf } = useContents();
   const [filters, setFilters] = useState<AuditFilters>({});
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
+  const wholeTeam = member.role === "owner" || member.role === "admin";
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -74,74 +127,127 @@ export function AuditLog({ member }: { member: SignedInMember }) {
     setNext(page.next ?? null);
   }, [filters, next]);
 
-  const filter = (name: keyof AuditFilters) => (event: React.ChangeEvent<HTMLInputElement>) =>
-    setFilters((was) => ({ ...was, [name]: event.currentTarget.value || undefined }));
+  const set = (name: keyof AuditFilters, value: string | null) =>
+    setFilters((was) => ({ ...was, [name]: value || undefined }));
+  const projectName = (id: string | null | undefined) => (id ? (projects.get(id)?.name ?? id) : "");
 
   return (
-    <>
-      <Title order={2} size="h3" mb="xs">
-        Audit log
-      </Title>
-      <Text c="dimmed" size="sm" mb="md">
-        {member.role === "owner" || member.role === "admin"
-          ? `Everything that changed in team ${member.team}, newest first.`
-          : "Everything that changed in the projects you lead, newest first."}
-      </Text>
+    <div>
+      <h1 className="page-title wide">Audit log</h1>
+      <p className="standfirst">
+        {wholeTeam
+          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens and memory, from the console and from Claude.`
+          : "Every change in the projects you lead, newest first."}{" "}
+        What a memory said lives in its history; this records who changed it and when.
+      </p>
 
-      <Card withBorder mb="md">
-        <Group align="end" gap="sm">
-          <TextInput label="Member" placeholder="employee ID" data-testid="filter-member" onChange={filter("member")} />
-          <TextInput label="Kind" placeholder="signed_in" data-testid="filter-kind" onChange={filter("kind")} />
-          <TextInput label="Project" placeholder="project ID" data-testid="filter-project" onChange={filter("project")} />
-          <TextInput label="From" type="date" data-testid="filter-since" onChange={filter("since")} />
-          <TextInput label="To" type="date" data-testid="filter-until" onChange={filter("until")} />
-        </Group>
-      </Card>
+      <div className="form-line" style={{ marginTop: 24 }}>
+        <TextInput
+          label="Member"
+          placeholder="Employee ID"
+          data-testid="filter-member"
+          onChange={(event) => set("member", event.currentTarget.value.trim())}
+          style={{ flex: "1 1 140px" }}
+        />
+        <Select
+          label="Change"
+          placeholder="Every change"
+          clearable
+          searchable
+          data={Object.entries(WORDS).map(([value, label]) => ({ value, label }))}
+          data-testid="filter-kind"
+          onChange={(value) => set("kind", value)}
+          style={{ flex: "2 1 200px" }}
+        />
+        <Select
+          label="Project"
+          placeholder="Every project"
+          clearable
+          data={[...projects.values()].map((one) => ({ value: one.project_id, label: one.name }))}
+          data-testid="filter-project"
+          onChange={(value) => set("project", value)}
+          style={{ flex: "2 1 180px" }}
+        />
+        <TextInput
+          label="From"
+          type="date"
+          data-testid="filter-since"
+          onChange={(event) => set("since", event.currentTarget.value)}
+          style={{ flex: "1 1 140px" }}
+        />
+        <TextInput
+          label="To"
+          type="date"
+          data-testid="filter-until"
+          onChange={(event) => set("until", event.currentTarget.value)}
+          style={{ flex: "1 1 140px" }}
+        />
+      </div>
 
-      {refused && (
-        <Alert color="red" data-testid="audit-refused">
-          {refused}
-        </Alert>
-      )}
-      {!refused && events === null && <Loader size="sm" />}
-      {!refused && events?.length === 0 && (
-        <Text c="dimmed" data-testid="audit-empty">
-          Nothing matches those filters.
-        </Text>
-      )}
-      {!refused && events && events.length > 0 && (
-        <Table.ScrollContainer minWidth={600}>
-          <Table striped highlightOnHover data-testid="audit-table">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>When</Table.Th>
-                <Table.Th>Who</Table.Th>
-                <Table.Th>What</Table.Th>
-                <Table.Th>Details</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {events.map((event) => (
-                <Table.Tr key={event.id}>
-                  <Table.Td>{when(event.at)}</Table.Td>
-                  <Table.Td>{event.actor}</Table.Td>
-                  <Table.Td>{WORDS[event.kind] ?? event.kind}</Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      {[event.project_id, event.target, describe(event.detail)].filter(Boolean).join(" · ")}
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      )}
-      {next !== null && (
-        <Button variant="default" mt="md" onClick={older} data-testid="audit-more">
-          Show older
-        </Button>
-      )}
-    </>
+      <div style={{ marginTop: 24 }}>
+        {refused && <Refusal testid="audit-refused">{refused}</Refusal>}
+        {!refused && events === null && <Placeholder lines={8} />}
+        {!refused && events?.length === 0 && (
+          <p className="empty" data-testid="audit-empty">
+            Nothing matches those filters.
+          </p>
+        )}
+        {!refused && events && events.length > 0 && (
+          <div className="scroll-x">
+            <table className="register" data-testid="audit-table">
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Who</th>
+                  <th scope="col">What</th>
+                  <th scope="col">Where</th>
+                  <th scope="col">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((event) => {
+                  const isMemory = event.target?.endsWith(".md");
+                  return (
+                    <tr key={event.id}>
+                      <td style={{ whiteSpace: "nowrap" }}>{moment(event.at)}</td>
+                      <td className="primary who-cell" title={event.actor}>
+                        {nameOf(event.actor)}
+                      </td>
+                      <td style={{ color: "var(--ink)" }}>{WORDS[event.kind] ?? event.kind}</td>
+                      <td>
+                        {projectName(event.project_id)}
+                        {event.target && (
+                          <div style={{ overflowWrap: "anywhere" }}>
+                            {isMemory ? (
+                              <FileLink path={event.target} />
+                            ) : /^(team|projects)\//.test(event.target) ? (
+                              <Link to={folderUrl(event.target)} title={event.target} className="path">
+                                {event.target.split("/").pop()}/
+                              </Link>
+                            ) : event.kind.startsWith("repository_") ? (
+                              <span className="path">{event.target}</span>
+                            ) : (
+                              nameOf(event.target)
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ fontSize: "0.8125rem" }}>
+                        <Details detail={event.detail} nameOf={nameOf} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {next !== null && (
+          <Button variant="default" mt="md" onClick={older} data-testid="audit-more">
+            Show older
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

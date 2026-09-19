@@ -141,18 +141,19 @@ class SearchIndex:
         team: str,
         query: str,
         *,
-        project_id: str,
+        project_id: str | list[str],
         member_id: str | None = None,
         levels: Iterable[str] | None = None,
         type: str | None = None,
         limit: int = 10,
     ) -> list[Hit]:
-        """Active sections visible from a project, ranked by meaning and exact words together.
+        """Active sections visible from a project, or from several, ranked by meaning and exact words together.
 
         member_id, when given, limits personal memory to that member's own.
         """
-        conditions = ["team = %(team)s", "status = 'active'", "(level = 'team' OR project_id = %(project)s)"]
-        params: dict[str, object] = {"team": team, "project": project_id, "text": query}
+        projects = [project_id] if isinstance(project_id, str) else list(project_id)
+        conditions = ["team = %(team)s", "status = 'active'", "(level = 'team' OR project_id = ANY(%(projects)s))"]
+        params: dict[str, object] = {"team": team, "projects": projects, "text": query}
         if member_id is not None:
             conditions.append("(level <> 'personal' OR member_id = %(member)s)")
             params["member"] = member_id

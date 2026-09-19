@@ -329,6 +329,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+        get: operations["files"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Any memory this member can reach, by its path, with its file exactly as Claude reads it. */
+        get: operations["memory_at"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of a memory, by its path, newest first. */
+        get: operations["history_at"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A memory, by its path, as it was at one version. */
+        get: operations["version_at"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/difference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What changed in a memory, by its path, between two versions. */
+        get: operations["difference_at"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+        post: operations["pin_at"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/unpin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a pin. */
+        post: operations["unpin_at"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire a memory that is no longer true; another author's raises a challenge they decide. */
+        post: operations["retire_at"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Memories that match, across team memory and every project this member can reach. */
+        get: operations["search_everywhere"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/challenges": {
         parameters: {
             query?: never;
@@ -621,6 +774,8 @@ export interface components {
             project_id: string;
             /** Name */
             name: string;
+            /** Restricted */
+            restricted: boolean;
             /** Leads */
             leads: components["schemas"]["ProjectMember"][];
             /** You Lead */
@@ -797,6 +952,10 @@ export interface components {
             promoted_by: string | null;
             /** Body */
             body: string;
+            /** Author Name */
+            author_name: string;
+            /** Source */
+            source: string;
             /** Pinned */
             pinned: boolean;
             /** Pending */
@@ -808,6 +967,8 @@ export interface components {
         SearchHit: {
             /** Path */
             path: string;
+            /** Project Id */
+            project_id: string | null;
             /** Title */
             title: string;
             /** Heading */
@@ -909,6 +1070,180 @@ export interface components {
             path: string;
         };
         /**
+         * Crumb
+         * @description A folder on the way down to the one being looked at.
+         */
+        Crumb: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * FileEntry
+         * @description A memory in the folder being looked at.
+         */
+        FileEntry: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Level */
+            level: string;
+            /** Status */
+            status: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Changed */
+            changed: string | null;
+            /** Pinned */
+            pinned: boolean;
+            /** Challenged */
+            challenged: number;
+            /** Waiting */
+            waiting: boolean;
+        };
+        /**
+         * FolderEntry
+         * @description A folder inside the one being looked at, and what it holds.
+         */
+        FolderEntry: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /** Memories */
+            memories: number;
+            /** Changed */
+            changed: string | null;
+        };
+        /**
+         * FolderSection
+         * @description A folder beneath the one being looked at, with the memories directly in it.
+         */
+        FolderSection: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /** Depth */
+            depth: number;
+            /** Count */
+            count: number;
+            /** Changed */
+            changed: string | null;
+            /** Memories */
+            memories: components["schemas"]["FileEntry"][];
+        };
+        /**
+         * Folder
+         * @description One folder of the team's memory: where it sits, the folders in it, and its memories.
+         */
+        Folder: {
+            /** Folder */
+            folder: string;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /** Pinnable */
+            pinnable: boolean;
+            /** Pinned */
+            pinned: boolean;
+            /** Trail */
+            trail: components["schemas"]["Crumb"][];
+            /** Folders */
+            folders: components["schemas"]["FolderEntry"][];
+            /** Memories */
+            memories: components["schemas"]["FileEntry"][];
+            /** Inside */
+            inside: components["schemas"]["FolderSection"][];
+        };
+        /**
+         * MemoryVersion
+         * @description One version of a memory in the memory folder's history.
+         */
+        MemoryVersion: {
+            /** Commit */
+            commit: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Author */
+            author: string;
+            /** Name */
+            name: string;
+            /** Message */
+            message: string;
+        };
+        /** MemoryHistory */
+        MemoryHistory: {
+            /** Path */
+            path: string;
+            /** Versions */
+            versions: components["schemas"]["MemoryVersion"][];
+        };
+        /**
+         * MemoryAtVersion
+         * @description A memory's text as it was at one version.
+         */
+        MemoryAtVersion: {
+            /** Path */
+            path: string;
+            /** Commit */
+            commit: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * MemoryDifference
+         * @description What changed in a memory between two versions.
+         */
+        MemoryDifference: {
+            /** Path */
+            path: string;
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+            /** Difference */
+            difference: string;
+        };
+        /**
+         * PinState
+         * @description Whether a memory or topic folder is pinned into every briefing it belongs in.
+         */
+        PinState: {
+            /** Path */
+            path: string;
+            /** Pinned */
+            pinned: boolean;
+        };
+        /**
+         * Retired
+         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
+         */
+        Retired: {
+            /** Status */
+            status: string;
+            /** Path */
+            path: string;
+            /** Challenge Id */
+            challenge_id: number | null;
+        };
+        /**
          * ChallengeDetail
          * @description A challenge waiting for a decision, with both memories to compare.
          */
@@ -964,6 +1299,8 @@ export interface components {
             kind: string;
             /** Target Path */
             target_path: string;
+            /** Target Title */
+            target_title: string;
             /** Challenger Path */
             challenger_path: string | null;
             /**
@@ -1000,70 +1337,6 @@ export interface components {
              * @enum {string}
              */
             decision: "accept" | "reject";
-        };
-        /**
-         * Retired
-         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
-         */
-        Retired: {
-            /** Status */
-            status: string;
-            /** Path */
-            path: string;
-            /** Challenge Id */
-            challenge_id: number | null;
-        };
-        /**
-         * MemoryVersion
-         * @description One version of a memory in the memory folder's history.
-         */
-        MemoryVersion: {
-            /** Commit */
-            commit: string;
-            /**
-             * At
-             * Format: date-time
-             */
-            at: string;
-            /** Author */
-            author: string;
-            /** Name */
-            name: string;
-            /** Message */
-            message: string;
-        };
-        /** MemoryHistory */
-        MemoryHistory: {
-            /** Path */
-            path: string;
-            /** Versions */
-            versions: components["schemas"]["MemoryVersion"][];
-        };
-        /**
-         * MemoryAtVersion
-         * @description A memory's text as it was at one version.
-         */
-        MemoryAtVersion: {
-            /** Path */
-            path: string;
-            /** Commit */
-            commit: string;
-            /** Text */
-            text: string;
-        };
-        /**
-         * MemoryDifference
-         * @description What changed in a memory between two versions.
-         */
-        MemoryDifference: {
-            /** Path */
-            path: string;
-            /** Before */
-            before: string;
-            /** After */
-            after: string;
-            /** Difference */
-            difference: string;
         };
         /**
          * MemberSummary
@@ -1643,6 +1916,217 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Pins"];
+                };
+            };
+        };
+    };
+    files: {
+        parameters: {
+            query?: {
+                folder?: string;
+                deep?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Folder"];
+                };
+            };
+        };
+    };
+    memory_at: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Any memory this member can reach, by its path, with its file exactly as Claude reads it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDetail"];
+                };
+            };
+        };
+    };
+    history_at: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every version of a memory, by its path, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryHistory"];
+                };
+            };
+        };
+    };
+    version_at: {
+        parameters: {
+            query?: {
+                path?: string;
+                commit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A memory, by its path, as it was at one version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryAtVersion"];
+                };
+            };
+        };
+    };
+    difference_at: {
+        parameters: {
+            query?: {
+                path?: string;
+                before?: string;
+                after?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What changed in a memory, by its path, between two versions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDifference"];
+                };
+            };
+        };
+    };
+    pin_at: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinState"];
+                };
+            };
+        };
+    };
+    unpin_at: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Remove a pin. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinState"];
+                };
+            };
+        };
+    };
+    retire_at: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryPath"];
+            };
+        };
+        responses: {
+            /** @description Retire a memory that is no longer true; another author's raises a challenge they decide. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retired"];
+                };
+            };
+        };
+    };
+    search_everywhere: {
+        parameters: {
+            query?: {
+                query?: string;
+                level?: string;
+                type?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Memories that match, across team memory and every project this member can reach. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResults"];
                 };
             };
         };
