@@ -228,6 +228,7 @@ class Lifecycle:
 
     def retire(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
+        caller.require_reach(path)
         location = locate(path)
         memory = self._store.read(caller.team, location.path)
         if location.level == "personal":
@@ -254,6 +255,8 @@ class Lifecycle:
         challenge = self._challenges.open_challenge(caller.team, challenge_id)
         if challenge is None:
             raise Refused(f"There is no open challenge {challenge_id} in your team.")
+        caller.require_reach(challenge.target_path)
+        caller.require_reach(challenge.challenger_path)
         self._challenges.require_decider(caller, challenge)
         decider = caller.member_id
 
