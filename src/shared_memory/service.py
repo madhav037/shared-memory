@@ -18,7 +18,7 @@ from shared_memory.validation import validate
 
 
 def committer(caller: Caller) -> Committer:
-    return Committer(caller.member_id, caller.member.name)
+    return Committer(caller.member_id, caller.member.name, caller.agent)
 
 
 def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
@@ -186,6 +186,7 @@ class MemoryService:
                     "author": version.author,
                     "name": version.name,
                     "message": version.message,
+                    "agent": version.agent,
                 }
                 for version in versions
             ],

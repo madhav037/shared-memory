@@ -7,7 +7,7 @@ import { day, moment } from "./format";
  * that is another memory, this one was superseded by it.
  */
 export function whatHappened(version: MemoryVersion, title: string): string {
-  const by = version.name;
+  const by = version.name + inAgent(version.agent);
   const message = version.message;
   const challenge = message.match(/^Accept challenge (\d+): (retire )?(.*)$/);
   if (challenge) {
@@ -50,4 +50,10 @@ export function inForce(versions: MemoryVersion[], place: number, standing = "ac
     ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(next.at))
     : moment(next.at);
   return `In force from ${moment(version.at)} to ${until}`;
+}
+
+/** Which coding agent a change came from, as a phrase to follow its author: " in Codex", " from another agent". */
+export function inAgent(agent: string | null | undefined): string {
+  if (!agent) return "";
+  return agent === "another agent" ? " from another agent" : ` in ${agent}`;
 }

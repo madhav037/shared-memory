@@ -89,7 +89,7 @@ def test_pinning_and_unpinning_are_recorded(console: Console, signed_out: Consol
 
     recorded = log(signed_out, project=project)
     assert kinds(recorded)[:2] == ["memory_unpinned", "memory_pinned"]
-    assert recorded[1]["detail"] == {"pinned": "memory", "level": "project"}
+    assert recorded[1]["detail"] == {"pinned": "memory", "level": "project", "agent": "another agent"}
 
 
 def test_a_challenge_raised_and_decided_from_a_session_is_recorded(
@@ -117,6 +117,7 @@ def test_a_challenge_raised_and_decided_from_a_session_is_recorded(
         "challenge_id": raised["challenge_id"],
         "decision": "accepted",
         "challenge": "supersede",
+        "agent": "another agent",
     }
     assert decided[0]["actor"] == "E1001"
     assert challenged[0]["actor"] == "emp-2"
@@ -166,3 +167,53 @@ def test_what_the_memory_tools_answer_is_unchanged(console: Console, signed_out:
 
     assert set(saved) == {"path"}
     assert set(pinned) == {"pinned"}
+
+
+def test_a_memory_change_records_the_coding_agent_it_came_from(console: Console, signed_out: ConsoleClient) -> None:
+    _, project, in_project = a_project(console, signed_out, "olive-changes-agent", 911)
+
+    path = a_memory(in_project.as_agent("codex-mcp-client"))
+
+    saved = next(event for event in log(signed_out, project=project) if event["kind"] == "memory_saved")
+    assert saved["detail"]["agent"] == "Codex"
+    history = signed_out.get(f"/api/memory/history?path={path}").json()
+    assert [version["agent"] for version in history["versions"]] == ["Codex"]
+
+
+def test_each_coding_agent_is_named_the_way_members_know_it(console: Console, signed_out: ConsoleClient) -> None:
+    _, project, in_project = a_project(console, signed_out, "olive-changes-agents", 912)
+    reported = {
+        "claude-code": "Claude Code",
+        "codex-mcp-client": "Codex",
+        "Visual Studio Code": "GitHub Copilot",
+        "gemini-cli-mcp-client": "Gemini CLI",
+        "cursor-vscode": "Cursor",
+        "Windsurf": "Devin Desktop",
+        "Cline": "Cline",
+        "some-new-tool": "another agent",
+    }
+
+    for name in reported:
+        a_memory(in_project.as_agent(name), f"Saved from {name}")
+
+    saved = {
+        event["target"].rsplit("/", 1)[-1]: event["detail"]["agent"]
+        for event in log(signed_out, project=project)
+        if event["kind"] == "memory_saved"
+    }
+    for name, known_as in reported.items():
+        file = next(file for file in saved if file.startswith("saved-from-" + name.lower().replace(" ", "-")[:12]))
+        assert saved[file] == known_as, name
+
+
+def test_an_agent_that_does_not_say_what_it_is_changes_nothing_about_what_it_may_do(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    _, project, in_project = a_project(console, signed_out, "olive-changes-silent", 913)
+
+    path = a_memory(in_project)
+
+    saved = next(event for event in log(signed_out, project=project) if event["kind"] == "memory_saved")
+    assert saved["target"] == path
+    assert saved["detail"]["agent"] == "another agent"
+

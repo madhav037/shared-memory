@@ -1187,6 +1187,8 @@ export interface components {
             name: string;
             /** Message */
             message: string;
+            /** Agent */
+            agent: string | null;
         };
         /** MemoryHistory */
         MemoryHistory: {

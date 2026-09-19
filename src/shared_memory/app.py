@@ -1,5 +1,6 @@
 """The HTTP interface: MCP tools and Claude Code hook endpoints."""
 
+import dataclasses
 import functools
 import logging
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.briefing import Briefing
 from shared_memory.console_api import ConsoleApi
@@ -52,6 +54,12 @@ def _refusals_as_tool_errors(fn: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
+def _reported_client(ctx: Context) -> str | None:
+    """The name the session's coding agent gave for itself when it connected, if it gave one."""
+    params = ctx.session.client_params
+    return params.client_info.name if params is not None and params.client_info is not None else None
+
+
 def _bearer(value: str | None) -> str | None:
     if value and value.lower().startswith("bearer "):
         return value[7:].strip() or None
@@ -81,7 +89,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         )
 
     def caller(ctx: Context) -> Caller:
-        return authenticate(ctx.headers or {})
+        return dataclasses.replace(authenticate(ctx.headers or {}), agent=agent_named(_reported_client(ctx)))
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
 
