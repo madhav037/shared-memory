@@ -93,7 +93,11 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
       <>
         Commit the repository’s <code>.devin/mcp_config.json</code>, <code>AGENTS.md</code> section and skill.
       </>,
-      <>Devin reads your token from <code>SHARED_MEMORY_TOKEN</code>.</>,
+      <>
+        If Devin connects without your token, put the same entry, with your own token, in{" "}
+        <code>.devin/mcp_config.local.json</code>, which Devin keeps out of git. Its documentation doesn’t yet say it
+        reads environment variables in headers.
+      </>,
     ],
     automatic: (
       <>

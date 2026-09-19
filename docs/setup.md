@@ -44,7 +44,7 @@ docker compose exec server shared-memory reindex
 
 ## 2. Add members (the owner)
 
-In a Claude Code session with the plugin installed, ask Claude to:
+In the console's **Members**, or from your own coding agent once it is connected (section 4), ask it to:
 
 - **add a member**: `add_member` with their employee ID and name. Their personal token is shown once; pass it to them privately.
 - **remove a member**: `remove_member`. Their token stops working; their memories stay, credited to them.
@@ -52,7 +52,21 @@ In a Claude Code session with the plugin installed, ask Claude to:
 
 ## 3. Connect a repository (any member, once per repository)
 
-In a Claude Code session inside the repository, ask Claude to create a project (or reuse an existing project ID for another repository of the same product). `create_project` returns settings to merge into the repository's committed `.claude/settings.json`:
+Create a project for the repository: **New project** on the console's front page, or ask a coding agent that is already connected to call `create_project`. For another repository of the same product, reuse the existing project instead. Either way you get the files that connect the repository to its project, for every **coding agent** the team uses. The console shows them in the project's **Settings**, and one agent at a time on **Connect your agent**.
+
+| Coding agent | File the repository commits |
+|---|---|
+| Claude Code | `.claude/settings.json` |
+| Codex | `.codex/config.toml` |
+| GitHub Copilot | `.vscode/mcp.json` for VS Code, `.github/mcp.json` for Copilot CLI |
+| Gemini CLI | `.gemini/settings.json` |
+| Cursor | `.cursor/mcp.json` |
+| Devin Desktop | `.devin/mcp_config.json` |
+| Every agent | a Shared Memory section in `AGENTS.md`, and the skill in `.agents/skills/shared-memory/SKILL.md` |
+
+Commit the files for the agents your team uses, merging each into any file already there. They name the project and the repository, never a personal token. Cline keeps its MCP servers on each machine rather than in the repository, so each member who uses Cline adds the project's entry once (section 4).
+
+For Claude Code, the settings look like this:
 
 ```json
 {
@@ -67,13 +81,17 @@ In a Claude Code session inside the repository, ask Claude to create a project (
 }
 ```
 
-Commit the file. Several repositories can use the same project ID, each with its own repository name.
+Several repositories can use the same project ID, each with its own repository name.
 
-Whoever creates a project becomes its first **project lead**: they appoint other leads and look after its repositories. The same can be done in the console — **New project** on its front page, then its **Settings**, which shows each repository with the settings to commit into it. A project lead can also read the audit log for their own projects.
+Whoever creates a project becomes its first **project lead**: they appoint other leads and look after its repositories. The project's **Settings** in the console show each repository with the files to commit into it. A project lead can also read the audit log for their own projects.
 
 A project is open to the whole team unless a lead or an admin **restricts** it. A restricted project can be reached only by the members on its **access list**, its leads and the team's admins: everyone else stops seeing it listed, its memory tools refuse, and a session started in one of its repositories is told why and gets no briefing or recall. Team memory stays readable by the whole team. Opening a project up again keeps its access list, so restricting it later lets the same members straight back in.
 
 ## 4. Join as a new member
+
+Your personal token comes from whoever added you. You can also issue yourself a new one on the console's **Connect your agent** page, which shows the steps below for each agent.
+
+### Claude Code
 
 1. Clone the repository and open it in Claude Code.
 2. Trust the repository's settings when Claude Code asks. That adds the marketplace and enables the **shared-memory** plugin; there is no separate install prompt.
@@ -85,6 +103,15 @@ A project is open to the whole team unless a lead or an admin **restricts** it. 
 Access to the plugin marketplace repository is needed to install the plugin. While the repository is private, members need read access to it on GitHub.
 
 The plugin's hooks call the server with `curl`, which ships with Windows 10 and later, macOS and Linux. On Windows, Claude Code runs the hooks with Git Bash (from Git for Windows).
+
+### Every other coding agent
+
+1. Set your personal token once on your machine, in the `SHARED_MEMORY_TOKEN` environment variable (on Windows, `setx SHARED_MEMORY_TOKEN <token>`), then restart the agent. VS Code asks for the token the first time instead, and keeps it.
+2. Open the repository. Trust the folder or approve the server when the agent asks; most agents ignore a repository's own settings until you do.
+3. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project.
+4. **Devin Desktop**: its documentation doesn't yet say it reads environment variables in headers. If it connects without your token, put the same entry, with your own token, in `.devin/mcp_config.local.json`, which git never commits.
+
+These agents don't get the briefing and recall by themselves yet. The server's instructions and the `AGENTS.md` section ask them to call `briefing` at the start of a task and `search` before answering, and each change they make is recorded with the agent it came from.
 
 ## 5. Decide what every session is briefed with
 
@@ -98,4 +125,4 @@ A memory that is no longer true and has nothing to replace it is **retired** fro
 
 ## 7. Repositories without a project
 
-A repository whose settings don't name a project behaves exactly as before: hooks add nothing, and memory tools reply that the repository isn't connected to a project.
+A repository whose files don't name a project behaves exactly as before: hooks add nothing, and memory tools reply that the repository isn't connected to a project and how to connect it.
