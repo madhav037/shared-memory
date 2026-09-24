@@ -82,14 +82,16 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     steps: [
       <>Set your personal token in <code>SHARED_MEMORY_TOKEN</code>, above.</>,
       <>
-        Commit the repository’s <code>.cursor/mcp.json</code>, <code>AGENTS.md</code> section and skill.
+        Commit the repository’s <code>.cursor/mcp.json</code>, <code>.cursor/hooks.json</code> and{" "}
+        <code>.cursor/rules/shared-memory.mdc</code>, with the <code>AGENTS.md</code> section and skill.
       </>,
       <>Approve the server when Cursor asks.</>,
     ],
     automatic: (
       <>
-        Not yet automatic: Cursor follows <code>AGENTS.md</code>, calling <code>briefing</code> and{" "}
-        <code>search</code> itself.
+        Every session starts with the briefing. Cursor’s prompt hook cannot add memory to a prompt, so the
+        always-applied rule asks it to search memory before answering. On Windows, Cursor launches hooks through
+        PowerShell, where the command doesn’t run, and the rule is what keeps memory in reach.
       </>
     ),
   },
@@ -98,7 +100,8 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     steps: [
       <>Set your personal token in <code>SHARED_MEMORY_TOKEN</code>, above.</>,
       <>
-        Commit the repository’s <code>.devin/mcp_config.json</code>, <code>AGENTS.md</code> section and skill.
+        Commit the repository’s <code>.devin/mcp_config.json</code> and <code>.devin/hooks.v1.json</code>, with the{" "}
+        <code>AGENTS.md</code> section and skill.
       </>,
       <>
         If Devin connects without your token, put the same entry, with your own token, in{" "}
@@ -108,8 +111,9 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Not yet automatic: Devin follows <code>AGENTS.md</code>, calling <code>briefing</code> and <code>search</code>{" "}
-        itself.
+        Every session starts with the briefing, and memory that matches each prompt is recalled into it, from Devin’s
+        own hooks. Devin loads hooks from <code>.claude/settings.json</code> as well, where Shared Memory keeps none,
+        so a session is never briefed twice.
       </>
     ),
   },
@@ -122,13 +126,15 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
         once, for each project you work in.
       </>,
       <>
-        Commit the repository’s <code>AGENTS.md</code> section, which Cline reads.
+        Commit the repository’s <code>AGENTS.md</code> section, which Cline reads, and the hook scripts in{" "}
+        <code>.clinerules/hooks</code>. Make the ones without an extension executable (<code>chmod +x</code>).
       </>,
     ],
     automatic: (
       <>
-        Not yet automatic: Cline follows <code>AGENTS.md</code>, calling <code>briefing</code> and <code>search</code>{" "}
-        itself.
+        Every task starts with the briefing, and memory that matches each prompt is recalled into it, from the scripts
+        in <code>.clinerules/hooks</code>. On macOS and Linux Cline runs the ones without an extension; on Windows it
+        runs the <code>.ps1</code> beside them.
       </>
     ),
   },
