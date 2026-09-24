@@ -16,6 +16,7 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from shared_memory import hooks
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.briefing import Briefing
@@ -124,6 +125,8 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         if not isinstance(payload, dict):
             return JSONResponse({})
         headers = Headers(scope=request.scope)
+        answer_format = request.query_params.get("format")
+        named_event = hooks.event_in(payload, event)
 
         def authenticated() -> Caller | Refused:
             try:
@@ -137,7 +140,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             if isinstance(current, Refused):
                 connected = headers.get("x-shared-memory-project") or headers.get("authorization")
                 if report_refusals and connected:
-                    return JSONResponse({"systemMessage": f"Shared Memory is unavailable: {current}"})
+                    return JSONResponse(hooks.notice(answer_format, f"Shared Memory is unavailable: {current}"))
                 return JSONResponse({})
             if current.project is None:
                 return JSONResponse({})
@@ -153,7 +156,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         context = "\n\n".join(part for part in parts if part)
         if not context:
             return JSONResponse({})
-        return JSONResponse({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}})
+        return JSONResponse(hooks.answered(answer_format, named_event, context))
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
@@ -161,8 +164,8 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             return challenges.prompt_notices(current)
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
-            prompt = payload.get("prompt")
-            return recall.for_prompt(current, prompt) if isinstance(prompt, str) else None
+            prompt = hooks.prompt_in(payload)
+            return recall.for_prompt(current, prompt) if prompt else None
 
         return await hook(request, "UserPromptSubmit", notices, recalled)
 
