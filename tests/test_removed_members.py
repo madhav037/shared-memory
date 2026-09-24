@@ -1,40 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
-from tests.support import Session, Team, added_context
-
-
-NPM = {
-    "title": "Use npm for installs",
-    "summary": "Packages are installed with npm.",
-    "type": "convention",
-    "body": "Install dependencies with npm install. Do not use other package managers.",
-}
-PNPM = {
-    "title": "Use pnpm, not npm",
-    "summary": "Every package uses pnpm.",
-    "type": "convention",
-    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
-}
-
-
-def promote_now(session: Session, memory: dict[str, str]) -> str:
-    result = session.call("promote", path=session.call("remember", **memory)["path"], level="project")
-    assert result["status"] == "promoted", result
-    path: str = result["path"]
-    return path
-
-
-def challenge(session: Session, memory: dict[str, str], target: str) -> dict[str, Any]:
-    personal = session.call("remember", **memory)["path"]
-    first = session.call("promote", path=personal, level="project")
-    resolutions = {s["path"]: ("supersede" if s["path"] == target else "keep_both") for s in first["similar"]}
-    result: dict[str, Any] = session.call(
-        "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions
-    )
-    assert result["status"] == "challenge_raised", result
-    return {**result, "personal": personal}
+from tests.support import NPM, PNPM, Session, Team, added_context, challenge, promote_now
 
 
 def test_any_member_can_decide_a_challenge_after_three_days(team: Team, owner: Session, dana: Session, cole: Session) -> None:

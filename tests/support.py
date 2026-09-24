@@ -242,6 +242,52 @@ def member(team: Team, project: str, employee_id: str, name: str) -> Session:
     return Session(team.server, added["personal_token"], project, "billing-api")
 
 
+# Two memories that contradict each other, so promoting the second finds the first similar.
+NPM = {
+    "title": "Use npm for installs",
+    "summary": "Packages are installed with npm.",
+    "type": "convention",
+    "body": "Install dependencies with npm install. Do not use other package managers.",
+}
+PNPM = {
+    "title": "Use pnpm, not npm",
+    "summary": "Every package uses pnpm.",
+    "type": "convention",
+    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
+}
+
+
+def promote_now(session: Session, memory: dict[str, str], level: str = "project") -> str:
+    """Promote a memory that has nothing similar to resolve."""
+    result = session.call("promote", path=session.call("remember", **memory)["path"], level=level)
+    assert result["status"] == "promoted", result
+    path: str = result["path"]
+    return path
+
+
+def _supersede(session: Session, personal: str, target: str, level: str) -> dict[str, Any]:
+    first = session.call("promote", path=personal, level=level)
+    assert first["status"] == "similar_memories", first
+    resolutions = {similar["path"]: ("supersede" if similar["path"] == target else "keep_both") for similar in first["similar"]}
+    result: dict[str, Any] = session.call(
+        "promote", path=personal, level=level, reference=first["reference"], resolutions=resolutions
+    )
+    return result
+
+
+def promote_superseding(session: Session, memory: dict[str, str], target: str, level: str = "project") -> dict[str, Any]:
+    """Promote a memory over one it supersedes, keeping anything else similar."""
+    return _supersede(session, session.call("remember", **memory)["path"], target, level)
+
+
+def challenge(session: Session, memory: dict[str, str], target: str, level: str = "project") -> dict[str, Any]:
+    """Raise a challenge: supersede another author's memory, which they decide."""
+    personal = session.call("remember", **memory)["path"]
+    result = _supersede(session, personal, target, level)
+    assert result["status"] == "challenge_raised", result
+    return {**result, "personal": personal}
+
+
 class FakeGitHub:
     """Stands in for GitHub's sign-in, so no test touches the real one.
 

@@ -3,21 +3,9 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from tests.support import Session, Team
+from tests.support import NPM, PNPM, Session, Team
 
 
-PNPM = {
-    "title": "Use pnpm, not npm",
-    "summary": "Every package uses pnpm.",
-    "type": "convention",
-    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
-}
-NPM = {
-    "title": "Use npm for installs",
-    "summary": "Packages are installed with npm.",
-    "type": "convention",
-    "body": "Install dependencies with npm install. Do not use other package managers.",
-}
 CENTS = {
     "title": "Money amounts",
     "summary": "Money is integer cents.",
