@@ -10,3 +10,9 @@ backup_key
 # Impeccable working files: review screenshots and question logs from a design session
 .impeccable/review/
 .impeccable/questions/
+
+# Screenshots, snapshots and console logs from a Playwright MCP browser session
+.playwright-mcp/
+
+# A local compose override, for a server run on one machine
+compose.override.yaml
