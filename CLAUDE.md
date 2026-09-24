@@ -13,9 +13,11 @@ inventing language this project doesn't use or you've found a real gap — settl
 `.claude/skills/domain-modeling` before it reaches code.
 
 **The ADRs in `docs/adr/` bind.** Code contradicting one is wrong until that ADR is superseded.
-Load-bearing above the rest: **ADR-0009 — the console governs memory but never writes it.**
-Console routes read, list, pin and administer; sessions are the only writers. A console route
-that saves, promotes, supersedes or retires a memory is a bug.
+Load-bearing above the rest: **ADR-0009 — the console governs memory but never writes it.** From
+the console a member pins, unpins, decides challenges and retires; writing, editing and promoting
+belong to a session, because promotion needs a coding agent to judge contradictions (ADR-0004)
+and a web page has no model to do it. A console route that saves, edits or promotes a memory is
+a bug.
 
 ## The feature path
 
