@@ -236,6 +236,12 @@ def new_team(server: RunningServer) -> Team:
     return Team(server, code, token)
 
 
+def member(team: Team, project: str, employee_id: str, name: str) -> Session:
+    """A session for a member added to the team, working in one project."""
+    added = team.owner().call("add_member", employee_id=employee_id, name=name)
+    return Session(team.server, added["personal_token"], project, "billing-api")
+
+
 class FakeGitHub:
     """Stands in for GitHub's sign-in, so no test touches the real one.
 

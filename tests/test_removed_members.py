@@ -2,35 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from tests.support import Session, Team, added_context
-
-
-@pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
-    return project_id
-
-
-@pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
-
-
-def member(team: Team, project: str, employee_id: str, name: str) -> Session:
-    added = team.owner().call("add_member", employee_id=employee_id, name=name)
-    return Session(team.server, added["personal_token"], project, "billing-api")
-
-
-@pytest.fixture
-def dana(team: Team, project: str) -> Session:
-    return member(team, project, "emp-2", "Dana Dev")
-
-
-@pytest.fixture
-def cole(team: Team, project: str) -> Session:
-    return member(team, project, "emp-3", "Cole Coder")
 
 
 NPM = {

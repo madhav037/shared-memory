@@ -7,17 +7,6 @@ import pytest
 from tests.support import Session, Team
 
 
-@pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
-    return project_id
-
-
-@pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
-
-
 def remember(session: Session, title: str, body: str, type: str = "convention", summary: str | None = None) -> str:
     saved = session.call("remember", title=title, summary=summary or title, type=type, body=body)
     path: str = saved["path"]

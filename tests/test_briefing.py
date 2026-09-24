@@ -1,19 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from tests.support import Session, Team, added_context
-
-
-@pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
-    return project_id
-
-
-@pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
 
 
 def promote(session: Session, title: str, body: str, level: str = "project", topic: str | None = None) -> str:

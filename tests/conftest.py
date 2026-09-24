@@ -9,7 +9,19 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import FastEmbedEmbedder
-from tests.support import REPO_ROOT, Console, ConsoleClient, FakeGitHub, RunningServer, Team, TestClock, fresh_database, new_team
+from tests.support import (
+    REPO_ROOT,
+    Console,
+    ConsoleClient,
+    FakeGitHub,
+    RunningServer,
+    Session,
+    Team,
+    TestClock,
+    fresh_database,
+    member,
+    new_team,
+)
 
 
 @pytest.fixture(scope="session")
@@ -66,3 +78,24 @@ def signed_out(console: Console) -> Iterator[ConsoleClient]:
         yield client
     finally:
         client.close()
+
+
+@pytest.fixture
+def project(team: Team) -> str:
+    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
+    return project_id
+
+
+@pytest.fixture
+def owner(team: Team, project: str) -> Session:
+    return team.owner().in_project(project, "billing-api")
+
+
+@pytest.fixture
+def dana(team: Team, project: str) -> Session:
+    return member(team, project, "emp-2", "Dana Dev")
+
+
+@pytest.fixture
+def cole(team: Team, project: str) -> Session:
+    return member(team, project, "emp-3", "Cole Coder")

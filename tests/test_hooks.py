@@ -28,17 +28,6 @@ def context_in(output: dict[str, Any], format: str | None) -> str:
     return text
 
 
-@pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
-    return project_id
-
-
-@pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
-
-
 def promoted(session: Session, title: str, body: str) -> str:
     """A project memory of this session's project, which recall can reach."""
     personal = session.call("remember", title=title, summary=f"{title}.", type="convention", body=body)["path"]
