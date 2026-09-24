@@ -7,8 +7,6 @@ export type AuditEvent = components["schemas"]["AuditEvent"];
 export type Projects = components["schemas"]["Projects"];
 export type ProjectSummary = components["schemas"]["ProjectSummary"];
 export type ProjectDetail = components["schemas"]["ProjectDetail"];
-export type ProjectMember = components["schemas"]["ProjectMember"];
-export type ProjectRepository = components["schemas"]["ProjectRepository"];
 export type ConnectionFile = components["schemas"]["ConnectionFile"];
 export type MemoryDetail = components["schemas"]["MemoryDetail"];
 export type SearchResults = components["schemas"]["SearchResults"];
@@ -17,12 +15,9 @@ export type IssuedToken = components["schemas"]["IssuedToken"];
 export type MemoryHistory = components["schemas"]["MemoryHistory"];
 export type MemoryVersion = components["schemas"]["MemoryVersion"];
 export type MemoryAtVersion = components["schemas"]["MemoryAtVersion"];
-export type MemoryDifference = components["schemas"]["MemoryDifference"];
 export type Members = components["schemas"]["Members"];
 export type Folder = components["schemas"]["Folder"];
-export type FolderEntry = components["schemas"]["FolderEntry"];
 export type FileEntry = components["schemas"]["FileEntry"];
-export type FolderSection = components["schemas"]["FolderSection"];
 export type PinState = components["schemas"]["PinState"];
 export type Pins = components["schemas"]["Pins"];
 export type Pin = components["schemas"]["Pin"];
@@ -96,11 +91,6 @@ export function fetchProject(projectId: string, signal?: AbortSignal): Promise<P
 
 export type SearchAsked = { query: string; level?: string; type?: string; limit?: number };
 
-/** Memories that match, by meaning and by exact words. */
-export function search(projectId: string, asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
-  return ask<SearchResults>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/search`, asked), { signal });
-}
-
 /** One folder of the team's memory: its folders, with what they hold, and its memories. "" is the top. */
 export function fetchFolder(folder: string, signal?: AbortSignal, deep = false): Promise<Folder> {
   return ask<Folder>(withQuery("/api/files", { folder, deep: deep ? "1" : undefined }), { signal });
@@ -148,15 +138,6 @@ export function fetchPins(projectId: string, signal?: AbortSignal): Promise<Pins
   return ask<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { signal });
 }
 
-/** Pin a project or team memory, or a topic folder, into every session's briefing. */
-export function pin(projectId: string, path: string): Promise<Pins> {
-  return change<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { path });
-}
-
-export function unpin(projectId: string, path: string): Promise<Pins> {
-  return change<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins/remove`, { path });
-}
-
 /** Challenges waiting for this member's decision, and the ones they raised. */
 export function fetchChallenges(signal?: AbortSignal): Promise<ChallengeList> {
   return ask<ChallengeList>("/api/challenges", { signal });
@@ -165,11 +146,6 @@ export function fetchChallenges(signal?: AbortSignal): Promise<ChallengeList> {
 /** Accept a challenge or reject it. */
 export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<ChallengeList> {
   return change<ChallengeList>(`/api/challenges/${challengeId}/decide`, { decision });
-}
-
-/** Retire a memory that is no longer true; another author's raises a challenge they decide. */
-export function retire(projectId: string, path: string): Promise<Retired> {
-  return change<Retired>(`/api/projects/${encodeURIComponent(projectId)}/retire`, { path });
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */
@@ -253,4 +229,3 @@ export function removeRepository(projectId: string, name: string): Promise<Proje
 }
 
 export const signInUrl = "/api/sign-in/github";
-export { ApiError };
