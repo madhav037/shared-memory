@@ -13,6 +13,7 @@ from importlib import resources
 from typing import Any, Literal
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"
+GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
 EVERY_AGENT = "Every agent"
 SECTION_START = "<!-- shared-memory:start -->"
 SECTION_END = "<!-- shared-memory:end -->"
@@ -46,11 +47,169 @@ def skill() -> str:
     return resources.files("shared_memory").joinpath("skill.md").read_text(encoding="utf-8")
 
 
+def hook_command(hooks_url: str, event: str, project_id: str, repository: str, *, seconds: int, windows: bool) -> str:
+    """The command a hook runs to post its payload and print what the server answers.
+
+    It never gets in a session's way: a server that is down, slow or unhappy leaves the command printing nothing at
+    all. Windows gets its own variant because Codex runs hooks there in cmd.exe, where a POSIX shell's syntax for an
+    environment variable means nothing.
+    """
+    token = "%" + TOKEN_VARIABLE + "%" if windows else "$" + TOKEN_VARIABLE
+    quote = '"' if windows else "'"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+        "X-Shared-Memory-Project": project_id,
+        "X-Shared-Memory-Repository": repository,
+    }
+    written = " ".join(f"-H {quote}{name}: {value}{quote}" for name, value in headers.items())
+    if not windows:
+        written = written.replace(f"-H 'Authorization: Bearer {token}'", f'-H "Authorization: Bearer {token}"')
+    return (
+        f"{'curl.exe' if windows else 'curl'} -s --fail --max-time {seconds} {written} --data-binary @- "
+        f"{quote}{hooks_url}/{event}{quote} || {'exit /b 0' if windows else 'true'}"
+    )
+
+
+def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
+    """Codex's own hooks: the briefing when a session starts, and memory recalled on each prompt.
+
+    Both post with curl rather than calling the briefing tool through Codex's mcp_tool hook, which would need no token
+    of its own but does need a connection that is already up: prototype #2 (docs/design.md) found MCP-tool hooks don't
+    run at a session's start, and Codex's own reference says its MCP-tool hooks reuse an existing connection without
+    starting one. Windows gets its own commands because Codex runs hooks there in cmd.exe.
+    """
+    posix = {
+        event: hook_command(hooks_url, event, project_id, repository, seconds=seconds, windows=False)
+        for event, seconds in (("session-start", 5), ("prompt-submitted", 3))
+    }
+    windows = {
+        event: hook_command(hooks_url, event, project_id, repository, seconds=seconds, windows=True)
+        for event, seconds in (("session-start", 5), ("prompt-submitted", 3))
+    }
+    return f"""
+[[hooks.SessionStart]]
+matcher = "^(startup|resume|clear)$"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = {json.dumps(posix["session-start"])}
+command_windows = {json.dumps(windows["session-start"])}
+timeout = 6
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = {json.dumps(posix["prompt-submitted"])}
+command_windows = {json.dumps(windows["prompt-submitted"])}
+timeout = 4
+"""
+
+
+def gemini_hooks() -> dict[str, Any]:
+    """Gemini CLI's hooks. Both run the one script beside them, because Gemini has no per-machine variant of a command
+    and the shell it runs them in differs from machine to machine; node is the same everywhere and Gemini brings it."""
+    return {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "name": "shared-memory-briefing",
+                        "type": "command",
+                        "command": f"node {GEMINI_SCRIPT} session-start",
+                        "timeout": 6000,
+                    }
+                ]
+            }
+        ],
+        "BeforeAgent": [
+            {
+                "hooks": [
+                    {
+                        "name": "shared-memory-recall",
+                        "type": "command",
+                        "command": f"node {GEMINI_SCRIPT} prompt-submitted",
+                        "timeout": 4000,
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def gemini_script(hooks_url: str, project_id: str, repository: str) -> str:
+    """The script both of Gemini CLI's hooks run: it posts the payload it is given and prints the server's answer."""
+    return f'''// Shared Memory: the briefing when a session starts, and memory recalled on each prompt.
+// Gemini CLI runs a hook through whichever shell the machine has, so this is a script rather than a shell command:
+// node is the same on every machine, and Gemini CLI brings its own. Your personal token is read from the
+// {TOKEN_VARIABLE} environment variable and is never committed here.
+// Nothing in here can hold up a session: any problem at all answers with nothing.
+const server = {json.dumps(hooks_url)};
+const headers = {{
+  "Content-Type": "application/json",
+  "X-Shared-Memory-Project": {json.dumps(project_id)},
+  "X-Shared-Memory-Repository": {json.dumps(repository)},
+}};
+
+const [event] = process.argv.slice(2);
+const token = process.env.{TOKEN_VARIABLE};
+const seconds = event === "session-start" ? 5 : 3;
+
+let payload = "";
+if (!process.stdin.isTTY) {{
+  for await (const chunk of process.stdin) payload += chunk;
+}}
+
+try {{
+  if (token) {{
+    const answer = await fetch(`${{server}}/${{event}}`, {{
+      method: "POST",
+      headers: {{ ...headers, Authorization: `Bearer ${{token}}` }},
+      body: payload || "{{}}",
+      signal: AbortSignal.timeout(seconds * 1000),
+    }});
+    if (answer.ok) process.stdout.write(await answer.text());
+  }}
+}} catch {{
+  // A server that is down, slow or unreachable leaves the session exactly as it was.
+}}
+process.exit(0);
+'''
+
+
+def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[str, Any]:
+    """Copilot CLI's hook. It posts to the server itself, so there is no command and no shell to get right.
+
+    Only the session start is here: GitHub's own reference says the CLI drops what a userPromptSubmitted hook answers,
+    and a hook whose answer is thrown away would take this member's waiting challenges with it.
+    """
+    return {
+        "version": 1,
+        "hooks": {
+            "sessionStart": [
+                {
+                    "type": "http",
+                    "url": f"{hooks_url}/session-start?format=copilot-cli",
+                    "headers": {
+                        "Authorization": f"Bearer ${{{TOKEN_VARIABLE}}}",
+                        "X-Shared-Memory-Project": project_id,
+                        "X-Shared-Memory-Repository": repository,
+                    },
+                    "allowedEnvVars": [TOKEN_VARIABLE],
+                    "timeoutSec": 6,
+                }
+            ]
+        },
+    }
+
+
 def connection_kit(
     *, server_url: str, marketplace: str, project_id: str, project_name: str, repository: str
 ) -> list[dict[str, Any]]:
     """Every file that connects this repository to its project, one agent after another."""
     endpoint = f"{server_url.rstrip('/')}/mcp"
+    hooks_url = f"{server_url.rstrip('/')}/hooks"
     headers = {"X-Shared-Memory-Project": project_id, "X-Shared-Memory-Repository": repository}
     files = [
         ConnectionFile(
@@ -64,8 +223,9 @@ def connection_kit(
             agent="Codex",
             path=".codex/config.toml",
             action="merge",
-            how="Add this table to the file, keeping anything already there. Codex 0.78 or later reads it once the "
-            "project is trusted; earlier versions ignore a repository's own configuration.",
+            how="Add these tables to the file, keeping anything already there. Codex 0.78 or later reads them once "
+            "the project is trusted; earlier versions ignore a repository's own configuration. The hooks brief each "
+            "session and recall memory for each prompt, with curl, and each has a cmd.exe command for Windows.",
             contents=(
                 "[mcp_servers.shared-memory]\n"
                 f"url = {json.dumps(endpoint)}\n"
@@ -73,6 +233,7 @@ def connection_kit(
                 "http_headers = { "
                 + ", ".join(f"{json.dumps(name)} = {json.dumps(value)}" for name, value in headers.items())
                 + " }\n"
+                + codex_hooks(hooks_url, project_id, repository)
             ),
         ),
         ConnectionFile(
@@ -120,11 +281,23 @@ def connection_kit(
             ),
         ),
         ConnectionFile(
+            agent="GitHub Copilot",
+            path=".github/hooks/shared-memory.json",
+            action="create",
+            how="For Copilot CLI: add this file, which briefs each session as it starts. The CLI calls the server "
+            "itself, so there is no command to run and no shell to get right; it expands your token only when the "
+            "server's URL is https. Only the session start is here, because GitHub's reference says the CLI drops "
+            "whatever a prompt hook answers. VS Code has no hooks at all: there, Copilot calls briefing and search "
+            "itself.",
+            contents=_json(copilot_cli_hook(hooks_url, project_id, repository)),
+        ),
+        ConnectionFile(
             agent="Gemini CLI",
             path=".gemini/settings.json",
             action="merge",
             how="Merge these keys into the file, keeping anything already there; add AGENTS.md to any context file "
-            "names already listed. Gemini CLI reads it in folders you trust.",
+            "names already listed, and the hooks to any hooks already there. Gemini CLI reads it in folders you "
+            "trust, briefs each session as it starts and recalls memory for each prompt.",
             contents=_json(
                 {
                     "mcpServers": {
@@ -135,8 +308,18 @@ def connection_kit(
                         }
                     },
                     "context": {"fileName": ["AGENTS.md", "GEMINI.md"]},
+                    "hooks": gemini_hooks(),
                 }
             ),
+        ),
+        ConnectionFile(
+            agent="Gemini CLI",
+            path=GEMINI_SCRIPT,
+            action="create",
+            how="Add this file: both of Gemini CLI's hooks run it. It reads your personal token from the "
+            "environment, so nothing secret is committed, and it answers with nothing at all if the server is slow "
+            "or down.",
+            contents=gemini_script(hooks_url, project_id, repository),
         ),
         ConnectionFile(
             agent="Cursor",

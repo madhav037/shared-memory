@@ -36,8 +36,8 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Not yet automatic: Codex calls <code>briefing</code> at the start of a task and <code>search</code> before
-        answering, as <code>AGENTS.md</code> and the server ask it to.
+        Every session starts with the briefing, and memory that matches each prompt is recalled into it. Codex reads
+        the hooks from <code>.codex/config.toml</code> once you trust the project.
       </>
     ),
   },
@@ -45,16 +45,18 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     name: "GitHub Copilot",
     steps: [
       <>
-        Commit the repository’s <code>.vscode/mcp.json</code> for VS Code and <code>.github/mcp.json</code> for Copilot
-        CLI, with the <code>AGENTS.md</code> section and skill.
+        Commit the repository’s <code>.vscode/mcp.json</code> for VS Code, and <code>.github/mcp.json</code> with
+        <code>.github/hooks/shared-memory.json</code> for Copilot CLI, with the <code>AGENTS.md</code> section and
+        skill.
       </>,
       <>VS Code asks for your personal token the first time and keeps it; Copilot CLI reads SHARED_MEMORY_TOKEN.</>,
       <>Trust the server when VS Code asks, and the folder when Copilot CLI asks.</>,
     ],
     automatic: (
       <>
-        Not yet automatic: Copilot calls <code>briefing</code> and <code>search</code> itself, as the server’s
-        instructions and <code>AGENTS.md</code> ask.
+        In Copilot CLI, every session starts with the briefing, which the server sends it directly. Recall on each
+        prompt is not set up: the CLI drops whatever a prompt hook answers. VS Code has no hooks at all, so there
+        Copilot calls <code>briefing</code> and <code>search</code> itself, as <code>AGENTS.md</code> asks.
       </>
     ),
   },
@@ -63,14 +65,15 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     steps: [
       <>Set your personal token in <code>SHARED_MEMORY_TOKEN</code>, above.</>,
       <>
-        Commit the repository’s <code>.gemini/settings.json</code>, <code>AGENTS.md</code> section and skill.
+        Commit the repository’s <code>.gemini/settings.json</code> and <code>.gemini/hooks/shared-memory.mjs</code>,
+        with the <code>AGENTS.md</code> section and skill.
       </>,
       <>Trust the folder when Gemini CLI asks; it ignores a project’s settings until you do.</>,
     ],
     automatic: (
       <>
-        Not yet automatic: Gemini CLI reads the server’s instructions and <code>AGENTS.md</code>, and calls{" "}
-        <code>briefing</code> and <code>search</code> itself.
+        Every session starts with the briefing, and memory that matches each prompt is recalled into it, through the
+        small script in <code>.gemini/hooks</code> that both hooks run.
       </>
     ),
   },

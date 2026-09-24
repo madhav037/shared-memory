@@ -58,8 +58,8 @@ Create a project for the repository: **New project** on the console's front page
 |---|---|
 | Claude Code | `.claude/settings.json` |
 | Codex | `.codex/config.toml` |
-| GitHub Copilot | `.vscode/mcp.json` for VS Code, `.github/mcp.json` for Copilot CLI |
-| Gemini CLI | `.gemini/settings.json` |
+| GitHub Copilot | `.vscode/mcp.json` for VS Code; `.github/mcp.json` and `.github/hooks/shared-memory.json` for Copilot CLI |
+| Gemini CLI | `.gemini/settings.json` and `.gemini/hooks/shared-memory.mjs` |
 | Cursor | `.cursor/mcp.json` |
 | Devin Desktop | `.devin/mcp_config.json` |
 | Every agent | a Shared Memory section in `AGENTS.md`, and the skill in `.agents/skills/shared-memory/SKILL.md` |
@@ -112,7 +112,9 @@ The plugin's hooks call the server with `curl`, which ships with Windows 10 and 
 4. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project.
 5. **Devin Desktop**: its documentation doesn't yet say it reads environment variables in headers. If it connects without your token, put the same entry, with your own token, in `.devin/mcp_config.local.json`, which git never commits.
 
-These agents don't get the briefing and recall by themselves yet. The server's instructions and the `AGENTS.md` section ask them to call `briefing` at the start of a task and `search` before answering, and each change they make is recorded with the agent it came from.
+Codex and Gemini CLI are briefed when a session starts and recall memory for each prompt, from the hooks in their own files; Gemini CLI runs both through the small script committed beside its settings. Copilot CLI is briefed at the start of a session, which the server sends it directly, but it drops whatever a prompt hook answers, so recall there is left to the agent. Copilot in VS Code, Cursor, Devin Desktop and Cline have no hooks set up yet.
+
+Wherever a hook doesn't brief a session, the server's instructions and the `AGENTS.md` section ask the agent to call `briefing` at the start of a task and `search` before answering. Each change is recorded with the agent it came from, whichever way it was made.
 
 ## 5. Decide what every session is briefed with
 

@@ -19,7 +19,9 @@ test("a member picks their coding agent and gets its steps and the repository's 
   await expect(files).not.toContainText("smt_");
   await files.getByTestId("copy-.codex/config.toml").click();
   await expect(files.getByTestId("copy-.codex/config.toml")).toContainText("Copied");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("[mcp_servers.shared-memory]");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("[mcp_servers.shared-memory]");
+  expect(copied).toContain("[[hooks.SessionStart]]");
 
   await page.getByTestId("connect-Cline").click();
 
