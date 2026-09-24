@@ -13,23 +13,6 @@ from shared_memory.embeddings import FastEmbedEmbedder
 from tests.support import RunningServer, Session, Team, added_context, new_team
 
 
-@pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
-    return project_id
-
-
-@pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
-
-
-@pytest.fixture
-def dana(team: Team, project: str) -> Session:
-    added = team.owner().call("add_member", employee_id="emp-2", name="Dana Dev")
-    return Session(team.server, added["personal_token"], project, "billing-api")
-
-
 def remember(session: Session, title: str, body: str, type: str = "convention") -> str:
     path: str = session.call("remember", title=title, summary=title, type=type, body=body)["path"]
     return path
