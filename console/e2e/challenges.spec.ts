@@ -13,8 +13,12 @@ test("the owner decides a challenge waiting for them and the memory is supersede
 
   await page.getByTestId("decide-them").click();
   const dispute = page.getByTestId("waiting");
-  await expect(dispute.getByRole("list", { name: "Amendments" })).toContainText("Words substituted by the offer from");
-  await expect(dispute.locator("ins").first()).toContainText("02:17 UTC");
+
+  // An offer is shown in its own words. Marking up what it takes out and puts in is there for whoever wants it.
+  await expect(dispute.getByTestId("tracked")).toHaveCount(0);
+  await page.getByLabel("Show what each offer takes out and puts in").check();
+  await expect(dispute.locator(".tracked-text del")).toContainText("every night.");
+  await expect(dispute.locator(".tracked-text ins")).toContainText("02:17 UTC");
   await dispute.getByRole("button", { name: "Accept: supersede it" }).click();
   await expect(page.getByTestId("nothing-waiting")).toBeVisible();
 

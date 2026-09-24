@@ -50,6 +50,49 @@ export function wordDiff(before: string, after: string): Piece[] {
 }
 
 /**
+ * What changed between two texts, a line at a time.
+ *
+ * Word-by-word is right for one text amended into the next, where most words stand and a few give way. Two texts
+ * written separately share only stray words, and matching those shreds both into fragments that read as noise. Whole
+ * lines keep each statement together: this line goes, this one comes in, these are the same in both.
+ */
+export function lineDiff(before: string, after: string): Piece[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const width = b.length + 1;
+  const table = new Uint32Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i -= 1) {
+    for (let j = b.length - 1; j >= 0; j -= 1) {
+      table[i * width + j] =
+        a[i] === b[j]
+          ? table[(i + 1) * width + j + 1]! + 1
+          : Math.max(table[(i + 1) * width + j]!, table[i * width + j + 1]!);
+    }
+  }
+
+  const pieces: Piece[] = [];
+  const put = (kind: Piece["kind"], line: string) => pieces.push({ kind, text: `${line}\n` });
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      put("same", a[i]!);
+      i += 1;
+      j += 1;
+    } else if (table[(i + 1) * width + j]! >= table[i * width + j + 1]!) {
+      put("delete", a[i]!);
+      i += 1;
+    } else {
+      put("insert", b[j]!);
+      j += 1;
+    }
+  }
+  for (; i < a.length; i += 1) put("delete", a[i]!);
+  for (; j < b.length; j += 1) put("insert", b[j]!);
+  return merge(pieces);
+}
+
+/**
  * Word-by-word changes read as noise: "night.night Don't at". An amended passage is set as what was taken out,
  * then what was put in. Changes separated only by spaces, or by a single short word, join into one passage.
  */
