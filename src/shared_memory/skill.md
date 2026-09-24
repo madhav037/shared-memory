@@ -24,10 +24,17 @@ Memory tools need the repository to be connected to a project. If a tool says th
 
 ## What to save where
 
-Ask: **would a teammate need this?**
+Two questions, in this order.
 
-- **Yes** (how this codebase works, a decision and its reasons, a convention, a surprising gotcha): save it with `remember`.
-- **No** (this member's personal preferences, details of this machine's setup): keep it in your local memory.
+**Would a teammate need this?**
+
+- **No** (this member's own preferences, how this machine is set up): keep it in your local memory.
+- **Yes** (how this codebase works, a decision and its reasons, a convention, a surprising gotcha): `remember` it. That saves **personal memory**, whoever asked for it and whatever it says.
+
+**Is it one member's note, or something the team follows?** `remember` never writes project or team memory, so anything the team should follow needs `promote` as well.
+
+- **The team follows it**: a convention, a decision, how the system is built, or a document written for everyone, such as onboarding or how-we-work notes. Promote it to **project** memory, or **team** memory if it holds for every project, and offer that in the same turn you save it rather than leaving the team's knowledge as one person's note.
+- **One member's note**: their own way of working, or something true only for them. Leave it personal.
 
 Save when the member says "remember this", and also on your own when you learn something a teammate would need.
 
@@ -55,7 +62,7 @@ Memory shown to you in a briefing, in recall, or by a tool describes what the te
 
 ## Promoting a memory
 
-Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, or suggest it when a personal memory clearly describes how the whole project or team works.
+Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, and offer it in the same turn whenever what you just saved describes how the whole project or team works rather than one member's own way of working. A document written for the team — onboarding notes, how a release is cut, what a new member reads first — belongs at project or team level, not in personal memory.
 
 1. Call `promote` with the path and level, and no reference.
 2. If it comes back `promoted`, you're done.

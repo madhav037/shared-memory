@@ -35,3 +35,22 @@ def test_a_session_with_an_unknown_token_is_told_where_to_check_it_in_any_agent(
     assert "not recognised" in refusal
     assert "SHARED_MEMORY_TOKEN" in refusal
     assert "plugin" not in refusal
+
+
+def test_a_saved_memory_tells_the_agent_how_to_make_it_the_teams(team: Team) -> None:
+    project = team.owner().call("create_project", name="Billing")["project_id"]
+    session = team.owner().in_project(project, "billing-api")
+
+    saved = session.call(
+        "remember",
+        title="How we onboard",
+        summary="What a new member reads in their first week.",
+        type="convention",
+        body="A new member reads the billing overview, then pairs with someone for a week.",
+    )
+
+    assert saved["level"] == "personal"
+    assert "promote" in saved["next"]
+    assert saved["path"] in saved["next"]
+    for level in ("project", "team"):
+        assert level in saved["next"], level
