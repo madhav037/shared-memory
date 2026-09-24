@@ -165,7 +165,8 @@ def test_what_the_memory_tools_answer_is_unchanged(console: Console, signed_out:
     )
     pinned = in_project.call("pin", path=in_project.call("promote", path=saved["path"], level="project")["path"])
 
-    assert set(saved) == {"path"}
+    # remember also says which level it saved at and what to do about it, since that is the moment an agent chooses.
+    assert set(saved) == {"path", "level", "next"}
     assert set(pinned) == {"pinned"}
 
 

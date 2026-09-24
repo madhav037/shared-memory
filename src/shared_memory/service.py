@@ -18,6 +18,20 @@ from shared_memory.store import Committer, MemoryStore
 from shared_memory.validation import validate
 
 
+def _promoting(path: str) -> str:
+    """What to do with a memory that has just been saved, which is always personal memory at first.
+
+    It goes in the result rather than only in the server's instructions or the skill, because it is the moment the
+    choice of level is actually in front of an agent, and because some agents read neither.
+    """
+    return (
+        f"Saved as this member's personal memory: the team can read it but hasn't accepted it. If everyone on this "
+        f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'team' if it "
+        f"holds for every project in the team. Anything written for the whole team, such as onboarding or how-we-work "
+        f"notes, belongs at one of those levels. Leave it personal if it is only this member's own note."
+    )
+
+
 def committer(caller: Caller) -> Committer:
     return Committer(caller.member_id, caller.member.name, caller.agent)
 
@@ -168,7 +182,7 @@ class MemoryService:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
         self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type)
-        return {"path": str(path)}
+        return {"path": str(path), "level": "personal", "next": _promoting(str(path))}
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
