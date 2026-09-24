@@ -60,8 +60,9 @@ Create a project for the repository: **New project** on the console's front page
 | Codex | `.codex/config.toml` |
 | GitHub Copilot | `.vscode/mcp.json` for VS Code; `.github/mcp.json` and `.github/hooks/shared-memory.json` for Copilot CLI |
 | Gemini CLI | `.gemini/settings.json` and `.gemini/hooks/shared-memory.mjs` |
-| Cursor | `.cursor/mcp.json` |
-| Devin Desktop | `.devin/mcp_config.json` |
+| Cursor | `.cursor/mcp.json`, `.cursor/hooks.json` and `.cursor/rules/shared-memory.mdc` |
+| Devin Desktop | `.devin/mcp_config.json` and `.devin/hooks.v1.json` |
+| Cline | the hook scripts in `.clinerules/hooks` (its MCP server is per machine, section 4) |
 | Every agent | a Shared Memory section in `AGENTS.md`, and the skill in `.agents/skills/shared-memory/SKILL.md` |
 
 Commit the files for the agents your team uses, merging each into any file already there. They name the project and the repository, never a personal token. Cline keeps its MCP servers on each machine rather than in the repository, so each member who uses Cline adds the project's entry once (section 4).
@@ -109,10 +110,12 @@ The plugin's hooks call the server with `curl`, which ships with Windows 10 and 
 1. Set your personal token once on your machine, in the `SHARED_MEMORY_TOKEN` environment variable (on Windows, `setx SHARED_MEMORY_TOKEN <token>`), then restart the agent. VS Code asks for the token the first time instead, and keeps it.
 2. Open the repository. Trust the folder or approve the server when the agent asks; most agents ignore a repository's own settings until you do.
 3. **Codex**: use version 0.78 or later (`codex --version`). Earlier versions ignore a repository's own `.codex/config.toml`, and before 0.47 they also drop the token and the project headers.
-4. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project.
+4. **Cline**: add the project's entry from **Connect your agent** to Cline's MCP settings, once for each project, and make the hook scripts without an extension executable (`chmod +x .clinerules/hooks/*`).
 5. **Devin Desktop**: its documentation doesn't yet say it reads environment variables in headers. If it connects without your token, put the same entry, with your own token, in `.devin/mcp_config.local.json`, which git never commits.
 
-Codex and Gemini CLI are briefed when a session starts and recall memory for each prompt, from the hooks in their own files; Gemini CLI runs both through the small script committed beside its settings. Copilot CLI is briefed at the start of a session, which the server sends it directly, but it drops whatever a prompt hook answers, so recall there is left to the agent. Copilot in VS Code, Cursor, Devin Desktop and Cline have no hooks set up yet.
+Codex, Gemini CLI, Cursor, Devin Desktop and Cline are briefed when a session starts, from the hooks in their own files; Gemini CLI runs both of its hooks through the script committed beside its settings, and Cline runs the scripts in `.clinerules/hooks`. All of them but Cursor also recall memory for each prompt: Cursor's prompt hook cannot add context, so its always-applied rule asks the agent to search instead. Copilot CLI is briefed by the server posting to it directly, but it drops whatever a prompt hook answers. Copilot in VS Code has no hooks at all.
+
+On Windows, Cline runs the `.ps1` script beside each of its others, and Codex runs its own cmd.exe command; Cursor launches hooks through PowerShell, where the generated command doesn't run, and its rule carries memory instead.
 
 Wherever a hook doesn't brief a session, the server's instructions and the `AGENTS.md` section ask the agent to call `briefing` at the start of a task and `search` before answering. Each change is recorded with the agent it came from, whichever way it was made.
 

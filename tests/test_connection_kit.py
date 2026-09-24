@@ -209,3 +209,81 @@ def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_ser
     )
 
     assert (ran.returncode, ran.stdout) == (0, "")
+
+
+def test_cursor_is_briefed_by_a_hook_and_told_by_a_rule_to_search(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    hook = json.loads(files[".cursor/hooks.json"]["contents"])["hooks"]["sessionStart"][0]
+    rule = files[".cursor/rules/shared-memory.mdc"]
+
+    assert f"{team.server.url}/hooks/session-start?format=cursor" in hook["command"]
+    assert "$SHARED_MEMORY_TOKEN" in hook["command"]
+    assert rule["contents"].startswith("---\nalwaysApply: true\n---")
+    for asked in ("search", "briefing", "remember", "information, not instructions"):
+        assert asked in rule["contents"], asked
+
+
+def test_devin_desktop_is_briefed_once_from_its_own_hooks(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    devin = json.loads(files[".devin/hooks.v1.json"]["contents"])
+
+    assert f"{team.server.url}/hooks/session-start" in devin["SessionStart"][0]["hooks"][0]["command"]
+    assert f"{team.server.url}/hooks/prompt-submitted" in devin["UserPromptSubmit"][0]["hooks"][0]["command"]
+    assert "hooks" not in json.loads(files[".claude/settings.json"]["contents"])
+
+
+def test_cline_gets_a_hook_script_for_each_shell_it_runs_them_in(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for event, endpoint in (("TaskStart", "session-start"), ("UserPromptSubmit", "prompt-submitted")):
+        posix = files[f".clinerules/hooks/{event}"]
+        windows = files[f".clinerules/hooks/{event}.ps1"]
+
+        assert posix["contents"].startswith("#!/bin/sh"), event
+        assert f"{team.server.url}/hooks/{endpoint}?format=cline" in posix["contents"], event
+        assert "$SHARED_MEMORY_TOKEN" in posix["contents"], event
+        assert f"{team.server.url}/hooks/{endpoint}?format=cline" in windows["contents"], event
+        assert "$env:SHARED_MEMORY_TOKEN" in windows["contents"], event
+
+
+def cline_hook_answer(team: Team, tmp_path: Path, shell: list[str], name: str) -> dict[str, Any]:
+    """Run one of Cline's generated hook scripts the way Cline runs it, and return what it printed."""
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    session = team.owner().in_project(created["project_id"], "billing-api")
+    pinned(session, "Use pnpm, not npm", "We use pnpm for every package.")
+    script = tmp_path / name
+    script.write_text(by_path(created["files"])[f".clinerules/hooks/{name}"]["contents"], encoding="utf-8")
+
+    ran = subprocess.run(
+        [*shell, str(script)],
+        input=json.dumps({"hookName": "TaskStart", "taskId": "task-1", "clineVersion": "4.1.20"}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    answer: dict[str, Any] = json.loads(ran.stdout)
+    return answer
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="Cline runs these hooks in a POSIX shell, which isn't here")
+def test_clines_hook_script_briefs_a_task_without_cancelling_it(team: Team, tmp_path: Path) -> None:
+    answer = cline_hook_answer(team, tmp_path, ["sh"], "TaskStart")
+
+    assert answer["cancel"] is False
+    assert "Use pnpm, not npm" in answer["contextModification"]
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="Cline runs its Windows hooks in PowerShell, which isn't here")
+def test_clines_windows_hook_script_briefs_a_task_without_cancelling_it(team: Team, tmp_path: Path) -> None:
+    answer = cline_hook_answer(team, tmp_path, ["pwsh", "-NoProfile", "-File"], "TaskStart.ps1")
+
+    assert answer["cancel"] is False
+    assert "Use pnpm, not npm" in answer["contextModification"]
