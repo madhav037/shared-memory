@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlencode
 
 import httpx
 import httpx2
@@ -394,3 +394,51 @@ class Console:
         )  # fmt: skip
         token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
         return code, token
+
+
+def signed_in(console: Console, github: str, account: int) -> ConsoleClient:
+    """A console client signed in as one GitHub account."""
+    client = console.client()
+    console.github.as_(account, github)
+    client.sign_in()
+    return client
+
+
+def signed_in_owner(console: Console, client: ConsoleClient, github: str, account: int) -> Session:
+    """A team whose owner is signed in to the console, and that owner's Claude session."""
+    _, owner_token = console.a_team(github)
+    console.github.as_(account, github)
+    client.sign_in()
+    return Session(console.server, owner_token)
+
+
+def ask(client: ConsoleClient, url: str, **asked: Any) -> dict[str, Any]:
+    """A GET the console makes, which is expected to answer."""
+    response = client.get(f"{url}?{urlencode({k: v for k, v in asked.items() if v is not None})}")
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def add(client: ConsoleClient, employee_id: str, name: str, github: str | None = None) -> dict[str, Any]:
+    """Add a member to the team through the console."""
+    response = client.post_json("/api/members", {"employee_id": employee_id, "name": name, "github": github})
+    assert response.status_code == 200, response.text
+    added: dict[str, Any] = response.json()
+    return added
+
+
+def create(client: ConsoleClient, name: str) -> dict[str, Any]:
+    """Create a project through the console."""
+    response = client.post_json("/api/projects", {"name": name})
+    assert response.status_code == 200, response.text
+    created: dict[str, Any] = response.json()
+    return created
+
+
+def fetch_project(client: ConsoleClient, project_id: str) -> dict[str, Any]:
+    """One project as the console shows it."""
+    response = client.get(f"/api/projects/{project_id}")
+    assert response.status_code == 200, response.text
+    found: dict[str, Any] = response.json()
+    return found
