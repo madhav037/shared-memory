@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlencode
 
-from tests.support import Console, ConsoleClient, Session
-from tests.test_console_browsing import ask, signed_in_owner
+from tests.support import Console, ConsoleClient, ask, signed_in_owner
 
 
 def changed_twice(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[str, str]:

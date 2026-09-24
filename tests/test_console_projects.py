@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session
-from tests.test_console_browsing import signed_in_owner
-from tests.test_console_members import add
+from tests.support import Console, ConsoleClient, Session, add, create, fetch_project, signed_in_owner
 
 
 def projects(client: ConsoleClient) -> list[dict[str, Any]]:
@@ -15,20 +13,6 @@ def projects(client: ConsoleClient) -> list[dict[str, Any]]:
     assert response.status_code == 200, response.text
     listed: list[dict[str, Any]] = response.json()["projects"]
     return listed
-
-
-def create(client: ConsoleClient, name: str) -> dict[str, Any]:
-    response = client.post_json("/api/projects", {"name": name})
-    assert response.status_code == 200, response.text
-    created: dict[str, Any] = response.json()
-    return created
-
-
-def project(client: ConsoleClient, project_id: str) -> dict[str, Any]:
-    response = client.get(f"/api/projects/{project_id}")
-    assert response.status_code == 200, response.text
-    found: dict[str, Any] = response.json()
-    return found
 
 
 def leads(project: dict[str, Any]) -> list[str]:
@@ -64,7 +48,7 @@ def test_creating_a_project_from_claude_makes_the_creator_its_lead(console: Cons
 
     made_by_dana = dana_claude.call("create_project", name="Payments")["project_id"]
 
-    assert leads(project(signed_out, made_by_dana)) == ["emp-2"]
+    assert leads(fetch_project(signed_out, made_by_dana)) == ["emp-2"]
     assert [one["you_lead"] for one in projects(dana) if one["project_id"] == made_by_dana] == [True]
     dana.close()
 
@@ -154,7 +138,7 @@ def test_a_member_who_does_not_lead_a_project_cannot_rename_it(console: Console,
     billing = create(signed_out, "Billing")["project_id"]
 
     refused = dana.post_json(f"/api/projects/{billing}/rename", {"name": "Dana's billing"})
-    seen = project(dana, billing)
+    seen = fetch_project(dana, billing)
 
     assert refused.status_code == 403
     assert seen["you_may_change"] is False

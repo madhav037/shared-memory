@@ -2,25 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-from urllib.parse import urlencode
-
-from tests.support import Console, ConsoleClient, Session
-
-
-def signed_in_owner(console: Console, client: ConsoleClient, github: str, account: int) -> Session:
-    """A team whose owner is signed in to the console, and that owner's Claude session."""
-    _, owner_token = console.a_team(github)
-    console.github.as_(account, github)
-    client.sign_in()
-    return Session(console.server, owner_token)
-
-
-def ask(client: ConsoleClient, url: str, **asked: Any) -> dict[str, Any]:
-    response = client.get(f"{url}?{urlencode({k: v for k, v in asked.items() if v is not None})}")
-    assert response.status_code == 200, response.text
-    body: dict[str, Any] = response.json()
-    return body
+from tests.support import Console, ConsoleClient, Session, ask, signed_in_owner
 
 
 def test_a_member_sees_the_projects_they_can_reach(console: Console, signed_out: ConsoleClient) -> None:

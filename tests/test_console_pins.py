@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, added_context
-from tests.test_console_browsing import ask, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, added_context, ask, signed_in_owner
 
 
 def a_project(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:

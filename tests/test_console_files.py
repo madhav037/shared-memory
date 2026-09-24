@@ -5,11 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlencode
 
-from tests.support import Console, ConsoleClient
-from tests.test_console_browsing import signed_in_owner
-from tests.test_console_members import add
-from tests.test_console_projects import create
-from tests.test_restricted_projects import signed_in
+from tests.support import Console, ConsoleClient, add, create, signed_in, signed_in_owner
 
 
 def files(client: ConsoleClient, folder: str = "") -> dict[str, Any]:

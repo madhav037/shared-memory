@@ -5,10 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, added_context
-from tests.test_console_browsing import ask, signed_in_owner
-from tests.test_console_members import add
-from tests.test_console_projects import create, project
+from tests.support import Console, ConsoleClient, Session, add, added_context, ask, create, fetch_project, signed_in, signed_in_owner
 
 
 @dataclass
@@ -29,13 +26,6 @@ def restricted(console: Console, client: ConsoleClient, github: str, account: in
     assert closed.status_code == 200, closed.text
     assert closed.json()["restricted"] is True
     return ARestrictedProject(owner, billing, dana)
-
-
-def signed_in(console: Console, github: str, account: int) -> ConsoleClient:
-    client = console.client()
-    console.github.as_(account, github)
-    client.sign_in()
-    return client
 
 
 def remembered(session: Session, title: str, body: str) -> dict[str, Any]:
@@ -154,7 +144,7 @@ def test_a_member_who_does_not_lead_the_project_cannot_restrict_it(
     assert opening_it.status_code == 403
     assert "leads and the team's admins" in opening_it.json()["message"]
     assert letting_someone_in.status_code == 403
-    assert project(dana, it.billing)["you_may_change"] is False
+    assert fetch_project(dana, it.billing)["you_may_change"] is False
     dana.close()
 
 

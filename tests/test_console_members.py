@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, ToolRefused
-from tests.test_console_browsing import signed_in_owner
+from tests.support import Console, ConsoleClient, Session, ToolRefused, add, signed_in_owner
 
 
 def members(client: ConsoleClient) -> list[dict[str, Any]]:
@@ -13,13 +12,6 @@ def members(client: ConsoleClient) -> list[dict[str, Any]]:
     assert response.status_code == 200, response.text
     listed: list[dict[str, Any]] = response.json()["members"]
     return listed
-
-
-def add(client: ConsoleClient, employee_id: str, name: str, github: str | None = None) -> dict[str, Any]:
-    response = client.post_json("/api/members", {"employee_id": employee_id, "name": name, "github": github})
-    assert response.status_code == 200, response.text
-    added: dict[str, Any] = response.json()
-    return added
 
 
 def test_an_admin_sees_everyone_with_their_role_and_github_account(

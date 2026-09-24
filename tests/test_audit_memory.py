@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session
-from tests.test_console_browsing import signed_in_owner
+from tests.support import Console, ConsoleClient, Session, signed_in_owner
 
 
 def log(client: ConsoleClient, **filters: Any) -> list[dict[str, Any]]:

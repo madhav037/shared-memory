@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session
-from tests.test_console_browsing import ask, signed_in_owner
-from tests.test_console_members import add
+from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
 
 
 def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
