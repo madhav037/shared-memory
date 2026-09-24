@@ -1,23 +1,10 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
 
-from tests.support import Session, Team, added_context
+from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding
 
 
-NPM = {
-    "title": "Use npm for installs",
-    "summary": "Packages are installed with npm.",
-    "type": "convention",
-    "body": "Install dependencies with npm install. Do not use other package managers.",
-}
-PNPM = {
-    "title": "Use pnpm, not npm",
-    "summary": "Every package uses pnpm.",
-    "type": "convention",
-    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
-}
 JSON_LOGS = {
     "title": "Log in JSON",
     "summary": "All services log JSON.",
@@ -30,27 +17,6 @@ PLAIN_LOGS = {
     "type": "convention",
     "body": "The old billing service writes plain text logs to stdout, not JSON.",
 }
-
-
-def promote_now(session: Session, memory: dict[str, str], level: str = "project") -> str:
-    personal = session.call("remember", **memory)["path"]
-    result = session.call("promote", path=personal, level=level)
-    if result["status"] == "similar_memories":
-        keep = {similar["path"]: "keep_both" for similar in result["similar"]}
-        result = session.call("promote", path=personal, level=level, reference=result["reference"], resolutions=keep)
-    path: str = result["path"]
-    return path
-
-
-def promote_superseding(session: Session, memory: dict[str, str], target: str, level: str = "project") -> dict[str, Any]:
-    personal = session.call("remember", **memory)["path"]
-    first = session.call("promote", path=personal, level=level)
-    assert first["status"] == "similar_memories", first
-    resolutions = {similar["path"]: ("supersede" if similar["path"] == target else "keep_both") for similar in first["similar"]}
-    result: dict[str, Any] = session.call(
-        "promote", path=personal, level=level, reference=first["reference"], resolutions=resolutions
-    )
-    return result
 
 
 def test_superseding_your_own_memory_replaces_it(owner: Session) -> None:

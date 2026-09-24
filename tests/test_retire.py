@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
 
-from tests.support import Session, Team, added_context
+from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding
 
 
 RETRIES = {
@@ -12,35 +11,6 @@ RETRIES = {
     "type": "convention",
     "body": "The billing service retries a failed card charge three times before giving up.",
 }
-NPM = {
-    "title": "Use npm for installs",
-    "summary": "Packages are installed with npm.",
-    "type": "convention",
-    "body": "Install dependencies with npm install. Do not use other package managers.",
-}
-PNPM = {
-    "title": "Use pnpm, not npm",
-    "summary": "Every package uses pnpm.",
-    "type": "convention",
-    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
-}
-
-
-def promote_now(session: Session, memory: dict[str, str]) -> str:
-    result = session.call("promote", path=session.call("remember", **memory)["path"], level="project")
-    assert result["status"] == "promoted", result
-    path: str = result["path"]
-    return path
-
-
-def promote_superseding(session: Session, memory: dict[str, str], target: str) -> dict[str, Any]:
-    personal = session.call("remember", **memory)["path"]
-    first = session.call("promote", path=personal, level="project")
-    resolutions = {s["path"]: ("supersede" if s["path"] == target else "keep_both") for s in first["similar"]}
-    result: dict[str, Any] = session.call(
-        "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions
-    )
-    return result
 
 
 def test_an_author_retires_their_memory_at_once_in_one_commit(team: Team, owner: Session) -> None:
