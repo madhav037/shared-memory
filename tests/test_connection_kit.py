@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 import tomllib
+from pathlib import Path
 from typing import Any
 
-from tests.support import REPO_ROOT, Team
+import pytest
+
+from tests.support import REPO_ROOT, Session, Team
 
 
 def by_path(files: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -100,3 +106,106 @@ def test_cline_is_set_up_once_per_project_on_each_members_machine_for_every_repo
     assert server["type"] == "streamableHttp"
     assert server["headers"] == {"Authorization": "Bearer ${env:SHARED_MEMORY_TOKEN}", "X-Shared-Memory-Project": project}
     assert all(file["kept_in"] == "repository" for file in created["files"] if file["agent"] != "Cline")
+
+
+def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_runs_on(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    hooks = tomllib.loads(by_path(created["files"])[".codex/config.toml"]["contents"])["hooks"]
+
+    briefing = hooks["SessionStart"][0]["hooks"][0]
+    recall = hooks["UserPromptSubmit"][0]["hooks"][0]
+
+    for hook, event in ((briefing, "session-start"), (recall, "prompt-submitted")):
+        assert hook["type"] == "command"
+        assert f"{team.server.url}/hooks/{event}" in hook["command"], event
+        assert "$SHARED_MEMORY_TOKEN" in hook["command"], event
+        assert "curl.exe" in hook["command_windows"], event
+        assert "%SHARED_MEMORY_TOKEN%" in hook["command_windows"], event
+
+
+def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+    hooks = json.loads(files[".gemini/settings.json"]["contents"])["hooks"]
+    script = files[".gemini/hooks/shared-memory.mjs"]
+
+    assert hooks["SessionStart"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs session-start"
+    assert hooks["BeforeAgent"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs prompt-submitted"
+    assert (script["agent"], script["action"]) == ("Gemini CLI", "create")
+    assert "process.env.SHARED_MEMORY_TOKEN" in script["contents"]
+    assert f"{team.server.url}/hooks" in script["contents"]
+
+
+def test_copilot_cli_is_briefed_by_the_server_itself_with_no_shell_command(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    file = by_path(created["files"])[".github/hooks/shared-memory.json"]
+    hooks = json.loads(file["contents"])["hooks"]
+
+    briefing = hooks["sessionStart"][0]
+
+    assert file["agent"] == "GitHub Copilot"
+    assert briefing["type"] == "http"
+    assert briefing["url"] == f"{team.server.url}/hooks/session-start?format=copilot-cli"
+    assert briefing["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
+    assert briefing["allowedEnvVars"] == ["SHARED_MEMORY_TOKEN"]
+    assert "userPromptSubmitted" not in hooks
+
+
+def test_an_agent_that_reads_claude_codes_settings_is_never_briefed_twice(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    assert "hooks" not in json.loads(files[".claude/settings.json"]["contents"])
+    assert "hooks" not in json.loads(files[".vscode/mcp.json"]["contents"])
+
+
+def pinned(session: Session, title: str, body: str) -> str:
+    """A project memory in this project's briefing, so a hook has something to bring back."""
+    personal = session.call("remember", title=title, summary=f"{title}.", type="convention", body=body)["path"]
+    result = session.call("promote", path=personal, level="project")
+    if result["status"] == "similar_memories":
+        keep = {similar["path"]: "keep_both" for similar in result["similar"]}
+        result = session.call("promote", path=personal, level="project", reference=result["reference"], resolutions=keep)
+    path: str = result["path"]
+    session.call("pin", path=path)
+    return path
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_the_script_geminis_hooks_run_brings_back_the_briefing(team: Team, tmp_path: Path) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    session = team.owner().in_project(created["project_id"], "billing-api")
+    pinned(session, "Use pnpm, not npm", "We use pnpm for every package.")
+    script = tmp_path / "shared-memory.mjs"
+    script.write_text(by_path(created["files"])[".gemini/hooks/shared-memory.mjs"]["contents"], encoding="utf-8")
+
+    ran = subprocess.run(
+        ["node", str(script), "session-start"],
+        input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert "Use pnpm, not npm" in json.loads(ran.stdout)["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_server(team: Team, tmp_path: Path) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    script = tmp_path / "shared-memory.mjs"
+    contents = by_path(created["files"])[".gemini/hooks/shared-memory.mjs"]["contents"]
+    script.write_text(contents.replace(team.server.url, "http://127.0.0.1:1"), encoding="utf-8")
+
+    ran = subprocess.run(
+        ["node", str(script), "prompt-submitted"],
+        input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "which package manager do we use?"}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+    )
+
+    assert (ran.returncode, ran.stdout) == (0, "")
