@@ -942,6 +942,8 @@ export interface components {
             raised_by: string;
             /** Challenger Path */
             challenger_path: string | null;
+            /** May Decide */
+            may_decide: boolean;
         };
         /**
          * MemoryDetail

@@ -238,3 +238,22 @@ def test_a_decision_from_the_console_is_in_the_audit_log(console: Console, signe
     assert [event["actor"] for event in log] == ["E1001"]
     assert log[0]["detail"]["decision"] == "accepted"
     assert log[0]["detail"]["challenge_id"] == challenge_id
+
+
+def test_a_challenged_memory_says_whether_this_member_is_the_one_to_decide(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-disputes-decider", 1130)
+    mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    ash = a_member(console, signed_out, "emp-3", "ash-disputes-decider", 1131)
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    a_supersede_challenge(dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."))
+
+    for_the_author = ask(signed_out, "/api/memory", path=mine)["open_challenges"]
+    for_a_bystander = ask(ash, "/api/memory", path=mine)["open_challenges"]
+
+    assert [one["may_decide"] for one in for_the_author] == [True]
+    assert [one["may_decide"] for one in for_a_bystander] == [False]
+    ash.close()

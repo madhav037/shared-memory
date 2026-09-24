@@ -1981,13 +1981,18 @@
               }
             ],
             "title": "Challenger Path"
+          },
+          "may_decide": {
+            "title": "May Decide",
+            "type": "boolean"
           }
         },
         "required": [
           "challenge_id",
           "kind",
           "raised_by",
-          "challenger_path"
+          "challenger_path",
+          "may_decide"
         ],
         "title": "OpenChallenge",
         "type": "object"
