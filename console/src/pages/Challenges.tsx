@@ -10,10 +10,11 @@ import {
   type ChallengeDetail,
   type RaisedChallenge,
 } from "../api/client";
-import { Amended } from "../components/Amended";
+import { Tracked } from "../components/Tracked";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
 import { useContents } from "../components/Contents";
-import { changed, wordDiff } from "../lib/diff";
+import { whatChanges } from "../lib/changes";
+import { changed, lineDiff } from "../lib/diff";
 import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
@@ -61,7 +62,7 @@ function Waiting({
   onDecided: () => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
-  const [marked, setMarked] = useState(true);
+  const [marked, setMarked] = useState(false);
   const { refresh } = useContents();
 
   const decide = async (challengeId: number, decision: "accept" | "reject") => {
@@ -84,7 +85,7 @@ function Waiting({
       <Checkbox
         radius={0}
         size="xs"
-        label="Mark what each offer changes"
+        label="Show what each offer takes out and puts in"
         checked={marked}
         onChange={(event) => setMarked(event.currentTarget.checked)}
         style={{ margin: "4px 0 14px" }}
@@ -129,7 +130,8 @@ function Proposal({
   onDecide: (challengeId: number, decision: "accept" | "reject") => void;
 }) {
   const offered = challenge.challenger;
-  const pieces = offered ? wordDiff(challenge.target.body, offered.body) : null;
+  const pieces = offered ? lineDiff(challenge.target.body, offered.body) : null;
+  const changes = offered ? whatChanges(challenge.target.body, offered.body) : null;
   return (
     <div className="proposal">
       <p className="proposal-by">
@@ -138,6 +140,36 @@ function Proposal({
         {moment(challenge.raised_at)}
         {!challenge.yours && " · its author hasn’t decided in time, so anyone may"}
       </p>
+      {changes && (
+        <div className="what-changes" data-testid="what-changes">
+          <p className="what-changes-head">If you accept this, here is what would be different</p>
+          {changes.differences.length > 0 ? (
+            <ul>
+              {changes.differences.map((difference) => (
+                <li key={`${difference.kind}-${difference.label}`}>
+                  <b>{difference.label}</b>{" "}
+                  {difference.kind === "changed" ? (
+                    <>
+                      changes from “{difference.from}” to “{difference.to}”
+                    </>
+                  ) : difference.kind === "added" ? (
+                    <>is added: “{difference.to}”</>
+                  ) : (
+                    <>is dropped, where it now says “{difference.from}”</>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="what-changes-none">
+              The parts both of them set out are the same. The difference is in the words around them, below.
+            </p>
+          )}
+          {changes.unchanged.length > 0 && (
+            <p className="what-changes-same">Unchanged: {changes.unchanged.join(", ")}.</p>
+          )}
+        </div>
+      )}
       <div className="facing">
         <div>
           <Link className="title" to={memoryUrl(challenge.target.path)}>
@@ -155,7 +187,7 @@ function Proposal({
               <p className="by">Offered in its place by {who(offered.author)}</p>
               <div className="body">
                 {marked && pieces && changed(pieces) ? (
-                  <Amended pieces={pieces} source={`the offer from ${who(offered.author)} (${day(challenge.raised_at)})`} />
+                  <Tracked pieces={pieces} testid="tracked" />
                 ) : (
                   offered.body
                 )}

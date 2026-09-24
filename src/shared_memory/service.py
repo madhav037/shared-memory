@@ -190,7 +190,7 @@ class MemoryService:
         location = locate(path)
         memory = describe(location.path, self._store.read(caller.team, location.path))
         memory["pending"] = self._challenges.pending(caller.team, [memory["path"]])[memory["path"]]
-        memory["open_challenges"] = self._challenges.against(caller.team, memory["path"])
+        memory["open_challenges"] = self._challenges.against(caller, memory["path"])
         return memory
 
     def history(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -435,7 +435,7 @@ class MemoryService:
                 "author": memory.author,
                 "author_name": people.get(memory.author, memory.author),
                 "changed": self._store.changed(caller.team, path),
-                "challenged": len(self._challenges.against(caller.team, str(path))),
+                "challenged": len(self._challenges.against(caller, str(path))),
                 "waiting": bool(pending[str(path)]),
             }
             for path, memory in memories

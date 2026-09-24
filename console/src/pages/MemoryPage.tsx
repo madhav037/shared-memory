@@ -241,7 +241,14 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
                   : `${nameOf(challenge.raised_by)} wants to supersede it`,
               )
               .join("; ")}
-            . Until its author decides, it stands as it is. <Link to="/challenges">Compare and decide</Link>
+            .{" "}
+            {memory.open_challenges.some((challenge) => challenge.may_decide) ? (
+              <>
+                Until you decide, it stands as it is. <Link to="/challenges">Compare and decide</Link>
+              </>
+            ) : (
+              <>Until {memory.author_name} decides, it stands as it is.</>
+            )}
           </p>
         )}
         {personal ? (

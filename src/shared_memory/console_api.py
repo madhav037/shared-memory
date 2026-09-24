@@ -228,6 +228,8 @@ class OpenChallenge(BaseModel):
     kind: str
     raised_by: str
     challenger_path: str | None
+    # Whether the member reading this is the one who may decide it: its author, or anyone once the fallback passed.
+    may_decide: bool
 
 
 class TreeMemory(BaseModel):

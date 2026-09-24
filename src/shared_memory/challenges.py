@@ -180,10 +180,17 @@ class Challenges:
             )
         return labels
 
-    def against(self, team: str, path: str) -> list[dict[str, Any]]:
+    def against(self, caller: Caller, path: str) -> list[dict[str, Any]]:
+        """Every open challenge against one memory, and whether this member is the one who may decide it."""
         return [
-            {"challenge_id": c.id, "kind": c.kind, "raised_by": c.raised_by, "challenger_path": c.challenger_path}
-            for c in self.open_challenges(team, target_path=path)
+            {
+                "challenge_id": c.id,
+                "kind": c.kind,
+                "raised_by": c.raised_by,
+                "challenger_path": c.challenger_path,
+                "may_decide": self.may_decide(caller, c),
+            }
+            for c in self.open_challenges(caller.team, target_path=path)
         ]
 
     def waiting_for(self, caller: Caller) -> list[Challenge]:
