@@ -34,6 +34,9 @@ from shared_memory.config import Settings
 ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# What Claude Code calls each event it hooks, which is what its payloads name.
+CLAUDE_EVENTS = {"session-start": "SessionStart", "prompt-submitted": "UserPromptSubmit"}
+
 
 def fresh_database(name: str) -> str:
     """Drop and recreate a database on the test Postgres; return its URL."""
@@ -184,20 +187,30 @@ class Session:
             return str(refused)
         raise AssertionError(f"{tool} was not refused")
 
-    def _hook(self, event: str, payload: dict[str, Any]) -> dict[str, Any]:
-        body = {"session_id": "test-session", "cwd": "/work/app", "hook_event_name": event, **payload}
-        response = httpx.post(f"{self.server.url}/hooks/{event}", json=body, headers=self.headers(), timeout=60)
+    def _hook(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
+        body = {"session_id": "test-session", "cwd": "/work/app", "hook_event_name": CLAUDE_EVENTS[event], **payload}
+        return self.hook_payload(event, body, format)
+
+    def hook_payload(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
+        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format."""
+        response = httpx.post(
+            f"{self.server.url}/hooks/{event}",
+            json=payload,
+            params={"format": format} if format else None,
+            headers=self.headers(),
+            timeout=60,
+        )
         assert response.status_code == 200, response.text
         data: dict[str, Any] = response.json()
         return data
 
-    def start(self) -> dict[str, Any]:
+    def start(self, format: str | None = None) -> dict[str, Any]:
         """Fire the session-start hook and return its hook output."""
-        return self._hook("session-start", {"source": "startup"})
+        return self._hook("session-start", {"source": "startup"}, format)
 
-    def prompt(self, text: str) -> dict[str, Any]:
+    def prompt(self, text: str, format: str | None = None) -> dict[str, Any]:
         """Fire the prompt-submitted hook and return its hook output."""
-        return self._hook("prompt-submitted", {"prompt": text})
+        return self._hook("prompt-submitted", {"prompt": text}, format)
 
 
 def added_context(hook_output: dict[str, Any]) -> str:
