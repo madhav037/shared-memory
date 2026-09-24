@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+from anyio.from_thread import start_blocking_portal
 
-from anyio.from_thread import start_blocking_portal  # noqa: E402
-
-from shared_memory.app import build_app  # noqa: E402
-from shared_memory.config import Settings  # noqa: E402
-from tests.support import FakeGitHub, RunningServer, Session, TestClock, fresh_database  # noqa: E402
+from shared_memory.app import build_app
+from shared_memory.config import Settings
+from tests.support import REPO_ROOT, FakeGitHub, RunningServer, Session, TestClock, fresh_database
 
 CONSOLE = "http://127.0.0.1:4173"
 PORT = 8123
