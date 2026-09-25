@@ -49,10 +49,40 @@ export function typeName(type: string): string {
   return TYPES[type] ?? type;
 }
 
+/** A memory file's lines, however it spells its line endings. */
+function linesOf(source: string): string[] {
+  return source.replace(/\r\n/g, "\n").split("\n");
+}
+
+/** Where a memory file's header ends: the line holding its closing fence, or -1 if it has no header. */
+export function headerEnd(source: string): number {
+  const lines = linesOf(source);
+  return lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+}
+
 /** The body of a memory file: everything after its header. */
 export function bodyOf(source: string): string {
-  const match = source.replace(/\r\n/g, "\n").match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/);
-  return (match?.[1] ?? source).trim();
+  const end = headerEnd(source);
+  return (end < 0 ? source : linesOf(source).slice(end + 1).join("\n")).trim();
+}
+
+/** What the header of a memory file says, field by field, so a change to its standing can be named. */
+export function headerOf(source: string): Map<string, string> {
+  const lines = linesOf(source);
+  const fields = new Map<string, string>();
+  if (lines[0] !== "---") return fields;
+  for (const line of lines.slice(1)) {
+    if (line === "---") break;
+    const at = line.indexOf(":");
+    if (at > 0 && !line.startsWith(" ")) fields.set(line.slice(0, at), line.slice(at + 1).trim());
+  }
+  return fields;
+}
+
+/** Which level a memory path sits at: team memory, a project's accepted memory, or a member's personal memory. */
+export function levelOf(path: string): string {
+  if (path.startsWith("team/")) return "team";
+  return path.split("/")[2] === "people" ? "personal" : "project";
 }
 
 export function folderUrl(path: string): string {
