@@ -32,7 +32,9 @@ python-preference = "only-managed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# -ra: a run that skipped something says so, which -q alone hides. Four tests skip when node, sh or pwsh
+# is missing, and a skipped CI run should not read as a passing one.
+addopts = "-q -ra"
 
 [tool.mypy]
 python_version = "3.12"

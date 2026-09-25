@@ -411,12 +411,14 @@ class ConsoleApi:
 
     def _pin_at(self, request: Request) -> Response:
         def pin(caller: Caller, path: str) -> PinState:
+            # Briefing answers in the memory tool's shape, so the path it pinned comes back under "pinned".
             return PinState(path=self._briefing.pin(caller, path)["pinned"], pinned=True)
 
         return self._at(request, pin, request.state.asked.path)
 
     def _unpin_at(self, request: Request) -> Response:
         def unpin(caller: Caller, path: str) -> PinState:
+            # As above: "unpinned" is the key, the value is the path.
             return PinState(path=self._briefing.unpin(caller, path)["unpinned"], pinned=False)
 
         return self._at(request, unpin, request.state.asked.path)

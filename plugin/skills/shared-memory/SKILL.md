@@ -1,6 +1,6 @@
 ---
 name: shared-memory
-description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team knowledge, or when a briefing or recall mentions memory.
+description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team memory, or when a briefing or recall mentions memory.
 ---
 
 # Shared Memory
@@ -33,7 +33,7 @@ Two questions, in this order.
 
 **Is it one member's note, or something the team follows?** `remember` never writes project or team memory, so anything the team should follow needs `promote` as well.
 
-- **The team follows it**: a convention, a decision, how the system is built, or a document written for everyone, such as onboarding or how-we-work notes. Promote it to **project** memory, or **team** memory if it holds for every project, and offer that in the same turn you save it rather than leaving the team's knowledge as one person's note.
+- **The team follows it**: a convention, a decision, how the system is built, or a document written for everyone, such as onboarding or how-we-work notes. Promote it to **project** memory, or **team** memory if it holds for every project, and offer that in the same turn you save it rather than leaving something the whole team follows in one member's personal memory.
 - **One member's note**: their own way of working, or something true only for them. Leave it personal.
 
 Save when the member says "remember this", and also on your own when you learn something a teammate would need.
@@ -42,7 +42,7 @@ Save when the member says "remember this", and also on your own when you learn s
 
 - **One memory, one thing.** A memory is a title, a one-line summary, and a short body (at most 600 words).
 - **Always write the summary** as one line that tells a teammate what the memory says without opening it. Folder indexes, `list` and `tree` show it.
-- **Choose the type carefully**, so the same kind of knowledge always lands in the same place:
+- **Choose the type carefully**, so the same kind of memory always lands in the same place:
   - `convention`: a rule for how the team works, followed every day. *"Always use pnpm."*
   - `decision`: a choice made once, with its reasons and the alternatives rejected. *"We chose pnpm over npm because CI rejects two lockfiles."*
   - `architecture`: how the system is built and how its parts relate. *"Billing reaches payments only through the queue."*
@@ -73,7 +73,7 @@ Personal memory becomes what the team follows only when it is promoted with `pro
 
 Never resolve a real contradiction as keep_both to get a promotion through: project and team memory must never contradict each other.
 
-If the member chooses **supersede** for a memory someone else wrote, nobody's knowledge is overridden without their say: promote returns `challenge_raised`, the member's memory stays personal (labeled pending), and the other author decides.
+If the member chooses **supersede** for a memory someone else wrote, nobody's memory is superseded without their say: promote returns `challenge_raised`, the member's memory stays personal (labeled pending), and the other author decides.
 
 ## Retiring a memory
 

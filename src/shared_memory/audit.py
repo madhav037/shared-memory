@@ -181,12 +181,12 @@ class Audit:
         ]
         return Page(events, events[-1].id if len(rows) > limit and events else None)
 
-    def may_read(self, member: Member) -> bool:
+    def _may_read(self, member: Member) -> bool:
         """The owner and the admins read the whole log; a project lead reads their own projects'."""
         return _runs_the_team(member) or bool(self._identity.leads_of(member))
 
     def require_reader(self, member: Member) -> None:
-        if not self.may_read(member):
+        if not self._may_read(member):
             raise Refused("Only the team's owner, its admins and a project's leads can read the audit log.")
 
 
