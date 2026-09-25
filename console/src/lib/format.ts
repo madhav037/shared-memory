@@ -28,13 +28,21 @@ export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-const LEVELS: Record<string, string> = {
+/** Where a memory sits. The server's vocabulary, so anything naming levels is exhaustive against this. */
+export const LEVEL_KEYS = ["team", "project", "personal"] as const;
+export type Level = (typeof LEVEL_KEYS)[number];
+
+/** What a memory is. The server's vocabulary, so anything naming types is exhaustive against this. */
+export const TYPE_KEYS = ["convention", "decision", "architecture", "gotcha"] as const;
+export type MemoryType = (typeof TYPE_KEYS)[number];
+
+const LEVELS: Record<Level, string> = {
   team: "Team memory",
   project: "Project memory",
   personal: "Personal memory",
 };
 
-const TYPES: Record<string, string> = {
+const TYPES: Record<MemoryType, string> = {
   convention: "Convention",
   decision: "Decision",
   architecture: "Architecture",
@@ -42,11 +50,11 @@ const TYPES: Record<string, string> = {
 };
 
 export function levelName(level: string): string {
-  return LEVELS[level] ?? level;
+  return LEVELS[level as Level] ?? level;
 }
 
 export function typeName(type: string): string {
-  return TYPES[type] ?? type;
+  return TYPES[type as MemoryType] ?? type;
 }
 
 /** The body of a memory file: everything after its header. */
