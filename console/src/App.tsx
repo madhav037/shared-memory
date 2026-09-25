@@ -13,7 +13,8 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, usePa
 
 import { fetchChallenges, fetchStatus, signOut, type SignedInMember, type Status } from "./api/client";
 import { Refusal } from "./components/Bits";
-import { ContentsProvider, ContentsTree } from "./components/Contents";
+import { ContentsTree } from "./components/Contents";
+import { ContentsProvider } from "./lib/contents";
 import { folderUrl, memoryUrl } from "./lib/format";
 import { AuditLog } from "./pages/AuditLog";
 import { ConnectAgent } from "./pages/ConnectAgent";

@@ -16,7 +16,7 @@ import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
 import { PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { Prose } from "../components/Prose";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
