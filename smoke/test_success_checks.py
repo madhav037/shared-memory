@@ -66,7 +66,7 @@ def test_the_prompt_hook_adds_under_one_second(team: Team, project: str, olive: 
         olive,
         title="Errors are returned, never thrown",
         summary="Billing services return Result values for expected errors instead of throwing.",
-        body="Expected failures (validation, not found, conflicts) are returned as Result values. Throw only for bugs.",
+        body="Expected failures (validation, not found, duplicates) are returned as Result values. Throw only for bugs.",
     )
     dana = member(team, project, "emp-2", "Dana Dev")
 

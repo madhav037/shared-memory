@@ -279,7 +279,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         related_files: list[str] | None = None,
         topic: str | None = None,
     ) -> dict[str, Any]:
-        """Save knowledge a teammate would need as your personal memory in this project: a convention, a decision
+        """Save what a teammate would need to know as your personal memory in this project: a convention, a decision
         and its reasons, how the system is built, or a surprising gotcha. Keep one member's own preferences in your
         local memory instead. Promote it when the team should follow it.
 
