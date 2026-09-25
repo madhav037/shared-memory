@@ -6,23 +6,32 @@ import { Link, useSearchParams } from "react-router";
 import { searchEverywhere, type SearchHit } from "../api/client";
 import { Placeholder, Rank, Refusal, WaitingMark } from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { memoryUrl, typeName } from "../lib/format";
+import { memoryUrl, typeName, type Level, type MemoryType } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
-const LEVELS = [
-  { value: "", label: "Every level" },
-  { value: "project", label: "Project" },
-  { value: "team", label: "Team" },
-  { value: "personal", label: "Personal" },
+// The filters name the server's levels and types in their own words, but they are the same words:
+// these records are exhaustive over the vocabulary in lib/format, so a new level or type will not compile
+// until it is named here too.
+const LEVEL_FILTERS: Record<Level, string> = {
+  project: "Project",
+  team: "Team",
+  personal: "Personal",
+};
+
+const TYPE_FILTERS: Record<MemoryType, string> = {
+  convention: "Conventions",
+  decision: "Decisions",
+  architecture: "Architecture",
+  gotcha: "Gotchas",
+};
+
+const options = (every: string, labels: Record<string, string>) => [
+  { value: "", label: every },
+  ...Object.entries(labels).map(([value, label]) => ({ value, label })),
 ];
 
-const TYPES = [
-  { value: "", label: "Every type" },
-  { value: "convention", label: "Conventions" },
-  { value: "decision", label: "Decisions" },
-  { value: "architecture", label: "Architecture" },
-  { value: "gotcha", label: "Gotchas" },
-];
+const LEVELS = options("Every level", LEVEL_FILTERS);
+const TYPES = options("Every type", TYPE_FILTERS);
 
 /** Search every memory this member can reach, by meaning and by exact words, the way their coding agent does. */
 export function SearchPage() {
