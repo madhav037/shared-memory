@@ -21,7 +21,7 @@ import { Prose } from "../components/Prose";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
-import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "./HistoryPanel";
+import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "../components/History";
 
 /** One memory, set as printed text, with its standing in the margin and its history below. */
 export function MemoryPage() {

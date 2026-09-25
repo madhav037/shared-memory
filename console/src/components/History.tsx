@@ -2,7 +2,7 @@ import { Slider } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchHistoryAt, fetchVersionAt, type MemoryVersion } from "../api/client";
-import { Amended } from "../components/Amended";
+import { Amended } from "./Amended";
 import { changed, wordDiff } from "../lib/diff";
 import { bodyOf, day, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
