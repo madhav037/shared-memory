@@ -14,7 +14,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
   webServer: [
     {
-      command: "uv run --project .. python e2e/serve.py",
+      command: "uv run python -m tests.console_e2e_server",
+      cwd: "..",
       url: "http://127.0.0.1:8123/api/status",
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
