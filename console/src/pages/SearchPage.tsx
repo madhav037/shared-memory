@@ -5,7 +5,7 @@ import { Link, useSearchParams } from "react-router";
 
 import { searchEverywhere, type SearchHit } from "../api/client";
 import { Placeholder, Rank, Refusal, WaitingMark } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { memoryUrl, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 

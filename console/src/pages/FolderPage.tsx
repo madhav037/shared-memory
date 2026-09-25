@@ -5,7 +5,7 @@ import { Link, useSearchParams } from "react-router";
 
 import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
 import { ChallengedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { day, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 

@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { fetchProject, reissueMyToken, type IssuedToken, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { ConnectionFiles, EVERY_AGENT } from "../components/ConnectionFiles";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
 
 /** What a member does in each coding agent, and what that agent then does with the team's memory by itself. */

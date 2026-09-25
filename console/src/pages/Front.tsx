@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router";
 
 import { createProject, fetchChallenges, fetchFolder, signInUrl, type SignedInMember, type Status } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { day, folderUrl, longDay, memoryUrl, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 

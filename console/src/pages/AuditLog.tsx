@@ -4,7 +4,7 @@ import { Link } from "react-router";
 
 import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { folderUrl, memoryUrl, moment, typeName } from "../lib/format";
 import { agentLabel } from "../lib/versions";
 

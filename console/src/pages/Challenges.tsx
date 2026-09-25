@@ -12,7 +12,7 @@ import {
 } from "../api/client";
 import { Tracked } from "../components/Tracked";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, lineDiff } from "../lib/diff";
 import { day, memoryUrl, moment } from "../lib/format";

@@ -18,7 +18,7 @@ import {
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { ConnectionFiles } from "../components/ConnectionFiles";
-import { useContents } from "../components/Contents";
+import { useContents } from "../lib/contents";
 import { folderUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
