@@ -11,6 +11,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
 from shared_memory.connection import claude_settings, connection_kit
 from shared_memory.errors import Refused
+from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.memory import Location, Memory, level_folder, locate, slugify
@@ -72,6 +73,7 @@ class MemoryService:
         settings: Settings,
         identity: Identity,
         store: MemoryStore,
+        history: MemoryHistory,
         index: SearchIndex,
         challenges: Challenges,
         audit: Audit,
@@ -79,6 +81,7 @@ class MemoryService:
         self._settings = settings
         self._identity = identity
         self._store = store
+        self._history = history
         self._index = index
         self._challenges = challenges
         self._audit = audit
@@ -161,7 +164,7 @@ class MemoryService:
         caller.require_reach(path)
         location = locate(path)
         self._store.read(caller.team, location.path)  # refuses a memory that isn't there
-        versions = self._store.history(caller.team, location.path)
+        versions = self._history.versions(caller.team, location.path)
         return {
             "path": str(location.path),
             "versions": [
@@ -182,7 +185,11 @@ class MemoryService:
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        return {"path": str(location.path), "commit": commit, "text": self._store.version(caller.team, location.path, commit)}
+        return {
+            "path": str(location.path),
+            "commit": commit,
+            "text": self._history.text_at(caller.team, location.path, commit),
+        }
 
     def difference(self, caller: Caller, path: str, before: str, after: str) -> dict[str, Any]:
         """What changed in one memory between two versions."""
@@ -193,7 +200,7 @@ class MemoryService:
             "path": str(location.path),
             "before": before,
             "after": after,
-            "difference": self._store.difference(caller.team, location.path, before, after),
+            "difference": self._history.difference(caller.team, location.path, before, after),
         }
 
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:

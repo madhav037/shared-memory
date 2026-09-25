@@ -29,6 +29,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.embeddings import Embedder, FastEmbedEmbedder
 from shared_memory.errors import Refused
+from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.lifecycle import Lifecycle
@@ -90,8 +91,9 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     audit = Audit(db, clock, identity)
     index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
     store = MemoryStore(settings.memory_root, listeners=[index])
+    history = MemoryHistory(settings.memory_root)
     challenges = Challenges(settings, db, store, identity, audit, clock)
-    service = MemoryService(settings, identity, store, index, challenges, audit)
+    service = MemoryService(settings, identity, store, history, index, challenges, audit)
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, audit, clock)
