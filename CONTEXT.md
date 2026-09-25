@@ -133,7 +133,7 @@ _Avoid_: Delete, archive
 ### Reading memory
 
 **Briefing**:
-What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: pinned memories and current activity.
+What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, and any notice waiting for the member, such as a challenge they must decide.
 _Avoid_: Pinned set
 
 **Pin**:
