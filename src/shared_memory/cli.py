@@ -83,9 +83,9 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     if args.command == "openapi":
         import json
 
-        from shared_memory import console_api
+        from shared_memory import console_contract
 
-        print(json.dumps(console_api.description(), indent=2), file=out)
+        print(json.dumps(console_contract.description(), indent=2), file=out)
         return 0
 
     if args.command == "serve":
