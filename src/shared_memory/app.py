@@ -21,6 +21,7 @@ from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.briefing import Briefing
 from shared_memory.console_api import ConsoleApi
+from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
@@ -392,6 +393,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             audit,
             identity,
             service,
+            ConsoleMemory(identity, store, challenges),
             briefing,
             lifecycle,
             challenges,

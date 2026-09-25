@@ -41,6 +41,7 @@ from shared_memory.audit import (
 from shared_memory.briefing import Briefing, pin_target
 from shared_memory.challenges import Challenge, Challenges, project_of
 from shared_memory.config import Settings
+from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
     AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, ChallengeDetail, ChallengeList, ChallengedMemory,
@@ -107,6 +108,7 @@ class ConsoleApi:
         audit: Audit,
         identity: Identity,
         service: MemoryService,
+        explorer: ConsoleMemory,
         briefing: Briefing,
         lifecycle: Lifecycle,
         challenges: Challenges,
@@ -116,6 +118,7 @@ class ConsoleApi:
         self._audit = audit
         self._identity = identity
         self._service = service
+        self._explorer = explorer
         self._briefing = briefing
         self._lifecycle = lifecycle
         self._challenging = challenges
@@ -373,7 +376,7 @@ class ConsoleApi:
             return _sign_in_first()
         try:
             caller = self._identity.caller_in(member, None)
-            found = self._service.explore(
+            found = self._explorer.explore(
                 caller, request.query_params.get("folder", ""), deep=request.query_params.get("deep") == "1"
             )
         except Refused as refused:
