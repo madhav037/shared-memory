@@ -5,7 +5,7 @@ import { Link } from "react-router";
 import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { folderUrl, memoryUrl, moment, typeName } from "../lib/format";
+import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
 import { agentLabel } from "../lib/versions";
 
 /** What each kind of change is called, in the order they are offered as a filter. */
@@ -40,12 +40,6 @@ const WORDS: Record<string, string> = {
   access_granted: "Access granted",
   access_revoked: "Access taken away",
 };
-
-/** Which level a memory path sits at: team memory, a project's accepted memory, or a member's personal memory. */
-function levelOf(path: string): string {
-  if (path.startsWith("team/")) return "team";
-  return path.split("/")[2] === "people" ? "personal" : "project";
-}
 
 /** A memory file, named the way the contents name it, linked to where it can be read. */
 function FileLink({ path }: { path: string }) {

@@ -18,7 +18,7 @@ import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../a
 import { PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose } from "../components/Prose";
-import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
+import { day, headerEnd, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
 import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "../components/History";
@@ -287,7 +287,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
 /** The file as it is on disk: its header, then its body. */
 function Source({ text }: { text: string }) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const closing = lines.indexOf("---", 1);
+  const closing = headerEnd(text);
   return (
     <pre className="source" data-testid="memory-source">
       {lines.map((line, number) => (

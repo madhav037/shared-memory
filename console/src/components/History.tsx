@@ -4,22 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchHistoryAt, fetchVersionAt, type MemoryVersion } from "../api/client";
 import { Amended } from "./Amended";
 import { changed, wordDiff } from "../lib/diff";
-import { bodyOf, day, moment } from "../lib/format";
+import { bodyOf, day, headerOf, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
-
-/** What the header of a memory file says, line by line, so a change to its standing can be named. */
-function headerOf(text: string): Map<string, string> {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const fields = new Map<string, string>();
-  if (lines[0] !== "---") return fields;
-  for (const line of lines.slice(1)) {
-    if (line === "---") break;
-    const at = line.indexOf(":");
-    if (at > 0 && !line.startsWith(" ")) fields.set(line.slice(0, at), line.slice(at + 1).trim());
-  }
-  return fields;
-}
 
 const FIELD_NAMES: Record<string, string> = {
   status: "its status",
