@@ -64,6 +64,10 @@ jobs:
         working-directory: console
         run: npm run build
 
+      - name: Console units
+        working-directory: console
+        run: npm run test
+
       - name: The console's API types are current
         working-directory: console
         run: npm run api:check
