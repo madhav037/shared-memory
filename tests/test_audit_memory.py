@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, get_args
 
+from shared_memory import audit
 from tests.support import Console, ConsoleClient, Session, signed_in_owner
 
 
@@ -217,3 +218,15 @@ def test_an_agent_that_does_not_say_what_it_is_is_recorded_as_another_agent(
     assert saved["target"] == path
     assert saved["detail"]["agent"] == "another agent"
 
+
+def test_the_kinds_the_server_records_and_the_kinds_it_publishes_are_the_same_list() -> None:
+    """mypy already refuses a constant missing from `Kind`; this is the other direction.
+
+    A kind in `Kind` with no constant behind it reaches the console's contract, where every kind has to be
+    given words, and asks for words for something that can never happen.
+    """
+    recorded = {
+        value for name, value in vars(audit).items() if name.isupper() and isinstance(value, str)
+    }
+
+    assert set(get_args(audit.Kind)) == recorded

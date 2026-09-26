@@ -8,8 +8,11 @@ import { useContents } from "../lib/contents";
 import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
 import { agentLabel } from "../lib/versions";
 
+/** Every kind the server records, from the contract: the words below are exhaustive over it. */
+type Kind = AuditEvent["kind"];
+
 /** What each kind of change is called, in the order they are offered as a filter. */
-const WORDS: Record<string, string> = {
+const WORDS: Record<Kind, string> = {
   memory_saved: "Memory saved",
   memory_edited: "Memory edited",
   memory_deleted: "Memory deleted",
@@ -217,7 +220,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                         {nameOf(event.actor)}
                       </td>
                       <td className="what-cell" style={{ color: "var(--ink)" }}>
-                        {WORDS[event.kind] ?? event.kind}
+                        {WORDS[event.kind]}
                       </td>
                       <td className="where-cell">
                         {projectName(event.project_id)}

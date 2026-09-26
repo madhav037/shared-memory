@@ -15,6 +15,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from shared_memory.audit import Kind
+
 PREFIX = "/api"
 
 
@@ -42,7 +44,7 @@ class AuditEvent(BaseModel):
     id: int
     at: datetime
     actor: str
-    kind: str
+    kind: Kind
     project_id: str | None
     target: str | None
     detail: dict[str, Any]
