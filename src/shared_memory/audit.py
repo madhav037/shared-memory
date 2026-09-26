@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from psycopg.types.json import Jsonb
 
@@ -21,35 +21,69 @@ from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
 
-SIGNED_IN = "signed_in"
-SIGN_IN_REFUSED = "sign_in_refused"
-TOKEN_ISSUED = "token_issued"
-MEMBER_ADDED = "member_added"
-MEMBER_REMOVED = "member_removed"
-MEMBER_CHANGED = "member_changed"
-ADMIN_GRANTED = "admin_granted"
-ADMIN_REVOKED = "admin_revoked"
-OWNERSHIP_HANDED_OVER = "ownership_handed_over"
-PROJECT_CREATED = "project_created"
-PROJECT_RENAMED = "project_renamed"
-LEAD_APPOINTED = "lead_appointed"
-LEAD_REMOVED = "lead_removed"
-REPOSITORY_ADDED = "repository_added"
-REPOSITORY_REMOVED = "repository_removed"
-PROJECT_RESTRICTED = "project_restricted"
-PROJECT_OPENED = "project_opened"
-ACCESS_GRANTED = "access_granted"
-ACCESS_REVOKED = "access_revoked"
-MEMORY_SAVED = "memory_saved"
-MEMORY_EDITED = "memory_edited"
-MEMORY_DELETED = "memory_deleted"
-MEMORY_PROMOTED = "memory_promoted"
-MEMORY_SUPERSEDED = "memory_superseded"
-MEMORY_RETIRED = "memory_retired"
-MEMORY_PINNED = "memory_pinned"
-MEMORY_UNPINNED = "memory_unpinned"
-CHALLENGE_RAISED = "challenge_raised"
-CHALLENGE_DECIDED = "challenge_decided"
+#: Every kind of change the server records. The constants below are annotated with it, so mypy refuses a new
+#: one that is not named here, and the console's contract offers the same list to `npm run api:check`.
+Kind = Literal[
+    "signed_in",
+    "sign_in_refused",
+    "token_issued",
+    "member_added",
+    "member_removed",
+    "member_changed",
+    "admin_granted",
+    "admin_revoked",
+    "ownership_handed_over",
+    "project_created",
+    "project_renamed",
+    "lead_appointed",
+    "lead_removed",
+    "repository_added",
+    "repository_removed",
+    "project_restricted",
+    "project_opened",
+    "access_granted",
+    "access_revoked",
+    "memory_saved",
+    "memory_edited",
+    "memory_deleted",
+    "memory_promoted",
+    "memory_superseded",
+    "memory_retired",
+    "memory_pinned",
+    "memory_unpinned",
+    "challenge_raised",
+    "challenge_decided",
+]
+
+SIGNED_IN: Kind = "signed_in"
+SIGN_IN_REFUSED: Kind = "sign_in_refused"
+TOKEN_ISSUED: Kind = "token_issued"
+MEMBER_ADDED: Kind = "member_added"
+MEMBER_REMOVED: Kind = "member_removed"
+MEMBER_CHANGED: Kind = "member_changed"
+ADMIN_GRANTED: Kind = "admin_granted"
+ADMIN_REVOKED: Kind = "admin_revoked"
+OWNERSHIP_HANDED_OVER: Kind = "ownership_handed_over"
+PROJECT_CREATED: Kind = "project_created"
+PROJECT_RENAMED: Kind = "project_renamed"
+LEAD_APPOINTED: Kind = "lead_appointed"
+LEAD_REMOVED: Kind = "lead_removed"
+REPOSITORY_ADDED: Kind = "repository_added"
+REPOSITORY_REMOVED: Kind = "repository_removed"
+PROJECT_RESTRICTED: Kind = "project_restricted"
+PROJECT_OPENED: Kind = "project_opened"
+ACCESS_GRANTED: Kind = "access_granted"
+ACCESS_REVOKED: Kind = "access_revoked"
+MEMORY_SAVED: Kind = "memory_saved"
+MEMORY_EDITED: Kind = "memory_edited"
+MEMORY_DELETED: Kind = "memory_deleted"
+MEMORY_PROMOTED: Kind = "memory_promoted"
+MEMORY_SUPERSEDED: Kind = "memory_superseded"
+MEMORY_RETIRED: Kind = "memory_retired"
+MEMORY_PINNED: Kind = "memory_pinned"
+MEMORY_UNPINNED: Kind = "memory_unpinned"
+CHALLENGE_RAISED: Kind = "challenge_raised"
+CHALLENGE_DECIDED: Kind = "challenge_decided"
 
 
 @dataclass(frozen=True)

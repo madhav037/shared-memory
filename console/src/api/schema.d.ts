@@ -1031,8 +1031,11 @@ export interface components {
             at: string;
             /** Actor */
             actor: string;
-            /** Kind */
-            kind: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided";
             /** Project Id */
             project_id: string | null;
             /** Target */
