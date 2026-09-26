@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, added_context, ask, signed_in_owner
+from tests.support import (
+    Console,
+    ConsoleClient,
+    Session,
+    added_context,
+    ask,
+    promote_keeping_both,
+    signed_in_owner,
+)
 
 
 def a_project(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
@@ -16,30 +24,15 @@ def a_project(console: Console, client: ConsoleClient, github: str, account: int
 def a_promoted_memory(
     session: Session, title: str = "Use pnpm, not npm", topic: str | None = None, body: str | None = None
 ) -> str:
-    saved = session.call(
-        "remember",
-        title=title,
-        summary=f"{title}.",
-        type="convention",
-        body=body or f"{title}, every time, in every package.",
-        topic=topic,
-    )
-    return promoted(session, saved["path"])
-
-
-def promoted(session: Session, path: str) -> str:
-    """Promote a memory, keeping anything similar that is already there."""
-    result = session.call("promote", path=path, level="project")
-    if result.get("status") == "similar_memories":
-        result = session.call(
-            "promote",
-            path=path,
-            level="project",
-            reference=result["reference"],
-            resolutions={one["path"]: "keep_both" for one in result["similar"]},
-        )
-    answer: str = result["path"]
-    return answer
+    memory = {
+        "title": title,
+        "summary": f"{title}.",
+        "type": "convention",
+        "body": body or f"{title}, every time, in every package.",
+    }
+    if topic is not None:
+        memory["topic"] = topic
+    return promote_keeping_both(session, memory)
 
 
 def pins(client: ConsoleClient, project: str) -> dict[str, Any]:
