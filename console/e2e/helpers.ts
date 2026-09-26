@@ -7,7 +7,8 @@ export async function signInAs(page: Page, id: number, login: string) {
   await page.request.post(`${fakeGitHub}/as-account`, { data: { id, login } });
   await page.goto("/");
   await page.getByTestId("sign-in").click();
-  await expect(page.getByTestId("who")).toBeVisible();
+  // The member menu, not their name: the name is hidden at phone width, the menu is there at every width.
+  await expect(page.getByTestId("member-menu")).toBeVisible();
 }
 
 /** Sign out from the member menu in the masthead. */
