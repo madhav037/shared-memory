@@ -9,7 +9,15 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
-from tests.support import REPO_ROOT, FakeGitHub, RunningServer, Session, TestClock, fresh_database
+from tests.support import (
+    REPO_ROOT,
+    FakeGitHub,
+    RunningServer,
+    Session,
+    TestClock,
+    fresh_database,
+    promote_now,
+)
 
 CONSOLE = "http://127.0.0.1:4273"
 PORT = 8123
@@ -78,6 +86,29 @@ if __name__ == "__main__":
             reference=similar["reference"],
             resolutions={
                 one["path"]: ("supersede" if one["path"] == challenged else "keep_both") for one in similar["similar"]
+            },
+        )
+        # Two memories the retire journeys have to themselves, on topics nothing else here touches: retiring
+        # one changes nothing another journey reads. Olive's is hers to retire outright; Raj's can only ask
+        # him, because retiring another author's memory raises a challenge instead.
+        promote_now(
+            in_project,
+            {
+                "title": "Release notes go out on Thursday",
+                "summary": "Every release note is published on Thursday morning.",
+                "type": "convention",
+                "body": "Release notes are published on Thursday morning, after the Wednesday release train "
+                "lands.",
+            },
+        )
+        promote_now(
+            dana,
+            {
+                "title": "The API rate limit is 100 a minute",
+                "summary": "Billing's public API allows 100 requests a minute per client.",
+                "type": "gotcha",
+                "body": "Billing's public API allows each client 100 requests a minute; anything above that "
+                "gets a 429.",
             },
         )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
