@@ -11,7 +11,7 @@ from shared_memory.app import build_app
 from shared_memory.config import Settings
 from tests.support import REPO_ROOT, FakeGitHub, RunningServer, Session, TestClock, fresh_database
 
-CONSOLE = "http://127.0.0.1:4173"
+CONSOLE = "http://127.0.0.1:4273"
 PORT = 8123
 
 if __name__ == "__main__":
