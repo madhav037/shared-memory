@@ -43,7 +43,13 @@ def claude_settings(marketplace: str, project_id: str, repository: str) -> dict[
 
 
 def skill() -> str:
-    """The Shared Memory skill: when to save memory and at which level. The same text the Claude Code plugin ships."""
+    """The Shared Memory skill: when to save memory and at which level.
+
+    Word for word the text the Claude Code plugin ships, and that copy is the source. There are two because the
+    image carries one and the plugin carries the other: the Dockerfile copies `src/` and nothing else, so a
+    server reading the plugin's copy would find nothing there, and Claude Code loads a plugin skill only from
+    `plugin/skills/<name>/SKILL.md`. tests/test_connection_kit.py fails if they drift, and says how to sync.
+    """
     return resources.files("shared_memory").joinpath("skill.md").read_text(encoding="utf-8")
 
 

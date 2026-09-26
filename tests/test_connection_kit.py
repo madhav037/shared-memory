@@ -46,13 +46,21 @@ def test_every_agent_is_told_in_agents_md_how_to_use_the_projects_memory(team: T
         assert needed in section["contents"], needed
 
 
+#: The plugin's copy is the source. The package's is the one the server serves, because the Dockerfile copies
+#: `src/` and nothing else, and Claude Code loads a plugin skill only from `plugin/skills/<name>/SKILL.md`.
+SYNC = (
+    "The skill has drifted. The plugin's copy is the source; copy it over the package's:\n"
+    "  cp plugin/skills/shared-memory/SKILL.md src/shared_memory/skill.md"
+)
+
+
 def test_the_skill_every_agent_reads_is_the_one_claude_code_ships(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
 
     skill = by_path(created["files"])[".agents/skills/shared-memory/SKILL.md"]
 
     shipped = (REPO_ROOT / "plugin" / "skills" / "shared-memory" / "SKILL.md").read_text(encoding="utf-8")
-    assert skill["contents"] == shipped
+    assert skill["contents"] == shipped, SYNC
     assert skill["action"] == "create"
 
 
