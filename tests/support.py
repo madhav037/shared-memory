@@ -265,6 +265,28 @@ def promote_now(session: Session, memory: dict[str, str], level: str = "project"
     return path
 
 
+def promote_keeping_both(session: Session, memory: dict[str, str], level: str = "project") -> str:
+    """Promote a memory that reads as similar to others but contradicts none of them.
+
+    Similarity is generous — two memories about entirely different things can sit above the threshold — so a
+    seed that adds a memory to a team which already has a few cannot assume nothing will come back.
+    """
+    personal = session.call("remember", **memory)["path"]
+    first = session.call("promote", path=personal, level=level)
+    if first["status"] == "promoted":
+        return str(first["path"])
+    assert first["status"] == "similar_memories", first
+    result = session.call(
+        "promote",
+        path=personal,
+        level=level,
+        reference=first["reference"],
+        resolutions={similar["path"]: "keep_both" for similar in first["similar"]},
+    )
+    assert result["status"] == "promoted", result
+    return str(result["path"])
+
+
 def _supersede(session: Session, personal: str, target: str, level: str) -> dict[str, Any]:
     first = session.call("promote", path=personal, level=level)
     assert first["status"] == "similar_memories", first

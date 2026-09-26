@@ -16,7 +16,9 @@ from tests.support import (
     Session,
     TestClock,
     fresh_database,
+    promote_keeping_both,
     promote_now,
+    promote_superseding,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -110,6 +112,32 @@ if __name__ == "__main__":
                 "body": "Billing's public API allows each client 100 requests a minute; anything above that "
                 "gets a 429.",
             },
+        )
+        # A challenge for the reject journeys, between Olive and a member no other journey signs in as, so
+        # it waits on nobody another journey checks has nothing waiting. Both memories set their parts out
+        # as a list, which is the shape `whatChanges` can summarise — of prose it has nothing honest to say.
+        mira = Session(
+            server,
+            owner.call("add_member", employee_id="emp-mira", name="Mira Maker", github="mira")["personal_token"],
+        ).in_project(project, "billing-api")
+        stack = promote_keeping_both(
+            mira,
+            {
+                "title": "How Billing is built",
+                "summary": "The stack Billing runs on.",
+                "type": "decision",
+                "body": "- Language: Go\n- Database: Postgres\n- Queue: RabbitMQ",
+            },
+        )
+        promote_superseding(
+            in_project,
+            {
+                "title": "How Billing is built now",
+                "summary": "The stack Billing runs on since the queue moved.",
+                "type": "decision",
+                "body": "- Language: Go\n- Database: Postgres\n- Queue: Kafka",
+            },
+            stack,
         )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
