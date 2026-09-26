@@ -139,6 +139,17 @@ if __name__ == "__main__":
             },
             stack,
         )
+        # Two memories filed under a topic, so the journeys have a topic folder to pin. A topic is a folder
+        # inside a type folder, which the type folder itself is not: pinning one puts everything filed under
+        # it into every briefing at once.
+        for title, body in (
+            ("Invoices are immutable", "An invoice is never edited once issued; a correction is a new one."),
+            ("Invoices are numbered per year", "Invoice numbers restart at 1 each January, behind the year."),
+        ):
+            promote_keeping_both(
+                in_project,
+                {"title": title, "summary": f"{title}.", "type": "convention", "body": body, "topic": "invoicing"},
+            )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
             server.join()
