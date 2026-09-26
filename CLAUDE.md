@@ -51,6 +51,7 @@ Run the seam you're touching while iterating, and the whole table once before ea
 | Python tests | `uv run pytest` |
 | Python types | `uv run mypy` |
 | Console build and types | `cd console && npm run build` |
+| Console units | `cd console && npm run test` |
 | Console JSON API contract | `cd console && npm run api:check` |
 | Console journeys | `cd console && npx playwright test` |
 
