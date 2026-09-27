@@ -23,7 +23,7 @@ PREFIX = "/api"
 class SignedInMember(BaseModel):
     """Who the console is signed in as."""
 
-    employee_id: str
+    member_id: str
     name: str
     team: str
     role: Literal["owner", "admin", "member"]
@@ -60,7 +60,7 @@ class AuditPage(BaseModel):
 class ProjectMember(BaseModel):
     """A member named on a project."""
 
-    employee_id: str
+    member_id: str
     name: str
 
 
@@ -118,7 +118,7 @@ class ProjectName(BaseModel):
 class Appointment(BaseModel):
     """The member being made a lead of this project."""
 
-    employee_id: str
+    member_id: str
 
 
 class RepositoryName(BaseModel):
@@ -136,7 +136,7 @@ class Restriction(BaseModel):
 class AccessChange(BaseModel):
     """The member being let into this project."""
 
-    employee_id: str
+    member_id: str
 
 
 class PendingChallenge(BaseModel):
@@ -357,7 +357,7 @@ class Folder(BaseModel):
 class MemberSummary(BaseModel):
     """One member of the team, as an admin sees them."""
 
-    employee_id: str
+    member_id: str
     name: str
     role: Literal["owner", "admin", "member"]
     github_login: str | None
@@ -371,7 +371,7 @@ class Members(BaseModel):
 class NewMember(BaseModel):
     """A member being added to the team."""
 
-    employee_id: str
+    member_id: str
     name: str
     github: str | None = None
 
@@ -416,7 +416,7 @@ class MemoryAtVersion(BaseModel):
 class IssuedToken(BaseModel):
     """A personal token, shown the once. The console never shows it again."""
 
-    employee_id: str
+    member_id: str
     personal_token: str
     server_url: str
 
@@ -499,7 +499,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=Appointment,
     ),
     Declaration(
-        path="/projects/{project_id}/leads/{employee_id}/remove",
+        path="/projects/{project_id}/leads/{member_id}/remove",
         method="POST",
         operation_id="remove_lead",
         summary="Take a lead off this project.",
@@ -525,7 +525,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=AccessChange,
     ),
     Declaration(
-        path="/projects/{project_id}/access/{employee_id}/remove",
+        path="/projects/{project_id}/access/{member_id}/remove",
         method="POST",
         operation_id="revoke_access",
         summary="Take a member off a project's access list.",
@@ -664,7 +664,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=NewMember,
     ),
     Declaration(
-        path="/members/{employee_id}/remove",
+        path="/members/{member_id}/remove",
         method="POST",
         operation_id="remove_member",
         summary="Remove a member: their sessions end and their personal token stops working.",
@@ -672,7 +672,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         changes=True,
     ),
     Declaration(
-        path="/members/{employee_id}/change",
+        path="/members/{member_id}/change",
         method="POST",
         operation_id="change_member",
         summary="Correct a member's name or the GitHub account they sign in with.",
@@ -681,7 +681,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=ChangedMember,
     ),
     Declaration(
-        path="/members/{employee_id}/admin",
+        path="/members/{member_id}/admin",
         method="POST",
         operation_id="set_admin",
         summary="Grant admin to a member, or take it away.",
@@ -690,7 +690,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=AdminChange,
     ),
     Declaration(
-        path="/members/{employee_id}/ownership",
+        path="/members/{member_id}/ownership",
         method="POST",
         operation_id="hand_over_ownership",
         summary="Make another member the team's owner.",
@@ -706,7 +706,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         changes=True,
     ),
     Declaration(
-        path="/members/{employee_id}/token",
+        path="/members/{member_id}/token",
         method="POST",
         operation_id="reissue_token",
         summary="Issue a new personal token for a member of the team, revoking the one they had.",

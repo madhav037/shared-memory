@@ -97,7 +97,7 @@ def test_a_challenge_raised_and_decided_from_a_session_is_recorded(
 ) -> None:
     owner, project, in_project = a_project(console, signed_out, "olive-changes-five", 905)
     promoted = in_project.call("promote", path=a_memory(in_project), level="project")["path"]
-    dana = Session(console.server, owner.call("add_member", employee_id="emp-2", name="Dana Dev")["personal_token"])
+    dana = Session(console.server, owner.call("add_member", member_id="emp-2", name="Dana Dev")["personal_token"])
     dana_in_project = dana.in_project(project, "billing-api")
     challenger = a_memory(dana_in_project, "Use npm, not pnpm")
     similar = dana_in_project.call("promote", path=challenger, level="project")
@@ -130,7 +130,7 @@ def test_the_log_filters_memory_changes_by_project_member_and_kind(
     owner, billing, in_billing = a_project(console, signed_out, "olive-changes-six", 906)
     payments = owner.call("create_project", name="Payments")["project_id"]
     in_payments = owner.in_project(payments, "payments-api")
-    dana = Session(console.server, owner.call("add_member", employee_id="emp-2", name="Dana Dev")["personal_token"])
+    dana = Session(console.server, owner.call("add_member", member_id="emp-2", name="Dana Dev")["personal_token"])
     a_memory(in_billing)
     a_memory(in_payments, "Refunds are asynchronous")
     a_memory(dana.in_project(billing, "billing-api"), "Dana's own note")

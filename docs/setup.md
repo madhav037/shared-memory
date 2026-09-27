@@ -29,7 +29,7 @@ The first search downloads the embedding model (about 70 MB) into the model cach
 ### Create the team and its owner
 
 ```bash
-docker compose exec server shared-memory setup --team acme --owner-employee-id E1001 --owner-name "Olive Owner"
+docker compose exec server shared-memory setup --team acme --owner-member-id E1001 --owner-name "Olive Owner"
 ```
 
 The command prints the **owner**'s **personal token** once. Hand it to the owner privately.
@@ -46,7 +46,7 @@ docker compose exec server shared-memory reindex
 
 In the console's **Members**, or from your own coding agent once it is connected (section 4), ask it to:
 
-- **add a member**: `add_member` with their employee ID and name. Their personal token is shown once; pass it to them privately.
+- **add a member**: `add_member` with their member ID and name. Their personal token is shown once; pass it to them privately.
 - **remove a member**: `remove_member`. Their token stops working; their memories stay, credited to them.
 - **reissue a token**: `reissue_token`, when a token has leaked.
 

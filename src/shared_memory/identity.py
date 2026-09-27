@@ -116,9 +116,9 @@ class Identity:
         self._db = db
         self._clock = clock
 
-    def setup_team(self, team_code: str, owner_employee_id: str, owner_name: str, owner_github: str | None = None) -> str:
+    def setup_team(self, team_code: str, owner_member_id: str, owner_name: str, owner_github: str | None = None) -> str:
         check_name("Team ID", team_code)
-        check_name("Employee ID", owner_employee_id)
+        check_name("Member ID", owner_member_id)
         now = self._clock()
         with self._db.transaction() as conn:
             if conn.execute("SELECT 1 FROM teams WHERE code = %s", (team_code,)).fetchone():
@@ -130,7 +130,7 @@ class Identity:
             member = conn.execute(
                 "INSERT INTO members (team_id, member_id, name, is_owner, github_login, created_at)"
                 " VALUES (%s, %s, %s, TRUE, %s, %s) RETURNING id",
-                (team["id"], owner_employee_id, owner_name, _github_login(owner_github), now),
+                (team["id"], owner_member_id, owner_name, _github_login(owner_github), now),
             ).fetchone()
             assert member is not None
             return self._issue_token(conn, member["id"])
@@ -205,64 +205,64 @@ class Identity:
         ).fetchone()
         return found is not None
 
-    def _member_pk(self, conn: Conn, caller: Caller, employee_id: str) -> int:
+    def _member_pk(self, conn: Conn, caller: Caller, member_id: str) -> int:
         row = conn.execute(
             "SELECT id FROM members WHERE team_id = %s AND member_id = %s AND removed_at IS NULL",
-            (caller.member.team_pk, employee_id),
+            (caller.member.team_pk, member_id),
         ).fetchone()
         if row is None:
-            raise Refused(f"No member with employee ID {employee_id!r} in your team.")
+            raise Refused(f"No member with member ID {member_id!r} in your team.")
         pk: int = row["id"]
         return pk
 
     def add_member(
-        self, caller: Caller, employee_id: str, name: str, team: str | None = None, github: str | None = None
+        self, caller: Caller, member_id: str, name: str, team: str | None = None, github: str | None = None
     ) -> str:
         self._require_admin(caller)
         if team is not None and team != caller.team:
             raise Refused(f"You can only add members to your own team ({caller.team}).")
-        check_name("Employee ID", employee_id)
+        check_name("Member ID", member_id)
         if not name.strip():
             raise Refused("A member needs a name.")
         with self._db.transaction() as conn:
             existing = conn.execute(
                 "SELECT removed_at FROM members WHERE team_id = %s AND member_id = %s",
-                (caller.member.team_pk, employee_id),
+                (caller.member.team_pk, member_id),
             ).fetchone()
             if existing is not None:
-                raise Refused(f"Employee ID {employee_id!r} is already a member of your team, or was one.")
+                raise Refused(f"Member ID {member_id!r} is already a member of your team, or was one.")
             login = _github_login(github)
             if login is not None:
                 self._github_free(conn, caller.member.team_pk, login, None)
             row = conn.execute(
                 "INSERT INTO members (team_id, member_id, name, github_login, created_at)"
                 " VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (caller.member.team_pk, employee_id, name.strip(), login, self._clock()),
+                (caller.member.team_pk, member_id, name.strip(), login, self._clock()),
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
 
-    def remove_member(self, caller: Caller, employee_id: str) -> None:
+    def remove_member(self, caller: Caller, member_id: str) -> None:
         self._require_admin(caller)
-        if employee_id == caller.member_id:
+        if member_id == caller.member_id:
             raise Refused("You cannot remove yourself.")
         with self._db.transaction() as conn:
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             self._only_the_owner_touches_admins(conn, caller, pk, "removed", "remove")
             now = self._clock()
             conn.execute("UPDATE members SET removed_at = %s WHERE id = %s", (now, pk))
             conn.execute("UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (now, pk))
 
-    def reissue_token(self, caller: Caller, employee_id: str) -> str:
+    def reissue_token(self, caller: Caller, member_id: str) -> str:
         self._require_admin(caller)
         with self._db.transaction() as conn:
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             conn.execute(
                 "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (self._clock(), pk)
             )
             return self._issue_token(conn, pk)
 
-    def link_github(self, team_code: str, employee_id: str, github_login: str) -> None:
+    def link_github(self, team_code: str, member_id: str, github_login: str) -> None:
         """Link a GitHub account to a member who already exists, so they can sign in to the console."""
         login = _github_login(github_login)
         if login is None:
@@ -271,10 +271,10 @@ class Identity:
             row = conn.execute(
                 "SELECT m.id FROM members m JOIN teams t ON t.id = m.team_id"
                 " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL",
-                (team_code, employee_id),
+                (team_code, member_id),
             ).fetchone()
             if row is None:
-                raise Refused(f"No member with employee ID {employee_id!r} in team {team_code!r}.")
+                raise Refused(f"No member with member ID {member_id!r} in team {team_code!r}.")
             taken = conn.execute(
                 "SELECT m.member_id FROM members m JOIN teams t ON t.id = m.team_id"
                 " WHERE t.code = %s AND lower(m.github_login) = lower(%s) AND m.id <> %s",
@@ -351,7 +351,7 @@ class Identity:
             ).fetchall()
         return [
             {
-                "employee_id": row["member_id"],
+                "member_id": row["member_id"],
                 "name": row["name"],
                 "role": "owner" if row["is_owner"] else "admin" if row["is_admin"] else "member",
                 "github_login": row["github_login"],
@@ -360,11 +360,11 @@ class Identity:
             for row in rows
         ]
 
-    def change_member(self, caller: Caller, employee_id: str, name: str | None, github: str | None) -> None:
+    def change_member(self, caller: Caller, member_id: str, name: str | None, github: str | None) -> None:
         """Correct a member's name, or the GitHub account they sign in with."""
         self._require_admin(caller)
         with self._db.transaction() as conn:
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             if name is not None:
                 if not name.strip():
                     raise Refused("A member needs a name.")
@@ -376,22 +376,22 @@ class Identity:
                 # Clearing the account id lets the next sign-in bind this login to whoever signs in with it.
                 conn.execute("UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, pk))
 
-    def set_admin(self, caller: Caller, employee_id: str, admin: bool) -> None:
+    def set_admin(self, caller: Caller, member_id: str, admin: bool) -> None:
         """Grant admin to a member, or take it away. Only the owner can."""
         self._require_owner(caller)
-        if employee_id == caller.member_id:
+        if member_id == caller.member_id:
             raise Refused("You are the owner: you have everything an admin has.")
         with self._db.transaction() as conn:
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             conn.execute("UPDATE members SET is_admin = %s WHERE id = %s", (admin, pk))
 
-    def hand_over_ownership(self, caller: Caller, employee_id: str) -> None:
+    def hand_over_ownership(self, caller: Caller, member_id: str) -> None:
         """Make another member the team's owner. The member handing it over stays an admin."""
         self._require_owner(caller)
-        if employee_id == caller.member_id:
+        if member_id == caller.member_id:
             raise Refused("You are already the owner.")
         with self._db.transaction() as conn:
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             conn.execute("UPDATE members SET is_owner = FALSE, is_admin = TRUE WHERE id = %s", (caller.member.pk,))
             conn.execute("UPDATE members SET is_owner = TRUE, is_admin = TRUE WHERE id = %s", (pk,))
 
@@ -513,7 +513,7 @@ class Identity:
         ).fetchall()
         listed: dict[str, list[dict[str, str]]] = {project_id: [] for project_id in project_ids}
         for row in rows:
-            listed[row["project_id"]].append({"employee_id": row["member_id"], "name": row["name"]})
+            listed[row["project_id"]].append({"member_id": row["member_id"], "name": row["name"]})
         return listed
 
     def project_summaries(self, member: Member) -> list[dict[str, Any]]:
@@ -534,7 +534,7 @@ class Identity:
                 "name": project.name,
                 "restricted": project.project_id in closed,
                 "leads": leads[project.project_id],
-                "you_lead": any(one["employee_id"] == member.member_id for one in leads[project.project_id]),
+                "you_lead": any(one["member_id"] == member.member_id for one in leads[project.project_id]),
             }
             for project in projects
         ]
@@ -560,7 +560,7 @@ class Identity:
             "name": project.name,
             "restricted": row["restricted"],
             "leads": leads,
-            "access": [{"employee_id": one["member_id"], "name": one["name"]} for one in access],
+            "access": [{"member_id": one["member_id"], "name": one["name"]} for one in access],
             "repositories": [row["name"] for row in repositories],
             "you_lead": you_lead,
             "you_may_change": you_lead or member.is_owner or member.is_admin,
@@ -576,56 +576,56 @@ class Identity:
             self._project_name(conn, caller.member, project_id)
             conn.execute("UPDATE projects SET restricted = %s WHERE project_id = %s", (restricted, project_id))
 
-    def grant_access(self, caller: Caller, project_id: str, employee_id: str) -> None:
+    def grant_access(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Let a member into this project. It takes effect on their next call."""
         self._require_lead(caller, project_id)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             conn.execute(
                 "INSERT INTO project_access (project_id, member_id, granted_at) VALUES (%s, %s, %s)"
                 " ON CONFLICT DO NOTHING",
                 (project_id, pk, self._clock()),
             )
 
-    def revoke_access(self, caller: Caller, project_id: str, employee_id: str) -> None:
+    def revoke_access(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Take a member off this project's access list. They lose it on their next call."""
         self._require_lead(caller, project_id)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             gone = conn.execute(
                 "DELETE FROM project_access WHERE project_id = %s AND member_id = %s RETURNING member_id",
                 (project_id, pk),
             ).fetchone()
         if gone is None:
-            raise Refused(f"{employee_id!r} is not on this project's access list.")
+            raise Refused(f"{member_id!r} is not on this project's access list.")
 
-    def appoint_lead(self, caller: Caller, project_id: str, employee_id: str) -> None:
+    def appoint_lead(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Make a member a lead of this project. A lead can appoint another lead; so can an admin."""
         self._require_lead(caller, project_id)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             conn.execute(
                 "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)"
                 " ON CONFLICT DO NOTHING",
                 (project_id, pk, self._clock()),
             )
 
-    def remove_lead(self, caller: Caller, project_id: str, employee_id: str) -> None:
+    def remove_lead(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Take a lead off a project. Only the team's admins can, so one lead can't unseat another."""
         if not (caller.member.is_owner or caller.member.is_admin):
             raise Refused("Only the team's owner and its admins can take a lead off a project.")
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
-            pk = self._member_pk(conn, caller, employee_id)
+            pk = self._member_pk(conn, caller, member_id)
             removed = conn.execute(
                 "DELETE FROM project_leads WHERE project_id = %s AND member_id = %s RETURNING member_id",
                 (project_id, pk),
             ).fetchone()
         if removed is None:
-            raise Refused(f"{employee_id!r} does not lead this project.")
+            raise Refused(f"{member_id!r} does not lead this project.")
 
     def add_repository(self, caller: Caller, project_id: str, repository: str) -> None:
         """Note a repository of this project, so its settings can be shown before anyone works in it."""

@@ -20,8 +20,8 @@ import { useAsked } from "../lib/useAsked";
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
 type Editing =
-  | { kind: "name" | "github"; employeeId: string; value: string }
-  | { kind: "remove" | "ownership"; employeeId: string }
+  | { kind: "name" | "github"; memberId: string; value: string }
+  | { kind: "remove" | "ownership"; memberId: string }
   | null;
 
 /** Who is in the team, what each of them may do, and everything an admin does about that. */
@@ -43,9 +43,9 @@ export function Team({ me }: { me: SignedInMember }) {
     }
   };
 
-  const issue = async (employeeId: string) => {
+  const issue = async (memberId: string) => {
     try {
-      setIssued(await reissueToken(employeeId));
+      setIssued(await reissueToken(memberId));
       setRefused(null);
     } catch (problem) {
       setRefused((problem as Error).message);
@@ -76,7 +76,7 @@ export function Team({ me }: { me: SignedInMember }) {
       )}
       {issued && (
         <div className="issued appear" style={{ marginTop: 24 }} data-testid="new-member-token" role="status">
-          <b>{issued.employee_id}’s personal token</b>
+          <b>{issued.member_id}’s personal token</b>
           <code data-testid="new-member-token-value">{issued.personal_token}</code>
           <CopyButton value={issued.personal_token}>
             {({ copied, copy }) => (
@@ -112,7 +112,7 @@ export function Team({ me }: { me: SignedInMember }) {
           <thead>
             <tr>
               <th scope="col">Member</th>
-              <th scope="col">Employee ID</th>
+              <th scope="col">Member ID</th>
               <th scope="col">GitHub</th>
               <th scope="col">Role</th>
               {runs && (
@@ -125,11 +125,11 @@ export function Team({ me }: { me: SignedInMember }) {
           <tbody>
             {members.map((member) => (
               <MemberRow
-                key={member.employee_id}
+                key={member.member_id}
                 member={member}
                 me={me}
                 runs={runs}
-                editing={editing?.employeeId === member.employee_id ? editing : null}
+                editing={editing?.memberId === member.member_id ? editing : null}
                 setEditing={setEditing}
                 attempt={attempt}
                 issue={issue}
@@ -157,10 +157,10 @@ function MemberRow({
   editing: Editing;
   setEditing: (editing: Editing) => void;
   attempt: (what: () => Promise<{ members: MemberSummary[] }>) => Promise<void>;
-  issue: (employeeId: string) => Promise<void>;
+  issue: (memberId: string) => Promise<void>;
 }) {
-  const id = member.employee_id;
-  const actionable = runs && !member.removed && id !== me.employee_id;
+  const id = member.member_id;
+  const actionable = runs && !member.removed && id !== me.member_id;
   const cells = (
     <>
       <td className="primary">
@@ -175,7 +175,7 @@ function MemberRow({
         ) : (
           <>
             {member.name}
-            {id === me.employee_id && <span style={{ color: "var(--ink-3)", fontWeight: 400 }}> (you)</span>}
+            {id === me.member_id && <span style={{ color: "var(--ink-3)", fontWeight: 400 }}> (you)</span>}
             {member.removed && <span style={{ color: "var(--ink-3)", fontWeight: 400 }}> · removed</span>}
           </>
         )}
@@ -226,23 +226,23 @@ function MemberRow({
                     </Menu.Item>
                   )}
                   {me.role === "owner" && (
-                    <Menu.Item onClick={() => setEditing({ kind: "ownership", employeeId: id })}>Hand over ownership…</Menu.Item>
+                    <Menu.Item onClick={() => setEditing({ kind: "ownership", memberId: id })}>Hand over ownership…</Menu.Item>
                   )}
                   <Menu.Item onClick={() => issue(id)} data-testid={`reissue-${id}`}>
                     Issue a new personal token
                   </Menu.Item>
-                  <Menu.Item onClick={() => setEditing({ kind: "name", employeeId: id, value: member.name })}>
+                  <Menu.Item onClick={() => setEditing({ kind: "name", memberId: id, value: member.name })}>
                     Correct their name
                   </Menu.Item>
                   <Menu.Item
-                    onClick={() => setEditing({ kind: "github", employeeId: id, value: member.github_login ?? "" })}
+                    onClick={() => setEditing({ kind: "github", memberId: id, value: member.github_login ?? "" })}
                   >
                     Change their GitHub account
                   </Menu.Item>
                   <Menu.Divider />
                   <Menu.Item
                     className="danger-item"
-                    onClick={() => setEditing({ kind: "remove", employeeId: id })}
+                    onClick={() => setEditing({ kind: "remove", memberId: id })}
                     data-testid={`remove-${id}`}
                   >
                     Remove from the team…
@@ -327,7 +327,7 @@ function AddMember({
   onAdded: (token: IssuedToken, everyone: MemberSummary[]) => void;
   onRefused: (message: string) => void;
 }) {
-  const [employeeId, setEmployeeId] = useState("");
+  const [memberId, setMemberId] = useState("");
   const [name, setName] = useState("");
   const [github, setGithub] = useState("");
   const [adding, setAdding] = useState(false);
@@ -335,10 +335,10 @@ function AddMember({
   const add = async () => {
     setAdding(true);
     try {
-      const token = await addMember({ employee_id: employeeId.trim(), name: name.trim(), github: github.trim() || undefined });
+      const token = await addMember({ member_id: memberId.trim(), name: name.trim(), github: github.trim() || undefined });
       const everyone = await fetchMembers();
       onAdded(token, everyone.members);
-      setEmployeeId("");
+      setMemberId("");
       setName("");
       setGithub("");
     } catch (problem) {
@@ -361,15 +361,15 @@ function AddMember({
         className="form-line"
         onSubmit={(event) => {
           event.preventDefault();
-          if (employeeId.trim() && name.trim()) void add();
+          if (memberId.trim() && name.trim()) void add();
         }}
       >
         <TextInput
-          label="Employee ID"
+          label="Member ID"
           placeholder="E1042"
-          value={employeeId}
-          data-testid="new-employee-id"
-          onChange={(event) => setEmployeeId(event.currentTarget.value)}
+          value={memberId}
+          data-testid="new-member-id"
+          onChange={(event) => setMemberId(event.currentTarget.value)}
           style={{ flex: "1 1 130px" }}
         />
         <TextInput
@@ -391,7 +391,7 @@ function AddMember({
         <Button
           type="submit"
           loading={adding}
-          disabled={!employeeId.trim() || !name.trim()}
+          disabled={!memberId.trim() || !name.trim()}
           leftSection={<IconUserPlus size={16} stroke={1.6} />}
           data-testid="add-member"
         >

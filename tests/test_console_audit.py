@@ -41,8 +41,8 @@ def test_a_refused_sign_in_is_recorded_with_the_account_that_tried(console: Cons
 
 def test_a_member_who_is_not_the_owner_cannot_read_the_log(console: Console, signed_out: ConsoleClient) -> None:
     team, owner_token = console.a_team("olive-audit-three")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "dana-audit")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
+    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-audit")
     console.github.as_(204, "dana-audit")
     signed_out.sign_in()
 
@@ -77,8 +77,8 @@ def test_the_log_is_newest_first_and_comes_a_page_at_a_time(console: Console, si
 
 def test_the_log_can_be_filtered_by_member_kind_and_day(console: Console, signed_out: ConsoleClient) -> None:
     team, owner_token = console.a_team("olive-audit-five")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "dana-audit-five")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
+    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-audit-five")
     console.github.as_(206, "dana-audit-five")
     signed_out.sign_in()
     signed_out.sign_out()

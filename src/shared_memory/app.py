@@ -244,29 +244,29 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     @server.tool()
     @_refusals_as_tool_errors
     def add_member(
-        employee_id: str, name: str, ctx: Context, team: str | None = None, github: str | None = None
+        member_id: str, name: str, ctx: Context, team: str | None = None, github: str | None = None
     ) -> dict[str, Any]:
         """Owner and admins: add a member to your team. Their personal token is shown once, in this result.
 
         github is their GitHub username, which lets them sign in to the console.
         """
         current = caller(ctx)
-        token = identity.add_member(current, employee_id, name, team, github)
-        return {"team": current.team, "employee_id": employee_id, "name": name, "personal_token": token}
+        token = identity.add_member(current, member_id, name, team, github)
+        return {"team": current.team, "member_id": member_id, "name": name, "personal_token": token}
 
     @server.tool()
     @_refusals_as_tool_errors
-    def remove_member(employee_id: str, ctx: Context) -> dict[str, Any]:
+    def remove_member(member_id: str, ctx: Context) -> dict[str, Any]:
         """Owner and admins: remove a member. Their token stops working; their memories stay, credited to them."""
-        identity.remove_member(caller(ctx), employee_id)
-        return {"removed": employee_id}
+        identity.remove_member(caller(ctx), member_id)
+        return {"removed": member_id}
 
     @server.tool()
     @_refusals_as_tool_errors
-    def reissue_token(employee_id: str, ctx: Context) -> dict[str, Any]:
+    def reissue_token(member_id: str, ctx: Context) -> dict[str, Any]:
         """Owner and admins: revoke a member's personal token and issue a new one, shown once in this result."""
-        token = identity.reissue_token(caller(ctx), employee_id)
-        return {"employee_id": employee_id, "personal_token": token}
+        token = identity.reissue_token(caller(ctx), member_id)
+        return {"member_id": member_id, "personal_token": token}
 
     @server.tool()
     @_refusals_as_tool_errors

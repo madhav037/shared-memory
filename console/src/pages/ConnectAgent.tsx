@@ -235,7 +235,7 @@ function Token({ member }: { member: SignedInMember }) {
             )}
           </CopyButton>
           <p style={{ marginTop: 10 }}>
-            This is the only time it is shown. Any token {member.employee_id} had before has stopped working. Set it in
+            This is the only time it is shown. Any token {member.member_id} had before has stopped working. Set it in
             your terminal’s profile with <code>export SHARED_MEMORY_TOKEN=…</code>, or on Windows with{" "}
             <code>setx SHARED_MEMORY_TOKEN …</code>, then restart your agent.
           </p>

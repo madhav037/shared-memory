@@ -250,16 +250,16 @@ class ConsoleApi:
     def _appoint_lead(self, request: Request) -> Response:
         def appoint(member: Member, caller: Caller, project_id: str) -> None:
             asked: Appointment = request.state.asked
-            self._identity.appoint_lead(caller, project_id, asked.employee_id)
-            self._audit.record(LEAD_APPOINTED, member=member, project_id=project_id, target=asked.employee_id)
+            self._identity.appoint_lead(caller, project_id, asked.member_id)
+            self._audit.record(LEAD_APPOINTED, member=member, project_id=project_id, target=asked.member_id)
 
         return self._change_project(request, appoint)
 
     def _remove_lead(self, request: Request) -> Response:
         def remove(member: Member, caller: Caller, project_id: str) -> None:
-            employee_id = request.path_params["employee_id"]
-            self._identity.remove_lead(caller, project_id, employee_id)
-            self._audit.record(LEAD_REMOVED, member=member, project_id=project_id, target=employee_id)
+            member_id = request.path_params["member_id"]
+            self._identity.remove_lead(caller, project_id, member_id)
+            self._audit.record(LEAD_REMOVED, member=member, project_id=project_id, target=member_id)
 
         return self._change_project(request, remove)
 
@@ -292,16 +292,16 @@ class ConsoleApi:
     def _grant_access(self, request: Request) -> Response:
         def grant(member: Member, caller: Caller, project_id: str) -> None:
             asked: AccessChange = request.state.asked
-            self._identity.grant_access(caller, project_id, asked.employee_id)
-            self._audit.record(ACCESS_GRANTED, member=member, project_id=project_id, target=asked.employee_id)
+            self._identity.grant_access(caller, project_id, asked.member_id)
+            self._audit.record(ACCESS_GRANTED, member=member, project_id=project_id, target=asked.member_id)
 
         return self._change_project(request, grant)
 
     def _revoke_access(self, request: Request) -> Response:
         def revoke(member: Member, caller: Caller, project_id: str) -> None:
-            employee_id = request.path_params["employee_id"]
-            self._identity.revoke_access(caller, project_id, employee_id)
-            self._audit.record(ACCESS_REVOKED, member=member, project_id=project_id, target=employee_id)
+            member_id = request.path_params["member_id"]
+            self._identity.revoke_access(caller, project_id, member_id)
+            self._audit.record(ACCESS_REVOKED, member=member, project_id=project_id, target=member_id)
 
         return self._change_project(request, revoke)
 
@@ -340,7 +340,7 @@ class ConsoleApi:
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:
-        return {one["employee_id"]: one["name"] for one in self._identity.members(member)}
+        return {one["member_id"]: one["name"] for one in self._identity.members(member)}
 
     # --- memory by its path, wherever it lives ---
 
@@ -532,45 +532,45 @@ class ConsoleApi:
         asked: NewMember = request.state.asked
         try:
             caller = self._identity.caller_in(member, None)
-            token = self._identity.add_member(caller, asked.employee_id, asked.name, github=asked.github)
+            token = self._identity.add_member(caller, asked.member_id, asked.name, github=asked.github)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         self._audit.record(
-            MEMBER_ADDED, member=member, target=asked.employee_id, detail={"name": asked.name, "github": asked.github}
+            MEMBER_ADDED, member=member, target=asked.member_id, detail={"name": asked.name, "github": asked.github}
         )
-        self._audit.record(TOKEN_ISSUED, member=member, target=asked.employee_id, detail={"for": asked.employee_id})
-        return self._issued(request, asked.employee_id, token)
+        self._audit.record(TOKEN_ISSUED, member=member, target=asked.member_id, detail={"for": asked.member_id})
+        return self._issued(request, asked.member_id, token)
 
     def _remove_member(self, request: Request) -> Response:
-        def remove(member: Member, caller: Caller, employee_id: str) -> None:
-            self._identity.remove_member(caller, employee_id)
-            self._sessions.end_all_for(employee_id, member.team_pk)
-            self._audit.record(MEMBER_REMOVED, member=member, target=employee_id)
+        def remove(member: Member, caller: Caller, member_id: str) -> None:
+            self._identity.remove_member(caller, member_id)
+            self._sessions.end_all_for(member_id, member.team_pk)
+            self._audit.record(MEMBER_REMOVED, member=member, target=member_id)
 
         return self._run_on_member(request, remove)
 
     def _change_member(self, request: Request) -> Response:
-        def change(member: Member, caller: Caller, employee_id: str) -> None:
+        def change(member: Member, caller: Caller, member_id: str) -> None:
             asked: ChangedMember = request.state.asked
-            self._identity.change_member(caller, employee_id, asked.name, asked.github)
+            self._identity.change_member(caller, member_id, asked.name, asked.github)
             self._audit.record(
-                MEMBER_CHANGED, member=member, target=employee_id, detail={"name": asked.name, "github": asked.github}
+                MEMBER_CHANGED, member=member, target=member_id, detail={"name": asked.name, "github": asked.github}
             )
 
         return self._run_on_member(request, change)
 
     def _set_admin(self, request: Request) -> Response:
-        def change(member: Member, caller: Caller, employee_id: str) -> None:
+        def change(member: Member, caller: Caller, member_id: str) -> None:
             asked: AdminChange = request.state.asked
-            self._identity.set_admin(caller, employee_id, asked.admin)
-            self._audit.record(ADMIN_GRANTED if asked.admin else ADMIN_REVOKED, member=member, target=employee_id)
+            self._identity.set_admin(caller, member_id, asked.admin)
+            self._audit.record(ADMIN_GRANTED if asked.admin else ADMIN_REVOKED, member=member, target=member_id)
 
         return self._run_on_member(request, change)
 
     def _hand_over_ownership(self, request: Request) -> Response:
-        def hand_over(member: Member, caller: Caller, employee_id: str) -> None:
-            self._identity.hand_over_ownership(caller, employee_id)
-            self._audit.record(OWNERSHIP_HANDED_OVER, member=member, target=employee_id)
+        def hand_over(member: Member, caller: Caller, member_id: str) -> None:
+            self._identity.hand_over_ownership(caller, member_id)
+            self._audit.record(OWNERSHIP_HANDED_OVER, member=member, target=member_id)
 
         return self._run_on_member(request, hand_over)
 
@@ -580,7 +580,7 @@ class ConsoleApi:
         if member is None:
             return _sign_in_first()
         try:
-            change(member, self._identity.caller_in(member, None), request.path_params["employee_id"])
+            change(member, self._identity.caller_in(member, None), request.path_params["member_id"])
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         return self._team(member)
@@ -601,16 +601,16 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        employee_id = request.path_params["employee_id"]
+        member_id = request.path_params["member_id"]
         try:
-            token = self._identity.reissue_token(self._identity.caller_in(member, None), employee_id)
+            token = self._identity.reissue_token(self._identity.caller_in(member, None), member_id)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        self._audit.record(TOKEN_ISSUED, member=member, target=employee_id, detail={"for": employee_id})
-        return self._issued(request, employee_id, token)
+        self._audit.record(TOKEN_ISSUED, member=member, target=member_id, detail={"for": member_id})
+        return self._issued(request, member_id, token)
 
-    def _issued(self, request: Request, employee_id: str, token: str) -> Response:
-        issued = IssuedToken(employee_id=employee_id, personal_token=token, server_url=self._server_url(request))
+    def _issued(self, request: Request, member_id: str, token: str) -> Response:
+        issued = IssuedToken(member_id=member_id, personal_token=token, server_url=self._server_url(request))
         return JSONResponse(issued.model_dump(mode="json"))
 
     def _server_url(self, request: Request) -> str:
@@ -661,7 +661,7 @@ class ConsoleApi:
             member=None
             if member is None
             else SignedInMember(
-                employee_id=member.member_id,
+                member_id=member.member_id,
                 name=member.name,
                 team=member.team_code,
                 role=member.role,  # type: ignore[arg-type]

@@ -7,7 +7,7 @@ test("an admin creates a project, appoints a lead, and that lead sees it as thei
 
   // The member who will lead the new project.
   await page.getByTestId("to-team").click();
-  await page.getByTestId("new-employee-id").fill("emp-lead");
+  await page.getByTestId("new-member-id").fill("emp-lead");
   await page.getByTestId("new-name").fill("Lee Lead");
   await page.getByTestId("new-github").fill("lee-lead");
   await page.getByTestId("add-member").click();

@@ -187,7 +187,7 @@ function Line({ memory, me }: { memory: FileEntry; me: SignedInMember }) {
         <span className="leader" aria-hidden />
         <span className="line-figures">
           <span>{typeName(memory.type)}</span>
-          <span>{memory.author === me.employee_id ? "you" : memory.author_name}</span>
+          <span>{memory.author === me.member_id ? "you" : memory.author_name}</span>
           {memory.changed && <span>{day(memory.changed)}</span>}
         </span>
       </div>

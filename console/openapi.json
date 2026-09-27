@@ -193,7 +193,7 @@
         }
       }
     },
-    "/api/projects/{project_id}/leads/{employee_id}/remove": {
+    "/api/projects/{project_id}/leads/{member_id}/remove": {
       "post": {
         "operationId": "remove_lead",
         "summary": "Take a lead off this project.",
@@ -207,7 +207,7 @@
             }
           },
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -305,7 +305,7 @@
         }
       }
     },
-    "/api/projects/{project_id}/access/{employee_id}/remove": {
+    "/api/projects/{project_id}/access/{member_id}/remove": {
       "post": {
         "operationId": "revoke_access",
         "summary": "Take a member off a project's access list.",
@@ -319,7 +319,7 @@
             }
           },
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -883,13 +883,13 @@
         }
       }
     },
-    "/api/members/{employee_id}/remove": {
+    "/api/members/{member_id}/remove": {
       "post": {
         "operationId": "remove_member",
         "summary": "Remove a member: their sessions end and their personal token stops working.",
         "parameters": [
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -911,13 +911,13 @@
         }
       }
     },
-    "/api/members/{employee_id}/change": {
+    "/api/members/{member_id}/change": {
       "post": {
         "operationId": "change_member",
         "summary": "Correct a member's name or the GitHub account they sign in with.",
         "parameters": [
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -949,13 +949,13 @@
         }
       }
     },
-    "/api/members/{employee_id}/admin": {
+    "/api/members/{member_id}/admin": {
       "post": {
         "operationId": "set_admin",
         "summary": "Grant admin to a member, or take it away.",
         "parameters": [
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -987,13 +987,13 @@
         }
       }
     },
-    "/api/members/{employee_id}/ownership": {
+    "/api/members/{member_id}/ownership": {
       "post": {
         "operationId": "hand_over_ownership",
         "summary": "Make another member the team's owner.",
         "parameters": [
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -1033,13 +1033,13 @@
         }
       }
     },
-    "/api/members/{employee_id}/token": {
+    "/api/members/{member_id}/token": {
       "post": {
         "operationId": "reissue_token",
         "summary": "Issue a new personal token for a member of the team, revoking the one they had.",
         "parameters": [
           {
-            "name": "employee_id",
+            "name": "member_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -1085,8 +1085,8 @@
       "SignedInMember": {
         "description": "Who the console is signed in as.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           },
           "name": {
@@ -1112,7 +1112,7 @@
           }
         },
         "required": [
-          "employee_id",
+          "member_id",
           "name",
           "team",
           "role",
@@ -1154,8 +1154,8 @@
       "ProjectMember": {
         "description": "A member named on a project.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           },
           "name": {
@@ -1164,7 +1164,7 @@
           }
         },
         "required": [
-          "employee_id",
+          "member_id",
           "name"
         ],
         "title": "ProjectMember",
@@ -1367,13 +1367,13 @@
       "Appointment": {
         "description": "The member being made a lead of this project.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           }
         },
         "required": [
-          "employee_id"
+          "member_id"
         ],
         "title": "Appointment",
         "type": "object"
@@ -1395,13 +1395,13 @@
       "AccessChange": {
         "description": "The member being let into this project.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           }
         },
         "required": [
-          "employee_id"
+          "member_id"
         ],
         "title": "AccessChange",
         "type": "object"
@@ -2577,8 +2577,8 @@
       "MemberSummary": {
         "description": "One member of the team, as an admin sees them.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           },
           "name": {
@@ -2611,7 +2611,7 @@
           }
         },
         "required": [
-          "employee_id",
+          "member_id",
           "name",
           "role",
           "github_login",
@@ -2639,8 +2639,8 @@
       "IssuedToken": {
         "description": "A personal token, shown the once. The console never shows it again.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           },
           "personal_token": {
@@ -2653,7 +2653,7 @@
           }
         },
         "required": [
-          "employee_id",
+          "member_id",
           "personal_token",
           "server_url"
         ],
@@ -2663,8 +2663,8 @@
       "NewMember": {
         "description": "A member being added to the team.",
         "properties": {
-          "employee_id": {
-            "title": "Employee Id",
+          "member_id": {
+            "title": "Member Id",
             "type": "string"
           },
           "name": {
@@ -2685,7 +2685,7 @@
           }
         },
         "required": [
-          "employee_id",
+          "member_id",
           "name"
         ],
         "title": "NewMember",

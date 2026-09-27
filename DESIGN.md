@@ -287,7 +287,7 @@ A neutral register: white, three near-greys and near-black ink, with one green a
 - **Control** (600, 0.005em): button text.
 - **Meta** (400, 0.875rem, tabular figures, third ink): dates, counts, authors, trails, currency lines.
 - **Label** (italic 400, 0.875rem, third or second ink): margin terms, register column heads, form labels, filter names. Never uppercase, never tracked.
-- **Mono** (Source Code Pro, 0.8125rem; 0.875rem in the source view): paths, citation stamps, employee ids, settings blocks.
+- **Mono** (Source Code Pro, 0.8125rem; 0.875rem in the source view): paths, citation stamps, member ids, settings blocks.
 
 ### Named Rules
 **The Two Voices Rule.** Charis SIL carries a memory's own words: its text, its summary, and its name wherever it is listed. Cooper Hewitt carries everything else: titles, labels, controls, metadata and tables.

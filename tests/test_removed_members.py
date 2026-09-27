@@ -28,7 +28,7 @@ def test_challenges_against_a_removed_members_memory_can_be_decided_at_once(team
     target = promote_now(dana, NPM)
     raised = challenge(cole, PNPM, target)
 
-    team.owner().call("remove_member", employee_id="emp-2")
+    team.owner().call("remove_member", member_id="emp-2")
     decided = team.owner().in_project(cole.project or "").call(
         "decide_challenge", challenge_id=raised["challenge_id"], decision="reject"
     )
@@ -41,7 +41,7 @@ def test_a_removed_members_challenge_stays_open_and_can_be_accepted(team: Team, 
     target = promote_now(owner, NPM)
     raised = challenge(dana, PNPM, target)
 
-    team.owner().call("remove_member", employee_id="emp-2")
+    team.owner().call("remove_member", member_id="emp-2")
     still_open = owner.call("read", path=target)["open_challenges"]
     accepted = owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
 
@@ -51,7 +51,7 @@ def test_a_removed_members_challenge_stays_open_and_can_be_accepted(team: Team, 
 
 def test_any_member_can_promote_a_removed_members_personal_memory(team: Team, dana: Session, cole: Session) -> None:
     danas = dana.call("remember", **PNPM)["path"]
-    team.owner().call("remove_member", employee_id="emp-2")
+    team.owner().call("remove_member", member_id="emp-2")
 
     result = cole.call("promote", path=danas, level="project")
     promoted = cole.call("read", path=result["path"])
@@ -70,7 +70,7 @@ def test_promoted_by_is_kept_when_promoting_a_removed_members_memory_raises_a_ch
 ) -> None:
     target = promote_now(owner, NPM)
     danas = dana.call("remember", **PNPM)["path"]
-    team.owner().call("remove_member", employee_id="emp-2")
+    team.owner().call("remove_member", member_id="emp-2")
     first = cole.call("promote", path=danas, level="project")
     raised = cole.call(
         "promote",

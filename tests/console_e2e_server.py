@@ -41,7 +41,7 @@ if __name__ == "__main__":
         )
         server = RunningServer(build_app(settings, clock=TestClock()), settings, TestClock(), portal, port=PORT)
         printed = server.run_cli(
-            "setup", "--team", "acme", "--owner-employee-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
         token = next(
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         )
         challenged = in_project.call("promote", path=staging["path"], level="project")["path"]
         dana_token = owner.call(
-            "add_member", employee_id="emp-dana", name="Raj Raiser", github="dana"
+            "add_member", member_id="emp-dana", name="Raj Raiser", github="dana"
         )["personal_token"]
         dana = Session(server, dana_token).in_project(project, "billing-api")
         offered = dana.call(
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         # as a list, which is the shape `whatChanges` can summarise — of prose it has nothing honest to say.
         mira = Session(
             server,
-            owner.call("add_member", employee_id="emp-mira", name="Mira Maker", github="mira")["personal_token"],
+            owner.call("add_member", member_id="emp-mira", name="Mira Maker", github="mira")["personal_token"],
         ).in_project(project, "billing-api")
         stack = promote_keeping_both(
             mira,

@@ -22,8 +22,8 @@ import { useAsked } from "../lib/useAsked";
 export function Challenges() {
   const { answer, refused, reload } = useAsked((signal) => fetchChallenges(signal), []);
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
-  const names = new Map((team?.members ?? []).map((one) => [one.employee_id, one.name]));
-  const who = (employeeId: string) => (names.get(employeeId) ? `${names.get(employeeId)} (${employeeId})` : employeeId);
+  const names = new Map((team?.members ?? []).map((one) => [one.member_id, one.name]));
+  const who = (memberId: string) => (names.get(memberId) ? `${names.get(memberId)} (${memberId})` : memberId);
 
   return (
     <div className="medium">
@@ -58,7 +58,7 @@ function Waiting({
   onDecided,
 }: {
   waiting: ChallengeDetail[];
-  who: (employeeId: string) => string;
+  who: (memberId: string) => string;
   onDecided: () => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
@@ -125,7 +125,7 @@ function Proposal({
   onDecide,
 }: {
   challenge: ChallengeDetail;
-  who: (employeeId: string) => string;
+  who: (memberId: string) => string;
   marked: boolean;
   onDecide: (challengeId: number, decision: "accept" | "reject") => void;
 }) {
@@ -231,7 +231,7 @@ const STATES: Record<string, string> = {
   withdrawn: "Withdrawn",
 };
 
-function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (employeeId: string) => string }) {
+function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: string) => string }) {
   return (
     <>
       <h2 className="section-heading">Challenges you raised</h2>

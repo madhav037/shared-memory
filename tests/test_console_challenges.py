@@ -45,8 +45,8 @@ def decide(client: ConsoleClient, challenge_id: int, decision: str) -> Any:
     return client.post_json(f"/api/challenges/{challenge_id}/decide", {"decision": decision})
 
 
-def a_member(console: Console, owner_client: ConsoleClient, employee_id: str, github: str, account: int) -> ConsoleClient:
-    add(owner_client, employee_id, f"Dana {employee_id}", github)
+def a_member(console: Console, owner_client: ConsoleClient, member_id: str, github: str, account: int) -> ConsoleClient:
+    add(owner_client, member_id, f"Dana {member_id}", github)
     client = console.client()
     console.github.as_(account, github)
     client.sign_in()

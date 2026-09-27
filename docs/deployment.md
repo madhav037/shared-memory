@@ -39,7 +39,7 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
 5. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
 
    ```bash
-   docker compose exec server shared-memory setup --team acme --owner-employee-id E1001 --owner-name "Olive Owner" --owner-github olive
+   docker compose exec server shared-memory setup --team acme --owner-member-id E1001 --owner-name "Olive Owner" --owner-github olive
    ```
 
 6. Check HTTPS works. This should print `200`:
@@ -74,7 +74,7 @@ The console is served at the domain by the same Caddy that fronts the server, so
 3. Link each member's GitHub account, so they can sign in. The owner's was linked by `setup --owner-github`:
 
    ```bash
-   docker compose exec server shared-memory link-github --team acme --employee-id E1042 --github dana
+   docker compose exec server shared-memory link-github --team acme --member-id E1042 --github dana
    ```
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.

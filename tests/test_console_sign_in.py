@@ -17,7 +17,7 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
         "signed_in": True,
         "github_sign_in": True,
         "member": {
-            "employee_id": "E1001",
+            "member_id": "E1001",
             "name": "Olive Owner",
             "team": team,
             "role": "owner",
@@ -38,9 +38,9 @@ def test_a_github_account_nobody_has_linked_is_refused(console: Console, signed_
 
 def test_a_removed_member_can_no_longer_sign_in(console: Console, signed_out: ConsoleClient) -> None:
     team, owner_token = console.a_team("olive-three")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "dana-three")
-    Session(console.server, owner_token).call("remove_member", employee_id="emp-2")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
+    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-three")
+    Session(console.server, owner_token).call("remove_member", member_id="emp-2")
     console.github.as_(103, "dana-three")
 
     landed = signed_out.sign_in()
@@ -58,15 +58,15 @@ def test_a_renamed_github_account_still_signs_in(console: Console, signed_out: C
     console.github.as_(104, "olive-four-renamed")
     signed_out.sign_in()
 
-    assert signed_out.status()["member"]["employee_id"] == "E1001"
+    assert signed_out.status()["member"]["member_id"] == "E1001"
 
 
 def test_one_github_account_cannot_belong_to_two_members(console: Console) -> None:
     team, owner_token = console.a_team("olive-five")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
 
     with pytest.raises(RuntimeError, match="already linked to 'E1001'"):
-        console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "olive-five")
+        console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "olive-five")
 
 
 def test_signing_out_ends_the_session(console: Console, signed_out: ConsoleClient) -> None:
@@ -102,13 +102,13 @@ def test_a_session_expires_after_a_day_without_use(console: Console, signed_out:
 
 def test_a_session_ends_when_the_member_is_removed(console: Console, signed_out: ConsoleClient) -> None:
     team, owner_token = console.a_team("olive-nine")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "dana-nine")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
+    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-nine")
     console.github.as_(109, "dana-nine")
     signed_out.sign_in()
     assert signed_out.status()["signed_in"] is True
 
-    Session(console.server, owner_token).call("remove_member", employee_id="emp-2")
+    Session(console.server, owner_token).call("remove_member", member_id="emp-2")
 
     assert signed_out.status()["signed_in"] is False
 

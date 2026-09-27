@@ -17,7 +17,7 @@ def promote(session: Session, title: str, body: str, level: str = "project", top
 def test_a_new_members_first_session_is_briefed_with_pinned_memory(team: Team, project: str, owner: Session) -> None:
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
-    added = team.owner().call("add_member", employee_id="emp-9", name="New Member")
+    added = team.owner().call("add_member", member_id="emp-9", name="New Member")
     newcomer = Session(team.server, added["personal_token"], project, "billing-api")
 
     output = newcomer.start()

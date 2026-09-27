@@ -23,14 +23,14 @@ def test_an_admin_sees_everyone_with_their_role_and_github_account(
 
     assert members(signed_out) == [
         {
-            "employee_id": "E1001",
+            "member_id": "E1001",
             "name": "Olive Owner",
             "role": "owner",
             "github_login": "olive-members-one",
             "removed": False,
         },
         {
-            "employee_id": "emp-2",
+            "member_id": "emp-2",
             "name": "Dana Dev",
             "role": "member",
             "github_login": "dana-members-one",
@@ -44,7 +44,7 @@ def test_adding_a_member_shows_their_token_once(console: Console, signed_out: Co
 
     added = add(signed_out, "emp-2", "Dana Dev")
 
-    assert added["employee_id"] == "emp-2"
+    assert added["member_id"] == "emp-2"
     assert added["personal_token"].startswith("smt_")
     Session(console.server, added["personal_token"]).call("create_project", name="Dana's check")
     assert added["personal_token"] not in str(members(signed_out))
@@ -63,7 +63,7 @@ def test_removing_a_member_ends_their_sessions_and_their_token(console: Console,
     signed_out.post("/api/members/emp-2/remove")
 
     assert dana.status()["signed_in"] is False
-    assert [one["removed"] for one in members(signed_out) if one["employee_id"] == "emp-2"] == [True]
+    assert [one["removed"] for one in members(signed_out) if one["member_id"] == "emp-2"] == [True]
     try:
         Session(console.server, added["personal_token"]).call("create_project", name="After removal")
         raise AssertionError("the removed member's token still works")
@@ -78,10 +78,10 @@ def test_an_admin_corrects_a_name_and_a_github_account(console: Console, signed_
 
     signed_out.post_json("/api/members/emp-2/change", {"name": "Dana Developer", "github": "dana-renamed-four"})
 
-    corrected = [one for one in members(signed_out) if one["employee_id"] == "emp-2"]
+    corrected = [one for one in members(signed_out) if one["member_id"] == "emp-2"]
     assert corrected == [
         {
-            "employee_id": "emp-2",
+            "member_id": "emp-2",
             "name": "Dana Developer",
             "role": "member",
             "github_login": "dana-renamed-four",
@@ -95,9 +95,9 @@ def test_the_owner_grants_admin_and_takes_it_away(console: Console, signed_out: 
     add(signed_out, "emp-2", "Dana Dev")
 
     signed_out.post_json("/api/members/emp-2/admin", {"admin": True})
-    granted = [one["role"] for one in members(signed_out) if one["employee_id"] == "emp-2"]
+    granted = [one["role"] for one in members(signed_out) if one["member_id"] == "emp-2"]
     signed_out.post_json("/api/members/emp-2/admin", {"admin": False})
-    taken_away = [one["role"] for one in members(signed_out) if one["employee_id"] == "emp-2"]
+    taken_away = [one["role"] for one in members(signed_out) if one["member_id"] == "emp-2"]
 
     assert granted == ["admin"]
     assert taken_away == ["member"]
@@ -114,7 +114,7 @@ def test_an_admin_can_manage_members_but_not_admins(console: Console, signed_out
     console.github.as_(608, "ash-members-six")
     ash.sign_in()
 
-    added_by_admin = ash.post_json("/api/members", {"employee_id": "emp-4", "name": "New Person"})
+    added_by_admin = ash.post_json("/api/members", {"member_id": "emp-4", "name": "New Person"})
     removing_a_member = ash.post("/api/members/emp-2/remove")
     removing_the_owner = ash.post("/api/members/E1001/remove")
     granting_admin = ash.post_json("/api/members/emp-2/admin", {"admin": True})
@@ -153,7 +153,7 @@ def test_ownership_is_handed_over(console: Console, signed_out: ConsoleClient) -
 
     signed_out.post("/api/members/emp-2/ownership")
 
-    roles = {one["employee_id"]: one["role"] for one in members(signed_out)}
+    roles = {one["member_id"]: one["role"] for one in members(signed_out)}
     assert roles == {"E1001": "admin", "emp-2": "owner"}
     assert signed_out.status()["member"]["role"] == "admin"
 
@@ -167,7 +167,7 @@ def test_a_plain_member_cannot_run_the_team(console: Console, signed_out: Consol
     console.github.as_(613, "dana-members-nine")
     dana.sign_in()
 
-    adding = dana.post_json("/api/members", {"employee_id": "emp-9", "name": "Nine"})
+    adding = dana.post_json("/api/members", {"member_id": "emp-9", "name": "Nine"})
     removing = dana.post("/api/members/E1001/remove")
 
     assert adding.status_code == 403
@@ -203,7 +203,7 @@ def test_an_admin_can_use_the_owners_memory_tools_in_claude(console: Console, si
     signed_out.post_json("/api/members/emp-2/admin", {"admin": True})
     ash = Session(console.server, added["personal_token"])
 
-    invited = ash.call("add_member", employee_id="emp-3", name="New Person", github="new-person-eleven")
+    invited = ash.call("add_member", member_id="emp-3", name="New Person", github="new-person-eleven")
 
-    assert invited["employee_id"] == "emp-3"
-    assert "owner" in ash.refusal("remove_member", employee_id="E1001")
+    assert invited["member_id"] == "emp-3"
+    assert "owner" in ash.refusal("remove_member", member_id="E1001")

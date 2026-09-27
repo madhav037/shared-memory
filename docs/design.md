@@ -184,7 +184,7 @@ flowchart TD
 
 ## 8. Identity and access
 
-- **Joining (v1):** the owner creates a member's account (team ID + employee ID + name), and the server issues that member's **personal token**, shown once.
+- **Joining (v1):** the owner creates a member's account (team ID + member ID + name), and the server issues that member's **personal token**, shown once.
   - *Later:* members of the GitHub organization join by logging in with GitHub, and leaving the organization revokes access within an hour.
   - *When selling:* company SSO.
 - **Owner:** the one role. The owner adds and removes members and revokes tokens.

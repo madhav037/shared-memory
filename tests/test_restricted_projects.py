@@ -39,7 +39,7 @@ def test_a_lead_restricts_a_project_and_the_allowed_still_reach_it(
     it = restricted(console, signed_out, "olive-closed-one", 801)
 
     for_the_owner = it.owner.in_project(it.billing, "billing-api").call("tree")
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
     for_dana = it.dana.in_project(it.billing, "billing-api").call("tree")
 
     assert for_the_owner == {"folders": []}
@@ -95,7 +95,7 @@ def test_a_session_gets_no_briefing_and_no_recall_and_is_told_why(console: Conso
 
 def test_losing_access_takes_effect_on_the_next_call(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-five", 806)
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
     while_allowed = it.dana.in_project(it.billing, "billing-api").call("tree")
 
     signed_out.post(f"/api/projects/{it.billing}/access/emp-2/remove")
@@ -107,14 +107,14 @@ def test_losing_access_takes_effect_on_the_next_call(console: Console, signed_ou
 
 def test_unrestricting_keeps_the_access_list_for_next_time(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-six", 807)
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
 
     opened = signed_out.post_json(f"/api/projects/{it.billing}/restrict", {"restricted": False})
     closed_again = signed_out.post_json(f"/api/projects/{it.billing}/restrict", {"restricted": True})
 
     assert opened.json()["restricted"] is False
-    assert [one["employee_id"] for one in opened.json()["access"]] == ["emp-2"]
-    assert [one["employee_id"] for one in closed_again.json()["access"]] == ["emp-2"]
+    assert [one["member_id"] for one in opened.json()["access"]] == ["emp-2"]
+    assert [one["member_id"] for one in closed_again.json()["access"]] == ["emp-2"]
     assert it.dana.in_project(it.billing, "billing-api").call("tree") == {"folders": []}
 
 
@@ -135,11 +135,11 @@ def test_a_member_who_does_not_lead_the_project_cannot_restrict_it(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     it = restricted(console, signed_out, "olive-closed-eight", 809)
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
     dana = signed_in(console, "dana-olive-closed-eight", 810)
 
     opening_it = dana.post_json(f"/api/projects/{it.billing}/restrict", {"restricted": False})
-    letting_someone_in = dana.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "E1001"})
+    letting_someone_in = dana.post_json(f"/api/projects/{it.billing}/access", {"member_id": "E1001"})
 
     assert opening_it.status_code == 403
     assert "leads and the team's admins" in opening_it.json()["message"]
@@ -152,14 +152,14 @@ def test_a_project_lead_manages_the_access_list_of_their_own_project(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     it = restricted(console, signed_out, "olive-closed-nine", 811)
-    signed_out.post_json(f"/api/projects/{it.billing}/leads", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/leads", {"member_id": "emp-2"})
     dana = signed_in(console, "dana-olive-closed-nine", 812)
     add(signed_out, "emp-3", "Ash Dev", "ash-closed-nine")
 
-    let_in = dana.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-3"})
+    let_in = dana.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-3"})
     opened = dana.post_json(f"/api/projects/{it.billing}/restrict", {"restricted": False})
 
-    assert [one["employee_id"] for one in let_in.json()["access"]] == ["emp-3"]
+    assert [one["member_id"] for one in let_in.json()["access"]] == ["emp-3"]
     assert opened.json()["restricted"] is False
     dana.close()
 
@@ -167,7 +167,7 @@ def test_a_project_lead_manages_the_access_list_of_their_own_project(
 def test_every_change_to_a_projects_access_is_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-ten", 813)
 
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
     signed_out.post(f"/api/projects/{it.billing}/access/emp-2/remove")
     signed_out.post_json(f"/api/projects/{it.billing}/restrict", {"restricted": False})
 
@@ -184,7 +184,7 @@ def test_every_change_to_a_projects_access_is_in_the_audit_log(console: Console,
 
 def test_a_briefing_still_reaches_a_member_who_is_allowed_in(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-eleven", 814)
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
     in_billing = it.owner.in_project(it.billing, "billing-api")
     saved = remembered(in_billing, "Staging resets nightly", "The staging database is wiped every night.")
     promoted = in_billing.call("promote", path=saved["path"], level="project")
@@ -260,7 +260,7 @@ def test_a_challenge_in_a_restricted_project_cant_be_decided_from_outside_it(
         level="project",
     )["path"]
     ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev", "ash-closed-fourteen")["personal_token"])
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-3"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-3"})
     ash_in_billing = ash.in_project(it.billing, "billing-api")
     offered = remembered(ash_in_billing, "Staging resets at 02:17 UTC", "The staging database is wiped at 02:17 UTC.")
     similar = ash_in_billing.call("promote", path=offered["path"], level="project")
@@ -286,7 +286,7 @@ def test_someone_allowed_in_still_reaches_it_by_path_from_another_project(
     it = restricted(console, signed_out, "olive-closed-fifteen", 819)
     payments = create(signed_out, "Payments")["project_id"]
     secret = a_secret_in(it)
-    signed_out.post_json(f"/api/projects/{it.billing}/access", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{it.billing}/access", {"member_id": "emp-2"})
 
     read = it.dana.in_project(payments, "payments-api").call("read", path=secret)
 
