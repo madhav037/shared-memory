@@ -176,7 +176,7 @@ function Proposal({
           )}
         </div>
       )}
-      <div className="facing">
+      <div className="facing" data-testid="facing">
         <div>
           <Link className="title" to={memoryUrl(challenge.target.path)}>
             {challenge.target.title}

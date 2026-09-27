@@ -14,15 +14,13 @@ test("the owner decides a challenge waiting for them and the memory is supersede
   await page.getByTestId("decide-them").click();
   const dispute = page.getByTestId("waiting");
 
-  // Raj said why he is asking. His Reasoning comes first, above what accepting would change, exactly as he
-  // wrote it: plain text, so the asterisks stay asterisks.
   const reasoning = dispute.getByTestId("reasoning");
   await expect(reasoning).toContainText("Reasoning");
   await expect(reasoning.getByTestId("reasoning-text")).toHaveText(
     "The reset moved to 02:17 UTC when the nightly backup took *midnight*.",
   );
   await expect(reasoning.locator("em, strong")).toHaveCount(0);
-  await expect(dispute.locator('[data-testid="reasoning"] ~ .facing')).toHaveCount(1);
+  await expect(dispute.locator('[data-testid="reasoning"] ~ [data-testid="facing"]')).toHaveCount(1);
 
   // An offer is shown in its own words. Marking up what it takes out and puts in is there for whoever wants it.
   await expect(dispute.getByTestId("tracked")).toHaveCount(0);

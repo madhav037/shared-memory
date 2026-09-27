@@ -286,7 +286,8 @@ class Challenges:
             lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
             for c in (c for c in challenges if c.target_path == target_path):
                 if c.challenger_path is None:
-                    line = f"- Challenge {c.id} by {c.raised_by}: retire it."
+                    line = f"- Challenge {c.id} by {c.raised_by}: retire it"
+                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 else:
                     try:
                         challenger = self._store.read(caller.team, PurePosixPath(c.challenger_path))
@@ -294,8 +295,8 @@ class Challenges:
                     except Refused:
                         replacement = c.challenger_path
                     line = f"- Challenge {c.id} by {c.raised_by}: supersede it with {replacement}"
-                if c.reasoning:
-                    line += f" — reasoning: {c.reasoning}"
+                    if c.reasoning:
+                        line += f" — reasoning: {c.reasoning}"
                 lines.append(line)
         lines.append(
             "Show these to the member and record their decision with decide_challenge (accept or reject). "

@@ -28,4 +28,9 @@ test("retiring a memory someone else wrote asks its author instead", async ({ pa
   await expect(page.getByTestId("open-challenges")).toContainText("Olive Owner wants to retire it");
   await expect(page.getByTestId("open-challenges")).toContainText("Until Raj Raiser decides, it stands as it is");
   await expect(page.getByTestId("retired-banner")).toHaveCount(0);
+
+  await signInAs(page, 2, "dana");
+  await page.getByTestId("to-challenges").click();
+  await expect(page.getByTestId("waiting")).toContainText("Olive Owner wants to retire it");
+  await expect(page.getByTestId("waiting").getByTestId("reasoning")).toHaveCount(0);
 });

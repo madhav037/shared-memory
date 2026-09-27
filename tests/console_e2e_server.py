@@ -15,10 +15,10 @@ from tests.support import (
     RunningServer,
     Session,
     TestClock,
+    challenge,
     fresh_database,
     promote_keeping_both,
     promote_now,
-    promote_superseding,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -130,7 +130,7 @@ if __name__ == "__main__":
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: RabbitMQ",
             },
         )
-        promote_superseding(
+        challenge(
             in_project,
             {
                 "title": "How Billing is built now",
@@ -139,6 +139,7 @@ if __name__ == "__main__":
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: Kafka",
             },
             stack,
+            reasoning="Billing moved its queue to Kafka in March.",
         )
         # Two memories filed under a topic, so the journeys have a topic folder to pin. A topic is a folder
         # inside a type folder, which the type folder itself is not: pinning one puts everything filed under

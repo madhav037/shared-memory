@@ -38,15 +38,17 @@ def test_a_challengers_reasoning_is_folded_into_the_authors_briefing_and_prompt(
         assert "pnpm is now standard; npm creates a second lockfile." in context
 
 
-def test_omitting_reasoning_leaves_the_supersede_notice_exactly_as_before(owner: Session, dana: Session) -> None:
+def test_a_supersede_challenge_raised_without_reasoning_carries_no_reasoning(owner: Session, dana: Session) -> None:
     target = promote_now(owner, NPM)
 
     raised = challenge(dana, PNPM, target)
 
     briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
 
-    assert f"- Challenge {raised['challenge_id']} by emp-2: supersede it with" in briefing
-    assert "reasoning" not in briefing.lower()
+    for context in (briefing, prompt):
+        assert f"- Challenge {raised['challenge_id']} by emp-2: supersede it with" in context
+        assert "reasoning" not in context.lower()
 
 
 def test_the_author_sees_the_challenge_in_their_briefing_and_next_prompt(owner: Session, dana: Session) -> None:

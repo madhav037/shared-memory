@@ -230,21 +230,23 @@ def a_challenger(
     return dana_console, Session(console.server, token).in_project(project, "billing-api")
 
 
-def a_reasoned_challenge(
-    console: Console, owner_client: ConsoleClient, github: str, account: int
-) -> tuple[ConsoleClient, int]:
-    """Dana offers npm in place of the owner's pnpm memory, saying why."""
+def danas_challenge(
+    console: Console, owner_client: ConsoleClient, github: str, account: int, reasoning: str | None = None
+) -> tuple[ConsoleClient, int, str]:
+    """Dana offers npm in place of the owner's pnpm memory in Billing, saying why when given reasoning."""
     owner, project, in_project = a_team(console, owner_client, f"olive-{github}", account)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console, dana = a_challenger(console, owner_client, project, github, account + 1)
     challenge_id = a_supersede_challenge(
-        dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."), reasoning="CI only has npm."
+        dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."), reasoning=reasoning
     )
-    return dana_console, challenge_id
+    return dana_console, challenge_id, project
 
 
 def test_a_challenges_reasoning_is_shown_to_whoever_decides_it(console: Console, signed_out: ConsoleClient) -> None:
-    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-waiting", 1150)
+    dana_console, challenge_id, _ = danas_challenge(
+        console, signed_out, "dana-reasoning-waiting", 1150, reasoning="CI only has npm."
+    )
 
     waiting = challenges(signed_out)["waiting"]
 
@@ -255,7 +257,9 @@ def test_a_challenges_reasoning_is_shown_to_whoever_decides_it(console: Console,
 def test_a_member_sees_their_own_reasoning_on_a_challenge_they_raised(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-raised", 1152)
+    dana_console, challenge_id, _ = danas_challenge(
+        console, signed_out, "dana-reasoning-raised", 1152, reasoning="CI only has npm."
+    )
 
     raised = challenges(dana_console)["raised"]
 
@@ -264,10 +268,7 @@ def test_a_member_sees_their_own_reasoning_on_a_challenge_they_raised(
 
 
 def test_a_challenge_raised_without_reasoning_has_none(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-none", 1154)
-    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
-    dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-none", 1155)
-    a_supersede_challenge(dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."))
+    dana_console, _, _ = danas_challenge(console, signed_out, "dana-reasoning-none", 1154)
 
     assert [one["reasoning"] for one in challenges(signed_out)["waiting"]] == [None]
     assert [one["reasoning"] for one in challenges(dana_console)["raised"]] == [None]
@@ -275,7 +276,9 @@ def test_a_challenge_raised_without_reasoning_has_none(console: Console, signed_
 
 
 def test_a_challenges_reasoning_survives_being_accepted(console: Console, signed_out: ConsoleClient) -> None:
-    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-accepted", 1156)
+    dana_console, challenge_id, _ = danas_challenge(
+        console, signed_out, "dana-reasoning-accepted", 1156, reasoning="CI only has npm."
+    )
 
     decide(signed_out, challenge_id, "accept")
 
@@ -285,7 +288,9 @@ def test_a_challenges_reasoning_survives_being_accepted(console: Console, signed
 
 
 def test_a_challenges_reasoning_survives_being_rejected(console: Console, signed_out: ConsoleClient) -> None:
-    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-rejected", 1158)
+    dana_console, challenge_id, _ = danas_challenge(
+        console, signed_out, "dana-reasoning-rejected", 1158, reasoning="CI only has npm."
+    )
 
     decide(signed_out, challenge_id, "reject")
 
@@ -297,14 +302,11 @@ def test_a_challenges_reasoning_survives_being_rejected(console: Console, signed
 def test_a_challenges_reasoning_survives_being_closed_by_another_challenges_acceptance(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-closed", 1160)
-    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
-    dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-closed", 1161)
+    dana_console, _, project = danas_challenge(
+        console, signed_out, "dana-reasoning-closed", 1160, reasoning="CI only has npm."
+    )
     ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev")["personal_token"]).in_project(
         project, "billing-api"
-    )
-    a_supersede_challenge(
-        dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."), reasoning="CI only has npm."
     )
     ashs = a_supersede_challenge(
         ash, remember(ash, "Use yarn, not pnpm", "We use yarn for every package."), reasoning="yarn is faster."

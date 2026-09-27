@@ -29,8 +29,8 @@ test("a member reads what a challenge would change and rejects it, and the memor
   await expect(changes).toContainText("RabbitMQ");
   await expect(changes).toContainText("Kafka");
   await expect(changes).toContainText("Unchanged: Language, Database.");
-  // Olive gave no Reasoning, so there is none shown, and nothing said about its absence.
-  await expect(page.getByTestId("reasoning")).toHaveCount(0);
+  await expect(page.getByTestId("reasoning-text")).toHaveText("Billing moved its queue to Kafka in March.");
+  await expect(page.locator('[data-testid="reasoning"] ~ [data-testid="what-changes"]')).toHaveCount(1);
 
   await page.getByRole("button", { name: "Reject: keep it as it is" }).click();
   await expect(page.getByTestId("nothing-waiting")).toBeVisible();

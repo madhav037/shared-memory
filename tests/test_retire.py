@@ -62,19 +62,23 @@ def test_a_retire_challenges_reasoning_is_folded_into_the_authors_briefing_and_p
     prompt = added_context(owner.prompt("write a haiku about cats"))
 
     for context in (briefing, prompt):
-        assert f"Challenge {raised['challenge_id']} by emp-2: retire it" in context
-        assert "We stopped retrying failed charges last quarter." in context
+        assert (
+            f"Challenge {raised['challenge_id']} by emp-2: retire it — reasoning: "
+            "We stopped retrying failed charges last quarter." in context
+        )
 
 
-def test_omitting_reasoning_leaves_the_retire_notice_exactly_as_before(owner: Session, dana: Session) -> None:
+def test_a_retire_challenge_raised_without_reasoning_carries_no_reasoning(owner: Session, dana: Session) -> None:
     path = promote_now(owner, RETRIES)
 
     raised = dana.call("retire", path=path)
 
     briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
 
-    assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in briefing
-    assert "reasoning" not in briefing.lower()
+    for context in (briefing, prompt):
+        assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in context
+        assert "reasoning" not in context.lower()
 
 
 def test_accepting_a_retire_challenge_retires_the_memory(owner: Session, dana: Session) -> None:

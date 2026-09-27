@@ -331,7 +331,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         """Mark a project or team memory as no longer true, with nothing superseding it.
 
         Your own memory is retired at once. Retiring another author's memory raises a challenge they decide;
-        pass reasoning for why you believe it's no longer true, so whoever decides it hears your argument.
+        pass reasoning for why you believe it's no longer true, so whoever decides it hears your reasoning.
         """
         return lifecycle.retire(caller(ctx), path, reasoning)
 
@@ -361,7 +361,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         them back with a reference. Judge whether each contradicts the memory being promoted, ask the member, then
         call promote again with the reference and resolutions mapping every similar memory's path to supersede,
         keep_both or cancel. Pass reasoning for why any memory resolved as supersede should give way to this one,
-        so whoever decides the resulting challenge hears your argument.
+        so whoever decides the resulting challenge hears your reasoning.
         """
         return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
 
