@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding
+from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding, reasoning_of
 
 
 RETRIES = {
@@ -49,6 +49,41 @@ def test_retiring_another_authors_memory_raises_a_retire_challenge(owner: Sessio
     assert raised["status"] == "challenge_raised"
     assert owner.call("read", path=path)["status"] == "active"
     assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in added_context(owner.start())
+
+
+def test_a_retire_challenges_reasoning_is_folded_into_the_authors_briefing_and_prompt(
+    owner: Session, dana: Session
+) -> None:
+    path = promote_now(owner, RETRIES)
+
+    raised = dana.call("retire", path=path, reasoning="We stopped retrying failed charges last quarter.")
+
+    briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
+
+    for context in (briefing, prompt):
+        assert f"Challenge {raised['challenge_id']} by emp-2: retire it" in context
+        assert "We stopped retrying failed charges last quarter." in context
+
+
+def test_omitting_reasoning_leaves_the_retire_notice_exactly_as_before(owner: Session, dana: Session) -> None:
+    path = promote_now(owner, RETRIES)
+
+    raised = dana.call("retire", path=path)
+
+    briefing = added_context(owner.start())
+
+    assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in briefing
+    assert "reasoning" not in briefing.lower()
+
+
+def test_a_retire_challenges_reasoning_survives_being_decided(owner: Session, dana: Session, team: Team) -> None:
+    path = promote_now(owner, RETRIES)
+    raised = dana.call("retire", path=path, reasoning="It's no longer true.")
+
+    owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
+
+    assert reasoning_of(team.server, raised["challenge_id"]) == "It's no longer true."
 
 
 def test_accepting_a_retire_challenge_retires_the_memory(owner: Session, dana: Session) -> None:

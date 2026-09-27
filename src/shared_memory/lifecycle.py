@@ -72,6 +72,7 @@ class Lifecycle:
         level: str,
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
+        reasoning: str | None = None,
     ) -> dict[str, Any]:
         project = caller.require_project()
         if level not in ("project", "team"):
@@ -167,8 +168,9 @@ class Lifecycle:
         self._forget(reference)
         if challenged is not None:
             challenge_id = self._challenges.raise_challenge(
-                caller, "supersede", challenged[0], challenged[1].author, str(location.path), target, promoted_by
-            )
+                caller, "supersede", challenged[0], challenged[1].author, str(location.path), target, promoted_by,
+                reasoning,
+            )  # fmt: skip
             return self._challenge_raised(challenge_id, challenged[0], challenged[1].author)
         result = self._move(
             caller, location, memory, target, supersede=supersede, exception_to=exception_to, promoted_by=promoted_by
@@ -226,7 +228,7 @@ class Lifecycle:
 
     # Retiring
 
-    def retire(self, caller: Caller, path: str) -> dict[str, Any]:
+    def retire(self, caller: Caller, path: str, reasoning: str | None = None) -> dict[str, Any]:
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
@@ -237,7 +239,7 @@ class Lifecycle:
             raise Refused(f"This memory is already {memory.status}.")
         if memory.author != caller.member_id:
             challenge_id = self._challenges.raise_challenge(
-                caller, "retire", str(location.path), memory.author, None, location.level
+                caller, "retire", str(location.path), memory.author, None, location.level, reasoning=reasoning
             )
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
         with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:

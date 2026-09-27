@@ -287,12 +287,12 @@ def promote_keeping_both(session: Session, memory: dict[str, str], level: str = 
     return str(result["path"])
 
 
-def _supersede(session: Session, personal: str, target: str, level: str) -> dict[str, Any]:
+def _supersede(session: Session, personal: str, target: str, level: str, reasoning: str | None = None) -> dict[str, Any]:
     first = session.call("promote", path=personal, level=level)
     assert first["status"] == "similar_memories", first
     resolutions = {similar["path"]: ("supersede" if similar["path"] == target else "keep_both") for similar in first["similar"]}
     result: dict[str, Any] = session.call(
-        "promote", path=personal, level=level, reference=first["reference"], resolutions=resolutions
+        "promote", path=personal, level=level, reference=first["reference"], resolutions=resolutions, reasoning=reasoning
     )
     return result
 
@@ -302,12 +302,28 @@ def promote_superseding(session: Session, memory: dict[str, str], target: str, l
     return _supersede(session, session.call("remember", **memory)["path"], target, level)
 
 
-def challenge(session: Session, memory: dict[str, str], target: str, level: str = "project") -> dict[str, Any]:
+def challenge(
+    session: Session, memory: dict[str, str], target: str, level: str = "project", reasoning: str | None = None
+) -> dict[str, Any]:
     """Raise a challenge: supersede another author's memory, which they decide."""
     personal = session.call("remember", **memory)["path"]
-    result = _supersede(session, personal, target, level)
+    result = _supersede(session, personal, target, level, reasoning)
     assert result["status"] == "challenge_raised", result
     return {**result, "personal": personal}
+
+
+def reasoning_of(server: RunningServer, challenge_id: int) -> str | None:
+    """The Reasoning stored on one challenge, read from its record directly.
+
+    No tool surfaces a decided challenge's Reasoning yet (the console gains that in a later ticket), so this is
+    the only way a test can confirm it survives a decision — the same reason test_promote.py and test_retire.py
+    read the memory git log directly for a commit message no tool returns either.
+    """
+    with psycopg.connect(server.settings.database_url) as conn:
+        row = conn.execute("SELECT reasoning FROM challenges WHERE id = %s", (challenge_id,)).fetchone()
+    if row is None or row[0] is None:
+        return None
+    return str(row[0])
 
 
 class FakeGitHub:

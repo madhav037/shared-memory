@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, add, ask, reasoning_of, signed_in_owner
 
 
 def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
@@ -203,6 +203,19 @@ def test_retiring_another_members_memory_raises_a_challenge_for_its_author(
     assert ask(signed_out, "/api/memory", path=theirs)["status"] == "active"
     waiting = challenges(signed_out)["waiting"]
     assert [(one["kind"], one["raised_by"], one["challenger"]) for one in waiting] == [("retire", "emp-2", None)]
+    dana_console.close()
+
+
+def test_a_console_raised_retire_challenge_carries_no_reasoning(console: Console, signed_out: ConsoleClient) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-disputes-reasoning", 1140)
+    theirs = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-reasoning", 1141)
+
+    asked = dana_console.post_json("/api/memory/retire", {"path": theirs})
+
+    assert asked.status_code == 200, asked.text
+    assert asked.json()["status"] == "challenge_raised"
+    assert reasoning_of(console.server, asked.json()["challenge_id"]) is None
     dana_console.close()
 
 
