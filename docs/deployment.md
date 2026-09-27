@@ -6,8 +6,10 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
 
 ## What you need
 
-- A Linux host with Docker and Docker Compose.
-- A domain name (for example `memory.example.com`) whose DNS record points at the host, with ports 80 and 443 open. Caddy uses both to get and renew the certificate.
+- A Linux host with Docker and Docker Compose v2, **2 vCPU and 4GB of memory**, and about 25GB of disk.
+  The build compiles the console with Vite and installs onnxruntime for the server; below roughly 2GB the
+  console build is killed by the kernel and the error does not say so. 2GB works with 2GB of swap added.
+- A domain name (for example `memory.example.com`) whose DNS record points at the host, with ports 80 and 443 open. Caddy uses both to get and renew the certificate. **On a cloud host, open them in the provider's firewall as well as the host's** — a VM's own rules are not the only ones in the way, and a blocked port 80 shows up only as a certificate that never arrives.
 - A **private** git repository for backups, for example `your-org/shared-memory-backup` on GitHub, and an SSH key with write access to it.
 - For the **console**, a GitHub OAuth app (free, made in a few clicks below). Without one the console still runs, but nobody can sign in to it.
 
@@ -30,25 +32,32 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
    | `BACKUP_SSH_KEY` | The private key from step 2 (default `./backup_key`) |
    | `BACKUP_TIME`, `TZ` | When the nightly backup runs (default 02:00 UTC) |
 
-4. Start everything:
+4. Check the host is ready. This takes a couple of seconds and refuses to let you spend several minutes
+   building on a host that cannot finish:
+
+   ```bash
+   ./preflight.sh
+   ```
+
+5. Start everything:
 
    ```bash
    docker compose up -d --build
    ```
 
-5. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
+6. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
 
    ```bash
    docker compose exec server shared-memory setup --team acme --owner-member-id E1001 --owner-name "Olive Owner" --owner-github olive
    ```
 
-6. Check HTTPS works. This should print `200`:
+7. Check HTTPS works. This should print `200`:
 
    ```bash
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://memory.example.com/hooks/session-start -d '{}'
    ```
 
-7. Run the first backup now, to check the key can push:
+8. Run the first backup now, to check the key can push:
 
    ```bash
    docker compose exec backup backup now
