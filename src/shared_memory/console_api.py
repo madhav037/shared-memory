@@ -46,7 +46,7 @@ from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
     AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, ChallengeDetail, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
-    MemoryAtVersion, MemoryDetail, MemoryDifference, MemoryHistory, MemoryPath, NewMember, PREFIX, Pin, PinState,
+    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, NewMember, PREFIX, Pin, PinState,
     Pins, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge, RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
@@ -145,14 +145,12 @@ class ConsoleApi:
             "memory_at": self._memory_at,
             "history_at": self._history_at,
             "version_at": self._version_at,
-            "difference_at": self._difference_at,
             "pin_at": self._pin_at,
             "unpin_at": self._unpin_at,
             "retire_at": self._retire_at,
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
             "decide_challenge": self._decide_challenge,
-            "difference": self._difference,
             "members": self._members,
             "add_member": self._add_member,
             "remove_member": self._remove_member,
@@ -376,15 +374,6 @@ class ConsoleApi:
 
         return self._at(request, read)
 
-    def _difference_at(self, request: Request) -> Response:
-        def read(caller: Caller, path: str) -> MemoryDifference:
-            asked = request.query_params
-            return MemoryDifference(
-                **self._service.difference(caller, path, asked.get("before", ""), asked.get("after", ""))
-            )
-
-        return self._at(request, read)
-
     def _pin_at(self, request: Request) -> Response:
         def pin(caller: Caller, path: str) -> PinState:
             # Briefing answers in the memory tool's shape, so the path it pinned comes back under "pinned".
@@ -449,17 +438,6 @@ class ConsoleApi:
         return Pins(
             pins=pins, tokens=sum(pin.tokens for pin in pins), cap=self._settings.briefing_cap_tokens
         )
-
-    def _difference(self, request: Request) -> Response:
-        def read(caller: Caller) -> MemoryDifference:
-            asked = request.query_params
-            return MemoryDifference(
-                **self._service.difference(
-                    caller, asked.get("path", ""), asked.get("before", ""), asked.get("after", "")
-                )
-            )
-
-        return self._browse(request, read)
 
     def _challenges(self, request: Request) -> Response:
         member = self._member(request)

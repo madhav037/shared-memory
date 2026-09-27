@@ -237,7 +237,6 @@ def test_the_console_cannot_reach_a_restricted_projects_memory_by_its_path(
         dana.get(f"/api/memory?path={secret}"),
         dana.get(f"/api/memory/history?path={secret}"),
         dana.get(f"/api/memory/version?path={secret}&commit=abc1234"),
-        dana.get(f"/api/memory/difference?path={secret}&before=abc1234&after=def5678"),
         dana.post_json("/api/memory/pin", {"path": secret}),
         dana.post_json("/api/memory/unpin", {"path": secret}),
         dana.post_json("/api/memory/retire", {"path": secret}),

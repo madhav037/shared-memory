@@ -124,19 +124,6 @@ class MemoryHistory:
         except RuntimeError:
             raise Refused(f"There is no version {commit!r} of {str(path)!r}.") from None
 
-    def difference(self, team: str, path: PurePosixPath, before: str, after: str) -> str:
-        """What changed in this memory between two versions, as a unified difference."""
-        _check_commit(before)
-        _check_commit(after)
-        then = self._where_then(team, path, before)
-        now = self._where_then(team, path, after)
-        try:
-            if then == now:
-                return self._git("diff", "--unified=3", before, after, "--", now)
-            return self._git("diff", "--unified=3", f"{before}:{then}", f"{after}:{now}")
-        except RuntimeError:
-            raise Refused("Those versions can't be compared.") from None
-
     def _inside_team(self, team: str, path: PurePosixPath) -> str:
         """The path git knows this memory by, confined to the team's own folder."""
         confine(self._root, team, path)  # refuses anything outside the team's folder

@@ -133,13 +133,10 @@ CONSOLE_API = pathlib.Path(__file__).resolve().parent.parent / "src" / "shared_m
 MAY_ASK: dict[str, set[str]] = {
     "_service": {
         "connection_files",
-        "difference",
         "history",
         "read",
-        "search",
         "search_everywhere",
         "source",
-        "tree",
         "version",
     },
     "_lifecycle": {"decide_challenge", "retire"},
@@ -168,4 +165,8 @@ def test_the_console_api_asks_nothing_of_memory_that_adr_0009_forbids(collaborat
         f"console_api.py now calls self.{collaborator}.{sorted(asked - MAY_ASK[collaborator])}. "
         "ADR-0009 lets the console pin, unpin, decide challenges and retire, and nothing else that changes memory. "
         "If the new call only reads, add it to MAY_ASK; if it writes, edits or promotes, it belongs in a session."
+    )
+    assert MAY_ASK[collaborator] <= asked, (
+        f"MAY_ASK still allows self.{collaborator}.{sorted(MAY_ASK[collaborator] - asked)}, which the console no "
+        "longer calls. A permission nothing uses reads as one the console still has; take it out."
     )

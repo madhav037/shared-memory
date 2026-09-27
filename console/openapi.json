@@ -647,50 +647,6 @@
         }
       }
     },
-    "/api/memory/difference": {
-      "get": {
-        "operationId": "difference_at",
-        "summary": "What changed in a memory, by its path, between two versions.",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "before",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "after",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "What changed in a memory, by its path, between two versions.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryDifference"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/memory/pin": {
       "post": {
         "operationId": "pin_at",
@@ -876,58 +832,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChallengeList"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/memory/difference": {
-      "get": {
-        "operationId": "difference",
-        "summary": "What changed in a memory between two versions.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "before",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "after",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "What changed in a memory between two versions.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryDifference"
                 }
               }
             }
@@ -2277,35 +2181,6 @@
           "text"
         ],
         "title": "MemoryAtVersion",
-        "type": "object"
-      },
-      "MemoryDifference": {
-        "description": "What changed in a memory between two versions.",
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "before": {
-            "title": "Before",
-            "type": "string"
-          },
-          "after": {
-            "title": "After",
-            "type": "string"
-          },
-          "difference": {
-            "title": "Difference",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "before",
-          "after",
-          "difference"
-        ],
-        "title": "MemoryDifference",
         "type": "object"
       },
       "PinState": {

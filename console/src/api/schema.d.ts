@@ -328,23 +328,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/memory/difference": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** What changed in a memory, by its path, between two versions. */
-        get: operations["difference_at"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/memory/pin": {
         parameters: {
             query?: never;
@@ -441,23 +424,6 @@ export interface paths {
         put?: never;
         /** Accept a challenge or reject it. */
         post: operations["decide_challenge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/memory/difference": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** What changed in a memory between two versions. */
-        get: operations["difference"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1046,20 +1012,6 @@ export interface components {
             commit: string;
             /** Text */
             text: string;
-        };
-        /**
-         * MemoryDifference
-         * @description What changed in a memory between two versions.
-         */
-        MemoryDifference: {
-            /** Path */
-            path: string;
-            /** Before */
-            before: string;
-            /** After */
-            after: string;
-            /** Difference */
-            difference: string;
         };
         /**
          * PinState
@@ -1759,30 +1711,6 @@ export interface operations {
             };
         };
     };
-    difference_at: {
-        parameters: {
-            query?: {
-                path?: string;
-                before?: string;
-                after?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description What changed in a memory, by its path, between two versions. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryDifference"];
-                };
-            };
-        };
-    };
     pin_at: {
         parameters: {
             query?: never;
@@ -1922,32 +1850,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChallengeList"];
-                };
-            };
-        };
-    };
-    difference: {
-        parameters: {
-            query?: {
-                path?: string;
-                before?: string;
-                after?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description What changed in a memory between two versions. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryDifference"];
                 };
             };
         };

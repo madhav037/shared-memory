@@ -54,22 +54,6 @@ def test_a_version_shows_the_memory_as_it_was_then(console: Console, signed_out:
     assert "wiped every night" in first["text"]
 
 
-def test_two_versions_can_be_compared(console: Console, signed_out: ConsoleClient) -> None:
-    project, path = changed_twice(console, signed_out, "olive-history-three", 503)
-    versions = history(signed_out, path=path)["versions"]
-
-    compared = ask(
-        signed_out,
-        "/api/memory/difference",
-        path=path,
-        before=versions[-1]["commit"],
-        after=versions[0]["commit"],
-    )
-
-    assert "-The staging database is wiped every night." in compared["difference"]
-    assert "+The staging database is wiped every night at 02:17 UTC." in compared["difference"]
-
-
 def test_a_promoted_memory_keeps_its_history_from_before_it_was_promoted(
     console: Console, signed_out: ConsoleClient
 ) -> None:
@@ -114,7 +98,7 @@ def test_a_made_up_version_is_refused(console: Console, signed_out: ConsoleClien
     assert "not a version" in refused.json()["message"]
 
 
-def test_history_reads_and_compares_versions_from_before_a_promotion(
+def test_history_reads_versions_from_before_a_promotion(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     owner = signed_in_owner(console, signed_out, "olive-history-seven", 507)
@@ -128,14 +112,6 @@ def test_history_reads_and_compares_versions_from_before_a_promotion(
 
     versions = history(signed_out, path=promoted)["versions"]
     first = ask(signed_out, "/api/memory/version", path=promoted, commit=versions[-1]["commit"])
-    compared = ask(
-        signed_out,
-        "/api/memory/difference",
-        path=promoted,
-        before=versions[-1]["commit"],
-        after=versions[0]["commit"],
-    )
 
     assert [version["message"].split(":")[0] for version in versions] == ["Promote", "Edit", "Remember"]
     assert "We deploy on Tuesdays." in first["text"]
-    assert "+We deploy on Tuesdays and Thursdays." in compared["difference"]
