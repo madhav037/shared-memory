@@ -126,6 +126,10 @@ _Avoid_: Replace, overwrite, update
 A request to supersede or retire another author's memory, waiting for that author's decision.
 _Avoid_: Approval, proposal, change request
 
+**Reasoning**:
+Why the member raising a challenge believes the memory it targets should be superseded or retired, carried on the challenge for whoever decides it.
+_Avoid_: Argument, case, rationale, justification
+
 **Retire**:
 To mark a memory as no longer true without anything superseding it.
 _Avoid_: Delete, archive
