@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { openInContents, signInAs } from "./helpers";
+import { openInContents, signInAs, signOut } from "./helpers";
 
 test("an author retires their own memory, and it stays readable for the record", async ({ page }) => {
   await signInAs(page, 1, "olive");
@@ -28,4 +28,10 @@ test("retiring a memory someone else wrote asks its author instead", async ({ pa
   await expect(page.getByTestId("open-challenges")).toContainText("Olive Owner wants to retire it");
   await expect(page.getByTestId("open-challenges")).toContainText("Until Raj Raiser decides, it stands as it is");
   await expect(page.getByTestId("retired-banner")).toHaveCount(0);
+
+  await signOut(page);
+  await signInAs(page, 2, "dana");
+  await page.getByTestId("to-challenges").click();
+  await expect(page.getByTestId("waiting")).toContainText("Olive Owner (E1001) wants to retire it");
+  await expect(page.getByTestId("waiting").getByTestId("reasoning")).toHaveCount(0);
 });

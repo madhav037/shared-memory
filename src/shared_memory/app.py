@@ -327,12 +327,13 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
     @server.tool()
     @_refusals_as_tool_errors
-    def retire(path: str, ctx: Context) -> dict[str, Any]:
+    def retire(path: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
         """Mark a project or team memory as no longer true, with nothing superseding it.
 
-        Your own memory is retired at once. Retiring another author's memory raises a challenge they decide.
+        Your own memory is retired at once. Retiring another author's memory raises a challenge they decide;
+        pass reasoning for why you believe it's no longer true, so whoever decides it hears your reasoning.
         """
-        return lifecycle.retire(caller(ctx), path)
+        return lifecycle.retire(caller(ctx), path, reasoning)
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -352,15 +353,17 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         ctx: Context,
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
+        reasoning: str | None = None,
     ) -> dict[str, Any]:
         """Promote your personal memory into project memory or team memory (level: project or team).
 
         Call it first without a reference. If similar project or team memories exist, nothing changes yet: you get
         them back with a reference. Judge whether each contradicts the memory being promoted, ask the member, then
         call promote again with the reference and resolutions mapping every similar memory's path to supersede,
-        keep_both or cancel.
+        keep_both or cancel. Pass reasoning for why any memory resolved as supersede should give way to this one,
+        so whoever decides the resulting challenge hears your reasoning.
         """
-        return lifecycle.promote(caller(ctx), path, level, reference, resolutions)
+        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
 
     @server.tool()
     @_refusals_as_tool_errors

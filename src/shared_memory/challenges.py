@@ -33,9 +33,11 @@ CREATE TABLE IF NOT EXISTS challenges (
     state TEXT NOT NULL,
     decided_by TEXT,
     decided_at TIMESTAMPTZ,
-    explanation TEXT
+    explanation TEXT,
+    reasoning TEXT
 );
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS promoted_by TEXT;
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reasoning TEXT;
 
 CREATE TABLE IF NOT EXISTS notices (
     id BIGSERIAL PRIMARY KEY,
@@ -59,6 +61,7 @@ class Challenge:
     raised_by: str
     promoted_by: str | None
     raised_at: datetime
+    reasoning: str | None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Challenge:
@@ -72,6 +75,7 @@ class Challenge:
             row["raised_by"],
             row["promoted_by"],
             row["raised_at"],
+            row["reasoning"],
         )
 
 
@@ -111,12 +115,17 @@ class Challenges:
         challenger_path: str | None,
         level: str,
         promoted_by: str | None = None,
+        reasoning: str | None = None,
     ) -> int:
         with self._db.transaction() as conn:
             row = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, challenger_path, level, raised_by,"
-                " promoted_by, raised_at, state) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open') RETURNING id",
-                (caller.team, kind, target_path, target_author, challenger_path, level, caller.member_id, promoted_by, self._clock()),
+                " promoted_by, raised_at, state, reasoning) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s)"
+                " RETURNING id",
+                (
+                    caller.team, kind, target_path, target_author, challenger_path, level, caller.member_id,
+                    promoted_by, self._clock(), reasoning,
+                ),  # fmt: skip
             ).fetchone()
         assert row is not None
         challenge_id: int = row["id"]
@@ -206,8 +215,8 @@ class Challenges:
         """Every challenge this member raised, newest first, and how each one ended."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation"
-                " FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
+                "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation,"
+                " reasoning FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
                 (caller.team, caller.member_id),
             ).fetchall()
         return [
@@ -221,6 +230,7 @@ class Challenges:
                 "decided_by": row["decided_by"],
                 "decided_at": row["decided_at"],
                 "explanation": row["explanation"],
+                "reasoning": row["reasoning"],
             }
             for row in rows
         ]
@@ -276,14 +286,18 @@ class Challenges:
             lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
             for c in (c for c in challenges if c.target_path == target_path):
                 if c.challenger_path is None:
-                    lines.append(f"- Challenge {c.id} by {c.raised_by}: retire it.")
-                    continue
-                try:
-                    challenger = self._store.read(caller.team, PurePosixPath(c.challenger_path))
-                    replacement = f'"{challenger.title}" ({c.challenger_path}): {challenger.summary}'
-                except Refused:
-                    replacement = c.challenger_path
-                lines.append(f"- Challenge {c.id} by {c.raised_by}: supersede it with {replacement}")
+                    line = f"- Challenge {c.id} by {c.raised_by}: retire it"
+                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                else:
+                    try:
+                        challenger = self._store.read(caller.team, PurePosixPath(c.challenger_path))
+                        replacement = f'"{challenger.title}" ({c.challenger_path}): {challenger.summary}'
+                    except Refused:
+                        replacement = c.challenger_path
+                    line = f"- Challenge {c.id} by {c.raised_by}: supersede it with {replacement}"
+                    if c.reasoning:
+                        line += f" — reasoning: {c.reasoning}"
+                lines.append(line)
         lines.append(
             "Show these to the member and record their decision with decide_challenge (accept or reject). "
             "At most one challenge per memory can be accepted."

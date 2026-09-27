@@ -51,6 +51,36 @@ def test_retiring_another_authors_memory_raises_a_retire_challenge(owner: Sessio
     assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in added_context(owner.start())
 
 
+def test_a_retire_challenges_reasoning_is_folded_into_the_authors_briefing_and_prompt(
+    owner: Session, dana: Session
+) -> None:
+    path = promote_now(owner, RETRIES)
+
+    raised = dana.call("retire", path=path, reasoning="We stopped retrying failed charges last quarter.")
+
+    briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
+
+    for context in (briefing, prompt):
+        assert (
+            f"Challenge {raised['challenge_id']} by emp-2: retire it — reasoning: "
+            "We stopped retrying failed charges last quarter." in context
+        )
+
+
+def test_a_retire_challenge_raised_without_reasoning_carries_no_reasoning(owner: Session, dana: Session) -> None:
+    path = promote_now(owner, RETRIES)
+
+    raised = dana.call("retire", path=path)
+
+    briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
+
+    for context in (briefing, prompt):
+        assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in context
+        assert "reasoning" not in context.lower()
+
+
 def test_accepting_a_retire_challenge_retires_the_memory(owner: Session, dana: Session) -> None:
     path = promote_now(owner, RETRIES)
     raised = dana.call("retire", path=path)

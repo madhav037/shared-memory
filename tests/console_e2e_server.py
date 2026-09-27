@@ -15,10 +15,10 @@ from tests.support import (
     RunningServer,
     Session,
     TestClock,
+    challenge,
     fresh_database,
     promote_keeping_both,
     promote_now,
-    promote_superseding,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         )
         in_project.call("promote", path=saved["path"], level="project")
 
-        # A second project memory, and a challenge against it waiting for the owner to decide.
+        # A second project memory, and a challenge against it waiting for the owner to decide, with Raj's Reasoning.
         staging = in_project.call(
             "remember",
             title="Staging resets nightly",
@@ -89,6 +89,7 @@ if __name__ == "__main__":
             resolutions={
                 one["path"]: ("supersede" if one["path"] == challenged else "keep_both") for one in similar["similar"]
             },
+            reasoning="The reset moved to 02:17 UTC when the nightly backup took *midnight*.",
         )
         # Two memories the retire journeys have to themselves, on topics nothing else here touches: retiring
         # one changes nothing another journey reads. Olive's is hers to retire outright; Raj's can only ask
@@ -129,7 +130,7 @@ if __name__ == "__main__":
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: RabbitMQ",
             },
         )
-        promote_superseding(
+        challenge(
             in_project,
             {
                 "title": "How Billing is built now",
@@ -138,6 +139,7 @@ if __name__ == "__main__":
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: Kafka",
             },
             stack,
+            reasoning="Billing moved its queue to Kafka in March.",
         )
         # Two memories filed under a topic, so the journeys have a topic folder to pin. A topic is a folder
         # inside a type folder, which the type folder itself is not: pinning one puts everything filed under

@@ -140,6 +140,12 @@ function Proposal({
         {moment(challenge.raised_at)}
         {!challenge.yours && " · its author hasn’t decided in time, so anyone may"}
       </p>
+      {challenge.reasoning && (
+        <div className="reasoning" data-testid="reasoning">
+          <p className="reasoning-head">Reasoning</p>
+          <p className="reasoning-text" data-testid="reasoning-text">{challenge.reasoning}</p>
+        </div>
+      )}
       {changes && (
         <div className="what-changes" data-testid="what-changes">
           <p className="what-changes-head">If you accept this, here is what would be different</p>
@@ -170,7 +176,7 @@ function Proposal({
           )}
         </div>
       )}
-      <div className="facing">
+      <div className="facing" data-testid="facing">
         <div>
           <Link className="title" to={memoryUrl(challenge.target.path)}>
             {challenge.target.title}
@@ -260,7 +266,14 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                       {one.target_title}
                     </Link>
                   </td>
-                  <td>{one.kind === "retire" ? "to retire it" : "to supersede it"}</td>
+                  <td>
+                    {one.kind === "retire" ? "to retire it" : "to supersede it"}
+                    {one.reasoning && (
+                      <div className="raised-reasoning" data-testid="raised-reasoning">
+                        {one.reasoning}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <b style={{ color: one.state === "accepted" ? "var(--accent)" : "var(--ink)" }}>{STATES[one.state] ?? one.state}</b>
                     {one.decided_by && (

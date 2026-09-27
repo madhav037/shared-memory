@@ -25,6 +25,32 @@ def test_superseding_another_authors_memory_raises_a_challenge(owner: Session, d
     assert [c["challenge_id"] for c in challenged["open_challenges"]] == [raised["challenge_id"]]
 
 
+def test_a_challengers_reasoning_is_folded_into_the_authors_briefing_and_prompt(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+
+    raised = challenge(dana, PNPM, target, reasoning="pnpm is now standard; npm creates a second lockfile.")
+
+    briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
+
+    for context in (briefing, prompt):
+        assert f"Challenge {raised['challenge_id']} by emp-2: supersede it with" in context
+        assert "pnpm is now standard; npm creates a second lockfile." in context
+
+
+def test_a_supersede_challenge_raised_without_reasoning_carries_no_reasoning(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+
+    raised = challenge(dana, PNPM, target)
+
+    briefing = added_context(owner.start())
+    prompt = added_context(owner.prompt("write a haiku about cats"))
+
+    for context in (briefing, prompt):
+        assert f"- Challenge {raised['challenge_id']} by emp-2: supersede it with" in context
+        assert "reasoning" not in context.lower()
+
+
 def test_the_author_sees_the_challenge_in_their_briefing_and_next_prompt(owner: Session, dana: Session) -> None:
     target = promote_now(owner, NPM)
     raised = challenge(dana, PNPM, target)

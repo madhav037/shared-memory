@@ -1093,6 +1093,8 @@ export interface components {
             yours: boolean;
             target: components["schemas"]["ChallengedMemory"];
             challenger: components["schemas"]["ChallengedMemory"] | null;
+            /** Reasoning */
+            reasoning: string | null;
         };
         /**
          * ChallengedMemory
@@ -1144,6 +1146,8 @@ export interface components {
             decided_at: string | null;
             /** Explanation */
             explanation: string | null;
+            /** Reasoning */
+            reasoning: string | null;
         };
         /**
          * ChallengeList

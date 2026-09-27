@@ -1744,6 +1744,33 @@ li[aria-expanded="true"] > .tree-row .twist {
   text-underline-offset: 2px;
 }
 
+/* Why the member who raised a challenge is asking, in their own words: plain text, never read as markdown. */
+.reasoning {
+  margin: 0 0 14px;
+}
+.reasoning-head {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.reasoning-text {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+.raised-reasoning {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* What a member is actually deciding, said in words before the two texts are shown. */
 .what-changes {
   margin: 0 0 14px;
