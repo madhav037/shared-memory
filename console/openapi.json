@@ -2378,6 +2378,17 @@
                 "type": "null"
               }
             ]
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
           }
         },
         "required": [
@@ -2388,7 +2399,8 @@
           "raised_at",
           "yours",
           "target",
-          "challenger"
+          "challenger",
+          "reasoning"
         ],
         "title": "ChallengeDetail",
         "type": "object"
@@ -2514,6 +2526,17 @@
               }
             ],
             "title": "Explanation"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
           }
         },
         "required": [
@@ -2526,7 +2549,8 @@
           "state",
           "decided_by",
           "decided_at",
-          "explanation"
+          "explanation",
+          "reasoning"
         ],
         "title": "RaisedChallenge",
         "type": "object"

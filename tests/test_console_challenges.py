@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, add, ask, reasoning_of, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
 
 
 def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
@@ -23,7 +23,7 @@ def promoted(session: Session, path: str) -> str:
     return answer
 
 
-def a_supersede_challenge(challenger: Session, path: str) -> int:
+def a_supersede_challenge(challenger: Session, path: str, reasoning: str | None = None) -> int:
     """Offer a memory in place of whatever it is similar to, which challenges that memory's author."""
     similar = challenger.call("promote", path=path, level="project")
     raised = challenger.call(
@@ -32,6 +32,7 @@ def a_supersede_challenge(challenger: Session, path: str) -> int:
         level="project",
         reference=similar["reference"],
         resolutions={one["path"]: "supersede" for one in similar["similar"]},
+        reasoning=reasoning,
     )
     challenge_id: int = raised["challenge_id"]
     return challenge_id
@@ -215,7 +216,119 @@ def test_a_console_raised_retire_challenge_carries_no_reasoning(console: Console
 
     assert asked.status_code == 200, asked.text
     assert asked.json()["status"] == "challenge_raised"
-    assert reasoning_of(console.server, asked.json()["challenge_id"]) is None
+    assert [one["reasoning"] for one in challenges(signed_out)["waiting"]] == [None]
+    assert [one["reasoning"] for one in challenges(dana_console)["raised"]] == [None]
+    dana_console.close()
+
+
+def a_challenger(
+    console: Console, owner_client: ConsoleClient, project: str, github: str, account: int
+) -> tuple[ConsoleClient, Session]:
+    """A member signed in to the console who also works in Billing from a coding agent, to raise challenges."""
+    dana_console = a_member(console, owner_client, "emp-2", github, account)
+    token = owner_client.post("/api/members/emp-2/token").json()["personal_token"]
+    return dana_console, Session(console.server, token).in_project(project, "billing-api")
+
+
+def a_reasoned_challenge(
+    console: Console, owner_client: ConsoleClient, github: str, account: int
+) -> tuple[ConsoleClient, int]:
+    """Dana offers npm in place of the owner's pnpm memory, saying why."""
+    owner, project, in_project = a_team(console, owner_client, f"olive-{github}", account)
+    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana_console, dana = a_challenger(console, owner_client, project, github, account + 1)
+    challenge_id = a_supersede_challenge(
+        dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."), reasoning="CI only has npm."
+    )
+    return dana_console, challenge_id
+
+
+def test_a_challenges_reasoning_is_shown_to_whoever_decides_it(console: Console, signed_out: ConsoleClient) -> None:
+    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-waiting", 1150)
+
+    waiting = challenges(signed_out)["waiting"]
+
+    assert [(one["challenge_id"], one["reasoning"]) for one in waiting] == [(challenge_id, "CI only has npm.")]
+    dana_console.close()
+
+
+def test_a_member_sees_their_own_reasoning_on_a_challenge_they_raised(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-raised", 1152)
+
+    raised = challenges(dana_console)["raised"]
+
+    assert [(one["challenge_id"], one["reasoning"]) for one in raised] == [(challenge_id, "CI only has npm.")]
+    dana_console.close()
+
+
+def test_a_challenge_raised_without_reasoning_has_none(console: Console, signed_out: ConsoleClient) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-none", 1154)
+    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-none", 1155)
+    a_supersede_challenge(dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."))
+
+    assert [one["reasoning"] for one in challenges(signed_out)["waiting"]] == [None]
+    assert [one["reasoning"] for one in challenges(dana_console)["raised"]] == [None]
+    dana_console.close()
+
+
+def test_a_challenges_reasoning_survives_being_accepted(console: Console, signed_out: ConsoleClient) -> None:
+    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-accepted", 1156)
+
+    decide(signed_out, challenge_id, "accept")
+
+    raised = challenges(dana_console)["raised"]
+    assert [(one["state"], one["reasoning"]) for one in raised] == [("accepted", "CI only has npm.")]
+    dana_console.close()
+
+
+def test_a_challenges_reasoning_survives_being_rejected(console: Console, signed_out: ConsoleClient) -> None:
+    dana_console, challenge_id = a_reasoned_challenge(console, signed_out, "dana-reasoning-rejected", 1158)
+
+    decide(signed_out, challenge_id, "reject")
+
+    raised = challenges(dana_console)["raised"]
+    assert [(one["state"], one["reasoning"]) for one in raised] == [("rejected", "CI only has npm.")]
+    dana_console.close()
+
+
+def test_a_challenges_reasoning_survives_being_closed_by_another_challenges_acceptance(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-closed", 1160)
+    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-closed", 1161)
+    ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    a_supersede_challenge(
+        dana, remember(dana, "Use npm, not pnpm", "We use npm for every package."), reasoning="CI only has npm."
+    )
+    ashs = a_supersede_challenge(
+        ash, remember(ash, "Use yarn, not pnpm", "We use yarn for every package."), reasoning="yarn is faster."
+    )
+
+    decide(signed_out, ashs, "accept")
+
+    raised = challenges(dana_console)["raised"]
+    assert [(one["state"], one["reasoning"]) for one in raised] == [("closed", "CI only has npm.")]
+    dana_console.close()
+
+
+def test_a_retire_challenges_reasoning_survives_being_decided(console: Console, signed_out: ConsoleClient) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-retire", 1162)
+    theirs = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
+    dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-retire", 1163)
+    raised = dana.call("retire", path=theirs, reasoning="It's no longer true.")
+
+    decide(signed_out, raised["challenge_id"], "accept")
+
+    mine = challenges(dana_console)["raised"]
+    assert [(one["kind"], one["state"], one["reasoning"]) for one in mine] == [
+        ("retire", "accepted", "It's no longer true.")
+    ]
     dana_console.close()
 
 

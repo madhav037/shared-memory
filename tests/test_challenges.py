@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.support import NPM, PNPM, Session, Team, added_context, challenge, promote_now, reasoning_of
+from tests.support import NPM, PNPM, Session, added_context, challenge, promote_now
 
 
 BUN = {
@@ -47,36 +47,6 @@ def test_omitting_reasoning_leaves_the_supersede_notice_exactly_as_before(owner:
 
     assert f"- Challenge {raised['challenge_id']} by emp-2: supersede it with" in briefing
     assert "reasoning" not in briefing.lower()
-
-
-def test_a_challenges_reasoning_survives_being_accepted(owner: Session, dana: Session, team: Team) -> None:
-    target = promote_now(owner, NPM)
-    raised = challenge(dana, PNPM, target, reasoning="pnpm is now standard.")
-
-    owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
-
-    assert reasoning_of(team.server, raised["challenge_id"]) == "pnpm is now standard."
-
-
-def test_a_challenges_reasoning_survives_being_rejected(owner: Session, dana: Session, team: Team) -> None:
-    target = promote_now(owner, NPM)
-    raised = challenge(dana, PNPM, target, reasoning="pnpm is now standard.")
-
-    owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
-
-    assert reasoning_of(team.server, raised["challenge_id"]) == "pnpm is now standard."
-
-
-def test_a_challenges_reasoning_survives_being_closed_by_another_challenges_acceptance(
-    owner: Session, dana: Session, cole: Session, team: Team
-) -> None:
-    target = promote_now(owner, NPM)
-    danas = challenge(dana, PNPM, target, reasoning="pnpm is now standard.")
-    coles = challenge(cole, BUN, target, reasoning="bun is faster.")
-
-    owner.call("decide_challenge", challenge_id=coles["challenge_id"], decision="accept")
-
-    assert reasoning_of(team.server, danas["challenge_id"]) == "pnpm is now standard."
 
 
 def test_the_author_sees_the_challenge_in_their_briefing_and_next_prompt(owner: Session, dana: Session) -> None:

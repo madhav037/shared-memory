@@ -215,6 +215,8 @@ class ChallengeDetail(BaseModel):
     yours: bool
     target: ChallengedMemory
     challenger: ChallengedMemory | None
+    # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
+    reasoning: str | None
 
 
 class RaisedChallenge(BaseModel):
@@ -229,7 +231,9 @@ class RaisedChallenge(BaseModel):
     state: str
     decided_by: str | None
     decided_at: datetime | None
+    # Why the challenge ended as it did; why it was raised is its reasoning.
     explanation: str | None
+    reasoning: str | None
 
 
 class ChallengeList(BaseModel):

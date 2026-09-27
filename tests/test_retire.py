@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding, reasoning_of
+from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding
 
 
 RETRIES = {
@@ -75,15 +75,6 @@ def test_omitting_reasoning_leaves_the_retire_notice_exactly_as_before(owner: Se
 
     assert f"Challenge {raised['challenge_id']} by emp-2: retire it." in briefing
     assert "reasoning" not in briefing.lower()
-
-
-def test_a_retire_challenges_reasoning_survives_being_decided(owner: Session, dana: Session, team: Team) -> None:
-    path = promote_now(owner, RETRIES)
-    raised = dana.call("retire", path=path, reasoning="It's no longer true.")
-
-    owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
-
-    assert reasoning_of(team.server, raised["challenge_id"]) == "It's no longer true."
 
 
 def test_accepting_a_retire_challenge_retires_the_memory(owner: Session, dana: Session) -> None:

@@ -312,20 +312,6 @@ def challenge(
     return {**result, "personal": personal}
 
 
-def reasoning_of(server: RunningServer, challenge_id: int) -> str | None:
-    """The Reasoning stored on one challenge, read from its record directly.
-
-    No tool surfaces a decided challenge's Reasoning yet (the console gains that in a later ticket), so this is
-    the only way a test can confirm it survives a decision — the same reason test_promote.py and test_retire.py
-    read the memory git log directly for a commit message no tool returns either.
-    """
-    with psycopg.connect(server.settings.database_url) as conn:
-        row = conn.execute("SELECT reasoning FROM challenges WHERE id = %s", (challenge_id,)).fetchone()
-    if row is None or row[0] is None:
-        return None
-    return str(row[0])
-
-
 class FakeGitHub:
     """Stands in for GitHub's sign-in, so no test touches the real one.
 

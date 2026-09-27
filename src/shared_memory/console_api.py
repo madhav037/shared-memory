@@ -483,6 +483,7 @@ class ConsoleApi:
             yours=challenge.target_author == caller.member_id,
             target=self._side(caller, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
+            reasoning=challenge.reasoning,
         )
 
     def _side(self, caller: Caller, path: str) -> ChallengedMemory:

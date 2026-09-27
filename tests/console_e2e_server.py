@@ -60,7 +60,7 @@ if __name__ == "__main__":
         )
         in_project.call("promote", path=saved["path"], level="project")
 
-        # A second project memory, and a challenge against it waiting for the owner to decide.
+        # A second project memory, and a challenge against it waiting for the owner to decide, with Raj's Reasoning.
         staging = in_project.call(
             "remember",
             title="Staging resets nightly",
@@ -89,6 +89,7 @@ if __name__ == "__main__":
             resolutions={
                 one["path"]: ("supersede" if one["path"] == challenged else "keep_both") for one in similar["similar"]
             },
+            reasoning="The reset moved to 02:17 UTC when the nightly backup took *midnight*.",
         )
         # Two memories the retire journeys have to themselves, on topics nothing else here touches: retiring
         # one changes nothing another journey reads. Olive's is hers to retire outright; Raj's can only ask
