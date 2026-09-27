@@ -191,18 +191,6 @@ class MemoryService:
             "text": self._history.text_at(caller.team, location.path, commit),
         }
 
-    def difference(self, caller: Caller, path: str, before: str, after: str) -> dict[str, Any]:
-        """What changed in one memory between two versions."""
-        caller.require_project()
-        caller.require_reach(path)
-        location = locate(path)
-        return {
-            "path": str(location.path),
-            "before": before,
-            "after": after,
-            "difference": self._history.difference(caller.team, location.path, before, after),
-        }
-
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
         caller.require_project()
         caller.require_reach(folder)

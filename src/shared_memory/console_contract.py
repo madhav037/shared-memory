@@ -413,15 +413,6 @@ class MemoryAtVersion(BaseModel):
     text: str
 
 
-class MemoryDifference(BaseModel):
-    """What changed in a memory between two versions."""
-
-    path: str
-    before: str
-    after: str
-    difference: str
-
-
 class IssuedToken(BaseModel):
     """A personal token, shown the once. The console never shows it again."""
 
@@ -606,14 +597,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("path", "commit"),
     ),
     Declaration(
-        path="/memory/difference",
-        method="GET",
-        operation_id="difference_at",
-        summary="What changed in a memory, by its path, between two versions.",
-        answers=MemoryDifference,
-        query=("path", "before", "after"),
-    ),
-    Declaration(
         path="/memory/pin",
         method="POST",
         operation_id="pin_at",
@@ -663,14 +646,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=ChallengeList,
         changes=True,
         accepts=Decision,
-    ),
-    Declaration(
-        path="/projects/{project_id}/memory/difference",
-        method="GET",
-        operation_id="difference",
-        summary="What changed in a memory between two versions.",
-        answers=MemoryDifference,
-        query=("path", "before", "after"),
     ),
     Declaration(
         path="/members",
