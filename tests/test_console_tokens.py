@@ -23,7 +23,7 @@ def test_a_member_issues_their_own_token_and_the_old_one_stops_working(
 
     issued = issue(signed_out)
 
-    assert issued["employee_id"] == "E1001"
+    assert issued["member_id"] == "E1001"
     assert issued["personal_token"].startswith("smt_")
     assert issued["server_url"].startswith("http")
     Session(console.server, issued["personal_token"]).call("create_project", name="Check")  # it works
@@ -47,13 +47,13 @@ def test_the_token_is_not_shown_again_afterwards(console: Console, signed_out: C
 
 def test_the_owner_issues_a_token_for_another_member(console: Console, signed_out: ConsoleClient) -> None:
     _, owner_token = console.a_team("olive-token-three")
-    dana = Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
+    dana = Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
     console.github.as_(403, "olive-token-three")
     signed_out.sign_in()
 
     issued = issue(signed_out, "/api/members/emp-2/token")
 
-    assert issued["employee_id"] == "emp-2"
+    assert issued["member_id"] == "emp-2"
     Session(console.server, issued["personal_token"]).call("create_project", name="Dana's check")
     try:
         Session(console.server, dana["personal_token"]).call("create_project", name="With Dana's old token")
@@ -64,8 +64,8 @@ def test_the_owner_issues_a_token_for_another_member(console: Console, signed_ou
 
 def test_a_member_cannot_issue_a_token_for_someone_else(console: Console, signed_out: ConsoleClient) -> None:
     team, owner_token = console.a_team("olive-token-four")
-    Session(console.server, owner_token).call("add_member", employee_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--employee-id", "emp-2", "--github", "dana-token-four")
+    Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
+    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-token-four")
     console.github.as_(404, "dana-token-four")
     signed_out.sign_in()
 

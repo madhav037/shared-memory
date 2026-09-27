@@ -7,7 +7,7 @@ test("a project is restricted, a member is let in, and then loses access", async
 
   // Someone to let in, and a project to keep from everyone else.
   await page.getByTestId("to-team").click();
-  await page.getByTestId("new-employee-id").fill("emp-ray");
+  await page.getByTestId("new-member-id").fill("emp-ray");
   await page.getByTestId("new-name").fill("Ray Reader");
   await page.getByTestId("new-github").fill("ray-reader");
   await page.getByTestId("add-member").click();

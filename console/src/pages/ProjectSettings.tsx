@@ -115,16 +115,16 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             </li>
           )}
           {project.access.map((person) => (
-            <li className="entry" key={person.employee_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <li className="entry" key={person.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>
-                {person.name} <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{person.employee_id}</span>
+                {person.name} <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{person.member_id}</span>
               </span>
               {project.you_may_change && (
                 <button
                   type="button"
                   className="quiet-link danger"
-                  onClick={() => attempt(() => revokeAccess(project.project_id, person.employee_id))}
-                  data-testid={`revoke-${person.employee_id}`}
+                  onClick={() => attempt(() => revokeAccess(project.project_id, person.member_id))}
+                  data-testid={`revoke-${person.member_id}`}
                 >
                   Take access away
                 </button>
@@ -134,11 +134,11 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </ul>
         {project.you_may_change && (
           <Adding
-            label="Employee ID"
+            label="Member ID"
             placeholder="E1042"
             action="Let them in"
             testid="access"
-            onAdd={(employeeId) => attempt(() => grantAccess(project.project_id, employeeId))}
+            onAdd={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
           />
         )}
         {!project.restricted && project.access.length > 0 && (
@@ -160,16 +160,16 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             </li>
           )}
           {project.leads.map((lead) => (
-            <li className="entry" key={lead.employee_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <li className="entry" key={lead.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>
-                {lead.name} <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{lead.employee_id}</span>
+                {lead.name} <span style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{lead.member_id}</span>
               </span>
               {runsTheTeam && (
                 <button
                   type="button"
                   className="quiet-link danger"
-                  onClick={() => attempt(() => removeLead(project.project_id, lead.employee_id))}
-                  data-testid={`remove-lead-${lead.employee_id}`}
+                  onClick={() => attempt(() => removeLead(project.project_id, lead.member_id))}
+                  data-testid={`remove-lead-${lead.member_id}`}
                 >
                   Take off
                 </button>
@@ -179,11 +179,11 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </ul>
         {project.you_may_change && (
           <Adding
-            label="Employee ID"
+            label="Member ID"
             placeholder="E1042"
             action="Appoint as lead"
             testid="lead"
-            onAdd={(employeeId) => attempt(() => appointLead(project.project_id, employeeId))}
+            onAdd={(memberId) => attempt(() => appointLead(project.project_id, memberId))}
           />
         )}
       </section>

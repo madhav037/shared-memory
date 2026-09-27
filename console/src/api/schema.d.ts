@@ -124,7 +124,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{project_id}/leads/{employee_id}/remove": {
+    "/api/projects/{project_id}/leads/{member_id}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -175,7 +175,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{project_id}/access/{employee_id}/remove": {
+    "/api/projects/{project_id}/access/{member_id}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -448,7 +448,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/members/{employee_id}/remove": {
+    "/api/members/{member_id}/remove": {
         parameters: {
             query?: never;
             header?: never;
@@ -465,7 +465,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/members/{employee_id}/change": {
+    "/api/members/{member_id}/change": {
         parameters: {
             query?: never;
             header?: never;
@@ -482,7 +482,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/members/{employee_id}/admin": {
+    "/api/members/{member_id}/admin": {
         parameters: {
             query?: never;
             header?: never;
@@ -499,7 +499,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/members/{employee_id}/ownership": {
+    "/api/members/{member_id}/ownership": {
         parameters: {
             query?: never;
             header?: never;
@@ -533,7 +533,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/members/{employee_id}/token": {
+    "/api/members/{member_id}/token": {
         parameters: {
             query?: never;
             header?: never;
@@ -576,8 +576,8 @@ export interface components {
          * @description Who the console is signed in as.
          */
         SignedInMember: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
             /** Name */
             name: string;
             /** Team */
@@ -606,8 +606,8 @@ export interface components {
          * @description A member named on a project.
          */
         ProjectMember: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
             /** Name */
             name: string;
         };
@@ -701,8 +701,8 @@ export interface components {
          * @description The member being made a lead of this project.
          */
         Appointment: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
         };
         /**
          * Restriction
@@ -717,8 +717,8 @@ export interface components {
          * @description The member being let into this project.
          */
         AccessChange: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
         };
         /**
          * RepositoryName
@@ -1171,8 +1171,8 @@ export interface components {
          * @description One member of the team, as an admin sees them.
          */
         MemberSummary: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
             /** Name */
             name: string;
             /**
@@ -1195,8 +1195,8 @@ export interface components {
          * @description A personal token, shown the once. The console never shows it again.
          */
         IssuedToken: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
             /** Personal Token */
             personal_token: string;
             /** Server Url */
@@ -1207,8 +1207,8 @@ export interface components {
          * @description A member being added to the team.
          */
         NewMember: {
-            /** Employee Id */
-            employee_id: string;
+            /** Member Id */
+            member_id: string;
             /** Name */
             name: string;
             /**
@@ -1430,7 +1430,7 @@ export interface operations {
             header?: never;
             path: {
                 project_id: string;
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -1505,7 +1505,7 @@ export interface operations {
             header?: never;
             path: {
                 project_id: string;
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -1903,7 +1903,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -1925,7 +1925,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -1951,7 +1951,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -1977,7 +1977,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };
@@ -2019,7 +2019,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                employee_id: string;
+                member_id: string;
             };
             cookie?: never;
         };

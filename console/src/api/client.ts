@@ -129,8 +129,8 @@ export function searchEverywhere(asked: SearchAsked, signal?: AbortSignal): Prom
 }
 
 /** Issue a new personal token for a member of the team; theirs stops working. */
-export function reissueToken(employeeId: string): Promise<IssuedToken> {
-  return change<IssuedToken>(`/api/members/${encodeURIComponent(employeeId)}/token`);
+export function reissueToken(memberId: string): Promise<IssuedToken> {
+  return change<IssuedToken>(`/api/members/${encodeURIComponent(memberId)}/token`);
 }
 
 /** Everything pinned that this project's sessions are briefed with. */
@@ -167,24 +167,24 @@ export function fetchMembers(signal?: AbortSignal): Promise<Members> {
 }
 
 /** Add a member; their personal token comes back once. */
-export function addMember(asked: { employee_id: string; name: string; github?: string }): Promise<IssuedToken> {
+export function addMember(asked: { member_id: string; name: string; github?: string }): Promise<IssuedToken> {
   return change<IssuedToken>("/api/members", asked);
 }
 
-export function removeMember(employeeId: string): Promise<Members> {
-  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/remove`);
+export function removeMember(memberId: string): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(memberId)}/remove`);
 }
 
-export function changeMember(employeeId: string, asked: { name?: string; github?: string }): Promise<Members> {
-  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/change`, asked);
+export function changeMember(memberId: string, asked: { name?: string; github?: string }): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(memberId)}/change`, asked);
 }
 
-export function setAdmin(employeeId: string, admin: boolean): Promise<Members> {
-  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/admin`, { admin });
+export function setAdmin(memberId: string, admin: boolean): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(memberId)}/admin`, { admin });
 }
 
-export function handOverOwnership(employeeId: string): Promise<Members> {
-  return change<Members>(`/api/members/${encodeURIComponent(employeeId)}/ownership`);
+export function handOverOwnership(memberId: string): Promise<Members> {
+  return change<Members>(`/api/members/${encodeURIComponent(memberId)}/ownership`);
 }
 
 /** Create a project; whoever creates it is its first project lead. */
@@ -196,12 +196,12 @@ export function renameProject(projectId: string, name: string): Promise<ProjectD
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/rename`, { name });
 }
 
-export function appointLead(projectId: string, employeeId: string): Promise<ProjectDetail> {
-  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/leads`, { employee_id: employeeId });
+export function appointLead(projectId: string, memberId: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/leads`, { member_id: memberId });
 }
 
-export function removeLead(projectId: string, employeeId: string): Promise<ProjectDetail> {
-  const where = `${encodeURIComponent(projectId)}/leads/${encodeURIComponent(employeeId)}`;
+export function removeLead(projectId: string, memberId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/leads/${encodeURIComponent(memberId)}`;
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
@@ -210,12 +210,12 @@ export function restrictProject(projectId: string, restricted: boolean): Promise
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/restrict`, { restricted });
 }
 
-export function grantAccess(projectId: string, employeeId: string): Promise<ProjectDetail> {
-  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/access`, { employee_id: employeeId });
+export function grantAccess(projectId: string, memberId: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/access`, { member_id: memberId });
 }
 
-export function revokeAccess(projectId: string, employeeId: string): Promise<ProjectDetail> {
-  const where = `${encodeURIComponent(projectId)}/access/${encodeURIComponent(employeeId)}`;
+export function revokeAccess(projectId: string, memberId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/access/${encodeURIComponent(memberId)}`;
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 

@@ -62,7 +62,7 @@ def test_a_memory_shows_the_challenges_it_is_waiting_on(console: Console, signed
         "remember", title="Use pnpm, not npm", summary="Billing uses pnpm.", type="convention", body="We use pnpm."
     )["path"]
     promoted = in_project.call("promote", path=first, level="project")
-    dana = Session(console.server, owner.call("add_member", employee_id="emp-2", name="Dana Dev")["personal_token"])
+    dana = Session(console.server, owner.call("add_member", member_id="emp-2", name="Dana Dev")["personal_token"])
     challenger = dana.in_project(project, "billing-api").call(
         "remember", title="Use npm, not pnpm", summary="Billing uses npm.", type="convention", body="We use npm."
     )["path"]
@@ -108,7 +108,7 @@ def test_another_members_personal_memory_is_labelled_as_not_accepted(
 ) -> None:
     owner = signed_in_owner(console, signed_out, "olive-browse-six", 306)
     project = owner.call("create_project", name="Billing")["project_id"]
-    dana = Session(console.server, owner.call("add_member", employee_id="emp-2", name="Dana Dev")["personal_token"])
+    dana = Session(console.server, owner.call("add_member", member_id="emp-2", name="Dana Dev")["personal_token"])
     dana.in_project(project, "billing-api").call(
         "remember",
         title="Dana's own note",

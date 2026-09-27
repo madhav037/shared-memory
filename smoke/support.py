@@ -10,8 +10,8 @@ from tests.support import Session, Team
 REPOSITORY = "smoke-app"
 
 
-def member(team: Team, project: str, employee_id: str, name: str) -> Session:
-    added = team.owner().call("add_member", employee_id=employee_id, name=name)
+def member(team: Team, project: str, member_id: str, name: str) -> Session:
+    added = team.owner().call("add_member", member_id=member_id, name=name)
     return Session(team.server, added["personal_token"], project, REPOSITORY)
 
 

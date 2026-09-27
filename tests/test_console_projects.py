@@ -16,14 +16,14 @@ def projects(client: ConsoleClient) -> list[dict[str, Any]]:
 
 
 def leads(project: dict[str, Any]) -> list[str]:
-    return [lead["employee_id"] for lead in project["leads"]]
+    return [lead["member_id"] for lead in project["leads"]]
 
 
 def signed_in_member(
-    console: Console, owner: ConsoleClient, employee_id: str, github: str, account: int
+    console: Console, owner: ConsoleClient, member_id: str, github: str, account: int
 ) -> ConsoleClient:
     """A second member of the team, added by the owner and signed in to their own console session."""
-    add(owner, employee_id, f"Dana {employee_id}", github)
+    add(owner, member_id, f"Dana {member_id}", github)
     client = console.client()
     console.github.as_(account, github)
     client.sign_in()
@@ -44,7 +44,7 @@ def test_an_admin_creates_a_project_and_is_its_first_lead(console: Console, sign
 def test_creating_a_project_from_claude_makes_the_creator_its_lead(console: Console, signed_out: ConsoleClient) -> None:
     owner = signed_in_owner(console, signed_out, "olive-projects-two", 702)
     dana = signed_in_member(console, signed_out, "emp-2", "dana-projects-two", 703)
-    dana_claude = Session(console.server, owner.call("reissue_token", employee_id="emp-2")["personal_token"])
+    dana_claude = Session(console.server, owner.call("reissue_token", member_id="emp-2")["personal_token"])
 
     made_by_dana = dana_claude.call("create_project", name="Payments")["project_id"]
 
@@ -80,8 +80,8 @@ def test_a_lead_appoints_another_lead_and_an_admin_takes_one_off(console: Consol
     ash = signed_in_member(console, signed_out, "emp-3", "ash-projects-five", 708)
     billing = create(signed_out, "Billing")["project_id"]
 
-    signed_out.post_json(f"/api/projects/{billing}/leads", {"employee_id": "emp-2"})
-    appointed_by_a_lead = dana.post_json(f"/api/projects/{billing}/leads", {"employee_id": "emp-3"})
+    signed_out.post_json(f"/api/projects/{billing}/leads", {"member_id": "emp-2"})
+    appointed_by_a_lead = dana.post_json(f"/api/projects/{billing}/leads", {"member_id": "emp-3"})
     removed_by_a_lead = dana.post(f"/api/projects/{billing}/leads/emp-3/remove")
     removed_by_an_admin = signed_out.post(f"/api/projects/{billing}/leads/emp-3/remove")
 
@@ -118,7 +118,7 @@ def test_a_lead_adds_and_removes_repositories_and_a_plain_member_cannot(
     dana = signed_in_member(console, signed_out, "emp-2", "dana-projects-seven", 711)
     ash = signed_in_member(console, signed_out, "emp-3", "ash-projects-seven", 712)
     billing = create(signed_out, "Billing")["project_id"]
-    signed_out.post_json(f"/api/projects/{billing}/leads", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{billing}/leads", {"member_id": "emp-2"})
 
     added_by_a_lead = dana.post_json(f"/api/projects/{billing}/repositories", {"name": "billing-api"})
     added_by_a_member = ash.post_json(f"/api/projects/{billing}/repositories", {"name": "billing-web"})
@@ -154,7 +154,7 @@ def test_a_project_lead_reads_the_audit_log_for_their_own_projects_only(
     ash = signed_in_member(console, signed_out, "emp-3", "ash-projects-nine", 717)
     billing = create(signed_out, "Billing")["project_id"]
     payments = create(signed_out, "Payments")["project_id"]
-    signed_out.post_json(f"/api/projects/{billing}/leads", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{billing}/leads", {"member_id": "emp-2"})
     signed_out.post_json(f"/api/projects/{billing}/repositories", {"name": "billing-api"})
     signed_out.post_json(f"/api/projects/{payments}/repositories", {"name": "payments-api"})
 
@@ -175,7 +175,7 @@ def test_every_change_to_a_project_is_in_the_audit_log(console: Console, signed_
     billing = create(signed_out, "Billing")["project_id"]
 
     signed_out.post_json(f"/api/projects/{billing}/rename", {"name": "Billing and invoicing"})
-    signed_out.post_json(f"/api/projects/{billing}/leads", {"employee_id": "emp-2"})
+    signed_out.post_json(f"/api/projects/{billing}/leads", {"member_id": "emp-2"})
     signed_out.post_json(f"/api/projects/{billing}/repositories", {"name": "billing-api"})
     signed_out.post(f"/api/projects/{billing}/repositories/billing-api/remove")
     signed_out.post(f"/api/projects/{billing}/leads/emp-2/remove")

@@ -134,7 +134,7 @@ def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningS
     team = new_team(slow_server)
     project = team.owner().call("create_project", name="Billing")["project_id"]
     owner = team.owner().in_project(project)
-    added = team.owner().call("add_member", employee_id="emp-2", name="Dana Dev")
+    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
     dana = Session(slow_server, added["personal_token"], project)
     npm = owner.call(
         "remember",

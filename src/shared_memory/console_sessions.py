@@ -184,13 +184,13 @@ class ConsoleSessions:
                 row["is_admin"],
             )  # fmt: skip
 
-    def end_all_for(self, employee_id: str, team_pk: int) -> None:
+    def end_all_for(self, member_id: str, team_pk: int) -> None:
         """End every console session of one member, for when they are removed from the team."""
         with self._db.transaction() as conn:
             conn.execute(
                 "UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id IN"
                 " (SELECT id FROM members WHERE team_id = %s AND member_id = %s)",
-                (self._clock(), team_pk, employee_id),
+                (self._clock(), team_pk, member_id),
             )
 
     def end(self, token: str | None) -> None:

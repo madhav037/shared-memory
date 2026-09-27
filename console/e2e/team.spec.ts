@@ -8,7 +8,7 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   await signInAs(page, 1, "olive");
   await page.getByTestId("to-team").click();
 
-  await page.getByTestId("new-employee-id").fill("emp-7");
+  await page.getByTestId("new-member-id").fill("emp-7");
   await page.getByTestId("new-name").fill("Dana Dev");
   await page.getByTestId("new-github").fill("dana-seven");
   await page.getByTestId("add-member").click();

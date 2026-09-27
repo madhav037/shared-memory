@@ -231,14 +231,14 @@ class Team:
 
 def new_team(server: RunningServer) -> Team:
     code = f"team-{uuid.uuid4().hex[:8]}"
-    output = server.run_cli("setup", "--team", code, "--owner-employee-id", "owner-1", "--owner-name", "Olive Owner")
+    output = server.run_cli("setup", "--team", code, "--owner-member-id", "owner-1", "--owner-name", "Olive Owner")
     token = next(line.split(":", 1)[1].strip() for line in output.splitlines() if line.startswith("Owner personal token:"))
     return Team(server, code, token)
 
 
-def member(team: Team, project: str, employee_id: str, name: str) -> Session:
+def member(team: Team, project: str, member_id: str, name: str) -> Session:
     """A session for a member added to the team, working in one project."""
-    added = team.owner().call("add_member", employee_id=employee_id, name=name)
+    added = team.owner().call("add_member", member_id=member_id, name=name)
     return Session(team.server, added["personal_token"], project, "billing-api")
 
 
@@ -411,7 +411,7 @@ class Console:
         """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
         code = f"team-{uuid.uuid4().hex[:8]}"
         printed = self.server.run_cli(
-            "setup", "--team", code, "--owner-employee-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", github_login,
         )  # fmt: skip
         token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
@@ -442,9 +442,9 @@ def ask(client: ConsoleClient, url: str, **asked: Any) -> dict[str, Any]:
     return body
 
 
-def add(client: ConsoleClient, employee_id: str, name: str, github: str | None = None) -> dict[str, Any]:
+def add(client: ConsoleClient, member_id: str, name: str, github: str | None = None) -> dict[str, Any]:
     """Add a member to the team through the console."""
-    response = client.post_json("/api/members", {"employee_id": employee_id, "name": name, "github": github})
+    response = client.post_json("/api/members", {"member_id": member_id, "name": name, "github": github})
     assert response.status_code == 200, response.text
     added: dict[str, Any] = response.json()
     return added

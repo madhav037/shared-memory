@@ -54,7 +54,7 @@ function FileLink({ path }: { path: string }) {
 }
 
 /** What else the record says about a change, in words rather than field names. */
-function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: (employeeId: string) => string }) {
+function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: (memberId: string) => string }) {
   const text = (name: string) => {
     const value = detail[name];
     return value === null || value === undefined || value === "" ? null : String(value);
@@ -150,7 +150,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       <div className="form-line" style={{ marginTop: 24 }}>
         <TextInput
           label="Member"
-          placeholder="Employee ID"
+          placeholder="Member ID"
           data-testid="filter-member"
           onChange={(event) => set("member", event.currentTarget.value.trim())}
           style={{ flex: "1 1 140px" }}

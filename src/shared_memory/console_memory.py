@@ -71,7 +71,7 @@ class ConsoleMemory:
         pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
         caller.require_reach(str(pure))
         reachable = {project.project_id: project.name for project in self._identity.projects(caller.member)}
-        people = {one["employee_id"]: one["name"] for one in self._identity.members(caller.member)}
+        people = {one["member_id"]: one["name"] for one in self._identity.members(caller.member)}
         memories: list[tuple[PurePosixPath, Memory]] = []
         if not pure.parts:
             subfolders = [PurePosixPath("team")] + [PurePosixPath("projects", project) for project in reachable]

@@ -273,7 +273,7 @@ function MemberMenu({
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>
-          {member.name} ({member.employee_id}), {member.role} of {member.team}
+          {member.name} ({member.member_id}), {member.role} of {member.team}
         </Menu.Label>
         <div className="only-small">
           {links.map((link) => (

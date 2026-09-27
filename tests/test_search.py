@@ -93,7 +93,7 @@ def test_search_can_be_filtered_by_type_and_level(owner: Session, knowledge: dic
 
 
 def test_other_members_personal_memory_is_labeled_as_not_accepted(team: Team, project: str, owner: Session) -> None:
-    added = team.owner().call("add_member", employee_id="emp-2", name="Dana Dev")
+    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
     dana = Session(team.server, added["personal_token"], project, "billing-api")
     path = remember(dana, "Webhook signatures", "Verify the Stripe webhook signature before parsing.")
 

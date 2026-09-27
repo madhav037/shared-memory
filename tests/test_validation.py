@@ -137,7 +137,7 @@ def test_an_author_deletes_their_personal_memory(member: Session) -> None:
 
 def test_members_cannot_edit_or_delete_someone_elses_memory(team: Team, member: Session) -> None:
     saved = remember(member)
-    added = team.owner().call("add_member", employee_id="emp-2", name="Dana Dev")
+    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
     other = Session(team.server, added["personal_token"], member.project, "billing-api")
 
     assert "only edit" in other.refusal("edit_memory", path=saved["path"], body="mine now")
