@@ -226,57 +226,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{project_id}/tree": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A project's memory as a folder tree, with each memory's title and summary. */
-        get: operations["tree"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/memory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** One memory in full, with any challenges on it. */
-        get: operations["memory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Memories that match, by meaning and by exact words. */
-        get: operations["search"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/audit": {
         parameters: {
             query?: never;
@@ -304,25 +253,7 @@ export interface paths {
         /** Everything pinned that this project's sessions are briefed with. */
         get: operations["pins"];
         put?: never;
-        /** Pin a project or team memory, or a topic folder, into every session's briefing. */
-        post: operations["pin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/pins/remove": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Remove a pin, so it no longer appears in the briefing. */
-        post: operations["unpin"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -510,57 +441,6 @@ export interface paths {
         put?: never;
         /** Accept a challenge or reject it. */
         post: operations["decide_challenge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/retire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Retire a memory that is no longer true; another author's raises a challenge they decide. */
-        post: operations["retire"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/memory/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Every version of one memory, newest first. */
-        get: operations["history"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/memory/version": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A memory as it was at one version. */
-        get: operations["version"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -883,141 +763,6 @@ export interface components {
             name: string;
         };
         /**
-         * PendingChallenge
-         * @description A challenge this personal memory is waiting on.
-         */
-        PendingChallenge: {
-            /** Challenge Id */
-            challenge_id: number;
-            /** Kind */
-            kind: string;
-            /** Replaces */
-            replaces: string | null;
-        };
-        /**
-         * TreeFolder
-         * @description A folder of memory. A topic folder can be pinned, which pins its index.
-         */
-        TreeFolder: {
-            /** Folder */
-            folder: string;
-            /** Pinnable */
-            pinnable: boolean;
-            /** Pinned */
-            pinned: boolean;
-            /** Memories */
-            memories: components["schemas"]["TreeMemory"][];
-        };
-        /** TreeMemory */
-        TreeMemory: {
-            /** Path */
-            path: string;
-            /** Title */
-            title: string;
-            /** Summary */
-            summary: string;
-            /** Pinned */
-            pinned: boolean;
-            /** Pending */
-            pending: components["schemas"]["PendingChallenge"][];
-        };
-        /**
-         * Tree
-         * @description A project's memory, folder by folder.
-         */
-        Tree: {
-            /** Folders */
-            folders: components["schemas"]["TreeFolder"][];
-        };
-        /**
-         * OpenChallenge
-         * @description A challenge raised against this memory.
-         */
-        OpenChallenge: {
-            /** Challenge Id */
-            challenge_id: number;
-            /** Kind */
-            kind: string;
-            /** Raised By */
-            raised_by: string;
-            /** Challenger Path */
-            challenger_path: string | null;
-            /** May Decide */
-            may_decide: boolean;
-        };
-        /**
-         * MemoryDetail
-         * @description One memory in full, as its author wrote it.
-         */
-        MemoryDetail: {
-            /** Path */
-            path: string;
-            /** Level */
-            level: string;
-            /** Project Id */
-            project_id: string | null;
-            /** Title */
-            title: string;
-            /** Summary */
-            summary: string;
-            /** Type */
-            type: string;
-            /** Author */
-            author: string;
-            /** Status */
-            status: string;
-            /** Replaces */
-            replaces: string | null;
-            /** Superseded By */
-            superseded_by: string | null;
-            /** Exception To */
-            exception_to: string | null;
-            /** Related Files */
-            related_files: string[];
-            /** Promoted By */
-            promoted_by: string | null;
-            /** Body */
-            body: string;
-            /** Author Name */
-            author_name: string;
-            /** Source */
-            source: string;
-            /** Pinned */
-            pinned: boolean;
-            /** Pending */
-            pending: components["schemas"]["PendingChallenge"][];
-            /** Open Challenges */
-            open_challenges: components["schemas"]["OpenChallenge"][];
-        };
-        /** SearchHit */
-        SearchHit: {
-            /** Path */
-            path: string;
-            /** Project Id */
-            project_id: string | null;
-            /** Title */
-            title: string;
-            /** Heading */
-            heading: string;
-            /** Level */
-            level: string;
-            /** Type */
-            type: string;
-            /** Author */
-            author: string;
-            /** Summary */
-            summary: string;
-            /** Label */
-            label: string;
-            /** Pending */
-            pending: components["schemas"]["PendingChallenge"][];
-        };
-        /** SearchResults */
-        SearchResults: {
-            /** Results */
-            results: components["schemas"]["SearchHit"][];
-        };
-        /**
          * AuditEvent
          * @description One thing that happened, and who did it.
          */
@@ -1089,14 +834,6 @@ export interface components {
             tokens: number;
             /** Cap */
             cap: number;
-        };
-        /**
-         * MemoryPath
-         * @description The memory or topic folder this change is about.
-         */
-        MemoryPath: {
-            /** Path */
-            path: string;
         };
         /**
          * Crumb
@@ -1199,6 +936,78 @@ export interface components {
             inside: components["schemas"]["FolderSection"][];
         };
         /**
+         * OpenChallenge
+         * @description A challenge raised against this memory.
+         */
+        OpenChallenge: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Raised By */
+            raised_by: string;
+            /** Challenger Path */
+            challenger_path: string | null;
+            /** May Decide */
+            may_decide: boolean;
+        };
+        /**
+         * PendingChallenge
+         * @description A challenge this personal memory is waiting on.
+         */
+        PendingChallenge: {
+            /** Challenge Id */
+            challenge_id: number;
+            /** Kind */
+            kind: string;
+            /** Replaces */
+            replaces: string | null;
+        };
+        /**
+         * MemoryDetail
+         * @description One memory in full, as its author wrote it.
+         */
+        MemoryDetail: {
+            /** Path */
+            path: string;
+            /** Level */
+            level: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Status */
+            status: string;
+            /** Replaces */
+            replaces: string | null;
+            /** Superseded By */
+            superseded_by: string | null;
+            /** Exception To */
+            exception_to: string | null;
+            /** Related Files */
+            related_files: string[];
+            /** Promoted By */
+            promoted_by: string | null;
+            /** Body */
+            body: string;
+            /** Author Name */
+            author_name: string;
+            /** Source */
+            source: string;
+            /** Pinned */
+            pinned: boolean;
+            /** Pending */
+            pending: components["schemas"]["PendingChallenge"][];
+            /** Open Challenges */
+            open_challenges: components["schemas"]["OpenChallenge"][];
+        };
+        /**
          * MemoryVersion
          * @description One version of a memory in the memory folder's history.
          */
@@ -1263,6 +1072,14 @@ export interface components {
             pinned: boolean;
         };
         /**
+         * MemoryPath
+         * @description The memory or topic folder this change is about.
+         */
+        MemoryPath: {
+            /** Path */
+            path: string;
+        };
+        /**
          * Retired
          * @description What retiring did: the memory is retired, or its author has been asked to retire it.
          */
@@ -1273,6 +1090,34 @@ export interface components {
             path: string;
             /** Challenge Id */
             challenge_id: number | null;
+        };
+        /** SearchHit */
+        SearchHit: {
+            /** Path */
+            path: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Title */
+            title: string;
+            /** Heading */
+            heading: string;
+            /** Level */
+            level: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Summary */
+            summary: string;
+            /** Label */
+            label: string;
+            /** Pending */
+            pending: components["schemas"]["PendingChallenge"][];
+        };
+        /** SearchResults */
+        SearchResults: {
+            /** Results */
+            results: components["schemas"]["SearchHit"][];
         };
         /**
          * ChallengeDetail
@@ -1774,81 +1619,6 @@ export interface operations {
             };
         };
     };
-    tree: {
-        parameters: {
-            query?: {
-                level?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A project's memory as a folder tree, with each memory's title and summary. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tree"];
-                };
-            };
-        };
-    };
-    memory: {
-        parameters: {
-            query?: {
-                path?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One memory in full, with any challenges on it. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryDetail"];
-                };
-            };
-        };
-    };
-    search: {
-        parameters: {
-            query?: {
-                query?: string;
-                level?: string;
-                type?: string;
-                limit?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Memories that match, by meaning and by exact words. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResults"];
-                };
-            };
-        };
-    };
     audit: {
         parameters: {
             query?: {
@@ -1889,58 +1659,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Everything pinned that this project's sessions are briefed with. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Pins"];
-                };
-            };
-        };
-    };
-    pin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MemoryPath"];
-            };
-        };
-        responses: {
-            /** @description Pin a project or team memory, or a topic folder, into every session's briefing. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Pins"];
-                };
-            };
-        };
-    };
-    unpin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MemoryPath"];
-            };
-        };
-        responses: {
-            /** @description Remove a pin, so it no longer appears in the briefing. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2204,81 +1922,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChallengeList"];
-                };
-            };
-        };
-    };
-    retire: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MemoryPath"];
-            };
-        };
-        responses: {
-            /** @description Retire a memory that is no longer true; another author's raises a challenge they decide. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Retired"];
-                };
-            };
-        };
-    };
-    history: {
-        parameters: {
-            query?: {
-                path?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Every version of one memory, newest first. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryHistory"];
-                };
-            };
-        };
-    };
-    version: {
-        parameters: {
-            query?: {
-                path?: string;
-                commit?: string;
-            };
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A memory as it was at one version. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryAtVersion"];
                 };
             };
         };

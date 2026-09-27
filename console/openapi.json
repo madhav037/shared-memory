@@ -415,138 +415,6 @@
         }
       }
     },
-    "/api/projects/{project_id}/tree": {
-      "get": {
-        "operationId": "tree",
-        "summary": "A project's memory as a folder tree, with each memory's title and summary.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "level",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A project's memory as a folder tree, with each memory's title and summary.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Tree"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/memory": {
-      "get": {
-        "operationId": "memory",
-        "summary": "One memory in full, with any challenges on it.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "One memory in full, with any challenges on it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryDetail"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/search": {
-      "get": {
-        "operationId": "search",
-        "summary": "Memories that match, by meaning and by exact words.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "level",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Memories that match, by meaning and by exact words.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchResults"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/audit": {
       "get": {
         "operationId": "audit",
@@ -640,80 +508,6 @@
         "responses": {
           "200": {
             "description": "Everything pinned that this project's sessions are briefed with.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Pins"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "pin",
-        "summary": "Pin a project or team memory, or a topic folder, into every session's briefing.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemoryPath"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Pin a project or team memory, or a topic folder, into every session's briefing.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Pins"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/pins/remove": {
-      "post": {
-        "operationId": "unpin",
-        "summary": "Remove a pin, so it no longer appears in the briefing.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemoryPath"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Remove a pin, so it no longer appears in the briefing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1082,124 +876,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChallengeList"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/retire": {
-      "post": {
-        "operationId": "retire",
-        "summary": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemoryPath"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Retired"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/memory/history": {
-      "get": {
-        "operationId": "history",
-        "summary": "Every version of one memory, newest first.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Every version of one memory, newest first.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryHistory"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{project_id}/memory/version": {
-      "get": {
-        "operationId": "version",
-        "summary": "A memory as it was at one version.",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "commit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A memory as it was at one version.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryAtVersion"
                 }
               }
             }
@@ -1840,395 +1516,6 @@
         "title": "RepositoryName",
         "type": "object"
       },
-      "PendingChallenge": {
-        "description": "A challenge this personal memory is waiting on.",
-        "properties": {
-          "challenge_id": {
-            "title": "Challenge Id",
-            "type": "integer"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "replaces": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replaces"
-          }
-        },
-        "required": [
-          "challenge_id",
-          "kind",
-          "replaces"
-        ],
-        "title": "PendingChallenge",
-        "type": "object"
-      },
-      "TreeFolder": {
-        "description": "A folder of memory. A topic folder can be pinned, which pins its index.",
-        "properties": {
-          "folder": {
-            "title": "Folder",
-            "type": "string"
-          },
-          "pinnable": {
-            "title": "Pinnable",
-            "type": "boolean"
-          },
-          "pinned": {
-            "title": "Pinned",
-            "type": "boolean"
-          },
-          "memories": {
-            "items": {
-              "$ref": "#/components/schemas/TreeMemory"
-            },
-            "title": "Memories",
-            "type": "array"
-          }
-        },
-        "required": [
-          "folder",
-          "pinnable",
-          "pinned",
-          "memories"
-        ],
-        "title": "TreeFolder",
-        "type": "object"
-      },
-      "TreeMemory": {
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          },
-          "pinned": {
-            "title": "Pinned",
-            "type": "boolean"
-          },
-          "pending": {
-            "items": {
-              "$ref": "#/components/schemas/PendingChallenge"
-            },
-            "title": "Pending",
-            "type": "array"
-          }
-        },
-        "required": [
-          "path",
-          "title",
-          "summary",
-          "pinned",
-          "pending"
-        ],
-        "title": "TreeMemory",
-        "type": "object"
-      },
-      "Tree": {
-        "description": "A project's memory, folder by folder.",
-        "properties": {
-          "folders": {
-            "items": {
-              "$ref": "#/components/schemas/TreeFolder"
-            },
-            "title": "Folders",
-            "type": "array"
-          }
-        },
-        "required": [
-          "folders"
-        ],
-        "title": "Tree",
-        "type": "object"
-      },
-      "OpenChallenge": {
-        "description": "A challenge raised against this memory.",
-        "properties": {
-          "challenge_id": {
-            "title": "Challenge Id",
-            "type": "integer"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "raised_by": {
-            "title": "Raised By",
-            "type": "string"
-          },
-          "challenger_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Challenger Path"
-          },
-          "may_decide": {
-            "title": "May Decide",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "challenge_id",
-          "kind",
-          "raised_by",
-          "challenger_path",
-          "may_decide"
-        ],
-        "title": "OpenChallenge",
-        "type": "object"
-      },
-      "MemoryDetail": {
-        "description": "One memory in full, as its author wrote it.",
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "level": {
-            "title": "Level",
-            "type": "string"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          },
-          "author": {
-            "title": "Author",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "replaces": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Replaces"
-          },
-          "superseded_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Superseded By"
-          },
-          "exception_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Exception To"
-          },
-          "related_files": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Related Files",
-            "type": "array"
-          },
-          "promoted_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Promoted By"
-          },
-          "body": {
-            "title": "Body",
-            "type": "string"
-          },
-          "author_name": {
-            "title": "Author Name",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "pinned": {
-            "title": "Pinned",
-            "type": "boolean"
-          },
-          "pending": {
-            "items": {
-              "$ref": "#/components/schemas/PendingChallenge"
-            },
-            "title": "Pending",
-            "type": "array"
-          },
-          "open_challenges": {
-            "items": {
-              "$ref": "#/components/schemas/OpenChallenge"
-            },
-            "title": "Open Challenges",
-            "type": "array"
-          }
-        },
-        "required": [
-          "path",
-          "level",
-          "project_id",
-          "title",
-          "summary",
-          "type",
-          "author",
-          "status",
-          "replaces",
-          "superseded_by",
-          "exception_to",
-          "related_files",
-          "promoted_by",
-          "body",
-          "author_name",
-          "source",
-          "pinned",
-          "pending",
-          "open_challenges"
-        ],
-        "title": "MemoryDetail",
-        "type": "object"
-      },
-      "SearchHit": {
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "heading": {
-            "title": "Heading",
-            "type": "string"
-          },
-          "level": {
-            "title": "Level",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          },
-          "author": {
-            "title": "Author",
-            "type": "string"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "pending": {
-            "items": {
-              "$ref": "#/components/schemas/PendingChallenge"
-            },
-            "title": "Pending",
-            "type": "array"
-          }
-        },
-        "required": [
-          "path",
-          "project_id",
-          "title",
-          "heading",
-          "level",
-          "type",
-          "author",
-          "summary",
-          "label",
-          "pending"
-        ],
-        "title": "SearchHit",
-        "type": "object"
-      },
-      "SearchResults": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/SearchHit"
-            },
-            "title": "Results",
-            "type": "array"
-          }
-        },
-        "required": [
-          "results"
-        ],
-        "title": "SearchResults",
-        "type": "object"
-      },
       "AuditEvent": {
         "description": "One thing that happened, and who did it.",
         "properties": {
@@ -2419,20 +1706,6 @@
           "cap"
         ],
         "title": "Pins",
-        "type": "object"
-      },
-      "MemoryPath": {
-        "description": "The memory or topic folder this change is about.",
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path"
-        ],
-        "title": "MemoryPath",
         "type": "object"
       },
       "Crumb": {
@@ -2694,6 +1967,226 @@
         "title": "Folder",
         "type": "object"
       },
+      "OpenChallenge": {
+        "description": "A challenge raised against this memory.",
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "raised_by": {
+            "title": "Raised By",
+            "type": "string"
+          },
+          "challenger_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenger Path"
+          },
+          "may_decide": {
+            "title": "May Decide",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "kind",
+          "raised_by",
+          "challenger_path",
+          "may_decide"
+        ],
+        "title": "OpenChallenge",
+        "type": "object"
+      },
+      "PendingChallenge": {
+        "description": "A challenge this personal memory is waiting on.",
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "replaces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "kind",
+          "replaces"
+        ],
+        "title": "PendingChallenge",
+        "type": "object"
+      },
+      "MemoryDetail": {
+        "description": "One memory in full, as its author wrote it.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "replaces": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaces"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "exception_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception To"
+          },
+          "related_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Files",
+            "type": "array"
+          },
+          "promoted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promoted By"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "pinned": {
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/PendingChallenge"
+            },
+            "title": "Pending",
+            "type": "array"
+          },
+          "open_challenges": {
+            "items": {
+              "$ref": "#/components/schemas/OpenChallenge"
+            },
+            "title": "Open Challenges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "level",
+          "project_id",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "status",
+          "replaces",
+          "superseded_by",
+          "exception_to",
+          "related_files",
+          "promoted_by",
+          "body",
+          "author_name",
+          "source",
+          "pinned",
+          "pending",
+          "open_challenges"
+        ],
+        "title": "MemoryDetail",
+        "type": "object"
+      },
       "MemoryVersion": {
         "description": "One version of a memory in the memory folder's history.",
         "properties": {
@@ -2834,6 +2327,20 @@
         "title": "PinState",
         "type": "object"
       },
+      "MemoryPath": {
+        "description": "The memory or topic folder this change is about.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "MemoryPath",
+        "type": "object"
+      },
       "Retired": {
         "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
         "properties": {
@@ -2863,6 +2370,90 @@
           "challenge_id"
         ],
         "title": "Retired",
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/PendingChallenge"
+            },
+            "title": "Pending",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "project_id",
+          "title",
+          "heading",
+          "level",
+          "type",
+          "author",
+          "summary",
+          "label",
+          "pending"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchResults": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "SearchResults",
         "type": "object"
       },
       "ChallengeDetail": {

@@ -54,7 +54,7 @@ def test_a_member_without_access_does_not_see_it_listed_or_browse_it(
     dana = signed_in(console, "dana-olive-closed-two", 803)
 
     listed = ask(dana, "/api/projects")["projects"]
-    browsing = dana.get(f"/api/projects/{it.billing}/tree")
+    browsing = dana.get(f"/api/files?folder=projects/{it.billing}")
     reading = dana.get(f"/api/projects/{it.billing}")
 
     assert [one["project_id"] for one in listed] == [open_to_everyone]
@@ -225,22 +225,22 @@ def test_a_restricted_projects_memory_cant_be_reached_by_path_from_another_proje
     assert f"projects/{payments}" in everything["folders"]
 
 
-def test_the_console_cant_reach_a_restricted_projects_memory_through_another_project(
+def test_the_console_cannot_reach_a_restricted_projects_memory_by_its_path(
     console: Console, signed_out: ConsoleClient
 ) -> None:
+    """Every console read takes a path and works out the project from it, so each one has to refuse on its own."""
     it = restricted(console, signed_out, "olive-closed-thirteen", 816)
-    payments = create(signed_out, "Payments")["project_id"]
     secret = a_secret_in(it)
     dana = signed_in(console, "dana-olive-closed-thirteen", 817)
-    through = f"/api/projects/{payments}"
 
     answers = [
-        dana.get(f"{through}/memory?path={secret}"),
-        dana.get(f"{through}/memory/history?path={secret}"),
-        dana.get(f"{through}/memory/version?path={secret}&commit=abc1234"),
-        dana.get(f"{through}/memory/difference?path={secret}&before=abc1234&after=def5678"),
-        dana.post_json(f"{through}/pins", {"path": secret}),
-        dana.post_json(f"{through}/retire", {"path": secret}),
+        dana.get(f"/api/memory?path={secret}"),
+        dana.get(f"/api/memory/history?path={secret}"),
+        dana.get(f"/api/memory/version?path={secret}&commit=abc1234"),
+        dana.get(f"/api/memory/difference?path={secret}&before=abc1234&after=def5678"),
+        dana.post_json("/api/memory/pin", {"path": secret}),
+        dana.post_json("/api/memory/unpin", {"path": secret}),
+        dana.post_json("/api/memory/retire", {"path": secret}),
     ]
 
     assert [answer.status_code for answer in answers] == [403] * len(answers)

@@ -158,29 +158,6 @@ class OpenChallenge(BaseModel):
     may_decide: bool
 
 
-class TreeMemory(BaseModel):
-    path: str
-    title: str
-    summary: str
-    pinned: bool
-    pending: list[PendingChallenge]
-
-
-class TreeFolder(BaseModel):
-    """A folder of memory. A topic folder can be pinned, which pins its index."""
-
-    folder: str
-    pinnable: bool
-    pinned: bool
-    memories: list[TreeMemory]
-
-
-class Tree(BaseModel):
-    """A project's memory, folder by folder."""
-
-    folders: list[TreeFolder]
-
-
 class Pin(BaseModel):
     """One thing pinned into every session's briefing for this project."""
 
@@ -582,30 +559,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
         changes=True,
     ),
     Declaration(
-        path="/projects/{project_id}/tree",
-        method="GET",
-        operation_id="tree",
-        summary="A project's memory as a folder tree, with each memory's title and summary.",
-        answers=Tree,
-        query=("level",),
-    ),
-    Declaration(
-        path="/projects/{project_id}/memory",
-        method="GET",
-        operation_id="memory",
-        summary="One memory in full, with any challenges on it.",
-        answers=MemoryDetail,
-        query=("path",),
-    ),
-    Declaration(
-        path="/projects/{project_id}/search",
-        method="GET",
-        operation_id="search",
-        summary="Memories that match, by meaning and by exact words.",
-        answers=SearchResults,
-        query=("query", "level", "type", "limit"),
-    ),
-    Declaration(
         path="/audit",
         method="GET",
         operation_id="audit",
@@ -619,24 +572,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="pins",
         summary="Everything pinned that this project's sessions are briefed with.",
         answers=Pins,
-    ),
-    Declaration(
-        path="/projects/{project_id}/pins",
-        method="POST",
-        operation_id="pin",
-        summary="Pin a project or team memory, or a topic folder, into every session's briefing.",
-        answers=Pins,
-        changes=True,
-        accepts=MemoryPath,
-    ),
-    Declaration(
-        path="/projects/{project_id}/pins/remove",
-        method="POST",
-        operation_id="unpin",
-        summary="Remove a pin, so it no longer appears in the briefing.",
-        answers=Pins,
-        changes=True,
-        accepts=MemoryPath,
     ),
     Declaration(
         path="/files",
@@ -728,31 +663,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=ChallengeList,
         changes=True,
         accepts=Decision,
-    ),
-    Declaration(
-        path="/projects/{project_id}/retire",
-        method="POST",
-        operation_id="retire",
-        summary="Retire a memory that is no longer true; another author's raises a challenge they decide.",
-        answers=Retired,
-        changes=True,
-        accepts=MemoryPath,
-    ),
-    Declaration(
-        path="/projects/{project_id}/memory/history",
-        method="GET",
-        operation_id="history",
-        summary="Every version of one memory, newest first.",
-        answers=MemoryHistory,
-        query=("path",),
-    ),
-    Declaration(
-        path="/projects/{project_id}/memory/version",
-        method="GET",
-        operation_id="version",
-        summary="A memory as it was at one version.",
-        answers=MemoryAtVersion,
-        query=("path", "commit"),
     ),
     Declaration(
         path="/projects/{project_id}/memory/difference",
