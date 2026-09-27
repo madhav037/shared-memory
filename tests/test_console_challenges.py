@@ -89,10 +89,10 @@ def test_accepting_a_challenge_supersedes_the_memory(console: Console, signed_ou
 
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["waiting"] == []
-    superseded = ask(signed_out, f"/api/projects/{project}/memory", path=mine)
+    superseded = ask(signed_out, "/api/memory", path=mine)
     assert superseded["status"] == "superseded"
     assert superseded["superseded_by"] is not None
-    assert ask(signed_out, f"/api/projects/{project}/memory", path=superseded["superseded_by"])["level"] == "project"
+    assert ask(signed_out, "/api/memory", path=superseded["superseded_by"])["level"] == "project"
 
 
 def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_out: ConsoleClient) -> None:
@@ -106,7 +106,7 @@ def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_
     rejected = decide(signed_out, challenge_id, "reject")
 
     assert rejected.status_code == 200, rejected.text
-    assert ask(signed_out, f"/api/projects/{project}/memory", path=mine)["status"] == "active"
+    assert ask(signed_out, "/api/memory", path=mine)["status"] == "active"
 
 
 def test_several_challenges_against_one_memory_are_shown_together_and_accepting_one_closes_the_others(
@@ -181,11 +181,11 @@ def test_a_member_retires_their_own_memory_from_the_console(console: Console, si
     owner, project, in_project = a_team(console, signed_out, "olive-disputes-seven", 1109)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
 
-    retired = signed_out.post_json(f"/api/projects/{project}/retire", {"path": mine})
+    retired = signed_out.post_json("/api/memory/retire", {"path": mine})
 
     assert retired.status_code == 200, retired.text
     assert retired.json() == {"status": "retired", "path": mine, "challenge_id": None}
-    assert ask(signed_out, f"/api/projects/{project}/memory", path=mine)["status"] == "retired"
+    assert ask(signed_out, "/api/memory", path=mine)["status"] == "retired"
 
 
 def test_retiring_another_members_memory_raises_a_challenge_for_its_author(
@@ -195,12 +195,12 @@ def test_retiring_another_members_memory_raises_a_challenge_for_its_author(
     theirs = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-eight", 1111)
 
-    asked = dana_console.post_json(f"/api/projects/{project}/retire", {"path": theirs})
+    asked = dana_console.post_json("/api/memory/retire", {"path": theirs})
 
     assert asked.status_code == 200, asked.text
     assert asked.json()["status"] == "challenge_raised"
     assert asked.json()["challenge_id"] is not None
-    assert ask(signed_out, f"/api/projects/{project}/memory", path=theirs)["status"] == "active"
+    assert ask(signed_out, "/api/memory", path=theirs)["status"] == "active"
     waiting = challenges(signed_out)["waiting"]
     assert [(one["kind"], one["raised_by"], one["challenger"]) for one in waiting] == [("retire", "emp-2", None)]
     dana_console.close()

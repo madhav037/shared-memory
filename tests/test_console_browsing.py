@@ -15,7 +15,7 @@ def test_a_member_sees_the_projects_they_can_reach(console: Console, signed_out:
     assert [project["name"] for project in projects["projects"]] == ["Billing", "Payments"]
 
 
-def test_a_project_shows_its_memory_as_a_tree_with_summaries(console: Console, signed_out: ConsoleClient) -> None:
+def test_a_project_lists_its_memory_with_summaries(console: Console, signed_out: ConsoleClient) -> None:
     owner = signed_in_owner(console, signed_out, "olive-browse-two", 302)
     project = owner.call("create_project", name="Billing")["project_id"]
     owner.in_project(project, "billing-api").call(
@@ -26,9 +26,9 @@ def test_a_project_shows_its_memory_as_a_tree_with_summaries(console: Console, s
         body="We use pnpm for every package.",
     )
 
-    tree = ask(signed_out, f"/api/projects/{project}/tree")
+    listed = ask(signed_out, "/api/files", folder=f"projects/{project}", deep="1")
 
-    memories = [memory for folder in tree["folders"] for memory in folder["memories"]]
+    memories = [one for section in listed["inside"] for one in section["memories"]]
     assert [(memory["title"], memory["summary"]) for memory in memories] == [("Use pnpm, not npm", "Billing uses pnpm.")]
 
 
@@ -43,7 +43,7 @@ def test_a_memory_reads_in_full_with_its_details(console: Console, signed_out: C
         body="The staging database is wiped and reseeded every night at 02:17 UTC.",
     )
 
-    memory = ask(signed_out, f"/api/projects/{project}/memory", path=saved["path"])
+    memory = ask(signed_out, "/api/memory", path=saved["path"])
 
     assert memory["title"] == "Staging resets nightly"
     assert memory["type"] == "gotcha"
@@ -75,8 +75,8 @@ def test_a_memory_shows_the_challenges_it_is_waiting_on(console: Console, signed
         resolutions={s["path"]: "supersede" for s in similar["similar"]},
     )
 
-    challenged = ask(signed_out, f"/api/projects/{project}/memory", path=promoted["path"])
-    pending = ask(signed_out, f"/api/projects/{project}/memory", path=challenger)
+    challenged = ask(signed_out, "/api/memory", path=promoted["path"])
+    pending = ask(signed_out, "/api/memory", path=challenger)
 
     assert [challenge["kind"] for challenge in challenged["open_challenges"]] == ["supersede"]
     assert [challenge["kind"] for challenge in pending["pending"]] == ["supersede"]
@@ -93,9 +93,9 @@ def test_search_finds_memories_by_meaning_and_by_exact_words(console: Console, s
         body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
     )
 
-    by_meaning = ask(signed_out, f"/api/projects/{project}/search", query="which package manager do we use")
-    by_word = ask(signed_out, f"/api/projects/{project}/search", query="pnpm")
-    filtered = ask(signed_out, f"/api/projects/{project}/search", query="pnpm", type="gotcha")
+    by_meaning = ask(signed_out, "/api/search", query="which package manager do we use")
+    by_word = ask(signed_out, "/api/search", query="pnpm")
+    filtered = ask(signed_out, "/api/search", query="pnpm", type="gotcha")
 
     assert [hit["title"] for hit in by_meaning["results"]] == ["Use pnpm, not npm"]
     assert [hit["title"] for hit in by_word["results"]] == ["Use pnpm, not npm"]
@@ -117,7 +117,7 @@ def test_another_members_personal_memory_is_labelled_as_not_accepted(
         body="Dana keeps test fixtures in a scratch folder while working.",
     )
 
-    found = ask(signed_out, f"/api/projects/{project}/search", query="fixtures scratch folder")
+    found = ask(signed_out, "/api/search", query="fixtures scratch folder")
 
     assert found["results"][0]["label"] == "personal memory of emp-2, not accepted by the team"
 

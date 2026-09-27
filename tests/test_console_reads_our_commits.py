@@ -46,8 +46,8 @@ def unreadable(messages: list[str]) -> list[str]:
     return [one for one in messages if not ACCEPTED.match(one) and one.split(": ", 1)[0] not in known]
 
 
-def messages(client: ConsoleClient, project: str, path: str) -> list[str]:
-    versions = ask(client, f"/api/projects/{project}/memory/history", path=path)["versions"]
+def messages(client: ConsoleClient, path: str) -> list[str]:
+    versions = ask(client, "/api/memory/history", path=path)["versions"]
     return [str(version["message"]) for version in versions]
 
 
@@ -63,7 +63,7 @@ def test_writing_editing_promoting_and_retiring_all_read_as_sentences(
     promoted = in_project.call("promote", path=saved, level="project")["path"]
     in_project.call("retire", path=promoted)
 
-    written = messages(signed_out, project, promoted)
+    written = messages(signed_out, promoted)
 
     assert unreadable(written) == []
     assert {one.split(": ", 1)[0] for one in written} == {"Remember", "Edit", "Promote", "Retire"}
@@ -80,7 +80,7 @@ def test_an_accepted_supersede_challenge_reads_as_a_sentence(console: Console, s
     decided = signed_out.post_json(f"/api/challenges/{raised['challenge_id']}/decide", {"decision": "accept"})
     assert decided.status_code == 200, decided.text
 
-    written = messages(signed_out, project, target)
+    written = messages(signed_out, target)
 
     assert unreadable(written) == []
     assert any(ACCEPTED.match(one) for one in written), written
@@ -97,7 +97,7 @@ def test_an_accepted_retire_challenge_reads_as_a_sentence(console: Console, sign
     decided = signed_out.post_json(f"/api/challenges/{asked['challenge_id']}/decide", {"decision": "accept"})
     assert decided.status_code == 200, decided.text
 
-    written = messages(signed_out, project, target)
+    written = messages(signed_out, target)
 
     assert unreadable(written) == []
     assert any(one.startswith("Accept challenge ") and " retire " in one for one in written), written
