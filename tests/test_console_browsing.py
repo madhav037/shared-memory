@@ -129,7 +129,7 @@ def test_browsing_needs_a_signed_in_member_and_a_project_of_their_team(
     owner = signed_in_owner(console, signed_out, "olive-browse-seven", 307)
     owner.call("create_project", name="Billing")
 
-    stranger_project = signed_out.get("/api/projects/not-a-project/tree")
+    stranger_project = signed_out.get("/api/projects/not-a-project/pins")
 
     assert signed_out_answer.status_code == 401
     assert stranger_project.status_code == 403

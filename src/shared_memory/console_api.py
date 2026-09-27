@@ -48,7 +48,7 @@ from shared_memory.console_contract import (
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
     MemoryAtVersion, MemoryDetail, MemoryDifference, MemoryHistory, MemoryPath, NewMember, PREFIX, Pin, PinState,
     Pins, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge, RepositoryName,
-    Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, Tree, description,
+    Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
@@ -140,10 +140,7 @@ class ConsoleApi:
             "restrict_project": self._restrict_project,
             "grant_access": self._grant_access,
             "revoke_access": self._revoke_access,
-            "tree": self._tree,
             "pins": self._pins,
-            "pin": self._pin,
-            "unpin": self._unpin,
             "files": self._files,
             "memory_at": self._memory_at,
             "history_at": self._history_at,
@@ -155,11 +152,6 @@ class ConsoleApi:
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
             "decide_challenge": self._decide_challenge,
-            "retire": self._retire,
-            "memory": self._memory,
-            "search": self._search,
-            "history": self._history,
-            "version": self._version,
             "difference": self._difference,
             "members": self._members,
             "add_member": self._add_member,
@@ -341,22 +333,6 @@ class ConsoleApi:
         files = self._service.connection_files(server_url, project_id, project_name, name)
         return ProjectRepository(name=name, files=[ConnectionFile(**file) for file in files])
 
-    def _tree(self, request: Request) -> Response:
-        def walk(caller: Caller) -> Tree:
-            walked = self._service.tree(caller, request.query_params.get("level"))
-            pinned = self._briefing.pinned_paths(caller.team)
-            for folder in walked["folders"]:
-                folder["pinnable"] = _may_be_pinned(folder["folder"])
-                folder["pinned"] = folder["folder"] in pinned
-                for memory in folder["memories"]:
-                    memory["pinned"] = memory["path"] in pinned
-            return Tree(**walked)
-
-        return self._browse(request, walk)
-
-    def _memory(self, request: Request) -> Response:
-        return self._browse(request, lambda caller: self._detail(caller, request.query_params.get("path", "")))
-
     def _detail(self, caller: Caller, path: str) -> MemoryDetail:
         """One memory in full: what it says, its file as Claude reads it, and whether it is pinned."""
         memory = self._service.read(caller, path)
@@ -468,58 +444,11 @@ class ConsoleApi:
     def _pins(self, request: Request) -> Response:
         return self._browse(request, self._pinned)
 
-    def _pin(self, request: Request) -> Response:
-        def pin(caller: Caller) -> Pins:
-            asked: MemoryPath = request.state.asked
-            self._briefing.pin(caller, asked.path)
-            return self._pinned(caller)
-
-        return self._browse(request, pin)
-
-    def _unpin(self, request: Request) -> Response:
-        def unpin(caller: Caller) -> Pins:
-            asked: MemoryPath = request.state.asked
-            self._briefing.unpin(caller, asked.path)
-            return self._pinned(caller)
-
-        return self._browse(request, unpin)
-
     def _pinned(self, caller: Caller) -> Pins:
         pins = [Pin(**one) for one in self._briefing.listed(caller)]
         return Pins(
             pins=pins, tokens=sum(pin.tokens for pin in pins), cap=self._settings.briefing_cap_tokens
         )
-
-    def _search(self, request: Request) -> Response:
-        def search(caller: Caller) -> SearchResults:
-            asked = request.query_params
-            found = self._service.search(
-                caller,
-                asked.get("query", ""),
-                level=asked.get("level") or None,
-                type=asked.get("type") or None,
-                limit=int(asked.get("limit", 10)),
-            )
-            return SearchResults(
-                results=[SearchHit(**{**hit, "project_id": _project_in(hit["path"])}) for hit in found["results"]]
-            )
-
-        return self._browse(request, search)
-
-    def _history(self, request: Request) -> Response:
-        def read(caller: Caller) -> MemoryHistory:
-            return MemoryHistory(**self._service.history(caller, request.query_params.get("path", "")))
-
-        return self._browse(request, read)
-
-    def _version(self, request: Request) -> Response:
-        def read(caller: Caller) -> MemoryAtVersion:
-            asked = request.query_params
-            return MemoryAtVersion(
-                **self._service.version(caller, asked.get("path", ""), asked.get("commit", ""))
-            )
-
-        return self._browse(request, read)
 
     def _difference(self, request: Request) -> Response:
         def read(caller: Caller) -> MemoryDifference:
@@ -557,18 +486,6 @@ class ConsoleApi:
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         return self._disputes(self._identity.caller_in(member, None))
-
-    def _retire(self, request: Request) -> Response:
-        def retire(caller: Caller) -> Retired:
-            asked: MemoryPath = request.state.asked
-            done = self._lifecycle.retire(caller, asked.path)
-            return Retired(
-                status=done["status"],
-                path=asked.path,
-                challenge_id=done.get("challenge_id"),
-            )
-
-        return self._browse(request, retire)
 
     def _disputes(self, caller: Caller) -> Response:
         waiting = [self._dispute(caller, challenge) for challenge in self._challenging.waiting_for(caller)]
