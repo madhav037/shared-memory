@@ -25,14 +25,14 @@ def changed_twice(console: Console, client: ConsoleClient, github: str, account:
     return project, path
 
 
-def history(client: ConsoleClient, project: str, **asked: Any) -> dict[str, Any]:
-    return ask(client, f"/api/projects/{project}/memory/history", **asked)
+def history(client: ConsoleClient, **asked: Any) -> dict[str, Any]:
+    return ask(client, "/api/memory/history", **asked)
 
 
 def test_a_memory_lists_its_versions_newest_first(console: Console, signed_out: ConsoleClient) -> None:
     project, path = changed_twice(console, signed_out, "olive-history-one", 501)
 
-    versions = history(signed_out, project, path=path)["versions"]
+    versions = history(signed_out, path=path)["versions"]
 
     assert len(versions) == 3
     assert [version["author"] for version in versions] == ["E1001", "E1001", "E1001"]
@@ -44,10 +44,10 @@ def test_a_memory_lists_its_versions_newest_first(console: Console, signed_out: 
 
 def test_a_version_shows_the_memory_as_it_was_then(console: Console, signed_out: ConsoleClient) -> None:
     project, path = changed_twice(console, signed_out, "olive-history-two", 502)
-    versions = history(signed_out, project, path=path)["versions"]
+    versions = history(signed_out, path=path)["versions"]
 
-    now = ask(signed_out, f"/api/projects/{project}/memory/version", path=path, commit=versions[0]["commit"])
-    first = ask(signed_out, f"/api/projects/{project}/memory/version", path=path, commit=versions[-1]["commit"])
+    now = ask(signed_out, "/api/memory/version", path=path, commit=versions[0]["commit"])
+    first = ask(signed_out, "/api/memory/version", path=path, commit=versions[-1]["commit"])
 
     assert "02:17 UTC" in now["text"]
     assert "02:17" not in first["text"]
@@ -56,11 +56,11 @@ def test_a_version_shows_the_memory_as_it_was_then(console: Console, signed_out:
 
 def test_two_versions_can_be_compared(console: Console, signed_out: ConsoleClient) -> None:
     project, path = changed_twice(console, signed_out, "olive-history-three", 503)
-    versions = history(signed_out, project, path=path)["versions"]
+    versions = history(signed_out, path=path)["versions"]
 
     compared = ask(
         signed_out,
-        f"/api/projects/{project}/memory/difference",
+        "/api/memory/difference",
         path=path,
         before=versions[-1]["commit"],
         after=versions[0]["commit"],
@@ -81,10 +81,10 @@ def test_a_promoted_memory_keeps_its_history_from_before_it_was_promoted(
     )["path"]
     promoted = in_project.call("promote", path=personal, level="project")["path"]
 
-    versions = history(signed_out, project, path=promoted)["versions"]
+    versions = history(signed_out, path=promoted)["versions"]
 
     assert [version["message"].split(":")[0] for version in versions] == ["Promote", "Remember"]
-    first = ask(signed_out, f"/api/projects/{project}/memory/version", path=promoted, commit=versions[-1]["commit"])
+    first = ask(signed_out, "/api/memory/version", path=promoted, commit=versions[-1]["commit"])
     assert "We use pnpm." in first["text"]
 
 
@@ -93,10 +93,10 @@ def test_history_is_refused_for_a_memory_that_is_not_there(console: Console, sig
     project = owner.call("create_project", name="Billing")["project_id"]
 
     missing = signed_out.get(
-        f"/api/projects/{project}/memory/history?{urlencode({'path': f'projects/{project}/shared/gotchas/nothing.md'})}"
+        f"/api/memory/history?{urlencode({'path': f'projects/{project}/shared/gotchas/nothing.md'})}"
     )
     outside = signed_out.get(
-        f"/api/projects/{project}/memory/history?{urlencode({'path': '../../etc/passwd'})}"
+        f"/api/memory/history?{urlencode({'path': '../../etc/passwd'})}"
     )
 
     assert missing.status_code == 403
@@ -107,7 +107,7 @@ def test_a_made_up_version_is_refused(console: Console, signed_out: ConsoleClien
     project, path = changed_twice(console, signed_out, "olive-history-six", 506)
 
     refused = signed_out.get(
-        f"/api/projects/{project}/memory/version?{urlencode({'path': path, 'commit': 'not-a-commit'})}"
+        f"/api/memory/version?{urlencode({'path': path, 'commit': 'not-a-commit'})}"
     )
 
     assert refused.status_code == 403
@@ -126,11 +126,11 @@ def test_history_reads_and_compares_versions_from_before_a_promotion(
     in_project.call("edit_memory", path=personal, body="We deploy on Tuesdays and Thursdays.")
     promoted = in_project.call("promote", path=personal, level="project")["path"]
 
-    versions = history(signed_out, project, path=promoted)["versions"]
-    first = ask(signed_out, f"/api/projects/{project}/memory/version", path=promoted, commit=versions[-1]["commit"])
+    versions = history(signed_out, path=promoted)["versions"]
+    first = ask(signed_out, "/api/memory/version", path=promoted, commit=versions[-1]["commit"])
     compared = ask(
         signed_out,
-        f"/api/projects/{project}/memory/difference",
+        "/api/memory/difference",
         path=promoted,
         before=versions[-1]["commit"],
         after=versions[0]["commit"],

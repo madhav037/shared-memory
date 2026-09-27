@@ -39,12 +39,12 @@ def pins(client: ConsoleClient, project: str) -> dict[str, Any]:
     return ask(client, f"/api/projects/{project}/pins")
 
 
-def pin(client: ConsoleClient, project: str, path: str) -> Any:
-    return client.post_json(f"/api/projects/{project}/pins", {"path": path})
+def pin(client: ConsoleClient, path: str) -> Any:
+    return client.post_json("/api/memory/pin", {"path": path})
 
 
-def unpin(client: ConsoleClient, project: str, path: str) -> Any:
-    return client.post_json(f"/api/projects/{project}/pins/remove", {"path": path})
+def unpin(client: ConsoleClient, path: str) -> Any:
+    return client.post_json("/api/memory/unpin", {"path": path})
 
 
 def test_a_memory_shows_whether_it_is_pinned_and_is_pinned_from_its_page(
@@ -53,11 +53,11 @@ def test_a_memory_shows_whether_it_is_pinned_and_is_pinned_from_its_page(
     _, project, in_project = a_project(console, signed_out, "olive-pins-one", 1001)
     path = a_promoted_memory(in_project)
 
-    before = ask(signed_out, f"/api/projects/{project}/memory", path=path)
-    pinned = pin(signed_out, project, path)
-    after = ask(signed_out, f"/api/projects/{project}/memory", path=path)
-    unpinned = unpin(signed_out, project, path)
-    last = ask(signed_out, f"/api/projects/{project}/memory", path=path)
+    before = ask(signed_out, "/api/memory", path=path)
+    pinned = pin(signed_out, path)
+    after = ask(signed_out, "/api/memory", path=path)
+    unpinned = unpin(signed_out, path)
+    last = ask(signed_out, "/api/memory", path=path)
 
     assert before["pinned"] is False
     assert pinned.status_code == 200, pinned.text
@@ -71,8 +71,8 @@ def test_a_project_shows_everything_pinned_in_it(console: Console, signed_out: C
     first = a_promoted_memory(in_project)
     second = a_promoted_memory(in_project, "Staging resets nightly")
 
-    pin(signed_out, project, first)
-    pin(signed_out, project, second)
+    pin(signed_out, first)
+    pin(signed_out, second)
 
     listed = pins(signed_out, project)
     assert {one["path"] for one in listed["pins"]} == {first, second}
@@ -86,7 +86,7 @@ def test_what_is_pinned_appears_in_the_briefing_of_a_session(console: Console, s
     _, project, in_project = a_project(console, signed_out, "olive-pins-three", 1003)
     path = a_promoted_memory(in_project)
 
-    pin(signed_out, project, path)
+    pin(signed_out, path)
 
     assert "Use pnpm, not npm" in added_context(in_project.start())
 
@@ -101,9 +101,9 @@ def test_a_pin_over_the_briefing_cap_is_refused_with_what_is_already_pinned(
         * 63
     )
     second = a_promoted_memory(in_project, "Everything billing is made of", body=long_body)
-    pin(signed_out, project, first)
+    pin(signed_out, first)
 
-    refused = pin(signed_out, project, second)
+    refused = pin(signed_out, second)
 
     assert refused.status_code == 403
     assert "over its cap" in refused.json()["message"]
@@ -117,7 +117,7 @@ def test_only_project_and_team_memory_can_be_pinned(console: Console, signed_out
         "remember", title="My own note", summary="Mine.", type="gotcha", body="Something I am still working out."
     )["path"]
 
-    refused = pin(signed_out, project, personal)
+    refused = pin(signed_out, personal)
 
     assert refused.status_code == 403
     assert "Only project memory and team memory can be pinned" in refused.json()["message"]
@@ -129,7 +129,7 @@ def test_pinning_a_topic_pins_its_index(console: Console, signed_out: ConsoleCli
     a_promoted_memory(in_project, "Invoices are numbered per year", topic="invoicing")
     topic = f"projects/{project}/shared/conventions/invoicing"
 
-    pinned = pin(signed_out, project, topic)
+    pinned = pin(signed_out, topic)
 
     assert pinned.status_code == 200, pinned.text
     assert [(one["path"], one["kind"], one["title"]) for one in pins(signed_out, project)["pins"]] == [
@@ -140,22 +140,23 @@ def test_pinning_a_topic_pins_its_index(console: Console, signed_out: ConsoleCli
     assert "Invoices are numbered per year" in briefing
 
 
-def test_the_tree_says_which_folders_are_topics_and_which_memories_are_pinned(
+def test_a_folder_says_whether_it_is_a_topic_and_which_of_its_memories_are_pinned(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     _, project, in_project = a_project(console, signed_out, "olive-pins-seven", 1007)
     loose = a_promoted_memory(in_project)
     a_promoted_memory(in_project, "Invoices are immutable", topic="invoicing")
-    pin(signed_out, project, loose)
+    pin(signed_out, loose)
 
-    tree = ask(signed_out, f"/api/projects/{project}/tree")
+    # A folder at a time, which is how the console asks: it opens one folder and reads what it may do to it.
+    topic = ask(signed_out, "/api/files", folder=f"projects/{project}/shared/conventions/invoicing")
+    conventions = ask(signed_out, "/api/files", folder=f"projects/{project}/shared/conventions")
+    beneath = ask(signed_out, "/api/files", folder=f"projects/{project}/shared", deep="1")
 
-    folders = {folder["folder"]: folder for folder in tree["folders"]}
-    topic = f"projects/{project}/shared/conventions/invoicing"
-    assert folders[topic]["pinnable"] is True
-    assert folders[topic]["pinned"] is False
-    assert folders[f"projects/{project}/shared/conventions"]["pinnable"] is False
-    pinned = [m["path"] for folder in tree["folders"] for m in folder["memories"] if m["pinned"]]
+    assert topic["pinnable"] is True
+    assert topic["pinned"] is False
+    assert conventions["pinnable"] is False
+    pinned = [one["path"] for section in beneath["inside"] for one in section["memories"] if one["pinned"]]
     assert pinned == [loose]
 
 
@@ -163,8 +164,8 @@ def test_pins_and_unpins_are_in_the_audit_log(console: Console, signed_out: Cons
     _, project, in_project = a_project(console, signed_out, "olive-pins-eight", 1008)
     path = a_promoted_memory(in_project)
 
-    pin(signed_out, project, path)
-    unpin(signed_out, project, path)
+    pin(signed_out, path)
+    unpin(signed_out, path)
 
     log = signed_out.get(f"/api/audit?project={project}").json()["events"]
     assert [event["kind"] for event in log][:2] == ["memory_unpinned", "memory_pinned"]
@@ -176,7 +177,7 @@ def test_unpinning_something_that_is_not_pinned_is_refused(console: Console, sig
     _, project, in_project = a_project(console, signed_out, "olive-pins-nine", 1009)
     path = a_promoted_memory(in_project)
 
-    refused = unpin(signed_out, project, path)
+    refused = unpin(signed_out, path)
 
     assert refused.status_code == 403
     assert "is not pinned" in refused.json()["message"]
