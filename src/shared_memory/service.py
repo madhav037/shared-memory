@@ -146,7 +146,7 @@ class MemoryService:
         with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
-        self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type)
+            change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type))
         return {"path": str(path), "level": "personal", "next": _promoting(str(path))}
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -351,7 +351,7 @@ class MemoryService:
             validate(edited, self._settings.memory_word_limit)
             change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)
-        self._audit.memory(caller, MEMORY_EDITED, str(location.path))
+            change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
         return describe(location.path, edited)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -359,5 +359,5 @@ class MemoryService:
             location, memory = self._own_personal_memory(caller, change, path, "delete")
             change.message = f"Delete: {memory.title}"
             change.delete(location.path)
-        self._audit.memory(caller, MEMORY_DELETED, str(location.path))
+            change.also(lambda: self._audit.memory(caller, MEMORY_DELETED, str(location.path)))
         return {"deleted": str(location.path)}

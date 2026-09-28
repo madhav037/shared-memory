@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -160,8 +161,13 @@ class Briefing:
                 return PurePosixPath(target.path).stem
         return PurePosixPath(target.path).name
 
-    def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None:
-        """Pins follow memory: a pin moves to whatever supersedes its memory and goes away when it is retired."""
+    @contextmanager
+    def on_change(
+        self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
+    ) -> Iterator[None]:
+        """Pins follow memory: a pin moves to whatever supersedes its memory and goes away when it is retired.
+
+        They follow in one transaction, which commits only once the save has landed everywhere else."""
         with self._db.transaction() as conn:
             for path, memory in writes.items():
                 if memory.status == "superseded" and memory.superseded_by:
@@ -172,6 +178,7 @@ class Briefing:
                     )
                 elif memory.status == "retired":
                     conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, str(path)))
+            yield
 
     def for_session(self, caller: Caller, extra: list[str] | None = None) -> str | None:
         """The briefing: pinned memories for the session's project within the cap, plus any extra notices."""

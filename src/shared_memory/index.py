@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -134,6 +135,10 @@ class SearchIndex:
                 overlap += counts[start]
 
     def update(self, team: str, path: PurePosixPath, memory: Memory) -> None:
+        with self._db.transaction() as conn:
+            self._update(conn, team, path, memory)
+
+    def _update(self, conn: Conn, team: str, path: PurePosixPath, memory: Memory) -> None:
         location = locate(str(path))
         texts = {
             (section_no, chunk_no): chunk
@@ -142,60 +147,61 @@ class SearchIndex:
         }
         hashes = {key: hashlib.sha256(text.encode()).hexdigest() for key, text in texts.items()}
         details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
-        with self._db.transaction() as conn:
-            existing = {
-                (row["section_no"], row["chunk_no"]): row["content_hash"]
-                for row in conn.execute(
-                    "SELECT section_no, chunk_no, content_hash FROM sections WHERE team = %s AND path = %s",
-                    (team, str(path)),
-                )
-            }
-            changed = [key for key, digest in hashes.items() if existing.get(key) != digest]
-            vectors = dict(zip(changed, self._embedder.passages([texts[key] for key in changed]), strict=True))
-            for section_no, chunk_no in existing.keys() - texts.keys():
+        existing = {
+            (row["section_no"], row["chunk_no"]): row["content_hash"]
+            for row in conn.execute(
+                "SELECT section_no, chunk_no, content_hash FROM sections WHERE team = %s AND path = %s",
+                (team, str(path)),
+            )
+        }
+        changed = [key for key, digest in hashes.items() if existing.get(key) != digest]
+        vectors = dict(zip(changed, self._embedder.passages([texts[key] for key in changed]), strict=True))
+        for section_no, chunk_no in existing.keys() - texts.keys():
+            conn.execute(
+                "DELETE FROM sections WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                (team, str(path), section_no, chunk_no),
+            )
+        for (section_no, chunk_no), text in texts.items():
+            if (section_no, chunk_no) in vectors:
                 conn.execute(
-                    "DELETE FROM sections WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
-                    (team, str(path), section_no, chunk_no),
+                    "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type,"
+                    " author, status, content_hash, embedding, tokens)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                    " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
+                    " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
+                    " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
+                    " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
+                    " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
+                    (
+                        team,
+                        str(path),
+                        section_no,
+                        chunk_no,
+                        *details,
+                        hashes[(section_no, chunk_no)],
+                        Vector(vectors[(section_no, chunk_no)]),
+                        text,
+                        text,
+                    ),
                 )
-            for (section_no, chunk_no), text in texts.items():
-                if (section_no, chunk_no) in vectors:
-                    conn.execute(
-                        "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type,"
-                        " author, status, content_hash, embedding, tokens)"
-                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                        " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
-                        " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
-                        " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
-                        " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
-                        " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
-                        (
-                            team,
-                            str(path),
-                            section_no,
-                            chunk_no,
-                            *details,
-                            hashes[(section_no, chunk_no)],
-                            Vector(vectors[(section_no, chunk_no)]),
-                            text,
-                            text,
-                        ),
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
-                        " status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
-                        (*details, team, str(path), section_no, chunk_no),
-                    )
+            else:
+                conn.execute(
+                    "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
+                    " status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                    (*details, team, str(path), section_no, chunk_no),
+                )
 
-    def remove(self, team: str, path: PurePosixPath) -> None:
+    @contextmanager
+    def on_change(
+        self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
+    ) -> Iterator[None]:
+        """Index a save in one transaction, which commits only once the save has landed everywhere else."""
         with self._db.transaction() as conn:
-            conn.execute("DELETE FROM sections WHERE team = %s AND path = %s", (team, str(path)))
-
-    def on_change(self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]) -> None:
-        for path in deletes:
-            self.remove(team, path)
-        for path, memory in writes.items():
-            self.update(team, path, memory)
+            for path in deletes:
+                conn.execute("DELETE FROM sections WHERE team = %s AND path = %s", (team, str(path)))
+            for path, memory in writes.items():
+                self._update(conn, team, path, memory)
+            yield
 
     def rebuild(self, store: MemoryStore) -> int:
         with self._db.transaction() as conn:
