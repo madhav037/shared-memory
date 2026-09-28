@@ -20,6 +20,8 @@ class Settings:
     # A hook payload is a prompt plus a little metadata; a body past this is not read.
     hook_body_limit_bytes: int = 1_000_000
     similar_threshold: float = 0.62
+    # The longest one database statement may run, waiting included, before its request fails.
+    statement_timeout_seconds: float = 10.0
     allowed_hosts: tuple[str, ...] = ()
     plugin_marketplace: str = "madhav037/shared-memory"
     github_client_id: str = ""

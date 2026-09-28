@@ -40,7 +40,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     settings = settings or Settings.from_env()
 
     if args.command == "setup":
-        db = Database(settings.database_url)
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             token = Identity(db, system_clock).setup_team(
                 args.team, args.owner_member_id, args.owner_name, args.owner_github
@@ -60,7 +60,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         from shared_memory.index import SearchIndex
         from shared_memory.store import MemoryStore
 
-        db = Database(settings.database_url)
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             count = SearchIndex(db, FastEmbedEmbedder(settings.model_cache)).rebuild(MemoryStore(settings.memory_root))
         finally:
@@ -69,7 +69,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         return 0
 
     if args.command == "link-github":
-        db = Database(settings.database_url)
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             Identity(db, system_clock).link_github(args.team, args.member_id, args.github)
         except Refused as refused:

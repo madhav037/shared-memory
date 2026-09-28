@@ -110,15 +110,18 @@ Conn = psycopg.Connection[dict[str, Any]]
 
 
 class Database:
-    def __init__(self, url: str) -> None:
-        with psycopg.connect(url, autocommit=True) as conn:
+    def __init__(self, url: str, statement_timeout_seconds: float) -> None:
+        """statement_timeout_seconds bounds every statement, waiting for a table included, so a stalled database
+        fails requests instead of freezing every one of them."""
+        options = f"-c statement_timeout={round(statement_timeout_seconds * 1000)}"
+        with psycopg.connect(url, autocommit=True, options=options) as conn:
             conn.execute(SCHEMA)
         self._pool: ConnectionPool[Conn] = ConnectionPool(
             url,
             min_size=1,
             max_size=10,
             open=True,
-            kwargs={"row_factory": dict_row},
+            kwargs={"row_factory": dict_row, "options": options},
             configure=register_vector,
         )
 
