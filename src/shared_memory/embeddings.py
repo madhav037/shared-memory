@@ -9,12 +9,18 @@ from typing import Any, Protocol
 
 MODEL = "BAAI/bge-small-en-v1.5"
 DIMENSIONS = 384
+# The model reads at most this many tokens of a text, its two markers included, and ignores the rest.
+MAX_TOKENS = 512
 
 
 class Embedder(Protocol):
     def passages(self, texts: list[str]) -> list[list[float]]: ...
 
     def query(self, text: str) -> list[float]: ...
+
+    def tokens(self, words: list[str]) -> list[int]:
+        """How many of the model's tokens each word takes."""
+        ...
 
 
 class FastEmbedEmbedder:
@@ -40,6 +46,12 @@ class FastEmbedEmbedder:
         result: list[float] = vector.tolist()
         return result
 
+    def tokens(self, words: list[str]) -> list[int]:
+        if not words:
+            return []
+        encodings = self._model.model.tokenizer.encode_batch(words, add_special_tokens=False)
+        return [len(encoding.ids) for encoding in encodings]
+
 
 class CachedQueries:
     """An embedder that remembers the embeddings of its most recent queries, so a repeated search or recall doesn't
@@ -57,6 +69,9 @@ class CachedQueries:
 
     def passages(self, texts: list[str]) -> list[list[float]]:
         return self._embedder.passages(texts)
+
+    def tokens(self, words: list[str]) -> list[int]:
+        return self._embedder.tokens(words)
 
     def query(self, text: str) -> list[float]:
         key = hashlib.sha256(text.encode()).digest()

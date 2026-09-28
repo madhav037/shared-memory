@@ -114,6 +114,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     # The model loads here, before the server takes its first request.
     index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache)))
     store = MemoryStore(settings.memory_root, listeners=[index])
+    index.catch_up(store)
     history = MemoryHistory(settings.memory_root)
     challenges = Challenges(settings, db, store, identity, audit, clock)
     service = MemoryService(settings, identity, store, history, index, challenges, audit)

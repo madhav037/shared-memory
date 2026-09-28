@@ -76,6 +76,9 @@ class Recorder:
         self.asked.append(text)
         return [float(len(text))]
 
+    def tokens(self, words: list[str]) -> list[int]:
+        return [1 for _ in words]
+
 
 def test_the_query_cache_forgets_the_least_recently_used_query_past_its_bound() -> None:
     inner = Recorder()
