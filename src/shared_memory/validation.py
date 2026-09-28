@@ -26,6 +26,11 @@ _ASSIGNMENT = re.compile(
 _PLACEHOLDER = re.compile(r"^(?:\$\{.*\}|<.*>|\*+|x+|\.\.\.+|changeme|example|placeholder|redacted)$", re.IGNORECASE)
 _CANDIDATE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
 
+# The word limit bounds what a memory says; this bounds what it weighs, so a few enormous "words" can't slip past it.
+# At twenty characters a word, a memory at the word limit still fits, paths and identifiers included.
+CHARACTER_LIMIT = 12_000
+_SPLIT_IT = "Split the subject into a topic: save several shorter memories under one topic name, each covering one part."
+
 
 def _entropy(text: str) -> float:
     counts = Counter(text)
@@ -65,9 +70,10 @@ def validate(memory: Memory, word_limit: int) -> None:
             raise Refused(f"Related file {entry!r} must be written as repository:path, for example billing-api:package.json.")
     words = len(memory.body.split())
     if words > word_limit:
+        raise Refused(f"This memory is {words} words; the limit is {word_limit} words. {_SPLIT_IT}")
+    if len(memory.body) > CHARACTER_LIMIT:
         raise Refused(
-            f"This memory is {words} words; the limit is {word_limit} words. Split the subject into a topic: "
-            "save several shorter memories under one topic name, each covering one part."
+            f"This memory is {len(memory.body)} characters; the limit is {CHARACTER_LIMIT} characters. {_SPLIT_IT}"
         )
     for text in (memory.title, memory.summary, memory.body, *memory.related_files):
         found = _find_secret(text)

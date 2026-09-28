@@ -85,7 +85,7 @@ We use pnpm for every package. npm creates a second lockfile and CI rejects it.
 
 ### 4.2 Size and topics
 
-- **Hard limit of 600 words per memory.** A longer save is refused, and the error tells Claude how to split it.
+- **Hard limit of 600 words per memory**, and of 12,000 characters, so a few enormous words can't pass. A longer save is refused, and the error tells Claude how to split it.
 - Claude splits a long subject into a **topic**: a folder containing an `index.md` overview plus several memories.
 - **Each file in a topic is its own memory.** A challenge, supersede or retire acts on one file. **Pinning** a topic pins only its `index.md`.
 
@@ -288,7 +288,8 @@ flowchart LR
 | Lock-check hook timeout | ~3 s, then allow |
 | Lock released after idle | ~20 min |
 | Challenge fallback to any member | 3 days |
-| Memory size limit | 600 words |
+| Memory size limit | 600 words, 12,000 characters |
+| Hook request body limit | 1 MB, checked after the personal token |
 | Outdated memory label | 60 days unused |
 
 ## 11. Deferred decisions
