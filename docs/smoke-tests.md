@@ -2,6 +2,8 @@
 
 The tests in `tests/` check the server through its HTTP interface. The smoke tests in `smoke/` check what those can't: that the plugin's wiring works in real Claude Code, and that Claude actually uses memory. They are slow and depend on the model, so they run nightly and by hand, never with `uv run pytest`.
 
+Beside them, `smoke/stress.py` puts many members' coding agents on one server at once and reports latency, failures, recall and whether memory files, git and the search index agree: see [the stress test](stress-test.md). It runs only by hand.
+
 ## What they check
 
 | Test | Checks |

@@ -1,0 +1,33 @@
+# The stress test's own stack (docs/stress-test.md). `python -m smoke.stress up` starts it under its own compose
+# project name, so its database, memory folder and port never touch the stack compose.yaml runs.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shared_memory
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  server:
+    build: ..
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SHARED_MEMORY_DATABASE_URL: postgresql://postgres:postgres@db:5432/shared_memory
+      SHARED_MEMORY_ROOT: /data/memory
+      SHARED_MEMORY_MODEL_CACHE: /data/models
+    ports:
+      - "127.0.0.1:${STRESS_PORT:-8100}:8000"
+    volumes:
+      - memory:/data/memory
+      - models:/data/models
+
+volumes:
+  memory:
+  models:
