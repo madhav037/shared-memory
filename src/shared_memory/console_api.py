@@ -54,9 +54,14 @@ from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.memory import locate
+from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 
 CONSOLE_HEADER = "x-shared-memory-console"
+
+# The calls that save memory (retiring, and deciding a challenge). They wait for their turn with every other save,
+# without holding a worker thread (see `saves.py`).
+SAVING = frozenset({"retire_at", "decide_challenge"})
 
 
 def _plainly(wrong: Exception) -> str:
@@ -112,8 +117,10 @@ class ConsoleApi:
         briefing: Briefing,
         lifecycle: Lifecycle,
         challenges: Challenges,
+        saves: Saves,
     ) -> None:
         self._settings = settings
+        self._saves = saves
         self._sessions = sessions
         self._audit = audit
         self._identity = identity
@@ -161,6 +168,7 @@ class ConsoleApi:
             "reissue_token": self._reissue_token,
             "sign_out": self._sign_out,
         }
+        assert SAVING <= handlers.keys()
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
 
         async def describe(request: Request) -> Response:
@@ -177,6 +185,8 @@ class ConsoleApi:
                     request.state.asked = declaration.accepts.model_validate(await request.json())
                 except (ValueError, ValidationError) as wrong:
                     return JSONResponse({"message": _plainly(wrong)}, status_code=422)
+            if declaration.operation_id in SAVING:
+                return await self._saves.run(handle, request)
             return await anyio.to_thread.run_sync(handle, request)
 
         return Route(
