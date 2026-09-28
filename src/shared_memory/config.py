@@ -17,6 +17,8 @@ class Settings:
     recall_threshold: float = 0.63
     challenge_fallback_days: int = 3
     memory_word_limit: int = 600
+    # A hook payload is a prompt plus a little metadata; a body past this is not read.
+    hook_body_limit_bytes: int = 1_000_000
     similar_threshold: float = 0.62
     allowed_hosts: tuple[str, ...] = ()
     plugin_marketplace: str = "madhav037/shared-memory"

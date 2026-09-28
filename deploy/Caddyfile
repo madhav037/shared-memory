@@ -1,6 +1,12 @@
 # Caddy gets and renews the HTTPS certificate for the domain automatically, serves the console, and passes
 # everything the server owns through to it. One domain, one certificate, one origin for the console's cookies.
 {$SHARED_MEMORY_DOMAIN} {
+	# No request the server is passed carries more than a megabyte: a hook is a prompt plus metadata, a memory is at
+	# most 600 words, and a console request is smaller still. A bigger body is refused here, before the server sees it.
+	request_body {
+		max_size 1MB
+	}
+
 	handle /api/* {
 		reverse_proxy server:8000
 	}

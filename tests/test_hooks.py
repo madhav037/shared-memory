@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import socket
+import threading
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -161,3 +165,92 @@ def test_a_payload_the_server_cannot_read_still_answers_every_family_emptily(own
         answer = httpx.post(url, content=b"not json", headers=owner.headers())
 
         assert (answer.status_code, answer.json()) == (200, {}), format
+
+
+HOOK_BODY_LIMIT = 1_000_000
+
+
+def posted_raw(session: Session, event: str, framing: dict[str, str], body: bytes) -> tuple[int, dict[str, Any]]:
+    """Post a hook over a bare socket: send these headers and this much body, then wait for the answer.
+
+    When the body sent is shorter than the headers promise, it never finishes arriving, so an answer at all shows the
+    server answered without reading the body whole. The body is sent from another thread, because a server that stops
+    reading leaves the sender blocked.
+    """
+    address = urlsplit(session.server.url)
+    assert address.hostname is not None and address.port is not None
+    lines = [f"POST /hooks/{event} HTTP/1.1", f"Host: {address.netloc}", "Content-Type: application/json"]
+    lines += [f"{name}: {value}" for name, value in {**session.headers(), **framing}.items()]
+    connection = socket.create_connection((address.hostname, address.port), timeout=15)
+
+    def send() -> None:
+        try:
+            connection.sendall(("\r\n".join(lines) + "\r\n\r\n").encode() + body)
+        except OSError:
+            pass
+
+    threading.Thread(target=send, daemon=True).start()
+    try:
+        received = b""
+        while b"\r\n\r\n" not in received:
+            chunk = connection.recv(65536)
+            assert chunk, "the server closed the connection without answering"
+            received += chunk
+        head, _, rest = received.partition(b"\r\n\r\n")
+        status = int(head.split(b" ")[1])
+        length = next(
+            int(line.split(b":")[1]) for line in head.split(b"\r\n") if line.lower().startswith(b"content-length:")
+        )
+        while len(rest) < length:
+            chunk = connection.recv(65536)
+            assert chunk, "the server closed the connection mid-answer"
+            rest += chunk
+        answer: dict[str, Any] = json.loads(rest[:length])
+        return status, answer
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("event", ["session-start", "prompt-submitted"])
+def test_an_anonymous_hook_is_answered_without_its_body_being_read(team: Team, event: str) -> None:
+    anonymous = Session(team.server, None)
+
+    answer = posted_raw(anonymous, event, {"Content-Length": str(500_000)}, b'{"prompt": "')
+
+    assert answer == (200, {})
+
+
+def test_a_hook_with_an_unknown_personal_token_is_answered_without_its_body_being_read(
+    team: Team, owner: Session
+) -> None:
+    unknown = Session(team.server, "smt_nope", owner.project, "billing-api")
+
+    answer = posted_raw(unknown, "prompt-submitted", {"Content-Length": str(500_000)}, b'{"prompt": "')
+
+    assert answer == (200, {})
+
+
+def test_a_hook_body_declared_over_the_limit_is_refused_without_being_read(owner: Session) -> None:
+    answer = posted_raw(owner, "prompt-submitted", {"Content-Length": str(HOOK_BODY_LIMIT + 1)}, b'{"prompt": "')
+
+    assert answer == (200, {})
+
+
+def test_a_streamed_hook_body_is_refused_once_it_runs_past_the_limit(owner: Session) -> None:
+    pieces = [b'{"prompt": "'] + [b"x" * 65536] * (HOOK_BODY_LIMIT // 65536 + 2)
+    chunked = b"".join(b"%x\r\n%s\r\n" % (len(piece), piece) for piece in pieces)
+
+    answer = posted_raw(owner, "prompt-submitted", {"Transfer-Encoding": "chunked"}, chunked)
+
+    assert answer == (200, {})
+
+
+def test_a_hook_body_just_under_the_limit_is_still_answered(owner: Session) -> None:
+    promoted(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    prompt = "store the refund amount in the database. " + " " * (HOOK_BODY_LIMIT - 1000)
+    body = json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": prompt}).encode()
+
+    status, answer = posted_raw(owner, "prompt-submitted", {"Content-Length": str(len(body))}, body)
+
+    assert status == 200
+    assert "integer cents" in added_context(answer)

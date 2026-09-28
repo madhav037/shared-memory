@@ -70,6 +70,17 @@ def test_a_memory_of_exactly_600_words_is_saved(member: Session) -> None:
     assert remember(member, body="word " * 600)["path"]
 
 
+def test_a_memory_too_long_in_characters_is_refused_however_few_its_words(member: Session) -> None:
+    refusal = refusal_to_remember(member, body="a" * 1_000_000)
+
+    assert "12000 characters" in refusal
+    assert "topic" in refusal
+
+
+def test_a_memory_of_600_long_words_is_saved(member: Session) -> None:
+    assert remember(member, body="billing-api/src/charges " * 500)["path"]
+
+
 @pytest.mark.parametrize(
     ("overrides", "complaint"),
     [

@@ -2,6 +2,7 @@
 
 import dataclasses
 import functools
+import json
 import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -13,7 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.datastructures import Headers
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
 
 from shared_memory import hooks
@@ -85,6 +86,27 @@ def _bearer(value: str | None) -> str | None:
     return None
 
 
+async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
+    """The hook's JSON payload, or None when it is unreadable or runs past `limit` bytes. A body that says it is too
+    big is not read at all, and one that turns out to be is read no further than the limit."""
+    declared = request.headers.get("content-length")
+    if declared is not None and (not declared.isdigit() or int(declared) > limit):
+        return None
+    body = bytearray()
+    try:
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > limit:
+                return None
+    except ClientDisconnect:
+        return None
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None) -> Starlette:
     db = Database(settings.database_url)
     identity = Identity(db, clock)
@@ -118,18 +140,12 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     ) -> Response:
         """Answer a coding agent's hook. Anything that goes wrong leaves the session unaffected.
 
-        The required part always runs to completion, because it marks news as delivered and so must reach the
-        member. The optional part (recall) is dropped if it runs past the recall budget.
+        The caller is authenticated from the headers before the body is read, so a hook without a valid personal token
+        costs next to nothing. The required part always runs to completion, because it marks news as delivered and so
+        must reach the member. The optional part (recall) is dropped if it runs past the recall budget.
         """
-        try:
-            payload = await request.json()
-        except ValueError:
-            return JSONResponse({})
-        if not isinstance(payload, dict):
-            return JSONResponse({})
         headers = Headers(scope=request.scope)
         answer_format = request.query_params.get("format")
-        named_event = hooks.event_in(payload, event)
 
         def authenticated() -> Caller | Refused:
             try:
@@ -147,6 +163,10 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
                 return JSONResponse({})
             if current.project is None:
                 return JSONResponse({})
+            payload = await _hook_payload(request, settings.hook_body_limit_bytes)
+            if payload is None:
+                return JSONResponse({})
+            named_event = hooks.event_in(payload, event)
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
             if optional is not None:
                 with anyio.move_on_after(settings.recall_budget_seconds):
