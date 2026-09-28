@@ -26,6 +26,8 @@ _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 _RRF_K = 60
 _CANDIDATES = 30
 _SIMILAR_LIMIT = 10
+# Promote's check takes this many nearest sections for each of the memory's own, then keeps the memories they belong to.
+_SIMILAR_CANDIDATES = 40
 # A section longer than the model reads is split into chunks of about this many tokens, each overlapping the one
 # before it, so a sentence cut at a chunk's edge is still read whole in its neighbour.
 _CHUNK_TOKENS = 256
@@ -51,6 +53,12 @@ CREATE TABLE IF NOT EXISTS sections (
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 """
+# Nearest sections by meaning come from an approximate-nearest-neighbour index rather than a comparison with every one.
+_EMBEDDING_INDEX = "CREATE INDEX IF NOT EXISTS sections_embedding ON sections USING hnsw (embedding vector_cosine_ops)"
+# The index hands out the nearest sections and a query's filters (team, status, level, project) drop the ones it can't
+# see. Scanning on until enough have passed keeps a team's memories findable among every other team's. The scan may
+# hand them out a little out of order (a stricter order skips sections it reaches late), so a query sorts them again.
+_NEAREST = "SET LOCAL hnsw.iterative_scan = relaxed_order; SET LOCAL hnsw.ef_search = {ef}"
 
 
 @dataclass(frozen=True)
@@ -85,6 +93,10 @@ class SearchIndex:
         self._embedder = embedder
         with db.transaction() as conn:
             conn.execute(SCHEMA)
+            # Indexing a database that already holds many sections takes longer than any request is allowed.
+            conn.execute("SET LOCAL statement_timeout = 0")
+            conn.execute(_EMBEDDING_INDEX)
+            conn.execute("RESET statement_timeout")
             conn.execute("LOCK TABLE sections IN ACCESS EXCLUSIVE MODE")
             self._unchunked = (
                 conn.execute(
@@ -248,8 +260,11 @@ class SearchIndex:
         where = " AND ".join(conditions)
         columns = "path, section_no, level, member_id, type, author, 1 - (embedding <=> %(query)s) AS similarity"
         with self._db.transaction() as conn:
+            conn.execute(_NEAREST.format(ef=_CANDIDATES))
             by_meaning = conn.execute(
-                f"SELECT {columns} FROM sections WHERE {where} ORDER BY embedding <=> %(query)s LIMIT {_CANDIDATES}",
+                f"WITH nearest AS MATERIALIZED (SELECT {columns} FROM sections WHERE {where}"
+                f" ORDER BY embedding <=> %(query)s LIMIT {_CANDIDATES})"
+                " SELECT * FROM nearest ORDER BY similarity DESC",
                 params,
             ).fetchall()
             by_words = self._keyword(conn, columns, where, params)
@@ -281,12 +296,15 @@ class SearchIndex:
     def similar(self, team: str, path: PurePosixPath, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
         """Active project and team memories whose sections come close in meaning to any section of this memory."""
         with self._db.transaction() as conn:
+            conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             rows = conn.execute(
-                "SELECT c.path, MAX(1 - (c.embedding <=> s.embedding)) AS similarity"
-                " FROM sections s JOIN sections c ON c.team = s.team AND c.path <> s.path"
-                " WHERE s.team = %(team)s AND s.path = %(path)s AND c.status = 'active'"
-                " AND (c.level = 'team' OR (c.level = 'project' AND c.project_id = %(project)s))"
-                " GROUP BY c.path HAVING MAX(1 - (c.embedding <=> s.embedding)) >= %(threshold)s"
+                "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("
+                " SELECT n.path, 1 - (n.embedding <=> s.embedding) AS similarity FROM sections n"
+                " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
+                " AND (n.level = 'team' OR (n.level = 'project' AND n.project_id = %(project)s))"
+                f" ORDER BY n.embedding <=> s.embedding LIMIT {_SIMILAR_CANDIDATES}) c"
+                " WHERE s.team = %(team)s AND s.path = %(path)s"
+                " GROUP BY c.path HAVING MAX(c.similarity) >= %(threshold)s"
                 f" ORDER BY similarity DESC LIMIT {_SIMILAR_LIMIT}",
                 {"team": team, "path": str(path), "project": project_id, "threshold": threshold},
             ).fetchall()
