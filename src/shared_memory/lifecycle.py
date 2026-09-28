@@ -215,10 +215,16 @@ class Lifecycle:
             if supersede is not None:
                 old = PurePosixPath(supersede)
                 change.write(old, replace(self._active(change, old), status="superseded", superseded_by=str(new_path)))
-        where = location.project_id
-        self._audit.memory(caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path))
-        if supersede is not None:
-            self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
+
+            def audited() -> None:
+                where = location.project_id
+                self._audit.memory(
+                    caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path)
+                )
+                if supersede is not None:
+                    self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
+
+            change.also(audited)
         return {"status": "promoted", "path": str(new_path)}
 
     @staticmethod
@@ -257,7 +263,7 @@ class Lifecycle:
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
         with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:
             change.write(location.path, replace(self._active(change, location.path), status="retired"))
-        self._audit.memory(caller, MEMORY_RETIRED, str(location.path))
+            change.also(lambda: self._audit.memory(caller, MEMORY_RETIRED, str(location.path)))
         self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, "its author retired it.")
         return {"status": "retired", "path": str(location.path)}
 
@@ -337,8 +343,11 @@ class Lifecycle:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
         with self._store.change(caller.team, committer(caller), message) as change:
             change.write(target_path, replace(self._active(change, target_path), status="retired"))
-        self._audit.memory(
-            caller, MEMORY_RETIRED, str(target_path), project_id=project_of(challenge), challenge_id=challenge.id
-        )
+            where = project_of(challenge)
+            change.also(
+                lambda: self._audit.memory(
+                    caller, MEMORY_RETIRED, str(target_path), project_id=where, challenge_id=challenge.id
+                )
+            )
         outcome = f"Your challenge {challenge.id} was accepted by {caller.member_id}: {challenge.target_path} is retired."
         return {"status": "accepted", "challenge_id": challenge.id, "retired": challenge.target_path}, outcome
