@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import threading
+from array import array
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -15,28 +18,57 @@ class Embedder(Protocol):
 
 
 class FastEmbedEmbedder:
-    """A small local embedding model running inside the server, so memory text never leaves it."""
+    """A small local embedding model running inside the server, so memory text never leaves it.
+
+    The model loads when this is built, so a server is ready before its first request instead of making that request
+    wait for the download. Each embed runs on one thread: at the model's default an embed spins every core, so a few
+    concurrent searches starve the rest of the server.
+    """
 
     def __init__(self, cache_dir: Path, model: str = MODEL) -> None:
-        self._cache_dir = cache_dir
-        self._model_name = model
-        self._model: Any = None
-        self._lock = threading.Lock()
+        from fastembed import TextEmbedding
 
-    def _load(self) -> Any:
-        with self._lock:
-            if self._model is None:
-                from fastembed import TextEmbedding
-
-                self._model = TextEmbedding(model_name=self._model_name, cache_dir=str(self._cache_dir))
-            return self._model
+        self._model: Any = TextEmbedding(model_name=model, cache_dir=str(cache_dir), threads=1)
 
     def passages(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        return [vector.tolist() for vector in self._load().passage_embed(texts)]
+        return [vector.tolist() for vector in self._model.passage_embed(texts)]
 
     def query(self, text: str) -> list[float]:
-        vector = next(iter(self._load().query_embed([text])))
+        vector = next(iter(self._model.query_embed([text])))
         result: list[float] = vector.tolist()
         return result
+
+
+class CachedQueries:
+    """An embedder that remembers the embeddings of its most recent queries, so a repeated search or recall doesn't
+    embed its query again. Passages are embedded afresh: a save always carries new text.
+
+    Bounded: it keeps `size` queries and forgets the least recently used. Each is kept under a digest of its text (a
+    recalled prompt can be long), as the single-precision floats the model produces.
+    """
+
+    def __init__(self, embedder: Embedder, size: int = 1024) -> None:
+        self._embedder = embedder
+        self._size = size
+        self._queries: OrderedDict[bytes, array[float]] = OrderedDict()
+        self._guard = threading.Lock()
+
+    def passages(self, texts: list[str]) -> list[list[float]]:
+        return self._embedder.passages(texts)
+
+    def query(self, text: str) -> list[float]:
+        key = hashlib.sha256(text.encode()).digest()
+        with self._guard:
+            known = self._queries.get(key)
+            if known is not None:
+                self._queries.move_to_end(key)
+                return known.tolist()
+        vector = self._embedder.query(text)
+        with self._guard:
+            self._queries[key] = array("f", vector)
+            self._queries.move_to_end(key)
+            while len(self._queries) > self._size:
+                self._queries.popitem(last=False)
+        return list(vector)

@@ -18,6 +18,8 @@ class Settings:
     challenge_fallback_days: int = 3
     memory_word_limit: int = 600
     similar_threshold: float = 0.62
+    # The longest one database statement may run, waiting included, before its request fails.
+    statement_timeout_seconds: float = 10.0
     allowed_hosts: tuple[str, ...] = ()
     plugin_marketplace: str = "madhav037/shared-memory"
     github_client_id: str = ""

@@ -27,7 +27,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
-from shared_memory.embeddings import Embedder, FastEmbedEmbedder
+from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity
@@ -86,10 +86,11 @@ def _bearer(value: str | None) -> str | None:
 
 
 def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None) -> Starlette:
-    db = Database(settings.database_url)
+    db = Database(settings.database_url, settings.statement_timeout_seconds)
     identity = Identity(db, clock)
     audit = Audit(db, clock, identity)
-    index = SearchIndex(db, embedder or FastEmbedEmbedder(settings.model_cache))
+    # The model loads here, before the server takes its first request.
+    index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache)))
     store = MemoryStore(settings.memory_root, listeners=[index])
     history = MemoryHistory(settings.memory_root)
     challenges = Challenges(settings, db, store, identity, audit, clock)
