@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import Future
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -138,6 +139,10 @@ class Session:
     def call(self, tool: str, **arguments: Any) -> Any:
         """Call an MCP tool; return its structured result or raise ToolRefused with its message."""
         return self.server.portal.call(self._call, tool, arguments)
+
+    def call_soon(self, tool: str, **arguments: Any) -> Future[Any]:
+        """Start an MCP tool call without waiting for it; the future holds what `call` would return."""
+        return self.server.portal.start_task_soon(self._call, tool, arguments)
 
     async def _call(self, tool: str, arguments: dict[str, Any]) -> Any:
         async with self._connected() as client:

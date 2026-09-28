@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 import anyio
+import anyio.from_thread
 import anyio.to_thread
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -35,6 +36,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.recall import Recall
+from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.store import MemoryStore
 
@@ -122,8 +124,18 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
+    saves = Saves()
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
+
+    def saving(tool: F) -> F:
+        """A tool that saves memory: it waits for its turn without holding a worker thread (see `saves.py`)."""
+
+        @functools.wraps(tool)
+        async def in_turn(*args: Any, **kwargs: Any) -> Any:
+            return await saves.run(tool, *args, **kwargs)
+
+        return in_turn  # type: ignore[return-value]
 
     def authenticate(headers: Any) -> Caller:
         return identity.authenticate(
@@ -137,6 +149,27 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
 
+    async def within_recall_budget(part: HookPart, current: Caller, payload: dict[str, Any]) -> str | None:
+        """Run a hook's optional part (recall) on a worker thread, or give up on it.
+
+        It has the recall budget to reach a thread, and the whole budget again from the moment it starts running, so
+        time spent waiting for a thread never eats into recall itself. Given up on, it adds nothing to the answer and
+        its thread is left to finish.
+        """
+        budget = settings.recall_budget_seconds
+        with anyio.move_on_after(budget) as scope:
+
+            def started() -> None:
+                if not scope.cancel_called:
+                    scope.deadline = anyio.current_time() + budget
+
+            def run() -> str | None:
+                anyio.from_thread.run_sync(started)
+                return part(current, payload)
+
+            return await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
+        return None
+
     async def hook(
         request: Request, event: str, required: HookPart, optional: HookPart | None = None, *, report_refusals: bool = False
     ) -> Response:
@@ -144,7 +177,8 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
 
         The caller is authenticated from the headers before the body is read, so a hook without a valid personal token
         costs next to nothing. The required part always runs to completion, because it marks news as delivered and so
-        must reach the member. The optional part (recall) is dropped if it runs past the recall budget.
+        must reach the member. The optional part (recall) is dropped if it can't start within the recall budget, or
+        runs past the budget once started.
         """
         headers = Headers(scope=request.scope)
         answer_format = request.query_params.get("format")
@@ -171,8 +205,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             named_event = hooks.event_in(payload, event)
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
             if optional is not None:
-                with anyio.move_on_after(settings.recall_budget_seconds):
-                    parts.append(await anyio.to_thread.run_sync(optional, current, payload, abandon_on_cancel=True))
+                parts.append(await within_recall_budget(optional, current, payload))
         except Refused:
             return JSONResponse({})
         except Exception:
@@ -291,6 +324,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return {"member_id": member_id, "personal_token": token}
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def remember(
         title: str,
@@ -348,6 +382,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return service.read(caller(ctx), path)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def retire(path: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
         """Mark a project or team memory as no longer true, with nothing superseding it.
@@ -358,6 +393,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return lifecycle.retire(caller(ctx), path, reasoning)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
         """Accept or reject a challenge against a memory (decision: accept or reject).
@@ -368,6 +404,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def promote(
         path: str,
@@ -388,6 +425,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def edit_memory(
         path: str,
@@ -402,6 +440,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         return service.edit_memory(caller(ctx), path, title, summary, type, body, related_files)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def delete_memory(path: str, ctx: Context) -> dict[str, Any]:
         """Delete your own personal memory."""
@@ -424,6 +463,7 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             briefing,
             lifecycle,
             challenges,
+            saves,
         ).routes()
     )
     return app
