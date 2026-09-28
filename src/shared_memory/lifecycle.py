@@ -23,7 +23,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.memory import Level, Location, Memory, level_folder, locate
 from shared_memory.service import committer, describe
-from shared_memory.store import MemoryStore
+from shared_memory.store import Change, MemoryStore
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS promotions (
@@ -78,7 +78,7 @@ class Lifecycle:
         if level not in ("project", "team"):
             raise Refused(f"Promote into 'project' or 'team' memory, not {level!r}.")
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        self._store.read(caller.team, location.path)  # refuses a memory that isn't there
         if location.level != "personal":
             raise Refused(f"This is already {location.level} memory. Only personal memory can be promoted.")
         promoted_by: str | None = None
@@ -101,7 +101,7 @@ class Lifecycle:
                 caller.team, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
             )
             if not similar:
-                return self._move(caller, location, memory, target, promoted_by=promoted_by)
+                return self._move(caller, location, target, promoted_by=promoted_by)
             reference = secrets.token_urlsafe(12)
             with self._db.transaction() as conn:
                 conn.execute(
@@ -173,7 +173,7 @@ class Lifecycle:
             )  # fmt: skip
             return self._challenge_raised(challenge_id, challenged[0], challenged[1].author)
         result = self._move(
-            caller, location, memory, target, supersede=supersede, exception_to=exception_to, promoted_by=promoted_by
+            caller, location, target, supersede=supersede, exception_to=exception_to, promoted_by=promoted_by
         )
         if supersede is not None:
             self._challenges.close_all_against(
@@ -189,18 +189,23 @@ class Lifecycle:
         self,
         caller: Caller,
         location: Location,
-        memory: Memory,
         target: Level,
         *,
         supersede: str | None = None,
         exception_to: str | None = None,
         promoted_by: str | None = None,
-        message: str | None = None,
+        reason: str = "Promote",
     ) -> dict[str, Any]:
-        folder = level_folder(target, memory.type, location.project_id)
-        if location.topic:
-            folder = folder / location.topic
-        with self._store.change(caller.team, committer(caller), message or f"Promote: {memory.title}") as change:
+        """Move a personal memory into project or team memory, reading it in the same save that moves it.
+
+        A memory moved or deleted by a save that went first is refused here, so it is never promoted twice.
+        """
+        with self._store.change(caller.team, committer(caller)) as change:
+            memory = change.read(location.path)
+            change.message = f"{reason}: {memory.title}"
+            folder = level_folder(target, memory.type, location.project_id)
+            if location.topic:
+                folder = folder / location.topic
             new_path = change.new_path(folder, location.path.stem)
             change.delete(location.path)
             change.write(
@@ -209,12 +214,20 @@ class Lifecycle:
             )
             if supersede is not None:
                 old = PurePosixPath(supersede)
-                change.write(old, replace(self._store.read(caller.team, old), status="superseded", superseded_by=str(new_path)))
+                change.write(old, replace(self._active(change, old), status="superseded", superseded_by=str(new_path)))
         where = location.project_id
         self._audit.memory(caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path))
         if supersede is not None:
             self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
         return {"status": "promoted", "path": str(new_path)}
+
+    @staticmethod
+    def _active(change: Change, path: PurePosixPath) -> Memory:
+        """A memory about to change, refused if a save that went first has already retired or superseded it."""
+        memory = change.read(path)
+        if memory.status != "active":
+            raise Refused(f"{path} is already {memory.status}.")
+        return memory
 
     @staticmethod
     def _challenge_raised(challenge_id: int, target_path: str, author: str) -> dict[str, Any]:
@@ -243,7 +256,7 @@ class Lifecycle:
             )
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
         with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:
-            change.write(location.path, replace(memory, status="retired"))
+            change.write(location.path, replace(self._active(change, location.path), status="retired"))
         self._audit.memory(caller, MEMORY_RETIRED, str(location.path))
         self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, "its author retired it.")
         return {"status": "retired", "path": str(location.path)}
@@ -303,16 +316,14 @@ class Lifecycle:
         if not self._store.exists(caller.team, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
-        challenger = self._store.read(caller.team, challenger_location.path)
         level: Level = "team" if challenge.level == "team" else "project"
         moved = self._move(
             caller,
             challenger_location,
-            challenger,
             level,
             supersede=challenge.target_path,
             promoted_by=challenge.promoted_by,
-            message=f"Accept challenge {challenge.id}: {challenger.title}",
+            reason=f"Accept challenge {challenge.id}",
         )
         outcome = (
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
@@ -325,7 +336,7 @@ class Lifecycle:
     ) -> tuple[dict[str, Any], str]:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
         with self._store.change(caller.team, committer(caller), message) as change:
-            change.write(target_path, replace(target, status="retired"))
+            change.write(target_path, replace(self._active(change, target_path), status="retired"))
         self._audit.memory(
             caller, MEMORY_RETIRED, str(target_path), project_id=project_of(challenge), challenge_id=challenge.id
         )
