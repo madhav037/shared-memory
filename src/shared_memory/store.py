@@ -13,20 +13,26 @@ transactions left open, then git commits exactly the files the save touched, the
 (its audit entry) runs, and only then do the listeners' transactions commit. A failure at any step undoes the steps
 before it: the transactions roll back, the commit comes off the branch, and every file the save touched is put back
 as it was, so nothing is left on disk for the next save to commit under another member's name.
+
+A memory file is parsed once and kept until it changes: each read looks at the file on disk and parses it again only
+if it is a different file, or was modified or resized, since it was parsed, so a file changed outside the server is
+still noticed. Every save also drops what it changed.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import stat
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Protocol, TypeVar
@@ -165,9 +171,99 @@ def read_whole(file: Path) -> str:
     return _settled(lambda: file.read_text(encoding="utf-8"))
 
 
+# Which file is at a path and how it stands: a save renames a new file in, and an edit in place changes when the file
+# was modified or how long it is.
+_Stamp = tuple[int, int, int]
+
+
+def _stamp(status: os.stat_result) -> _Stamp:
+    return status.st_ino, status.st_mtime_ns, status.st_size
+
+
+def _read_stamped(file: Path) -> tuple[str, _Stamp]:
+    """A file's text and its stamp, both taken from the one open file."""
+    with file.open(encoding="utf-8") as opened:
+        return opened.read(), _stamp(os.fstat(opened.fileno()))
+
+
+@dataclass(frozen=True)
+class _Parsed:
+    stamp: _Stamp
+    memory: Memory
+    size: int
+
+
+class ParsedMemories:
+    """Memory files already parsed, dropping the least recently read beyond a bound on the text they were parsed from.
+
+    Thread-safe. A file read while a save ended isn't kept, since a save can leave a file stamped as it
+    was before.
+    """
+
+    def __init__(self, bound: int) -> None:
+        self._bound = bound
+        self._size = 0
+        self._parsed: OrderedDict[Path, _Parsed] = OrderedDict()
+        self._saves = 0
+        self._guard = threading.Lock()
+
+    def read(self, file: Path) -> Memory:
+        """What a memory file says: FileNotFoundError when there is none, Refused when it isn't a memory.
+
+        The memory returned is a copy of its own, for the caller to change freely.
+        """
+        status = _settled(lambda: os.stat(file))
+        if stat.S_ISDIR(status.st_mode):
+            raise FileNotFoundError(file)
+        with self._guard:
+            parsed = self._parsed.get(file)
+            if parsed is not None and parsed.stamp == _stamp(status):
+                self._parsed.move_to_end(file)
+                return _copy(parsed.memory)
+            saves = self._saves
+        text, stamp = _settled(lambda: _read_stamped(file))
+        memory = Memory.from_text(text)
+        with self._guard:
+            if saves == self._saves:
+                self._keep(file, _Parsed(stamp, memory, len(text)))
+        return _copy(memory)
+
+    def forget(self, files: Iterable[Path]) -> None:
+        """Drop what a save changed, whether it landed or was undone, and keep nothing read before it ended."""
+        with self._guard:
+            self._saves += 1
+            for file in files:
+                self._drop(file)
+
+    def _keep(self, file: Path, parsed: _Parsed) -> None:
+        self._drop(file)
+        if parsed.size > self._bound:
+            return
+        self._parsed[file] = parsed
+        self._size += parsed.size
+        while self._size > self._bound:
+            self._drop(next(iter(self._parsed)))
+
+    def _drop(self, file: Path) -> None:
+        dropped = self._parsed.pop(file, None)
+        if dropped is not None:
+            self._size -= dropped.size
+
+
+def _copy(memory: Memory) -> Memory:
+    return replace(memory, related_files=list(memory.related_files))
+
+
+# How much memory text the server keeps parsed, in characters: a large team's whole memory, several times over.
+PARSED_CHARACTERS = 32 * 1024 * 1024
+
+
 class MemoryStore:
-    def __init__(self, root: Path, listeners: Iterable[ChangeListener] = ()) -> None:
+    def __init__(
+        self, root: Path, listeners: Iterable[ChangeListener] = (), parsed_characters: int = PARSED_CHARACTERS
+    ) -> None:
         self._root = root.resolve()
+        self._parsed = ParsedMemories(parsed_characters)
         self._root.mkdir(parents=True, exist_ok=True)
         self._turn = threading.Lock()
         self._listeners = list(listeners)
@@ -212,20 +308,22 @@ class MemoryStore:
         self, team: str, folder: PurePosixPath
     ) -> tuple[list[tuple[PurePosixPath, Memory]], list[PurePosixPath]]:
         """The memories directly in a folder (sorted by title) and its subfolders."""
+        directory = self._file(team, folder)
         try:
-            entries = list(self._file(team, folder).iterdir())
+            with os.scandir(directory) as listing:
+                entries = [(entry.name, entry.is_dir()) for entry in listing]
         except (FileNotFoundError, NotADirectoryError):
             return [], []
         memories: list[tuple[PurePosixPath, Memory]] = []
         folders: list[PurePosixPath] = []
-        for entry in entries:
-            if entry.name.startswith("."):
+        for name, is_folder in entries:
+            if name.startswith("."):
                 continue
-            if entry.is_dir():
-                folders.append(folder / entry.name)
-            elif entry.suffix == ".md" and entry.name != INDEX_NAME:
+            if is_folder:
+                folders.append(folder / name)
+            elif name.endswith(".md") and name != INDEX_NAME:
                 try:
-                    memories.append((folder / entry.name, Memory.from_text(read_whole(entry))))
+                    memories.append((folder / name, self._parsed.read(directory / name)))
                 except (Refused, FileNotFoundError):
                     continue  # not a memory, or deleted since the folder was listed
         memories.sort(key=lambda item: (item[1].title.lower(), str(item[0])))
@@ -292,7 +390,10 @@ class MemoryStore:
             return None
 
     def read(self, team: str, path: PurePosixPath) -> Memory:
-        return Memory.from_text(self.text(team, path))
+        try:
+            return self._parsed.read(self._file(team, path))
+        except FileNotFoundError:
+            raise Refused(f"There is no memory at {str(path)!r}.") from None
 
     @contextmanager
     def _one_save_at_a_time(self) -> Iterator[None]:
@@ -308,8 +409,12 @@ class MemoryStore:
         """
         with self._one_save_at_a_time():
             change = Change(self, team, message)
-            yield change
-            self._apply(change, committer)
+            try:
+                yield change
+                self._apply(change, committer)
+            finally:
+                # Whether the save landed or was undone, what it touched is read again.
+                self._parsed.forget(self._file(team, path) for path in [*change.writes, *change.deletes])
 
     def _apply(self, change: Change, committer: Committer) -> None:
         team = change.team
