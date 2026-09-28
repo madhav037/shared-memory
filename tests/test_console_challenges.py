@@ -383,3 +383,28 @@ def test_a_challenged_memory_says_whether_this_member_is_the_one_to_decide(
     assert [one["may_decide"] for one in for_the_author] == [True]
     assert [one["may_decide"] for one in for_a_bystander] == [False]
     ash.close()
+
+
+def test_a_folder_counts_the_open_challenges_against_each_memory_in_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-counts", 1190)
+    mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    danas = remember(dana, "Use npm, not pnpm", "We use npm for every package.")
+    a_supersede_challenge(dana, danas)
+    a_supersede_challenge(ash, remember(ash, "Use yarn, not pnpm", "We use yarn for every package."))
+
+    def counted(path: str) -> int:
+        folder = path.rsplit("/", 1)[0]
+        listed = signed_out.get(f"/api/files?folder={folder}").json()["memories"]
+        count: int = next(one["challenged"] for one in listed if one["path"] == path)
+        return count
+
+    assert counted(mine) == 2
+    assert counted(danas) == 0

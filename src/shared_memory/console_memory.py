@@ -7,6 +7,7 @@ session depends on.
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -131,6 +132,8 @@ class ConsoleMemory:
     ) -> list[dict[str, Any]]:
         """Memories as a folder lists them: what each is, who wrote it, when it changed and what is disputed."""
         pending = self._challenges.pending(caller.team, [str(path) for path, _ in memories])
+        # One query for the team's open challenges, not one per memory: a deep folder lists hundreds.
+        challenged = Counter(challenge.target_path for challenge in self._challenges.open_challenges(caller.team))
         return [
             {
                 "path": str(path),
@@ -142,7 +145,7 @@ class ConsoleMemory:
                 "author": memory.author,
                 "author_name": people.get(memory.author, memory.author),
                 "changed": self._store.changed(caller.team, path),
-                "challenged": len(self._challenges.against(caller, str(path))),
+                "challenged": challenged[str(path)],
                 "waiting": bool(pending[str(path)]),
             }
             for path, memory in memories
