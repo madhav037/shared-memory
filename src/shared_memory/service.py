@@ -15,7 +15,7 @@ from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.memory import Location, Memory, level_folder, locate, slugify
-from shared_memory.store import Committer, MemoryStore
+from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.validation import validate
 
 
@@ -311,11 +311,12 @@ class MemoryService:
         caller.require_reach(path)
         return self._store.text(caller.team, locate(path).path)
 
-    def _own_personal_memory(self, caller: Caller, path: str, verb: str) -> tuple[Location, Memory]:
+    def _own_personal_memory(self, caller: Caller, change: Change, path: str, verb: str) -> tuple[Location, Memory]:
+        """The caller's own personal memory, read in the save that changes it."""
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        memory = change.read(location.path)
         if location.level != "personal" or location.member_id != caller.member_id:
             raise Refused(
                 f"You can only {verb} your own personal memory. Project and team memory change only by "
@@ -333,28 +334,30 @@ class MemoryService:
         body: str | None = None,
         related_files: list[str] | None = None,
     ) -> dict[str, Any]:
-        location, memory = self._own_personal_memory(caller, path, "edit")
-        if type is not None and type != location.type:
-            raise Refused(
-                f"This memory is in the {location.type} folder, so its type must match. To change its type, "
-                "remember it again with the new type and delete this one."
+        with self._store.change(caller.team, committer(caller)) as change:
+            location, memory = self._own_personal_memory(caller, change, path, "edit")
+            if type is not None and type != location.type:
+                raise Refused(
+                    f"This memory is in the {location.type} folder, so its type must match. To change its type, "
+                    "remember it again with the new type and delete this one."
+                )
+            edited = replace(
+                memory,
+                title=memory.title if title is None else title.strip(),
+                summary=memory.summary if summary is None else summary.strip(),
+                body=memory.body if body is None else body,
+                related_files=memory.related_files if related_files is None else list(related_files),
             )
-        edited = replace(
-            memory,
-            title=memory.title if title is None else title.strip(),
-            summary=memory.summary if summary is None else summary.strip(),
-            body=memory.body if body is None else body,
-            related_files=memory.related_files if related_files is None else list(related_files),
-        )
-        validate(edited, self._settings.memory_word_limit)
-        with self._store.change(caller.team, committer(caller), f"Edit: {edited.title}") as change:
+            validate(edited, self._settings.memory_word_limit)
+            change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)
         self._audit.memory(caller, MEMORY_EDITED, str(location.path))
         return describe(location.path, edited)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
-        location, memory = self._own_personal_memory(caller, path, "delete")
-        with self._store.change(caller.team, committer(caller), f"Delete: {memory.title}") as change:
+        with self._store.change(caller.team, committer(caller)) as change:
+            location, memory = self._own_personal_memory(caller, change, path, "delete")
+            change.message = f"Delete: {memory.title}"
             change.delete(location.path)
         self._audit.memory(caller, MEMORY_DELETED, str(location.path))
         return {"deleted": str(location.path)}
