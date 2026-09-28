@@ -77,6 +77,9 @@ class StubEmbedder:
     def query(self, text: str) -> list[float]:
         return [0.0]
 
+    def tokens(self, words: list[str]) -> list[int]:
+        return [1 for _ in words]
+
 
 @pytest.fixture(scope="module")
 def guarded(server: RunningServer) -> Iterator[RunningServer]:

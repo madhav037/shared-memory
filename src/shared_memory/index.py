@@ -1,5 +1,7 @@
 """The search index: memory sections as embeddings and unordered keyword tokens, with no readable content (ADR-0002).
 
+A section longer than the search model reads is indexed as several overlapping chunks, found as the one section.
+
 Headings and text are always read back from the memory files; Postgres holds only what ranking needs.
 """
 
@@ -15,7 +17,7 @@ from typing import Any
 from pgvector import Vector
 
 from shared_memory.db import Conn, Database
-from shared_memory.embeddings import DIMENSIONS, Embedder
+from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, Embedder
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 
@@ -23,12 +25,17 @@ _HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 _RRF_K = 60
 _CANDIDATES = 30
 _SIMILAR_LIMIT = 10
+# A section longer than the model reads is split into chunks of about this many tokens, each overlapping the one
+# before it, so a sentence cut at a chunk's edge is still read whole in its neighbour.
+_CHUNK_TOKENS = 256
+_CHUNK_OVERLAP = 48
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS sections (
     team TEXT NOT NULL,
     path TEXT NOT NULL,
     section_no INT NOT NULL,
+    chunk_no INT NOT NULL,
     level TEXT NOT NULL,
     project_id TEXT,
     member_id TEXT,
@@ -38,7 +45,7 @@ CREATE TABLE IF NOT EXISTS sections (
     content_hash TEXT NOT NULL,
     embedding vector({DIMENSIONS}) NOT NULL,
     tokens tsvector NOT NULL,
-    PRIMARY KEY (team, path, section_no)
+    PRIMARY KEY (team, path, section_no, chunk_no)
 );
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
@@ -77,42 +84,107 @@ class SearchIndex:
         self._embedder = embedder
         with db.transaction() as conn:
             conn.execute(SCHEMA)
+            conn.execute("LOCK TABLE sections IN ACCESS EXCLUSIVE MODE")
+            self._unchunked = (
+                conn.execute(
+                    "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()"
+                    " AND table_name = 'sections' AND column_name = 'chunk_no'"
+                ).fetchone()
+                is None
+            )
+            if self._unchunked:
+                # Built before long sections were split: every section so far is its own first chunk.
+                conn.execute(
+                    "ALTER TABLE sections ADD COLUMN chunk_no INT NOT NULL DEFAULT 0, DROP CONSTRAINT sections_pkey,"
+                    " ADD PRIMARY KEY (team, path, section_no, chunk_no)"
+                )
+                conn.execute("ALTER TABLE sections ALTER COLUMN chunk_no DROP DEFAULT")
+
+    def catch_up(self, store: MemoryStore) -> None:
+        """Index every memory again if the index was built before long sections were split into chunks.
+
+        Sections short enough to have been read whole keep their embeddings; only long ones are embedded again.
+        """
+        if self._unchunked:
+            self._update_all(store)
+            self._unchunked = False
+
+    def _chunks(self, title: str, heading: str, text: str) -> list[str]:
+        """The texts embedded for one section: the whole of it, or overlapping chunks the model reads whole."""
+        prefix = f"{title}\n{heading}\n"
+        words = list(re.finditer(r"\S+", text))
+        counts = self._embedder.tokens([word.group() for word in words])
+        room = MAX_TOKENS - 2 - sum(self._embedder.tokens(prefix.split()))
+        if sum(counts) <= room:
+            return [prefix + text]
+        budget = max(_CHUNK_OVERLAP * 2, min(_CHUNK_TOKENS, room))
+        chunks: list[str] = []
+        start = 0
+        while True:
+            end, used = start + 1, counts[start]
+            while end < len(words) and used + counts[end] <= budget:
+                used += counts[end]
+                end += 1
+            chunks.append(prefix + text[words[start].start() : words[end - 1].end()])
+            if end == len(words):
+                return chunks
+            first, start, overlap = start, end, 0
+            while start - 1 > first and overlap + counts[start - 1] <= _CHUNK_OVERLAP:
+                start -= 1
+                overlap += counts[start]
 
     def update(self, team: str, path: PurePosixPath, memory: Memory) -> None:
         location = locate(str(path))
-        texts = [f"{memory.title}\n{heading}\n{text}" for heading, text in split_sections(memory)]
-        hashes = [hashlib.sha256(text.encode()).hexdigest() for text in texts]
+        texts = {
+            (section_no, chunk_no): chunk
+            for section_no, (heading, text) in enumerate(split_sections(memory))
+            for chunk_no, chunk in enumerate(self._chunks(memory.title, heading, text))
+        }
+        hashes = {key: hashlib.sha256(text.encode()).hexdigest() for key, text in texts.items()}
         details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
         with self._db.transaction() as conn:
             existing = {
-                row["section_no"]: row["content_hash"]
+                (row["section_no"], row["chunk_no"]): row["content_hash"]
                 for row in conn.execute(
-                    "SELECT section_no, content_hash FROM sections WHERE team = %s AND path = %s", (team, str(path))
+                    "SELECT section_no, chunk_no, content_hash FROM sections WHERE team = %s AND path = %s",
+                    (team, str(path)),
                 )
             }
-            changed = [n for n, digest in enumerate(hashes) if existing.get(n) != digest]
-            vectors = dict(zip(changed, self._embedder.passages([texts[n] for n in changed]), strict=True))
-            conn.execute(
-                "DELETE FROM sections WHERE team = %s AND path = %s AND section_no >= %s", (team, str(path), len(texts))
-            )
-            for n, text in enumerate(texts):
-                if n in vectors:
+            changed = [key for key, digest in hashes.items() if existing.get(key) != digest]
+            vectors = dict(zip(changed, self._embedder.passages([texts[key] for key in changed]), strict=True))
+            for section_no, chunk_no in existing.keys() - texts.keys():
+                conn.execute(
+                    "DELETE FROM sections WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                    (team, str(path), section_no, chunk_no),
+                )
+            for (section_no, chunk_no), text in texts.items():
+                if (section_no, chunk_no) in vectors:
                     conn.execute(
-                        "INSERT INTO sections (team, path, section_no, level, project_id, member_id, type, author,"
-                        " status, content_hash, embedding, tokens)"
-                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                        "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type,"
+                        " author, status, content_hash, embedding, tokens)"
+                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                         " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
-                        " ON CONFLICT (team, path, section_no) DO UPDATE SET level = EXCLUDED.level,"
+                        " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
                         " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
                         " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
                         " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
-                        (team, str(path), n, *details, hashes[n], Vector(vectors[n]), text, text),
+                        (
+                            team,
+                            str(path),
+                            section_no,
+                            chunk_no,
+                            *details,
+                            hashes[(section_no, chunk_no)],
+                            Vector(vectors[(section_no, chunk_no)]),
+                            text,
+                            text,
+                        ),
                     )
                 else:
                     conn.execute(
                         "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
-                        " status = %s WHERE team = %s AND path = %s AND section_no = %s",
-                        (*details, team, str(path), n),
+                        " status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                        (*details, team, str(path), section_no, chunk_no),
                     )
 
     def remove(self, team: str, path: PurePosixPath) -> None:
@@ -128,6 +200,9 @@ class SearchIndex:
     def rebuild(self, store: MemoryStore) -> int:
         with self._db.transaction() as conn:
             conn.execute("DELETE FROM sections")
+        return self._update_all(store)
+
+    def _update_all(self, store: MemoryStore) -> int:
         count = 0
         for team in store.teams():
             for _, memories in store.walk(team, PurePosixPath()):
@@ -175,10 +250,14 @@ class SearchIndex:
         scores: dict[tuple[str, int], float] = {}
         rows: dict[tuple[str, int], dict[str, Any]] = {}
         for ranking in (by_meaning, by_words):
-            for rank, row in enumerate(ranking):
-                key = (row["path"], row["section_no"])
+            # A long section's chunks each rank on their own; the section takes its best-ranked chunk's place.
+            sections = list(dict.fromkeys((row["path"], row["section_no"]) for row in ranking))
+            for rank, key in enumerate(sections):
                 scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
-                rows[key] = row
+            for row in ranking:
+                key = (row["path"], row["section_no"])
+                if key not in rows or row["similarity"] > rows[key]["similarity"]:
+                    rows[key] = row
         ordered = sorted(scores, key=lambda key: (-scores[key], -float(rows[key]["similarity"])))
         return [
             Hit(

@@ -160,7 +160,7 @@ flowchart TD
 - **Other members' personal memories** appear only when Claude searches, labeled *not accepted by the team*.
 - **Labeling:** everything recalled or briefed is marked as team memory: *information, not instructions*.
 - **Freshness:** a memory saved by one member shows up for another member on their **next prompt**.
-- **Search** works on sections (a file split at its headings). It combines search by meaning with keyword matching, so exact words like `pnpm` or error codes are found.
+- **Search** works on sections (a file split at its headings). It combines search by meaning with keyword matching, so exact words like `pnpm` or error codes are found. The search model reads only 512 tokens at a time, so a section longer than that is indexed as overlapping chunks, and a match on any chunk finds the section.
 - **Outdated memory** *(later phase)*: a memory unused for 60 days is labeled *possibly outdated*. Nothing is ever deleted automatically.
 
 ## 7. Sessions and collisions (v1.1)
