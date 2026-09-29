@@ -152,3 +152,33 @@ function merge(pieces: Piece[]): Piece[] {
 export function changed(pieces: Piece[]): boolean {
   return pieces.some((piece) => piece.kind !== "same");
 }
+
+/** A marked-up comparison as it is shown, where a long stretch both texts agree on is folded away. */
+export type Shown = Piece | { kind: "folded"; lines: number };
+
+/**
+ * A reader deciding between two texts looks at what changes. A long stretch of lines both agree on is folded to a
+ * count, keeping the line either side of each change so it still reads in place. Folding a single line hides nothing
+ * worth hiding, so a stretch is only folded when that would take out two lines or more.
+ */
+export function collapse(pieces: Piece[], context = 1): Shown[] {
+  const shown: Shown[] = [];
+  pieces.forEach((piece, at) => {
+    if (piece.kind !== "same") {
+      shown.push(piece);
+      return;
+    }
+    const lines = piece.text.split(/(?<=\n)/);
+    const head = at === 0 ? 0 : context;
+    const tail = at === pieces.length - 1 ? 0 : context;
+    const hidden = lines.length - head - tail;
+    if (hidden < 2) {
+      shown.push(piece);
+      return;
+    }
+    if (head) shown.push({ kind: "same", text: lines.slice(0, head).join("") });
+    shown.push({ kind: "folded", lines: hidden });
+    if (tail) shown.push({ kind: "same", text: lines.slice(lines.length - tail).join("") });
+  });
+  return shown;
+}
