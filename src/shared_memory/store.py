@@ -9,10 +9,12 @@ renamed into it, so a reader sees the old file or the new one, never part of one
 for their turn: a listing skips a memory deleted while it was being listed.
 
 A save lands whole or not at all. Its files are written, then its listeners (the search index, pins) do their part in
-transactions left open, then git commits exactly the files the save touched, then whatever else the save asked for
-(its audit entry) runs, and only then do the listeners' transactions commit. A failure at any step undoes the steps
-before it: the transactions roll back, the commit comes off the branch, and every file the save touched is put back
-as it was, so nothing is left on disk for the next save to commit under another member's name.
+transactions left open, then its commit is built in memory with pygit2 from exactly the files the save touched and
+main is moved to it, then whatever else the save asked for (its audit entry) runs, and only then do the listeners'
+transactions commit. Moving main is the save's last git step. A failure before it leaves main untouched; a failure
+after it is put back by a revert commit, never by resetting main. Either way the transactions roll back and every file
+the save touched is put back as it was, so nothing is left on disk for the next save to commit under another member's
+name. Saves don't use git's index file and don't keep it up to date: compare the files with main's tree, not the index.
 
 A memory file is parsed once and kept until it changes: each read looks at the file on disk and parses it again only
 if it is a different file, or was modified or resized, since it was parsed, so a file changed outside the server is
@@ -24,7 +26,6 @@ from __future__ import annotations
 import logging
 import os
 import stat
-import subprocess
 import sys
 import threading
 import time
@@ -36,6 +37,9 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Protocol, TypeVar
+
+import pygit2
+import pygit2.enums
 
 from shared_memory.errors import Refused
 from shared_memory.memory import INDEX_NAME, Memory, slugify
@@ -111,21 +115,119 @@ class ChangeListener(Protocol):
         ...
 
 
-class GitFailed(RuntimeError):
-    """A git command run on the memory folder failed."""
-
-    def __init__(self, args: tuple[str, ...], stderr: str) -> None:
-        super().__init__(f"git {' '.join(args)} failed: {stderr}")
-        # git's first line says what went wrong; the lines after it are advice for a person at a terminal.
-        self.reason = f"git could not record it ({stderr.splitlines()[0] if stderr else 'it gave no reason'})"
-
-
 def _reason(error: Exception) -> str:
     """Why a save failed, in one line."""
-    if isinstance(error, GitFailed):
-        return error.reason
     lines = str(error).strip().splitlines()
-    return lines[0] if lines else type(error).__name__
+    reason = lines[0] if lines else type(error).__name__
+    if isinstance(error, pygit2.GitError):
+        return f"git could not record it ({reason})"
+    return reason
+
+
+# Committing to main. A save builds its commit in memory on top of main and moves main to it with a compare-and-swap;
+# if main moved meanwhile, it builds again on the new main. Paths saved in the same moment never overlap, so building
+# again can't conflict.
+
+MAIN = "refs/heads/main"
+SERVER = ("Shared Memory", "server@shared-memory.invalid")
+# libgit2 has no compare-and-swap on a ref, and only this process saves, so reading main, checking it and moving it
+# happen under one lock. Held only for that, never while a commit is built.
+_moving_main = threading.Lock()
+_EMPTY_TREE = pygit2.Oid(hex="4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+
+
+@dataclass(frozen=True)
+class _Landed:
+    """A save's commit that main was moved to, and the commit it was built on."""
+
+    commit: pygit2.Oid
+    parent: pygit2.Oid | None
+
+
+def _author(committer: Committer) -> pygit2.Signature:
+    return pygit2.Signature(committer.name, f"{committer.member_id}@members.shared-memory.invalid")
+
+
+def _cleaned(message: str) -> str:
+    """A commit message as `git commit -m` leaves it: no trailing spaces, no blank lines at the ends, one newline."""
+    lines = [line.rstrip() for line in message.splitlines()]
+    return "\n".join(lines).strip("\n") + "\n"
+
+
+def _main(repository: pygit2.Repository) -> pygit2.Oid | None:
+    reference = repository.references.get(MAIN)
+    if reference is None:
+        return None
+    target = reference.target
+    assert isinstance(target, pygit2.Oid)  # main names a commit, never another ref
+    return target
+
+
+def _move_main(repository: pygit2.Repository, expected: pygit2.Oid | None, commit: pygit2.Oid, why: str) -> bool:
+    """Move main to a commit only if it is still at the commit that was built on. False when it moved first."""
+    with _moving_main:
+        if _main(repository) != expected:
+            return False
+        repository.create_reference_direct(MAIN, commit, expected is not None, message=why)
+        return True
+
+
+def _tree(
+    repository: pygit2.Repository, base: pygit2.Tree | None, changes: dict[tuple[str, ...], pygit2.Oid | None]
+) -> pygit2.Oid | None:
+    """A tree with changes (a file's blob, or None to remove it) applied on top of base. None when it holds nothing."""
+    builder = repository.TreeBuilder(base) if base is not None else repository.TreeBuilder()
+    below: dict[str, dict[tuple[str, ...], pygit2.Oid | None]] = {}
+    for parts, blob in changes.items():
+        if len(parts) > 1:
+            below.setdefault(parts[0], {})[parts[1:]] = blob
+        elif blob is not None:
+            builder.insert(parts[0], blob, pygit2.enums.FileMode.BLOB)
+        elif builder.get(parts[0]) is not None:
+            builder.remove(parts[0])
+    for name, inside in below.items():
+        entry = base[name] if base is not None and name in base else None
+        subtree = repository[entry.id] if entry is not None and entry.type == pygit2.enums.ObjectType.TREE else None
+        assert subtree is None or isinstance(subtree, pygit2.Tree)
+        built = _tree(repository, subtree, inside)
+        if built is not None:
+            builder.insert(name, built, pygit2.enums.FileMode.TREE)
+        elif builder.get(name) is not None:
+            builder.remove(name)  # a folder left empty goes, as git keeps no empty folders
+    return builder.write() if len(builder) else None
+
+
+def _land(
+    repository: pygit2.Repository, files: dict[str, pygit2.Oid | None], message: str, author: pygit2.Signature
+) -> _Landed | None:
+    """Commit files (each a blob, or None where there is no file) on top of main and move main to it.
+
+    Built again on the new main whenever main moved first. None when main already holds the files as they are.
+    """
+    changes = {tuple(path.split("/")): blob for path, blob in files.items()}
+    while True:
+        parent = _main(repository)
+        base = repository[parent].peel(pygit2.Tree) if parent is not None else None
+        tree = _tree(repository, base, changes) or repository.TreeBuilder().write()
+        if tree == (base.id if base is not None else _EMPTY_TREE):
+            return None
+        commit = repository.create_commit(
+            None, author, pygit2.Signature(*SERVER), message, tree, [parent] if parent is not None else []
+        )
+        if _move_main(repository, parent, commit, f"commit: {message.splitlines()[0]}"):
+            return _Landed(commit, parent)
+
+
+def _revert(repository: pygit2.Repository, paths: list[str], landed: _Landed) -> None:
+    """Put back what a commit on main changed at paths with a new commit on top of main: main only ever moves on."""
+    base = repository[landed.parent].peel(pygit2.Tree) if landed.parent is not None else None
+    files: dict[str, pygit2.Oid | None] = {}
+    for path in paths:
+        entry = base[path] if base is not None and path in base else None
+        files[path] = entry.id if entry is not None and entry.type == pygit2.enums.ObjectType.BLOB else None
+    subject = repository[landed.commit].peel(pygit2.Commit).message.splitlines()[0]
+    message = f'Revert "{subject}"\n\nThis reverts commit {landed.commit}: the save failed after it was committed.\n'
+    _land(repository, files, message, pygit2.Signature(*SERVER))
 
 
 def confine(root: Path, team: str, path: PurePosixPath) -> Path:
@@ -268,35 +370,10 @@ class MemoryStore:
         self._turn = threading.Lock()
         self._listeners = list(listeners)
         if not (self._root / ".git").exists():
-            self._git("init", "-q", "-b", "main")
-            self._git("config", "core.autocrlf", "false")
-            self._git("config", "core.quotepath", "false")
-
-    def _git(self, *args: str, committer: Committer | None = None) -> str:
-        env = dict(os.environ)
-        env.update(
-            GIT_COMMITTER_NAME="Shared Memory",
-            GIT_COMMITTER_EMAIL="server@shared-memory.invalid",
-            GIT_AUTHOR_NAME=committer.name if committer else "Shared Memory",
-            GIT_AUTHOR_EMAIL=f"{committer.member_id}@members.shared-memory.invalid"
-            if committer
-            else "server@shared-memory.invalid",
-            # A memory's path is only ever a path, never a pattern.
-            GIT_LITERAL_PATHSPECS="1",
-        )
-        result = subprocess.run(
-            ["git", "-C", str(self._root), *args], env=env, capture_output=True, text=True, check=False
-        )
-        if result.returncode != 0:
-            raise GitFailed(args, result.stderr.strip())
-        return result.stdout
-
-    def _head(self) -> str | None:
-        """The last commit, or None before the first."""
-        result = subprocess.run(
-            ["git", "-C", str(self._root), "rev-parse", "-q", "--verify", "HEAD"], capture_output=True, text=True
-        )
-        return result.stdout.strip() or None
+            repository = pygit2.init_repository(str(self._root), initial_head="main")
+            # For the git CLI that reads history and takes the backup.
+            repository.config["core.autocrlf"] = "false"
+            repository.config["core.quotepath"] = "false"
 
     def _file(self, team: str, path: PurePosixPath) -> Path:
         return confine(self._root, team, path)
@@ -439,8 +516,8 @@ class MemoryStore:
         touched = [*memories, *(folder / INDEX_NAME for folder in folders)]
         before = {path: self._previous(team, path) for path in touched}
         created = [folder for folder in folders if not self._file(team, folder).is_dir()]
-        head = self._head()
-        staged = False
+        repository = self._repository()
+        landed: _Landed | None = None
         try:
             for path, memory in change.writes.items():
                 write_whole(self._file(team, path), memory.to_text())
@@ -459,12 +536,13 @@ class MemoryStore:
             with ExitStack() as listening:
                 for listener in self._listeners:
                     listening.enter_context(listener.on_change(team, dict(change.writes), set(change.deletes)))
-                staged = True
-                self._commit(team, touched, change.message, committer)
+                # Moving main is the save's last git step: every failure before it leaves main untouched.
+                landed = self._commit(repository, team, touched, change.message, committer)
                 for action in change.alongside:
                     action()
+            # Leaving the block committed the listeners' transactions.
         except Exception as error:
-            self._undo(team, before, created, head, git_reached=staged)
+            self._undo(repository, team, before, created, landed)
             if isinstance(error, Refused):
                 raise
             log.exception("A save to %s failed and was undone", team)
@@ -479,28 +557,40 @@ class MemoryStore:
         except FileNotFoundError:
             return None
 
-    def _commit(self, team: str, touched: list[PurePosixPath], message: str, committer: Committer) -> None:
-        """Commit exactly the files this save touched: never a stray file in the folder, nor one staged before it."""
-        paths = [f"{team}/{path}" for path in touched]
-        self._git("update-index", "--add", "--remove", "--", *paths)
-        # Without renames, so a moved memory is named at both its old path and its new one.
-        staged = self._git("diff", "--cached", "--name-only", "--no-renames", "-z", "--", *paths)
-        changed = [path for path in staged.split("\0") if path]
-        if changed:
-            trailer = f"\n\nCoding-Agent: {committer.agent}" if committer.agent else ""
-            self._git("commit", "-q", "--only", "-m", message + trailer, "--", *changed, committer=committer)
+    def _repository(self) -> pygit2.Repository:
+        """The memory folder's repository, opened for one save: libgit2's objects aren't shared between threads."""
+        return pygit2.Repository(str(self._root))
+
+    def _commit(
+        self,
+        repository: pygit2.Repository,
+        team: str,
+        touched: list[PurePosixPath],
+        message: str,
+        committer: Committer,
+    ) -> _Landed | None:
+        """Commit exactly the files this save touched, as they are on disk, on top of main, and move main to it.
+
+        The commit is built in memory: never a stray file in the folder, nor anything left in git's index, which
+        saves don't use. None when the files already stand in main as they are.
+        """
+        blobs: dict[str, pygit2.Oid | None] = {}
+        for path in touched:
+            file = self._file(team, path)
+            blobs[f"{team}/{path}"] = repository.create_blob(file.read_bytes()) if file.is_file() else None
+        trailer = f"\n\nCoding-Agent: {committer.agent}" if committer.agent else ""
+        return _land(repository, blobs, _cleaned(message + trailer), _author(committer))
 
     def _undo(
         self,
+        repository: pygit2.Repository,
         team: str,
         before: dict[PurePosixPath, str | None],
         created: list[PurePosixPath],
-        head: str | None,
-        *,
-        git_reached: bool,
+        landed: _Landed | None,
     ) -> None:
         """Put back what a failed save did: the files it touched as `before` holds them, the folders it created, and,
-        once it reached git, the branch at `head` with nothing of it staged.
+        once it moved main, a revert commit on main putting back what its commit changed. main is never reset.
 
         Every step is tried even when one before it fails, and a failed step is logged: a failure that stopped the
         save partway also stopped it from doing what the step would undo.
@@ -512,17 +602,8 @@ class MemoryStore:
             except Exception:
                 log.exception("Undoing a failed save to %s: could not %s", team, what)
 
-        if git_reached:
-            paths = [f"{team}/{path}" for path in before]
-            if self._head() != head:
-                if head is None:
-                    attempt("take back the first commit", lambda: self._git("update-ref", "-d", "HEAD"))
-                else:
-                    attempt("take back the commit", lambda: self._git("update-ref", "HEAD", head))
-            if head is None:
-                attempt("unstage", lambda: self._git("rm", "--cached", "-q", "--ignore-unmatch", "--", *paths))
-            else:
-                attempt("unstage", lambda: self._git("reset", "-q", "--", *paths))
+        if landed is not None:
+            attempt("revert its commit", lambda: _revert(repository, [f"{team}/{path}" for path in before], landed))
         for path, text in before.items():
             file = self._file(team, path)
             if text is None:
