@@ -25,6 +25,7 @@ still noticed. Every save also drops what it changed.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import os
 import stat
@@ -32,7 +33,7 @@ import sys
 import threading
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
@@ -315,8 +316,8 @@ class _Parsed:
 class ParsedMemories:
     """Memory files already parsed, dropping the least recently read beyond a bound on the text they were parsed from.
 
-    Thread-safe. A file read while a save ended isn't kept, since a save can leave a file stamped as it
-    was before.
+    Thread-safe. A file read while a save that changed it ended isn't kept, since a save can leave a file stamped as it
+    was before. Saves in other areas end many times a second, so a save that changed other files doesn't count.
     """
 
     def __init__(self, bound: int) -> None:
@@ -324,6 +325,8 @@ class ParsedMemories:
         self._size = 0
         self._parsed: OrderedDict[Path, _Parsed] = OrderedDict()
         self._saves = 0
+        # The files of the last saves to end, oldest first; a read that spans more saves than this keeps nothing.
+        self._ended: deque[frozenset[Path]] = deque(maxlen=RECENT_SAVES)
         self._guard = threading.Lock()
 
     def read(self, file: Path) -> Memory:
@@ -343,16 +346,25 @@ class ParsedMemories:
         text, stamp = _settled(lambda: _read_stamped(file))
         memory = Memory.from_text(text)
         with self._guard:
-            if saves == self._saves:
+            if self._unchanged_since(saves, file):
                 self._keep(file, _Parsed(stamp, memory, len(text)))
         return _copy(memory)
 
     def forget(self, files: Iterable[Path]) -> None:
-        """Drop what a save changed, whether it landed or was undone, and keep nothing read before it ended."""
+        """Drop what a save changed, whether it landed or was undone, and keep none of it read before it ended."""
+        changed = frozenset(files)
         with self._guard:
             self._saves += 1
-            for file in files:
+            self._ended.append(changed)
+            for file in changed:
                 self._drop(file)
+
+    def _unchanged_since(self, saves: int, file: Path) -> bool:
+        """Whether no save that ended after the first `saves` changed this file."""
+        since = self._saves - saves
+        if since > len(self._ended):
+            return False
+        return not any(file in changed for changed in itertools.islice(reversed(self._ended), since))
 
     def _keep(self, file: Path, parsed: _Parsed) -> None:
         self._drop(file)
@@ -408,6 +420,8 @@ class Turns:
 
 # How much memory text the server keeps parsed, in characters: a large team's whole memory, several times over.
 PARSED_CHARACTERS = 32 * 1024 * 1024
+# How many of the last saves' changed files the parsed memories remember, to tell which reads a save made stale.
+RECENT_SAVES = 1024
 
 
 class MemoryStore:
