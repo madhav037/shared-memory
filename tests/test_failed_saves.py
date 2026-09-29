@@ -3,6 +3,7 @@
 The failures are real ones: git finding main held by a process that died holding it, and Postgres refusing the
 search index's rows or the audit log's. A failure before the save moves main leaves main as it was; one after it,
 such as the audit log refusing or the search index's transaction failing to commit, is put back by a revert commit.
+The tests where another member saves next also run with that member on a second worker (ADR-0013).
 """
 
 from __future__ import annotations
@@ -202,8 +203,9 @@ def test_a_new_memory_git_refuses_leaves_no_file_no_commit_and_nothing_to_search
 
 
 def test_the_next_members_save_after_a_refused_one_commits_only_their_own_memory(
-    team: Team, owner: Session, dana: Session
+    team: Team, owner: Session, dana: Session, elsewhere: Callable[[Session], Session]
 ) -> None:
+    dana = elsewhere(dana)
     remember(dana, f"Dana's first {uuid.uuid4().hex[:6]}", "b")
     lock = main_lock(team)
     lock.write_text("")
@@ -372,8 +374,13 @@ def test_a_new_memory_whose_index_fails_to_commit_is_reverted_and_files_git_and_
 
 
 def test_an_edit_whose_index_fails_to_commit_is_reverted_and_the_memory_reads_as_it_was(
-    team: Team, owner: Session, dana: Session, fail_committing_the_index: Refuse
+    team: Team,
+    owner: Session,
+    dana: Session,
+    fail_committing_the_index: Refuse,
+    elsewhere: Callable[[Session], Session],
 ) -> None:
+    dana = elsewhere(dana)
     tag, kept, changed = uuid.uuid4().hex[:8], word(), word()
     path = remember(owner, f"Reverted {tag}", kept)
     fail_committing_the_index(tag)
@@ -382,7 +389,7 @@ def test_an_edit_whose_index_fails_to_commit_is_reverted_and_the_memory_reads_as
     refusal = owner.refusal("edit_memory", path=path, body=changed)
 
     assert "not saved" in refusal
-    assert owner.call("read", path=path)["body"].strip() == kept
+    assert elsewhere(owner).call("read", path=path)["body"].strip() == kept
     assert_reverted(team, before)
     assert indexed(team, kept) == [path]
     assert indexed(team, changed) == []

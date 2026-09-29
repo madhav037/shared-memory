@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+import dataclasses
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,29 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
             yield running
         finally:
             running.stop()
+
+
+@pytest.fixture(scope="session")
+def second_server(server: RunningServer) -> Iterator[RunningServer]:
+    """A second server instance built from the same settings: one database and one memory folder shared, so to
+    Postgres and the disk the two are two workers (ADR-0013). Its clock is the first server's."""
+    app = build_app(server.settings, clock=server.clock, embedder=FastEmbedEmbedder(server.settings.model_cache))
+    with start_blocking_portal() as portal:
+        running = RunningServer(app, server.settings, server.clock, portal)
+        try:
+            yield running
+        finally:
+            running.stop()
+
+
+@pytest.fixture(params=["one worker", "two workers"])
+def elsewhere(request: pytest.FixtureRequest) -> Callable[[Session], Session]:
+    """Where a test sends the calls it splits: back to the same server, or to a second worker sharing its database
+    and memory folder. A test using it runs both ways."""
+    if request.param == "one worker":
+        return lambda session: session
+    other: RunningServer = request.getfixturevalue("second_server")
+    return lambda session: dataclasses.replace(session, server=other)
 
 
 @pytest.fixture

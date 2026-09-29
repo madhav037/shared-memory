@@ -8,6 +8,7 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import psycopg
 import pytest
@@ -15,6 +16,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.embeddings import CachedQueries, FastEmbedEmbedder
+from shared_memory.store import MemoryStore
 from tests.support import RunningServer, Session, ToolRefused, new_team
 
 
@@ -131,3 +133,25 @@ def test_a_stalled_database_fails_the_request_instead_of_freezing_it(impatient: 
         stall.close()
 
     assert owner.call("create_project", name="Billing")["name"] == "Billing"
+
+
+def test_a_save_waiting_for_its_turn_longer_than_the_statement_timeout_still_lands(
+    impatient: RunningServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A turn is a lock in Postgres (ADR-0013), and waiting for it is not a stalled database."""
+    team = new_team(impatient)
+    owner = team.owner().in_project(team.owner().call("create_project", name="Billing")["project_id"])
+    owner.call("remember", title="Warm-up", summary="The folder exists.", type="gotcha", body="b")
+    commit = MemoryStore._commit
+
+    def slow_commit(self: MemoryStore, *args: Any, **kwargs: Any) -> Any:
+        time.sleep(1.5)  # longer than the statement timeout, so the save behind it waits longer than that too
+        return commit(self, *args, **kwargs)
+
+    monkeypatch.setattr(MemoryStore, "_commit", slow_commit)
+    saves = [
+        owner.call_soon("remember", title=f"Waits {n}", summary="Saved in turn.", type="gotcha", body="b")
+        for n in range(2)
+    ]
+
+    assert len({save.result(timeout=60)["path"] for save in saves}) == 2

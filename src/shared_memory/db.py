@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import Any
 
 import psycopg
@@ -110,6 +110,43 @@ CREATE INDEX IF NOT EXISTS audit_events_by_team ON audit_events (team_id, id DES
 Conn = psycopg.Connection[dict[str, Any]]
 
 
+class SaveTransaction:
+    """One save's transaction, holding the locks its turns are made of (ADR-0013). Which locks, and in what order, is
+    decided by `store.Turns`.
+
+    Waiting for a lock is not bounded by the statement timeout: a turn can take seconds to come, and the wait ends
+    when the holder's transaction does, or its connection closes.
+    """
+
+    def __init__(self, conn: Conn) -> None:
+        self._conn = conn
+
+    def hold(self, key: int) -> None:
+        """Wait for a lock, and hold it until this transaction ends."""
+        self._conn.execute("SET LOCAL statement_timeout = 0")
+        self._conn.execute("SELECT pg_advisory_xact_lock(%s)", (key,))
+        self._conn.execute("RESET statement_timeout")
+
+    @contextmanager
+    def briefly(self, key: int) -> Iterator[None]:
+        """Wait for a lock, and hold it only for the block, on this transaction's connection: no second connection
+        is taken while the save holds this one."""
+        self._conn.execute("SET LOCAL statement_timeout = 0")
+        self._conn.execute("SELECT pg_advisory_lock(%s)", (key,))
+        self._conn.execute("RESET statement_timeout")
+        try:
+            yield
+        finally:
+            self._conn.execute("SELECT pg_advisory_unlock(%s)", (key,))
+
+    def commit(self) -> None:
+        """Commit the save's database work, having checked first, while its turns are still held, everything Postgres
+        would otherwise check only at commit. A refusal leaves the transaction open and usable, to undo the save."""
+        with self._conn.transaction():  # a savepoint
+            self._conn.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        self._conn.commit()
+
+
 # Connections to Postgres, and how many of them saves may hold at once.
 POOL_SIZE = 20
 SAVING_CONNECTIONS = 10
@@ -146,17 +183,25 @@ class Database:
             yield conn
 
     @contextmanager
-    def save_transaction(self) -> Iterator[None]:
-        """One connection and one transaction for all of a save's database work: its listeners and its audit entry.
+    def save_transaction(self) -> Iterator[SaveTransaction]:
+        """One connection and one transaction for all of a save's database work: its turns (ADR-0013), its listeners
+        and its audit entry. It commits when the save commits it, or when the block ends cleanly; it rolls back when
+        the block fails.
 
         Saves in different areas run at once (ADR-0012). Each holding a connection per listener while waiting for
         another for its audit entry, they would run the pool dry and wait on each other. Saves hold at most
         SAVING_CONNECTIONS of the pool, so reads and hooks always find one free.
         """
-        with self._saves, self._pool.connection() as conn, conn.transaction():
+        with self._saves, self._pool.connection() as conn:
             self._saving.conn = conn
             try:
-                yield
+                yield SaveTransaction(conn)
+                conn.commit()
+            except BaseException:
+                # A connection lost mid-save can't roll back; Postgres has already, and released its turns.
+                with suppress(psycopg.Error):
+                    conn.rollback()
+                raise
             finally:
                 self._saving.conn = None
 
