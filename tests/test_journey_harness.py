@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
-from tests.console_e2e_server import CONSOLE
+from tests.console_e2e_server import CONSOLE, DEFAULT_GITHUB_PORT, github_port
 from tests.support import REPO_ROOT
 
 PLAYWRIGHT_CONFIG = (REPO_ROOT / "console" / "playwright.config.ts").read_text(encoding="utf-8")
@@ -51,3 +51,32 @@ def test_the_journeys_do_not_share_a_port_with_a_developers_preview() -> None:
 
     assert journeys != int(developers.group(1)), "a developer's preview and the journeys want the same port"
     assert f"--port {journeys}" in PLAYWRIGHT_CONFIG, "the journeys' preview is not pinned to the port they open"
+
+
+HELPERS = (REPO_ROOT / "console" / "e2e" / "helpers.ts").read_text(encoding="utf-8")
+COMPOSE = (REPO_ROOT / "compose.yaml").read_text(encoding="utf-8")
+
+
+def test_the_journeys_fake_github_can_move_to_a_port_nothing_else_holds() -> None:
+    """A local sign-in stack, or a second run of the journeys, may already hold the default port."""
+    assert github_port({}) == DEFAULT_GITHUB_PORT
+    assert github_port({"SHARED_MEMORY_E2E_GITHUB_PORT": "8199"}) == 8199
+
+
+def test_the_browser_and_the_journey_server_agree_on_where_the_fake_github_is() -> None:
+    found = re.search(r'process\.env\.SHARED_MEMORY_E2E_GITHUB_PORT \?\? "(\d+)"', HELPERS)
+    assert found, "helpers.ts no longer reads the fake GitHub's port from SHARED_MEMORY_E2E_GITHUB_PORT"
+    assert int(found.group(1)) == DEFAULT_GITHUB_PORT, "the browser and the journey server default to different ports"
+
+    hard_coded = [
+        path.name
+        for path in (REPO_ROOT / "console" / "e2e").glob("*.ts")
+        if path.name != "helpers.ts" and re.search(r"127\.0\.0\.1:\d+", path.read_text(encoding="utf-8"))
+    ]
+    assert hard_coded == [], f"these journeys name the fake GitHub's address themselves: {hard_coded}"
+
+
+def test_the_journeys_fake_github_is_not_on_a_port_the_local_stack_publishes() -> None:
+    published = {int(port) for port in re.findall(r'"(\d+):\d+"', COMPOSE)}
+
+    assert DEFAULT_GITHUB_PORT not in published
