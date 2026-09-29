@@ -201,31 +201,46 @@ class SaveTransaction:
         self._conn.commit()
 
 
-# Connections to Postgres, and how many of them saves may hold at once: at most APART_CONNECTIONS of those for the
-# work a save commits apart from its own transaction (its markers, and putting back what a cut-off save left).
+# One worker's connections to Postgres by default, and how many of them saves may hold at once: at most
+# APART_CONNECTIONS of those for the work a save commits apart from its own transaction (its markers, and putting back
+# what a cut-off save left). `Settings` sizes them from the connections all workers share.
 POOL_SIZE = 20
 SAVING_CONNECTIONS = 10
 APART_CONNECTIONS = 2
 
 
 class Database:
-    def __init__(self, url: str, statement_timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        url: str,
+        statement_timeout_seconds: float,
+        pool_size: int = POOL_SIZE,
+        saving_connections: int = SAVING_CONNECTIONS,
+        sets_up: bool = True,
+    ) -> None:
         """statement_timeout_seconds bounds every statement, waiting for a table included, so a stalled database
-        fails requests instead of freezing every one of them."""
+        fails requests instead of freezing every one of them.
+
+        sets_up says whether this, and the classes built on it, create their tables. A worker started by `serve`
+        leaves that to the setup that ran before it (see `app.setup`)."""
         options = f"-c statement_timeout={round(statement_timeout_seconds * 1000)}"
-        with psycopg.connect(url, autocommit=True, options=options) as conn:
-            conn.execute(SCHEMA)
+        self.sets_up = sets_up
+        if sets_up:
+            with psycopg.connect(url, autocommit=True, options=options) as conn:
+                conn.execute(SCHEMA)
         self._pool: ConnectionPool[Conn] = ConnectionPool(
             url,
             min_size=1,
-            max_size=POOL_SIZE,
+            max_size=pool_size,
             open=True,
             kwargs={"row_factory": dict_row, "options": options},
             configure=register_vector,
         )
 
-        self._saves = threading.BoundedSemaphore(SAVING_CONNECTIONS - APART_CONNECTIONS)
-        self._apart = threading.BoundedSemaphore(APART_CONNECTIONS)
+        # Saves keep at least one connection besides the apart ones, however small the pool.
+        self.apart_connections = max(1, min(APART_CONNECTIONS, saving_connections - 1))
+        self._saves = threading.BoundedSemaphore(max(1, saving_connections - self.apart_connections))
+        self._apart = threading.BoundedSemaphore(self.apart_connections)
         self._saving = threading.local()
 
     @contextmanager
@@ -247,7 +262,7 @@ class Database:
 
         Saves in different areas run at once (ADR-0012). Each holding a connection per listener while waiting for
         another for its audit entry, they would run the pool dry and wait on each other. Saves hold at most
-        SAVING_CONNECTIONS of the pool, so reads and hooks always find one free.
+        the saving connections of the pool, so reads and hooks always find one free.
         """
         with self._saves, self._pool.connection() as conn:
             self._saving.conn = conn
@@ -267,7 +282,7 @@ class Database:
         """A transaction on a connection of its own, for work a save commits apart from its own transaction. While it
         is open, transactions opened on the save's thread join it instead of the save's.
 
-        Counted within SAVING_CONNECTIONS, so a save holding its own connection while it waits for this one never
+        Counted within the saving connections, so a save holding its own connection while it waits for this one never
         takes one reads and hooks need, and never waits on another save holding its own."""
         saving: Conn | None = getattr(self._saving, "conn", None)
         with self._apart, self._pool.connection() as conn:

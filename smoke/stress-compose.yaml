@@ -22,6 +22,7 @@ services:
       SHARED_MEMORY_DATABASE_URL: postgresql://postgres:postgres@db:5432/shared_memory
       SHARED_MEMORY_ROOT: /data/memory
       SHARED_MEMORY_MODEL_CACHE: /data/models
+      SHARED_MEMORY_WORKERS: ${STRESS_WORKERS:-2}
     ports:
       - "127.0.0.1:${STRESS_PORT:-8100}:8000"
     volumes:

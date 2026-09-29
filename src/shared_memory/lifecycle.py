@@ -60,8 +60,9 @@ class Lifecycle:
         self._challenges = challenges
         self._audit = audit
         self._clock = clock
-        with db.transaction() as conn:
-            conn.execute(SCHEMA)
+        if db.sets_up:
+            with db.transaction() as conn:
+                conn.execute(SCHEMA)
 
     # Promoting
 

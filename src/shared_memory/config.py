@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+# Below this a worker cannot keep a connection free for reads while saves hold theirs.
+MIN_POOL_CONNECTIONS = 4
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -31,11 +35,24 @@ class Settings:
     console_url: str = ""
     console_session_idle_hours: float = 24
     console_session_days: float = 7
+    # How many server processes `serve` runs, and how many connections to Postgres all of them may hold together.
+    workers: int = 2
+    database_connections: int = 40
 
     @property
     def github_sign_in(self) -> bool:
         """Whether this server can sign anyone in to the console."""
         return bool(self.github_client_id and self.github_client_secret)
+
+    @property
+    def pool_connections(self) -> int:
+        """One worker's connection pool: its share of the connections, and never fewer than it needs to work."""
+        return max(MIN_POOL_CONNECTIONS, self.database_connections // max(1, self.workers))
+
+    @property
+    def saving_connections(self) -> int:
+        """How many of a worker's connections saves may hold at once; reads and hooks keep the other half."""
+        return self.pool_connections // 2
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Settings:
@@ -53,4 +70,6 @@ class Settings:
             github_sign_in_url=env.get("SHARED_MEMORY_GITHUB_SIGN_IN_URL", "https://github.com"),
             github_api_url=env.get("SHARED_MEMORY_GITHUB_API_URL", "https://api.github.com"),
             console_url=env.get("SHARED_MEMORY_CONSOLE_URL", ""),
+            workers=int(env.get("SHARED_MEMORY_WORKERS", "2")),
+            database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
         )

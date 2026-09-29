@@ -101,8 +101,9 @@ class Challenges:
         self._identity = identity
         self._audit = audit
         self._clock = clock
-        with db.transaction() as conn:
-            conn.execute(SCHEMA)
+        if db.sets_up:
+            with db.transaction() as conn:
+                conn.execute(SCHEMA)
 
     # Storing challenges
 

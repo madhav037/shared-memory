@@ -71,8 +71,9 @@ class Briefing:
         self._store = store
         self._audit = audit
         self._clock = clock
-        with db.transaction() as conn:
-            conn.execute(SCHEMA)
+        if db.sets_up:
+            with db.transaction() as conn:
+                conn.execute(SCHEMA)
 
     def pin(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()

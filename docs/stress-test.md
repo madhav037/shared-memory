@@ -43,7 +43,7 @@ uv run python -m smoke.stress run --members 20 --subagents 3 --duration 60 --rac
 uv run python -m smoke.stress down                    # stop it and delete its data
 ```
 
-`up` starts `smoke/stress-compose.yaml` under its own compose project (`shared-memory-stress`), with its own database and memory folder, and the server on `127.0.0.1:8100`. Pass `--compose-project` and `--port` to all three commands to run another copy beside it. Each run has the server load its search model before the load starts; the first run after `up` also downloads it, which takes a minute or two.
+`up` starts `smoke/stress-compose.yaml` under its own compose project (`shared-memory-stress`), with its own database and memory folder, and the server on `127.0.0.1:8100`. Pass `--compose-project` and `--port` to all three commands to run another copy beside it. `up --workers N` starts the server with `N` worker processes (`SHARED_MEMORY_WORKERS`, default 2); compare a run against `--workers 1` to see what several workers change. Each run has the server load its search model before the load starts; the first run after `up` also downloads it, which takes a minute or two.
 
 | Option of `run` | Default | |
 |---|---|---|

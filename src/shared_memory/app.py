@@ -31,7 +31,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
-from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder
+from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity
@@ -157,13 +157,23 @@ async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None) -> Starlette:
-    db = Database(settings.database_url, settings.statement_timeout_seconds)
+def build_app(
+    settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None, setup: bool = True
+) -> Starlette:
+    """The server's ASGI app. With `setup` it first makes what the server keeps (the schema, the memory folder and its
+    repository); a worker started by `serve` passes False, because `serve` set up once before starting any worker."""
+    db = Database(
+        settings.database_url,
+        settings.statement_timeout_seconds,
+        pool_size=settings.pool_connections,
+        saving_connections=settings.saving_connections,
+        sets_up=setup,
+    )
     identity = Identity(db, clock)
     audit = Audit(db, clock, identity)
     # The model loads here, before the server takes its first request.
     index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache)))
-    store = MemoryStore(settings.memory_root, listeners=[index], transaction=db.save_transaction)
+    store = MemoryStore(settings.memory_root, listeners=[index], transaction=db.save_transaction, sets_up=setup)
     index.catch_up(store)
     history = MemoryHistory(settings.memory_root)
     challenges = Challenges(settings, db, store, identity, audit, clock)
@@ -533,4 +543,18 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         ).routes()
     )
     app.add_middleware(NeverCached)
+    app.state.database = db
     return app
+
+
+def setup(settings: Settings) -> None:
+    """Make what the server keeps, once: the schema, the memory folder and its repository. `serve` runs this before it
+    starts any worker, so workers starting together never race to create the same tables."""
+    app = build_app(settings, embedder=LazyEmbedder(settings.model_cache))
+    app.state.database.close()
+
+
+def worker_app() -> Starlette:
+    """The app a worker process serves (`uvicorn ... factory=True`). Its settings come from the environment, which
+    every worker inherits from `serve`; setup is not repeated."""
+    return build_app(Settings.from_env(), setup=False)
