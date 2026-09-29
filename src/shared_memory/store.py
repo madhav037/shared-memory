@@ -3,18 +3,20 @@
 This writes and reads the files as they stand now. What they said before is `history.py`, which answers by parsing
 git's output rather than by touching the filesystem.
 
-Saves take turns: one change to the memory folder is applied and committed at a time, and whatever a save reads to
-decide what it writes, it reads through its `Change`, inside that same turn. A file is written beside its place and
-renamed into it, so a reader sees the old file or the new one, never part of one. Reads outside a save don't wait
-for their turn: a listing skips a memory deleted while it was being listed.
+Saves take turns per area (ADR-0012): a save declares the areas it changes, waits for their turns, and whatever it
+reads to decide what it writes, it reads through its `Change`, inside those same turns. Saves in different areas run
+at once: each commits only the files it changed, and a folder's index only when its listing changed. A file is written
+beside its place and renamed into it, so a reader sees the old file or the new one, never part of one. Reads outside a
+save don't wait for a turn: a listing skips a memory deleted while it was being listed.
 
 A save lands whole or not at all. Its files are written, then its listeners (the search index, pins) do their part in
-transactions left open, then its commit is built in memory with pygit2 from exactly the files the save touched and
-main is moved to it, then whatever else the save asked for (its audit entry) runs, and only then do the listeners'
-transactions commit. Moving main is the save's last git step. A failure before it leaves main untouched; a failure
-after it is put back by a revert commit, never by resetting main. Either way the transactions roll back and every file
-the save touched is put back as it was, so nothing is left on disk for the next save to commit under another member's
-name. Saves don't use git's index file and don't keep it up to date: compare the files with main's tree, not the index.
+one database transaction left open, then its commit is built in memory with pygit2 from exactly the files the save touched and
+main is moved to it, then whatever else the save asked for (its audit entry) runs in that transaction, and only then
+does it commit. Moving main is the save's last git step. A failure before it leaves main untouched; a failure
+after it is put back by a revert commit, never by resetting main. Either way the transaction rolls back and every file
+the save changed is put back as it was, and nothing else: nothing is left on disk for the next save to commit under
+another member's name, and no other area's save is undone. Saves don't use git's index file and don't keep it up to
+date: compare the files with main's tree, not the index.
 
 A memory file is parsed once and kept until it changes: each read looks at the file on disk and parses it again only
 if it is a different file, or was modified or resized, since it was parsed, so a file changed outside the server is
@@ -32,7 +34,7 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -42,7 +44,7 @@ import pygit2
 import pygit2.enums
 
 from shared_memory.errors import Refused
-from shared_memory.memory import INDEX_NAME, Memory, slugify
+from shared_memory.memory import INDEX_NAME, Area, Memory, area_of, slugify
 
 T = TypeVar("T")
 log = logging.getLogger("shared_memory")
@@ -67,6 +69,8 @@ class Change:
     store: MemoryStore
     team: str
     message: str
+    # The areas the save declared before taking their turns: it writes and deletes only inside them.
+    areas: frozenset[Area]
     writes: dict[PurePosixPath, Memory] = field(default_factory=dict)
     deletes: set[PurePosixPath] = field(default_factory=set)
     alongside: list[Callable[[], None]] = field(default_factory=list)
@@ -83,12 +87,19 @@ class Change:
         return path in self.writes or (path not in self.deletes and self.store.exists(self.team, path))
 
     def write(self, path: PurePosixPath, memory: Memory) -> None:
+        self._inside_its_areas(path)
         self.deletes.discard(path)
         self.writes[path] = memory
 
     def delete(self, path: PurePosixPath) -> None:
+        self._inside_its_areas(path)
         self.writes.pop(path, None)
         self.deletes.add(path)
+
+    def _inside_its_areas(self, path: PurePosixPath) -> None:
+        """A save changing memory outside the areas whose turns it took is a bug in the save, never the member's."""
+        if area_of(path) not in self.areas:
+            raise AssertionError(f"{path} is outside the areas this save took turns for: declare its area.")
 
     def also(self, action: Callable[[], None]) -> None:
         """Something the save does besides its files, such as its audit entry. It runs once the commit is made, and
@@ -233,10 +244,16 @@ def _revert(repository: pygit2.Repository, paths: list[str], landed: _Landed) ->
 def confine(root: Path, team: str, path: PurePosixPath) -> Path:
     """Where a memory path lands on disk, refusing anything that would leave the team's own folder."""
     team_dir = (root / team).resolve()
-    target = (team_dir / Path(*path.parts)).resolve() if path.parts else team_dir
-    if target != team_dir and team_dir not in target.parents:
-        raise Refused(f"{str(path)!r} is outside your team's memory.")
-    return target
+    for attempt in range(5):
+        target = (team_dir / Path(*path.parts)).resolve() if path.parts else team_dir
+        if target == team_dir or team_dir in target.parents:
+            return target
+        # On Windows a path resolved while another area's save creates or removes a folder on it can come back
+        # wrong for a moment (#146); saves in different areas now do that at once, so look again before refusing.
+        if sys.platform != "win32" or attempt == 4:
+            break
+        time.sleep(0.01)
+    raise Refused(f"{str(path)!r} is outside your team's memory.")
 
 
 def _settled(action: Callable[[], T]) -> T:
@@ -356,18 +373,57 @@ def _copy(memory: Memory) -> Memory:
     return replace(memory, related_files=list(memory.related_files))
 
 
+class Turns:
+    """The one place saves are ordered (ADR-0012). Only this process saves, so mutexes between its threads are enough;
+    several servers would hold these turns somewhere they all share, and only this class would change.
+
+    A save takes the turn of every area it declared, in one fixed order (team, then project memory, then personal
+    memory, each by id), so two saves touching the same areas can't each hold one the other waits for. The folders
+    above the areas (the team's own folder, `projects/`, a project's folder and its `people/`) are shared by areas; a
+    save that creates or removes a folder directly under one of them also takes that team's shared folders' turn,
+    always last, so it is never held while an area's turn is awaited.
+    """
+
+    def __init__(self) -> None:
+        self._guard = threading.Lock()
+        self._areas: dict[tuple[str, Area], threading.Lock] = {}
+        self._shared_folders: dict[str, threading.Lock] = {}
+
+    def _mutex(self, mutexes: dict[T, threading.Lock], key: T) -> threading.Lock:
+        with self._guard:
+            return mutexes.setdefault(key, threading.Lock())
+
+    @contextmanager
+    def areas(self, team: str, areas: Iterable[Area]) -> Iterator[None]:
+        with ExitStack() as held:
+            for area in sorted(set(areas), key=Area.order):
+                held.enter_context(self._mutex(self._areas, (team, area)))
+            yield
+
+    @contextmanager
+    def shared_folders(self, team: str) -> Iterator[None]:
+        with self._mutex(self._shared_folders, team):
+            yield
+
+
 # How much memory text the server keeps parsed, in characters: a large team's whole memory, several times over.
 PARSED_CHARACTERS = 32 * 1024 * 1024
 
 
 class MemoryStore:
     def __init__(
-        self, root: Path, listeners: Iterable[ChangeListener] = (), parsed_characters: int = PARSED_CHARACTERS
+        self,
+        root: Path,
+        listeners: Iterable[ChangeListener] = (),
+        parsed_characters: int = PARSED_CHARACTERS,
+        transaction: Callable[[], AbstractContextManager[object]] = nullcontext,
     ) -> None:
+        """transaction, when given, holds all of one save's listeners and actions in one database transaction."""
         self._root = root.resolve()
+        self._transaction = transaction
         self._parsed = ParsedMemories(parsed_characters)
         self._root.mkdir(parents=True, exist_ok=True)
-        self._turn = threading.Lock()
+        self._turns = Turns()
         self._listeners = list(listeners)
         if not (self._root / ".git").exists():
             repository = pygit2.init_repository(str(self._root), initial_head="main")
@@ -413,16 +469,23 @@ class MemoryStore:
         for folder in folders:
             yield from self.walk(team, folder)
 
-    def _write_index(self, team: str, folder: PurePosixPath) -> bool:
-        """Bring a folder's index up to date, touching the file only when its text changes.
+    def _write_index(self, team: str, folder: PurePosixPath, before: dict[PurePosixPath, str | None]) -> bool:
+        """Bring a folder's index up to date, touching the file only when its text changes, and noting in `before`
+        what it held before this save first changed it.
 
         Returns whether the folder still exists afterwards: an emptied folder loses its index and is removed.
         """
         directory = self._file(team, folder)
         index = directory / INDEX_NAME
         memories, folders = self.list_folder(team, folder)
+        try:
+            previous: str | None = read_whole(index)
+        except FileNotFoundError:
+            previous = None
         if not memories and not folders:
-            _settled(lambda: index.unlink(missing_ok=True))
+            if previous is not None:
+                before.setdefault(folder / INDEX_NAME, previous)
+                _settled(lambda: index.unlink(missing_ok=True))
             if folder.parts and directory.is_dir() and not any(directory.iterdir()):
                 _settled(directory.rmdir)
             return directory.is_dir()
@@ -436,11 +499,8 @@ class MemoryStore:
             lines += [f"- [{sub.name}/]({sub.name}/{INDEX_NAME})" for sub in folders]
             lines.append("")
         text = "\n".join(lines)
-        try:
-            unchanged = read_whole(index) == text
-        except FileNotFoundError:
-            unchanged = False
-        if not unchanged:
+        if previous != text:
+            before.setdefault(folder / INDEX_NAME, previous)
             write_whole(index, text)
         return True
 
@@ -484,19 +544,28 @@ class MemoryStore:
             raise Refused(f"There is no memory at {str(path)!r}.") from None
 
     @contextmanager
-    def _one_save_at_a_time(self) -> Iterator[None]:
-        """The one place saves are serialized. Only this process saves, so a mutex between its threads is enough."""
-        with self._turn:
+    def _take_turns(self, team: str, areas: Iterable[Area]) -> Iterator[None]:
+        """Wait for the turns of a save's areas. Saves are ordered only here and in `_shared_folders_turn`, both
+        through `Turns`."""
+        with self._turns.areas(team, areas):
             yield
 
+    def _shared_folders_turn(self, team: str) -> AbstractContextManager[None]:
+        return self._turns.shared_folders(team)
+
     @contextmanager
-    def change(self, team: str, committer: Committer, message: str = "") -> Iterator[Change]:
-        """One save, in its turn: read what it changes and write through the Change, and it lands as one commit.
+    def change(
+        self, team: str, committer: Committer, message: str = "", *, areas: Iterable[Area]
+    ) -> Iterator[Change]:
+        """One save, in the turns of the areas it declares: read what it changes and write through the Change, and it
+        lands as one commit. The areas are every area the save reads to change or writes; writing outside them is a
+        bug and fails loudly.
 
         A refusal inside the block leaves the memory folder as it was.
         """
-        with self._one_save_at_a_time():
-            change = Change(self, team, message)
+        declared = frozenset(areas)
+        with self._take_turns(team, declared):
+            change = Change(self, team, message, declared)
             try:
                 yield change
                 self._apply(change, committer)
@@ -513,44 +582,79 @@ class MemoryStore:
         folders = sorted({f for path in memories for f in path.parents}, key=lambda f: len(f.parts), reverse=True)
         if not folders:
             return
-        touched = [*memories, *(folder / INDEX_NAME for folder in folders)]
-        before = {path: self._previous(team, path) for path in touched}
-        created = [folder for folder in folders if not self._file(team, folder).is_dir()]
-        repository = self._repository()
-        landed: _Landed | None = None
-        try:
-            for path, memory in change.writes.items():
-                write_whole(self._file(team, path), memory.to_text())
-            for path in change.deletes:
-                file = self._file(team, path)
-                _settled(lambda: file.unlink(missing_ok=True))
-            # A folder's index lists its memories and its subfolders' names, so a parent's listing changes only when
-            # a folder under it appeared or disappeared.
-            pending = {path.parent for path in memories}
-            for folder in folders:
-                if folder not in pending:
-                    continue
-                exists = self._write_index(team, folder)
-                if exists == (folder in created) and folder.parts:
-                    pending.add(folder.parent)
-            with ExitStack() as listening:
-                for listener in self._listeners:
-                    listening.enter_context(listener.on_change(team, dict(change.writes), set(change.deletes)))
-                # Moving main is the save's last git step: every failure before it leaves main untouched.
-                landed = self._commit(repository, team, touched, change.message, committer)
-                for action in change.alongside:
-                    action()
-            # Leaving the block committed the listeners' transactions.
-        except Exception as error:
-            self._undo(repository, team, before, created, landed)
-            if isinstance(error, Refused):
-                raise
-            log.exception("A save to %s failed and was undone", team)
-            raise Refused(
-                f"The memory was not saved: {_reason(error)}. Everything is as it was before this save; "
-                "try again once that is fixed."
-            ) from error
+        with ExitStack() as turns:
+            shared = self._reshapes_shared_folders(change)
+            if shared:
+                # Held until the save has landed or been undone, so no other save lists these folders in between.
+                turns.enter_context(self._shared_folders_turn(team))
+            # What each file this save changes held before it: its memories now, each index as the save changes it.
+            # Only these are committed and, if the save fails, put back, so no other area's change is ever undone.
+            before = {path: self._previous(team, path) for path in memories}
+            created = [folder for folder in folders if not self._file(team, folder).is_dir()]
+            repository = self._repository()
+            landed: _Landed | None = None
+            try:
+                for path, memory in change.writes.items():
+                    write_whole(self._file(team, path), memory.to_text())
+                for path in change.deletes:
+                    file = self._file(team, path)
+                    _settled(lambda: file.unlink(missing_ok=True))
+                # A folder's index lists its memories and its subfolders' names, so a parent's listing changes only
+                # when a folder under it appeared or disappeared.
+                pending = {path.parent for path in memories}
+                for folder in folders:
+                    if folder not in pending:
+                        continue
+                    if not shared and area_of(folder) not in change.areas:
+                        raise AssertionError(f"{folder} is shared by areas, and this save didn't take its turn.")
+                    exists = self._write_index(team, folder, before)
+                    if exists == (folder in created) and folder.parts:
+                        pending.add(folder.parent)
+                with self._transaction(), ExitStack() as listening:
+                    for listener in self._listeners:
+                        listening.enter_context(listener.on_change(team, dict(change.writes), set(change.deletes)))
+                    # Moving main is the save's last git step: every failure before it leaves main untouched.
+                    landed = self._commit(repository, team, list(before), change.message, committer)
+                    for action in change.alongside:
+                        action()
+                # Leaving the block committed the listeners' transactions.
+            except Exception as error:
+                self._undo(repository, team, before, created, landed)
+                if isinstance(error, Refused):
+                    raise
+                log.exception("A save to %s failed and was undone", team)
+                raise Refused(
+                    f"The memory was not saved: {_reason(error)}. Everything is as it was before this save; "
+                    "try again once that is fixed."
+                ) from error
 
+    def _reshapes_shared_folders(self, change: Change) -> bool:
+        """Whether the save creates or removes an area's own folder, changing the listing of a folder areas share.
+
+        Decided before anything is written: an area's folder holds only that area's memories, so while the save holds
+        its areas' turns nothing else can create, fill or empty it.
+        """
+        for path in change.writes:
+            area = area_of(path)
+            assert area is not None
+            if not self._file(change.team, area.folder).is_dir():
+                return True
+        emptied = {area.folder for area in map(area_of, change.deletes) if area is not None}
+        return any(not self._holds_memories_after(change, folder) for folder in emptied)
+
+    def _holds_memories_after(self, change: Change, folder: PurePosixPath) -> bool:
+        """Whether any memory is left in a folder, at any depth, once the save's writes and deletes are done."""
+        if any(folder in path.parents for path in change.writes):
+            return True
+        directory = self._file(change.team, folder)
+        for below, _, names in os.walk(directory):
+            for name in names:
+                if name.startswith(".") or not name.endswith(".md") or name == INDEX_NAME:
+                    continue
+                path = folder / Path(below, name).relative_to(directory).as_posix()
+                if path not in change.deletes:
+                    return True
+        return False
     def _previous(self, team: str, path: PurePosixPath) -> str | None:
         try:
             return read_whole(self._file(team, path))

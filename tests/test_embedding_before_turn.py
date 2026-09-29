@@ -6,6 +6,7 @@ import dataclasses
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import pytest
 from anyio.from_thread import start_blocking_portal
@@ -40,18 +41,18 @@ class WatchingEmbedder(FastEmbedEmbedder):
 def watched_server(
     server: RunningServer, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[tuple[RunningServer, WatchingEmbedder]]:
-    original = MemoryStore._one_save_at_a_time
+    original = MemoryStore._take_turns
 
     @contextmanager
-    def watched(self: MemoryStore) -> Iterator[None]:
-        with original(self):
+    def watched(self: MemoryStore, *args: Any) -> Iterator[None]:
+        with original(self, *args):
             _in_turn.held = True
             try:
                 yield
             finally:
                 _in_turn.held = False
 
-    monkeypatch.setattr(MemoryStore, "_one_save_at_a_time", watched)
+    monkeypatch.setattr(MemoryStore, "_take_turns", watched)
     settings = dataclasses.replace(server.settings, memory_root=tmp_path_factory.mktemp("watched-memory"))
     embedder = WatchingEmbedder(settings.model_cache)
     embedder.inside_a_turn = []

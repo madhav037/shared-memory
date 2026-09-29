@@ -21,7 +21,7 @@ from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Project
 from shared_memory.index import SearchIndex
-from shared_memory.memory import Level, Location, Memory, level_folder, locate
+from shared_memory.memory import Area, Level, Location, Memory, area_of, level_folder, locate
 from shared_memory.service import committer, describe
 from shared_memory.store import Change, MemoryStore
 
@@ -221,7 +221,11 @@ class Lifecycle:
 
         A memory moved or deleted by a save that went first is refused here, so it is never promoted twice.
         """
-        with self._store.change(caller.team, committer(caller)) as change:
+        # Every area the move touches, known before it takes a turn: where the memory is, where it goes, and the
+        # memories it supersedes or is an exception to.
+        areas = {area_of(location.path), Area(target, location.project_id if target == "project" else None)}
+        areas |= {area_of(PurePosixPath(path)) for path in (supersede, exception_to) if path is not None}
+        with self._store.change(caller.team, committer(caller), areas=[a for a in areas if a is not None]) as change:
             memory = change.read(location.path)
             change.message = f"{reason}: {memory.title}"
             folder = level_folder(target, memory.type, location.project_id)
@@ -277,12 +281,13 @@ class Lifecycle:
             raise Refused("Personal memory isn't retired. If it's yours and no longer true, remove it with delete_memory.")
         if memory.status != "active":
             raise Refused(f"This memory is already {memory.status}.")
+        areas = [area for area in [area_of(location.path)] if area is not None]
         if memory.author != caller.member_id:
             challenge_id = self._challenges.raise_challenge(
                 caller, "retire", str(location.path), memory.author, None, location.level, reasoning=reasoning
             )
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
-        with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}") as change:
+        with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}", areas=areas) as change:
             change.write(location.path, replace(self._active(change, location.path), status="retired"))
             change.also(lambda: self._audit.memory(caller, MEMORY_RETIRED, str(location.path)))
         self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, "its author retired it.")
@@ -362,7 +367,8 @@ class Lifecycle:
         self, caller: Caller, challenge: Challenge, target_path: PurePosixPath, target: Memory
     ) -> tuple[dict[str, Any], str]:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
-        with self._store.change(caller.team, committer(caller), message) as change:
+        areas = [area for area in [area_of(target_path)] if area is not None]
+        with self._store.change(caller.team, committer(caller), message, areas=areas) as change:
             change.write(target_path, replace(self._active(change, target_path), status="retired"))
             where = project_of(challenge)
             change.also(

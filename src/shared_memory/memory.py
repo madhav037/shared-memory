@@ -90,6 +90,46 @@ def locate(path: str) -> Location:
     return Location(pure, level, FOLDER_TYPES[parts[type_index]], project_id, member_id, topic)
 
 
+_LEVEL_ORDER: dict[Level, int] = {"team": 0, "project": 1, "personal": 2}
+
+
+@dataclass(frozen=True)
+class Area:
+    """The memory one save can change without waiting on others (CONTEXT.md): the team memory, one project's project
+    memory, or one member's personal memory in one project. Saves take turns per area (ADR-0012)."""
+
+    level: Level
+    project_id: str | None = None
+    member_id: str | None = None
+
+    @property
+    def folder(self) -> PurePosixPath:
+        """The folder holding the whole area, its own index included."""
+        if self.level == "team":
+            return PurePosixPath("team")
+        assert self.project_id is not None
+        if self.level == "project":
+            return PurePosixPath("projects", self.project_id, "shared")
+        assert self.member_id is not None
+        return PurePosixPath("projects", self.project_id, "people", self.member_id)
+
+    def order(self) -> tuple[int, str, str]:
+        """The order a save takes its areas' turns in: team, then project memory, then personal memory, each by id."""
+        return _LEVEL_ORDER[self.level], self.project_id or "", self.member_id or ""
+
+
+def area_of(path: PurePosixPath) -> Area | None:
+    """The area a memory, a folder or a folder's index lies in; None for the folders above the areas, which they share."""
+    parts = path.parts
+    if parts[:1] == ("team",):
+        return Area("team")
+    if len(parts) >= 3 and parts[0] == "projects" and parts[2] == "shared":
+        return Area("project", parts[1])
+    if len(parts) >= 4 and parts[0] == "projects" and parts[2] == "people" and parts[3] != INDEX_NAME:
+        return Area("personal", parts[1], parts[3])
+    return None
+
+
 def level_folder(level: Level, kind: str, project_id: str | None = None, member_id: str | None = None) -> PurePosixPath:
     """The type folder a memory of this level and type lives in."""
     if level == "team":

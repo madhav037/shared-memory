@@ -1,10 +1,10 @@
 """Saves run on threads of their own, so a save waiting its turn never holds a thread that reads and hooks need.
 
-The memory store serializes every save (`MemoryStore.change`). Tools and console routes run on a small pool of worker
-threads, so a save that waited for the store on one of them would hold a thread that reads and hooks need; under load
-most of the pool sat waiting to save. Every caller that saves goes through `Saves.run` instead, which runs it on a
+Saves into the same area take turns (`MemoryStore.change`, ADR-0012). Tools and console routes run on a small pool of
+worker threads, so a save that waited for its turn on one of them would hold a thread that reads and hooks need; under
+load most of the pool sat waiting to save. Every caller that saves goes through `Saves.run` instead, which runs it on a
 separate pool. Everything a save does before and after its turn (checking the personal token, promote's search for
-similar memories, the audit log) still runs alongside other saves; only the store's own serialization orders them.
+similar memories, the audit log) still runs alongside other saves; only the store's turns order them.
 """
 
 from __future__ import annotations
