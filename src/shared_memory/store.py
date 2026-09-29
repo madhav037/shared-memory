@@ -19,6 +19,10 @@ the save changed is put back as it was, and nothing else: nothing is left on dis
 another member's name, and no other area's save is undone. Saves don't use git's index file and don't keep it up to
 date: compare the files with main's tree, not the index.
 
+A save cut off without being undone, by its worker dying, is put back by the next save to take its turn: before writing
+any file a save records a marker of the paths it may touch, committed apart from its own transaction, and clears it as
+it lands or once it is undone. A marker found under a turn just taken names paths to put back to what main holds.
+
 A memory file is parsed once and kept until it changes: each read looks at the file on disk and parses it again only
 if it is a different file, or was modified or resized, since it was parsed, so a file changed outside the server is
 still noticed. Every save also drops what it changed.
@@ -37,7 +41,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict, deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -432,8 +436,24 @@ class SaveTransaction(Protocol):
         """Wait for a lock, and hold it only for the block."""
         ...
 
+    def left_behind(self, turns: Sequence[int]) -> dict[int, list[str]]:
+        """The paths named by markers other saves left under these turns."""
+        ...
+
+    def mark(self, team: str, paths: dict[int, list[str]]) -> None:
+        """Record under each turn the paths this save may touch there, committed before it writes any."""
+        ...
+
+    def unmark(self) -> None:
+        """Clear this save's markers once it has been undone."""
+        ...
+
+    def apart(self, turns: Sequence[int]) -> AbstractContextManager[None]:
+        """Database work committed on its own, with the markers left under these turns cleared."""
+        ...
+
     def commit(self) -> None:
-        """Commit the save's database work; the locks it holds until then are released."""
+        """Commit the save's database work and clear its markers; the locks it holds until then are released."""
         ...
 
 
@@ -474,6 +494,21 @@ class _OneProcessTransaction:
         with self._locks.lock(key):
             yield
 
+    # With no database there are no markers: a save cut off here was cut off with the whole process.
+
+    def left_behind(self, turns: Sequence[int]) -> dict[int, list[str]]:
+        return {}
+
+    def mark(self, team: str, paths: dict[int, list[str]]) -> None:
+        pass
+
+    def unmark(self) -> None:
+        pass
+
+    @contextmanager
+    def apart(self, turns: Sequence[int]) -> Iterator[None]:
+        yield
+
     def commit(self) -> None:
         pass
 
@@ -504,10 +539,18 @@ class Turns:
 
     def areas(self, transaction: SaveTransaction, team: str, areas: Iterable[Area]) -> None:
         for area in sorted(set(areas), key=Area.order):
-            transaction.hold(_lock_key("area", team, str(area.folder)))
+            transaction.hold(self.area(team, area))
 
     def shared_folders(self, transaction: SaveTransaction, team: str) -> None:
-        transaction.hold(_lock_key("shared folders", team))
+        transaction.hold(self.shared(team))
+
+    def area(self, team: str, area: Area) -> int:
+        """An area's turn, which also names the markers saves leave under it."""
+        return _lock_key("area", team, str(area.folder))
+
+    def shared(self, team: str) -> int:
+        """The team's shared folders' turn."""
+        return _lock_key("shared folders", team)
 
     def moving_main(self, transaction: SaveTransaction) -> MovingMain:
         return lambda: transaction.briefly(_MOVING_MAIN)
@@ -677,7 +720,88 @@ class MemoryStore:
         yield
 
     def _shared_folders_turn(self, transaction: SaveTransaction, team: str) -> None:
+        """Take the team's shared folders' turn, first putting back what a save cut off in that turn left."""
         self._turns.shared_folders(transaction, team)
+        shared = self._turns.shared(team)
+        left = transaction.left_behind([shared])
+        if left:
+            self._put_back(transaction, team, [shared], left[shared], lambda folder: area_of(folder) is None)
+
+    def _repair_areas(self, transaction: SaveTransaction, team: str, areas: frozenset[Area]) -> None:
+        """Put back what a save cut off in these areas' turns left, before this save reads anything in them.
+
+        A save clears its markers before its turns are released, so a marker found under a turn just taken was left
+        by a save cut off mid-turn: a worker that died, whose connection closing released its turns. Its files may be
+        on disk uncommitted, or committed to main while its search index rows never were; putting its paths back to
+        what main holds, and indexing them again, covers both. One lookup, of these turns' and the team's shared
+        folders' markers, when there is nothing to put back.
+        """
+        turns = [self._turns.area(team, area) for area in areas]
+        shared = self._turns.shared(team)
+        left = transaction.left_behind([*turns, shared])
+        paths = [path for turn in turns for path in left.get(turn, [])]
+        if not paths:
+            return
+        self._put_back(transaction, team, turns, paths, lambda folder: area_of(folder) in areas)
+        if shared in left:
+            # The cut-off save also changed the folders its areas share; their turn comes last, so it can be taken now.
+            self._shared_folders_turn(transaction, team)
+
+    def _put_back(
+        self,
+        transaction: SaveTransaction,
+        team: str,
+        turns: list[int],
+        paths: list[str],
+        ours: Callable[[PurePosixPath], bool],
+    ) -> None:
+        """Put the paths a cut-off save's markers name back to what main holds, removing the folders left empty that
+        `ours` says are this save's to remove, and index its memories again as main holds them. The markers are
+        cleared in the same transaction as the index, committed apart from this save, so a failure of this save
+        doesn't bring them back."""
+        log.warning("A save to %s was cut off before it ended; putting back %s", team, ", ".join(sorted(paths)))
+        repository = self._repository()
+        main = _main(repository)
+        tree = repository[main].peel(pygit2.Tree) if main is not None else None
+        writes: dict[PurePosixPath, Memory] = {}
+        deletes: set[PurePosixPath] = set()
+        files: list[Path] = []
+        for name in sorted(set(paths)):
+            path = PurePosixPath(name)
+            file = self._file(team, path)
+            files.append(file)
+            key = f"{team}/{path}"
+            entry = tree[key] if tree is not None and key in tree else None
+            if entry is not None and entry.type == pygit2.enums.ObjectType.BLOB:
+                blob = repository[entry.id]
+                assert isinstance(blob, pygit2.Blob)
+                data = blob.data
+                if not file.is_file() or file.read_bytes() != data:
+                    write_whole(file, data.decode("utf-8"))
+                if path.name != INDEX_NAME:
+                    try:
+                        writes[path] = Memory.from_text(data.decode("utf-8"))
+                    except Refused:
+                        log.warning("Putting back %s: main holds no memory there to index", path)
+                        deletes.add(path)
+            else:
+                _settled(lambda: file.unlink(missing_ok=True))
+                if path.name != INDEX_NAME:
+                    deletes.add(path)
+        self._prune(team, [PurePosixPath(name) for name in paths], ours)
+        self._parsed.forget(files)
+        with transaction.apart(turns), ExitStack() as listening:
+            if writes or deletes:
+                for listener in self._listeners:
+                    listening.enter_context(listener.on_change(team, writes, deletes))
+
+    def _prune(self, team: str, paths: list[PurePosixPath], ours: Callable[[PurePosixPath], bool]) -> None:
+        """Remove the folders above paths left empty, deepest first, of those that are ours to remove."""
+        folders = {folder for path in paths for folder in path.parents if folder.parts and ours(folder)}
+        for folder in sorted(folders, key=lambda f: len(f.parts), reverse=True):
+            directory = self._file(team, folder)
+            if directory.is_dir() and not any(directory.iterdir()):
+                _settled(directory.rmdir)
 
     @contextmanager
     def change(
@@ -692,6 +816,7 @@ class MemoryStore:
         declared = frozenset(areas)
         # The save's transaction opens first, since it holds the turns; they are taken before any file is read.
         with self._transaction() as transaction, self._take_turns(transaction, team, declared):
+            self._repair_areas(transaction, team, declared)
             change = Change(self, team, message, declared)
             try:
                 yield change
@@ -721,6 +846,8 @@ class MemoryStore:
         repository = self._repository()
         landed: _Landed | None = None
         try:
+            # Before any file is written, so a save cut off from here on is put back by its turns' next holder.
+            transaction.mark(team, self._marks(change, folders, shared))
             for path, memory in change.writes.items():
                 write_whole(self._file(team, path), memory.to_text())
             for path in change.deletes:
@@ -747,7 +874,7 @@ class MemoryStore:
             # The turns are released only once the database has taken the save.
             transaction.commit()
         except Exception as error:
-            self._undo(repository, team, before, created, landed, moving_main)
+            self._undo(repository, team, before, created, landed, moving_main, transaction)
             if isinstance(error, Refused):
                 raise
             log.exception("A save to %s failed and was undone", team)
@@ -755,6 +882,22 @@ class MemoryStore:
                 f"The memory was not saved: {_reason(error)}. Everything is as it was before this save; "
                 "try again once that is fixed."
             ) from error
+
+    def _marks(self, change: Change, folders: list[PurePosixPath], shared: bool) -> dict[int, list[str]]:
+        """The paths a save may touch, by the turn each is under: its memories and the indexes of every folder above
+        them, those of the shared folders only when it holds their turn."""
+        marks: dict[int, list[str]] = {}
+        for path in [*change.writes, *change.deletes, *(folder / INDEX_NAME for folder in folders)]:
+            area = area_of(path)
+            if area in change.areas:
+                assert area is not None
+                turn = self._turns.area(change.team, area)
+            elif shared:
+                turn = self._turns.shared(change.team)
+            else:
+                continue  # a shared folder's index, which this save can't change
+            marks.setdefault(turn, []).append(str(path))
+        return marks
 
     def _reshapes_shared_folders(self, change: Change) -> bool:
         """Whether the save creates or removes an area's own folder, changing the listing of a folder areas share.
@@ -822,9 +965,11 @@ class MemoryStore:
         created: list[PurePosixPath],
         landed: _Landed | None,
         moving_main: MovingMain,
+        transaction: SaveTransaction,
     ) -> None:
         """Put back what a failed save did: the files it touched as `before` holds them, the folders it created, and,
-        once it moved main, a revert commit on main putting back what its commit changed. main is never reset.
+        once it moved main, a revert commit on main putting back what its commit changed. main is never reset. Then
+        its markers are cleared; if clearing them fails, the next save in its areas puts its paths back again.
 
         Every step is tried even when one before it fails, and a failed step is logged: a failure that stopped the
         save partway also stopped it from doing what the step would undo.
@@ -849,6 +994,7 @@ class MemoryStore:
             directory = self._file(team, folder)
             if directory.is_dir() and not any(directory.iterdir()):
                 attempt(f"remove {folder}", lambda: _settled(directory.rmdir))
+        attempt("clear its markers", transaction.unmark)
 
     def subscribe(self, listener: ChangeListener) -> None:
         self._listeners.append(listener)

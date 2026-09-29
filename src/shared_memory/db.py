@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+import uuid
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import AbstractContextManager, contextmanager, suppress
 from typing import Any
 
 import psycopg
@@ -104,6 +105,17 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 
 CREATE INDEX IF NOT EXISTS audit_events_by_team ON audit_events (team_id, id DESC);
+
+-- A save's marker under one of its turns: the paths it may touch there, recorded before it writes any, and cleared
+-- once it has landed or been undone. One found by the turn's next holder was left by a save cut off mid-turn.
+CREATE TABLE IF NOT EXISTS save_markers (
+    turn BIGINT NOT NULL,
+    save_id UUID NOT NULL,
+    team TEXT NOT NULL,
+    paths TEXT[] NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (turn, save_id)
+);
 """
 
 
@@ -118,8 +130,11 @@ class SaveTransaction:
     when the holder's transaction does, or its connection closes.
     """
 
-    def __init__(self, conn: Conn) -> None:
+    def __init__(self, conn: Conn, apart: Callable[[], AbstractContextManager[Conn]]) -> None:
+        """apart opens a transaction on another connection, committed on its own."""
         self._conn = conn
+        self._apart = apart
+        self._id = uuid.uuid4()
 
     def hold(self, key: int) -> None:
         """Wait for a lock, and hold it until this transaction ends."""
@@ -139,17 +154,58 @@ class SaveTransaction:
         finally:
             self._conn.execute("SELECT pg_advisory_unlock(%s)", (key,))
 
+    def left_behind(self, turns: Sequence[int]) -> dict[int, list[str]]:
+        """The paths other saves' markers under these turns name: under a turn this save holds, only a save cut off
+        mid-turn leaves one. One indexed lookup."""
+        rows = self._conn.execute(
+            "SELECT turn, paths FROM save_markers WHERE turn = ANY(%s) AND save_id <> %s", (list(turns), self._id)
+        ).fetchall()
+        found: dict[int, list[str]] = {}
+        for row in rows:
+            found.setdefault(row["turn"], []).extend(row["paths"])
+        return found
+
+    def mark(self, team: str, paths: dict[int, list[str]]) -> None:
+        """Record, under each turn, the paths this save may touch there, committed at once and apart from the save,
+        so the record outlives a save cut off before its transaction ends."""
+        with self._apart() as conn:
+            for turn, under in paths.items():
+                conn.execute(
+                    "INSERT INTO save_markers (turn, save_id, team, paths) VALUES (%s, %s, %s, %s)",
+                    (turn, self._id, team, under),
+                )
+
+    def unmark(self) -> None:
+        """Clear this save's markers, committed apart from the save: it was undone."""
+        with self._apart() as conn:
+            conn.execute("DELETE FROM save_markers WHERE save_id = %s", (self._id,))
+
+    @contextmanager
+    def apart(self, turns: Sequence[int]) -> Iterator[None]:
+        """A transaction apart from the save, committed on its own when the block ends cleanly, for putting back what
+        a save cut off under these turns left: the database work done in the block (the save's listeners included)
+        and the clearing of its markers commit together, whatever becomes of this save."""
+        with self._apart() as conn:
+            yield
+            conn.execute(
+                "DELETE FROM save_markers WHERE turn = ANY(%s) AND save_id <> %s", (list(turns), self._id)
+            )
+
     def commit(self) -> None:
-        """Commit the save's database work, having checked first, while its turns are still held, everything Postgres
-        would otherwise check only at commit. A refusal leaves the transaction open and usable, to undo the save."""
+        """Commit the save's database work and clear its markers with it, having checked first, while its turns are
+        still held, everything Postgres would otherwise check only at commit. A refusal leaves the transaction open
+        and usable, to undo the save."""
         with self._conn.transaction():  # a savepoint
             self._conn.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        self._conn.execute("DELETE FROM save_markers WHERE save_id = %s", (self._id,))
         self._conn.commit()
 
 
-# Connections to Postgres, and how many of them saves may hold at once.
+# Connections to Postgres, and how many of them saves may hold at once: at most APART_CONNECTIONS of those for the
+# work a save commits apart from its own transaction (its markers, and putting back what a cut-off save left).
 POOL_SIZE = 20
 SAVING_CONNECTIONS = 10
+APART_CONNECTIONS = 2
 
 
 class Database:
@@ -168,7 +224,8 @@ class Database:
             configure=register_vector,
         )
 
-        self._saves = threading.BoundedSemaphore(SAVING_CONNECTIONS)
+        self._saves = threading.BoundedSemaphore(SAVING_CONNECTIONS - APART_CONNECTIONS)
+        self._apart = threading.BoundedSemaphore(APART_CONNECTIONS)
         self._saving = threading.local()
 
     @contextmanager
@@ -195,7 +252,7 @@ class Database:
         with self._saves, self._pool.connection() as conn:
             self._saving.conn = conn
             try:
-                yield SaveTransaction(conn)
+                yield SaveTransaction(conn, self._apart_from_save)
                 conn.commit()
             except BaseException:
                 # A connection lost mid-save can't roll back; Postgres has already, and released its turns.
@@ -204,6 +261,21 @@ class Database:
                 raise
             finally:
                 self._saving.conn = None
+
+    @contextmanager
+    def _apart_from_save(self) -> Iterator[Conn]:
+        """A transaction on a connection of its own, for work a save commits apart from its own transaction. While it
+        is open, transactions opened on the save's thread join it instead of the save's.
+
+        Counted within SAVING_CONNECTIONS, so a save holding its own connection while it waits for this one never
+        takes one reads and hooks need, and never waits on another save holding its own."""
+        saving: Conn | None = getattr(self._saving, "conn", None)
+        with self._apart, self._pool.connection() as conn:
+            self._saving.conn = conn
+            try:
+                yield conn
+            finally:
+                self._saving.conn = saving
 
     def close(self) -> None:
         self._pool.close()
