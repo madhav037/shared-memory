@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -109,6 +110,11 @@ CREATE INDEX IF NOT EXISTS audit_events_by_team ON audit_events (team_id, id DES
 Conn = psycopg.Connection[dict[str, Any]]
 
 
+# Connections to Postgres, and how many of them saves may hold at once.
+POOL_SIZE = 20
+SAVING_CONNECTIONS = 10
+
+
 class Database:
     def __init__(self, url: str, statement_timeout_seconds: float) -> None:
         """statement_timeout_seconds bounds every statement, waiting for a table included, so a stalled database
@@ -119,16 +125,40 @@ class Database:
         self._pool: ConnectionPool[Conn] = ConnectionPool(
             url,
             min_size=1,
-            max_size=10,
+            max_size=POOL_SIZE,
             open=True,
             kwargs={"row_factory": dict_row, "options": options},
             configure=register_vector,
         )
 
+        self._saves = threading.BoundedSemaphore(SAVING_CONNECTIONS)
+        self._saving = threading.local()
+
     @contextmanager
     def transaction(self) -> Iterator[Conn]:
+        """A transaction of its own; inside a save's transaction on the same thread, a savepoint in that one."""
+        joined: Conn | None = getattr(self._saving, "conn", None)
+        if joined is not None:
+            with joined.transaction():
+                yield joined
+            return
         with self._pool.connection() as conn:
             yield conn
+
+    @contextmanager
+    def save_transaction(self) -> Iterator[None]:
+        """One connection and one transaction for all of a save's database work: its listeners and its audit entry.
+
+        Saves in different areas run at once (ADR-0012). Each holding a connection per listener while waiting for
+        another for its audit entry, they would run the pool dry and wait on each other. Saves hold at most
+        SAVING_CONNECTIONS of the pool, so reads and hooks always find one free.
+        """
+        with self._saves, self._pool.connection() as conn, conn.transaction():
+            self._saving.conn = conn
+            try:
+                yield
+            finally:
+                self._saving.conn = None
 
     def close(self) -> None:
         self._pool.close()

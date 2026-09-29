@@ -14,7 +14,7 @@ from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
-from shared_memory.memory import Location, Memory, level_folder, locate, slugify
+from shared_memory.memory import Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.validation import validate
 
@@ -31,6 +31,16 @@ def _promoting(path: str) -> str:
         f"holds for every project in the team. Anything written for the whole team, such as onboarding or how-we-work "
         f"notes, belongs at one of those levels. Leave it personal if it is only this member's own note."
     )
+
+
+def _areas_of(path: str) -> list[Area]:
+    """The area of the memory a save changes, declared before its turn. A path that is no memory's changes nothing:
+    the save refuses it inside, before writing anything, so it takes no turn."""
+    try:
+        area = area_of(locate(path).path)
+    except Refused:
+        return []
+    return [area] if area is not None else []
 
 
 def committer(caller: Caller) -> Committer:
@@ -144,7 +154,8 @@ class MemoryService:
                 raise Refused("A topic needs a name made of letters or digits.")
             folder = folder / topic_folder
         self._index.prepare(caller.team, memory)
-        with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
+        mine = Area("personal", project.project_id, caller.member_id)
+        with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}", areas=[mine]) as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type))
@@ -360,7 +371,7 @@ class MemoryService:
         related_files: list[str] | None = None,
     ) -> dict[str, Any]:
         self._prepare_edit(caller, path, title, summary, body, related_files)
-        with self._store.change(caller.team, committer(caller)) as change:
+        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "edit")
             if type is not None and type != location.type:
                 raise Refused(
@@ -381,7 +392,7 @@ class MemoryService:
         return describe(location.path, edited)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
-        with self._store.change(caller.team, committer(caller)) as change:
+        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "delete")
             change.message = f"Delete: {memory.title}"
             change.delete(location.path)

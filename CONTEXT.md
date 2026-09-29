@@ -82,6 +82,10 @@ _Avoid_: Shared memory
 A memory that holds for every project in the team.
 _Avoid_: Company memory, global memory, shared memory
 
+**Area**:
+The memory one save can change without waiting on others: the team memory, one project's project memory, or one member's personal memory in one project.
+_Avoid_: Partition, shard, space, scope
+
 **Exception**:
 A project memory that deliberately overrides a named team memory for that one project.
 _Avoid_: Override, local rule

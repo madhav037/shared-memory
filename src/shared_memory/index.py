@@ -225,7 +225,9 @@ class SearchIndex:
         with self._prepared_lock:
             for digest in by_hash:
                 if digest in self._prepared:
-                    found[digest] = self._prepared.pop(digest)
+                    # Left for another save of the same text in another area, running at the same time.
+                    found[digest] = self._prepared[digest]
+                    self._prepared.move_to_end(digest)
         if known is None:
             known = self._stored_vectors(conn, team, [d for d in by_hash if d not in found])
         found.update({d: v for d, v in known.items() if d in by_hash and d not in found})
