@@ -1,7 +1,9 @@
 """Saves take turns per area (ADR-0012): saves by different members, or in different projects, don't wait for each
 other; saves into the same project memory still do.
 
-A turn is made slow by slowing the commit a save builds inside it, since embedding happens before the turn (#155).
+A turn is made slow by slowing the commit a save builds inside it, since embedding happens before the turn (#155). The
+tests that race saves also run with their calls split across two workers sharing one database and memory folder
+(ADR-0013), where the turns are held in Postgres.
 """
 
 from __future__ import annotations
@@ -66,6 +68,14 @@ def members(team: Team, project: str, count: int, prefix: str = "m") -> list[Ses
     return sessions
 
 
+Elsewhere = Callable[[Session], Session]
+
+
+def split(sessions: list[Session], elsewhere: Elsewhere) -> list[Session]:
+    """Every other session handled by the other worker, when the calls are split."""
+    return [session if n % 2 == 0 else elsewhere(session) for n, session in enumerate(sessions)]
+
+
 def all_at_once(calls: list[tuple[Session, str, dict[str, Any]]]) -> tuple[list[Any], float]:
     started = time.monotonic()
     futures: list[Future[Any]] = [session.call_soon(tool, **arguments) for session, tool, arguments in calls]
@@ -74,9 +84,9 @@ def all_at_once(calls: list[tuple[Session, str, dict[str, Any]]]) -> tuple[list[
 
 
 def test_saves_by_different_members_into_their_personal_memory_overlap(
-    team: Team, project: str, slow_turns: Callable[[], None]
+    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    sessions = members(team, project, 5)
+    sessions = split(members(team, project, 5), elsewhere)
     for session in sessions:
         session.call("remember", **note("Warm-up"))  # each member's folder exists before the timing starts
     slow_turns()
@@ -87,9 +97,12 @@ def test_saves_by_different_members_into_their_personal_memory_overlap(
     assert took < SLOW_TURN * 3, f"{len(sessions)} saves took {took:.1f} s, as if one at a time"
 
 
-def test_saves_in_different_projects_overlap(team: Team, slow_turns: Callable[[], None]) -> None:
+def test_saves_in_different_projects_overlap(
+    team: Team, slow_turns: Callable[[], None], elsewhere: Elsewhere
+) -> None:
     owner = team.owner()
-    sessions = [owner.in_project(owner.call("create_project", name=f"Overlap {n}")["project_id"]) for n in range(5)]
+    projects = [owner.call("create_project", name=f"Overlap {n}")["project_id"] for n in range(5)]
+    sessions = split([owner.in_project(project) for project in projects], elsewhere)
     for n, session in enumerate(sessions):
         # Each project's folders already exist, so no promotion creates or empties one the projects share.
         promote_now(session, note("Deploy windows", "Deploys happen on Tuesday mornings only.", type="decision"))
@@ -110,9 +123,9 @@ def test_saves_in_different_projects_overlap(team: Team, slow_turns: Callable[[]
 
 
 def test_saves_into_the_same_project_memory_still_take_turns(
-    team: Team, project: str, slow_turns: Callable[[], None]
+    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    sessions = members(team, project, 3)
+    sessions = split(members(team, project, 3), elsewhere)
     subjects = ["Kafka topic naming", "Terraform state locking", "Pixel density of icons"]
     personal = [
         session.call("remember", **note(subject, f"{subject} is settled: {word()}.", type="architecture"))
@@ -129,20 +142,21 @@ def test_saves_into_the_same_project_memory_still_take_turns(
 
 
 def test_a_save_that_loses_the_race_to_move_main_builds_on_the_new_main_and_both_land(
-    team: Team, owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch
+    team: Team, owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
 ) -> None:
+    dana = elsewhere(dana)
     owner.call("remember", **note("Owner's folder"))
     losing, winning = note("Loses the race"), note("Wins the race")
     original = store_module._move_main
     attempts: list[str] = []
 
-    def contested(repository: pygit2.Repository, expected: Any, commit: pygit2.Oid, why: str) -> bool:
+    def contested(repository: pygit2.Repository, expected: Any, commit: pygit2.Oid, why: str, *turn: Any) -> bool:
         if losing["title"] in why:
             attempts.append(why)
             if len(attempts) == 1:
                 # Another area moves main between the losing save building its commit and moving main to it.
                 dana.call("remember", **winning)
-        return original(repository, expected, commit, why)
+        return original(repository, expected, commit, why, *turn)
 
     monkeypatch.setattr(store_module, "_move_main", contested)
 
@@ -158,7 +172,7 @@ def test_a_save_that_loses_the_race_to_move_main_builds_on_the_new_main_and_both
 
 
 def test_two_areas_creating_folders_under_one_parent_both_appear_in_its_index(
-    team: Team, project: str, monkeypatch: pytest.MonkeyPatch
+    team: Team, project: str, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
 ) -> None:
     original = store_module.write_whole
     order: dict[str, list[Path]] = {"memories": [], "listings": []}
@@ -176,7 +190,7 @@ def test_two_areas_creating_folders_under_one_parent_both_appear_in_its_index(
         original(file, text)
     monkeypatch.setattr(store_module, "write_whole", late_listing)
     for trial in range(2):
-        sessions = members(team, project, 3, prefix=f"new{trial}-")
+        sessions = split(members(team, project, 3, prefix=f"new{trial}-"), elsewhere)
         order["memories"].clear()
         order["listings"].clear()
 
@@ -196,17 +210,19 @@ def test_a_failed_save_never_undoes_another_areas_save_that_landed_meanwhile(
     dana: Session,
     fail_committing_the_index: Callable[[str], None],
     monkeypatch: pytest.MonkeyPatch,
+    elsewhere: Elsewhere,
 ) -> None:
+    dana = elsewhere(dana)
     owner.call("remember", **note("Owner's folder"))
     doomed, landing = note("Doomed save"), note("Lands meanwhile")
     fail_committing_the_index(doomed["title"].lower().replace(" ", "-").replace("'", ""))
     original = store_module._move_main
     landed: list[dict[str, Any]] = []
 
-    def meanwhile(repository: pygit2.Repository, expected: Any, commit: pygit2.Oid, why: str) -> bool:
+    def meanwhile(repository: pygit2.Repository, expected: Any, commit: pygit2.Oid, why: str, *turn: Any) -> bool:
         if doomed["title"] in why and not landed:
             landed.append(dana.call("remember", **landing))
-        return original(repository, expected, commit, why)
+        return original(repository, expected, commit, why, *turn)
 
     monkeypatch.setattr(store_module, "_move_main", meanwhile)
 
@@ -223,9 +239,11 @@ def test_a_failed_save_never_undoes_another_areas_save_that_landed_meanwhile(
     assert uncommitted(team) == []
 
 
-def test_many_members_saving_at_once_leave_one_commit_each_authored_by_them(team: Team, project: str) -> None:
+def test_many_members_saving_at_once_leave_one_commit_each_authored_by_them(
+    team: Team, project: str, elsewhere: Elsewhere
+) -> None:
     other = team.owner().call("create_project", name="Second project")["project_id"]
-    sessions = members(team, project, 6) + members(team, other, 4, prefix="o")
+    sessions = split(members(team, project, 6) + members(team, other, 4, prefix="o"), elsewhere)
     before = int(git(team, "rev-list", "--count", "HEAD")) if head(team) else 0
     saves = [(session, "remember", note("Parallel note")) for session in sessions for _ in range(3)]
 

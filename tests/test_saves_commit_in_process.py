@@ -57,15 +57,18 @@ def test_a_save_that_finds_main_moved_builds_again_on_it_and_both_land(
     move_main = store._move_main
     intruded: list[pygit2.Oid | None] = []
 
-    def moved_first(repository: pygit2.Repository, expected: pygit2.Oid | None, commit: pygit2.Oid, why: str) -> bool:
+    def moved_first(
+        repository: pygit2.Repository, expected: pygit2.Oid | None, commit: pygit2.Oid, why: str, moving_main: Any
+    ) -> bool:
         if not intruded:
             intruded.append(None)
             # Another save moves main between this save building its commit and moving main to it.
             blob = repository.create_blob(b"Saved elsewhere.\n")
-            landed = store._land(repository, {elsewhere: blob}, "Elsewhere\n", pygit2.Signature(*store.SERVER))
+            server = pygit2.Signature(*store.SERVER)
+            landed = store._land(repository, {elsewhere: blob}, "Elsewhere\n", server, moving_main)
             assert landed is not None
             intruded[0] = landed.commit
-        return move_main(repository, expected, commit, why)
+        return move_main(repository, expected, commit, why, moving_main)
 
     monkeypatch.setattr(store, "_move_main", moved_first)
     title = f"Retried {uuid.uuid4().hex[:6]}"

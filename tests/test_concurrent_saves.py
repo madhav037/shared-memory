@@ -1,10 +1,12 @@
 """Parallel sessions changing the same memory at once, the way a member's subagents or several members would.
 
 Each race is run a number of times: a lost change only shows when the two saves interleave, which they don't always.
+Each also runs with its calls split across two workers sharing one database and memory folder (ADR-0013).
 """
 
 from __future__ import annotations
 
+import functools
 import threading
 import uuid
 from collections.abc import Callable
@@ -38,13 +40,16 @@ def remember(session: Session, title: str, type: str = "convention", body: str =
     return path
 
 
-def test_two_edits_of_different_fields_both_land(owner: Session) -> None:
+Elsewhere = Callable[[Session], Session]
+
+
+def test_two_edits_of_different_fields_both_land(owner: Session, elsewhere: Elsewhere) -> None:
     for trial in range(TRIALS):
         path = remember(owner, "Edited twice")
 
         outcomes = at_once(
             lambda: owner.call("edit_memory", path=path, summary=f"summary {trial}"),
-            lambda: owner.call("edit_memory", path=path, body=f"body {trial}"),
+            lambda: elsewhere(owner).call("edit_memory", path=path, body=f"body {trial}"),
         )
         memory = owner.call("read", path=path)
 
@@ -52,13 +57,13 @@ def test_two_edits_of_different_fields_both_land(owner: Session) -> None:
         assert (memory["summary"], memory["body"].strip()) == (f"summary {trial}", f"body {trial}")
 
 
-def test_an_edit_racing_a_delete_never_brings_the_memory_back(owner: Session) -> None:
+def test_an_edit_racing_a_delete_never_brings_the_memory_back(owner: Session, elsewhere: Elsewhere) -> None:
     for _ in range(TRIALS):
         path = remember(owner, "Deleted while edited", type="gotcha")
 
         deleted, edited = at_once(
             lambda: owner.call("delete_memory", path=path),
-            lambda: owner.call("edit_memory", path=path, body="edited"),
+            lambda: elsewhere(owner).call("edit_memory", path=path, body="edited"),
         )
 
         assert deleted == {"deleted": path}
@@ -66,13 +71,14 @@ def test_an_edit_racing_a_delete_never_brings_the_memory_back(owner: Session) ->
         assert "no memory" in owner.refusal("read", path=path)
 
 
-def test_a_memory_promoted_by_several_sessions_at_once_is_promoted_once(team: Team) -> None:
+def test_a_memory_promoted_by_several_sessions_at_once_is_promoted_once(team: Team, elsewhere: Elsewhere) -> None:
     for trial in range(TRIALS // 2):
         # A project of its own each time, so the memory promoted last time isn't a similar memory this time.
         owner = team.owner().in_project(team.owner().call("create_project", name=f"Promoting {trial}")["project_id"])
         path = remember(owner, "Promoted at once", type="architecture")
 
-        outcomes = at_once(*[lambda: owner.call("promote", path=path, level="project")] * 3)
+        sessions = [owner, elsewhere(owner), owner]
+        outcomes = at_once(*[functools.partial(s.call, "promote", path=path, level="project") for s in sessions])
         promoted = [o for o in outcomes if isinstance(o, dict) and o.get("status") == "promoted"]
         shared = owner.call("tree", level="project")["folders"]
 
@@ -104,19 +110,19 @@ def while_saving(save: Callable[[], None], look: Callable[[], Any], lookers: int
     return saved, [refusal for refusals in looked for refusal in refusals]
 
 
-def test_a_memory_read_while_it_is_being_saved_is_never_half_written(owner: Session) -> None:
+def test_a_memory_read_while_it_is_being_saved_is_never_half_written(owner: Session, elsewhere: Elsewhere) -> None:
     path = remember(owner, "Read while saved", body="word " * 500)
 
     def edit() -> None:
         for n in range(20):
             owner.call("edit_memory", path=path, body=f"version {n} " + "word " * 500)
 
-    saved, refusals = while_saving(edit, lambda: owner.call("read", path=path))
+    saved, refusals = while_saving(edit, lambda: elsewhere(owner).call("read", path=path))
 
     assert (saved, refusals) == (None, [])
 
 
-def test_listing_memory_while_memories_are_deleted_never_fails(owner: Session) -> None:
+def test_listing_memory_while_memories_are_deleted_never_fails(owner: Session, elsewhere: Elsewhere) -> None:
     paths = [remember(owner, "Listed while deleted", type="gotcha") for _ in range(20)]
     folder = paths[0].rsplit("/", 1)[0]
 
@@ -125,8 +131,8 @@ def test_listing_memory_while_memories_are_deleted_never_fails(owner: Session) -
             owner.call("delete_memory", path=path)
 
     def browse() -> None:
-        owner.call("tree")
-        owner.call("list", folder=folder)
+        elsewhere(owner).call("tree")
+        elsewhere(owner).call("list", folder=folder)
 
     saved, refusals = while_saving(delete, browse)
 
