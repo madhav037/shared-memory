@@ -143,6 +143,7 @@ class MemoryService:
             if not topic.strip() or topic_folder in ("memory", "index"):
                 raise Refused("A topic needs a name made of letters or digits.")
             folder = folder / topic_folder
+        self._index.prepare(caller.team, memory)
         with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}") as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
@@ -324,6 +325,30 @@ class MemoryService:
             )
         return location, memory
 
+    def _prepare_edit(
+        self,
+        caller: Caller,
+        path: str,
+        title: str | None,
+        summary: str | None,
+        body: str | None,
+        related_files: list[str] | None,
+    ) -> None:
+        """Embed an edit's new text before its save takes its turn. A refusal is left for the save itself to raise."""
+        try:
+            memory = self._store.read(caller.team, locate(path).path)
+        except Refused:
+            return
+        self._index.prepare(
+            caller.team,
+            replace(
+                memory,
+                title=memory.title if title is None else title.strip(),
+                summary=memory.summary if summary is None else summary.strip(),
+                body=memory.body if body is None else body,
+            ),
+        )
+
     def edit_memory(
         self,
         caller: Caller,
@@ -334,6 +359,7 @@ class MemoryService:
         body: str | None = None,
         related_files: list[str] | None = None,
     ) -> dict[str, Any]:
+        self._prepare_edit(caller, path, title, summary, body, related_files)
         with self._store.change(caller.team, committer(caller)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "edit")
             if type is not None and type != location.type:
