@@ -25,6 +25,7 @@ still noticed. Every save also drops what it changed.
 
 from __future__ import annotations
 
+import functools
 import itertools
 import logging
 import os
@@ -242,19 +243,41 @@ def _revert(repository: pygit2.Repository, paths: list[str], landed: _Landed) ->
     _land(repository, files, message, pygit2.Signature(*SERVER))
 
 
+@functools.cache
+def _team_folder(root: Path, team: str) -> Path:
+    return (root / team).resolve()
+
+
+# Folders under a team's folder already seen to be plain folders, not links. A folder only becomes a link if someone
+# with the server's disk replaces it, and they could change anything.
+_plain_folders: set[Path] = set()
+
+
 def confine(root: Path, team: str, path: PurePosixPath) -> Path:
-    """Where a memory path lands on disk, refusing anything that would leave the team's own folder."""
-    team_dir = (root / team).resolve()
-    for attempt in range(5):
-        target = (team_dir / Path(*path.parts)).resolve() if path.parts else team_dir
-        if target == team_dir or team_dir in target.parents:
-            return target
-        # On Windows a path resolved while another area's save creates or removes a folder on it can come back
-        # wrong for a moment (#146); saves in different areas now do that at once, so look again before refusing.
-        if sys.platform != "win32" or attempt == 4:
-            break
-        time.sleep(0.01)
-    raise Refused(f"{str(path)!r} is outside your team's memory.")
+    """Where a memory path lands on disk, refusing anything that would leave the team's own folder.
+
+    The memory folder holds only what the server wrote, so nothing in it is a link: a path is refused when it names
+    `..`, or when a folder on the way or the file itself is a link. Checked by name and one `lstat` per folder not
+    seen before, not by resolving the path, which costs a lookup per part on every call and, on Windows, can come back
+    wrong while another save creates or removes a folder on the way (#146).
+    """
+    team_dir = _team_folder(root, team)
+    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+        raise Refused(f"{str(path)!r} is outside your team's memory.")
+    target = team_dir.joinpath(*path.parts)
+    folder = team_dir
+    for part in path.parts:
+        folder = folder / part
+        if folder in _plain_folders:
+            continue
+        try:
+            if stat.S_ISLNK(os.lstat(folder).st_mode):
+                raise Refused(f"{str(path)!r} is outside your team's memory.")
+        except FileNotFoundError:
+            break  # nothing from here on exists yet, so nothing can link out
+        if folder != target:
+            _plain_folders.add(folder)
+    return target
 
 
 def _settled(action: Callable[[], T]) -> T:
