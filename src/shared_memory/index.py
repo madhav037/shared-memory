@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
+from collections import OrderedDict
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -32,6 +34,8 @@ _SIMILAR_CANDIDATES = 40
 # before it, so a sentence cut at a chunk's edge is still read whole in its neighbour.
 _CHUNK_TOKENS = 256
 _CHUNK_OVERLAP = 48
+# Vectors computed before a save's turn wait here for the turn to take them; the oldest go first past this many.
+_PREPARED_LIMIT = 512
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS sections (
@@ -52,6 +56,7 @@ CREATE TABLE IF NOT EXISTS sections (
 );
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
+CREATE INDEX IF NOT EXISTS sections_content_hash ON sections (team, content_hash);
 """
 # Nearest sections by meaning come from an approximate-nearest-neighbour index rather than a comparison with every one.
 _EMBEDDING_INDEX = "CREATE INDEX IF NOT EXISTS sections_embedding ON sections USING hnsw (embedding vector_cosine_ops)"
@@ -91,6 +96,8 @@ class SearchIndex:
     def __init__(self, db: Database, embedder: Embedder) -> None:
         self._db = db
         self._embedder = embedder
+        self._prepared: OrderedDict[str, list[float]] = OrderedDict()
+        self._prepared_lock = threading.Lock()
         with db.transaction() as conn:
             conn.execute(SCHEMA)
             # Indexing a database that already holds many sections takes longer than any request is allowed.
@@ -150,14 +157,60 @@ class SearchIndex:
         with self._db.transaction() as conn:
             self._update(conn, team, path, memory)
 
-    def _update(self, conn: Conn, team: str, path: PurePosixPath, memory: Memory) -> None:
-        location = locate(str(path))
+    def _plan(self, memory: Memory) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
+        """The texts embedded for a memory and the content hash of each, by (section, chunk)."""
         texts = {
             (section_no, chunk_no): chunk
             for section_no, (heading, text) in enumerate(split_sections(memory))
             for chunk_no, chunk in enumerate(self._chunks(memory.title, heading, text))
         }
-        hashes = {key: hashlib.sha256(text.encode()).hexdigest() for key, text in texts.items()}
+        return texts, {key: hashlib.sha256(text.encode()).hexdigest() for key, text in texts.items()}
+
+    @staticmethod
+    def _stored_vectors(conn: Conn, team: str, hashes: Iterable[str]) -> dict[str, list[float]]:
+        """The vectors sections in this team already hold for text with these content hashes."""
+        wanted = list(set(hashes))
+        if not wanted:
+            return {}
+        rows = conn.execute(
+            "SELECT DISTINCT ON (content_hash) content_hash, embedding FROM sections"
+            " WHERE team = %s AND content_hash = ANY(%s)",
+            (team, wanted),
+        )
+        return {row["content_hash"]: row["embedding"].to_list() for row in rows}
+
+    def prepare(self, team: str, memory: Memory) -> None:
+        """Embed a memory's text ahead of the save that will index it, so the save's turn runs no model.
+
+        Text the team's index already holds vectors for is left alone. What is computed waits, bounded, for the save.
+        """
+        texts, hashes = self._plan(memory)
+        with self._prepared_lock:
+            wanted = {digest: texts[key] for key, digest in hashes.items() if digest not in self._prepared}
+        if not wanted:
+            return
+        with self._db.transaction() as conn:
+            wanted = {d: t for d, t in wanted.items() if d not in self._stored_vectors(conn, team, wanted)}
+        if not wanted:
+            return
+        vectors = self._embedder.passages(list(wanted.values()))
+        with self._prepared_lock:
+            for digest, vector in zip(wanted, vectors, strict=True):
+                self._prepared[digest] = vector
+                self._prepared.move_to_end(digest)
+            while len(self._prepared) > _PREPARED_LIMIT:
+                self._prepared.popitem(last=False)
+
+    def _update(
+        self,
+        conn: Conn,
+        team: str,
+        path: PurePosixPath,
+        memory: Memory,
+        known: dict[str, list[float]] | None = None,
+    ) -> None:
+        location = locate(str(path))
+        texts, hashes = self._plan(memory)
         details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
         existing = {
             (row["section_no"], row["chunk_no"]): row["content_hash"]
@@ -167,7 +220,20 @@ class SearchIndex:
             )
         }
         changed = [key for key, digest in hashes.items() if existing.get(key) != digest]
-        vectors = dict(zip(changed, self._embedder.passages([texts[key] for key in changed]), strict=True))
+        by_hash = {hashes[key]: texts[key] for key in changed}
+        found: dict[str, list[float]] = {}
+        with self._prepared_lock:
+            for digest in by_hash:
+                if digest in self._prepared:
+                    found[digest] = self._prepared.pop(digest)
+        if known is None:
+            known = self._stored_vectors(conn, team, [d for d in by_hash if d not in found])
+        found.update({d: v for d, v in known.items() if d in by_hash and d not in found})
+        missing = [d for d in by_hash if d not in found]
+        if missing:
+            # Only reached when nothing prepared the vectors and no section holds them: embed inside the turn.
+            found.update(zip(missing, self._embedder.passages([by_hash[d] for d in missing]), strict=True))
+        vectors = {key: found[hashes[key]] for key in changed}
         for section_no, chunk_no in existing.keys() - texts.keys():
             conn.execute(
                 "DELETE FROM sections WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
@@ -209,10 +275,14 @@ class SearchIndex:
     ) -> Iterator[None]:
         """Index a save in one transaction, which commits only once the save has landed everywhere else."""
         with self._db.transaction() as conn:
+            # Read before the deletes: a memory that moved keeps its text, so its old rows hold the vectors it needs.
+            known = self._stored_vectors(
+                conn, team, (digest for memory in writes.values() for digest in self._plan(memory)[1].values())
+            )
             for path in deletes:
                 conn.execute("DELETE FROM sections WHERE team = %s AND path = %s", (team, str(path)))
             for path, memory in writes.items():
-                self._update(conn, team, path, memory)
+                self._update(conn, team, path, memory, known)
             yield
 
     def rebuild(self, store: MemoryStore) -> int:
