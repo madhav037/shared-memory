@@ -168,6 +168,47 @@ def test_a_memory_read_back_can_be_changed_without_changing_what_the_next_read_r
     assert (again.title, again.related_files) == ("Kept", [])
 
 
+def test_a_save_ending_mid_read_only_stops_its_own_files_being_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parses: Parses
+) -> None:
+    """Saves in other areas end many times a second; one ending while a file is parsed must not throw that parse away
+    unless the save changed that file."""
+    store = MemoryStore(tmp_path)
+    folder = tmp_path / "t" / "team" / "conventions"
+    folder.mkdir(parents=True)
+    paths = {}
+    for name in ("read", "saved"):
+        (folder / f"{name}.md").write_text(Memory(name, "S.", "convention", "a", "b").to_text(), encoding="utf-8")
+        paths[name] = PurePosixPath("team", "conventions", f"{name}.md")
+    counting = Memory.from_text.__func__  # type: ignore[attr-defined]
+
+    def a_save_ends_meanwhile(changed: str) -> None:
+        def parse(cls: type[Memory], text: str) -> Memory:
+            store._parsed.forget([folder / f"{changed}.md"])
+            result: Memory = counting(cls, text)
+            return result
+
+        monkeypatch.setattr(Memory, "from_text", classmethod(parse))
+
+    a_save_ends_meanwhile("saved")
+    store.read("t", paths["read"])
+    monkeypatch.setattr(Memory, "from_text", classmethod(counting))
+    parses.take()
+    store.read("t", paths["read"])
+    kept_despite_another_save = parses.take()
+
+    a_save_ends_meanwhile("read")
+    store.read("t", paths["saved"])
+    store.read("t", paths["read"])
+    monkeypatch.setattr(Memory, "from_text", classmethod(counting))
+    parses.take()
+    store.read("t", paths["read"])
+    dropped_after_its_own_save = parses.take()
+
+    assert kept_despite_another_save == 0
+    assert dropped_after_its_own_save == 1
+
+
 def test_parsed_memories_are_kept_within_a_bound(tmp_path: Path, parses: Parses) -> None:
     body = "x" * 4000
     store = MemoryStore(tmp_path, parsed_characters=10_000)
