@@ -5,12 +5,14 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
+from shared_memory.store import MemoryStore
 from tests.support import RunningServer, added_context, new_team, promote_now
 
 # More saves than the server has worker threads (40), so saves that each held a thread while waiting would take them all.
@@ -25,18 +27,20 @@ MONEY = {
 }
 
 
-class SlowSavingEmbedder(FastEmbedEmbedder):
-    """Indexing a saved memory is slow, so saves pile up behind each other; searching stays fast."""
-
-    def passages(self, texts: list[str]) -> list[list[float]]:
-        time.sleep(SECONDS_PER_SAVE)
-        return super().passages(texts)
-
-
 @pytest.fixture
-def slow_saving_server(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
+def slow_saving_server(
+    server: RunningServer, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[RunningServer]:
+    """Each save's turn is slow, so one member's saves pile up behind each other; reads stay fast."""
+    commit = MemoryStore._commit
+
+    def slow_commit(self: MemoryStore, *args: Any, **kwargs: Any) -> Any:
+        time.sleep(SECONDS_PER_SAVE)
+        return commit(self, *args, **kwargs)
+
+    monkeypatch.setattr(MemoryStore, "_commit", slow_commit)
     settings = dataclasses.replace(server.settings, memory_root=tmp_path_factory.mktemp("slow-saving-memory"))
-    app = build_app(settings, clock=server.clock, embedder=SlowSavingEmbedder(settings.model_cache))
+    app = build_app(settings, clock=server.clock, embedder=FastEmbedEmbedder(settings.model_cache))
     with start_blocking_portal() as portal:
         running = RunningServer(app, settings, server.clock, portal)
         try:
