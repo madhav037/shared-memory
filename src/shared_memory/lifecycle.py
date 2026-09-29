@@ -19,7 +19,7 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity
+from shared_memory.identity import Caller, Identity, Project
 from shared_memory.index import SearchIndex
 from shared_memory.memory import Level, Location, Memory, level_folder, locate
 from shared_memory.service import committer, describe
@@ -74,51 +74,12 @@ class Lifecycle:
         resolutions: dict[str, str] | None = None,
         reasoning: str | None = None,
     ) -> dict[str, Any]:
-        project = caller.require_project()
-        if level not in ("project", "team"):
-            raise Refused(f"Promote into 'project' or 'team' memory, not {level!r}.")
-        location = locate(path)
-        self._store.read(caller.team, location.path)  # refuses a memory that isn't there
-        if location.level != "personal":
-            raise Refused(f"This is already {location.level} memory. Only personal memory can be promoted.")
-        promoted_by: str | None = None
-        if location.member_id != caller.member_id:
-            if location.member_id is None or not self._identity.is_removed(caller.team, location.member_id):
-                raise Refused(
-                    "You can only promote your own personal memory, or the personal memory of a member who has "
-                    "been removed from the team."
-                )
-            promoted_by = caller.member_id
-        if location.project_id != project.project_id:
-            raise Refused("This memory belongs to another project. Promote it from a session in that project.")
-        waiting = self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)])
-        if waiting:
-            raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
-        target: Level = "team" if level == "team" else "project"
-
+        location, target, promoted_by, project = self._promotable(caller, path, level)
         if reference is None:
-            similar = self._index.similar(
-                caller.team, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
-            )
-            if not similar:
+            proposal = self._similar(caller, path, location, level, project)
+            if proposal is None:
                 return self._move(caller, location, target, promoted_by=promoted_by)
-            reference = secrets.token_urlsafe(12)
-            with self._db.transaction() as conn:
-                conn.execute(
-                    "INSERT INTO promotions (reference, team, member_id, path, level, similar_paths, created_at)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (reference, caller.team, caller.member_id, path, level, [p for p, _ in similar], self._clock()),
-                )
-            return {
-                "status": "similar_memories",
-                "reference": reference,
-                "similar": [
-                    {**describe(PurePosixPath(p), self._store.read(caller.team, PurePosixPath(p))), "similarity": round(s, 3)}
-                    for p, s in similar
-                ],
-                "next": "Judge whether each similar memory contradicts this one, ask the member, then call promote "
-                "again with this reference and a resolution (supersede, keep_both or cancel) for every similar memory.",
-            }
+            return proposal
 
         with self._db.transaction() as conn:
             row = conn.execute(
@@ -180,6 +141,66 @@ class Lifecycle:
                 caller.team, supersede, caller.member_id, f"its author superseded it with {result['path']}."
             )
         return result
+
+    def similar_before_promoting(self, caller: Caller, path: str, level: str) -> dict[str, Any] | None:
+        """Promote's first call up to the move: the similar memories to judge, or None when there are none.
+
+        It saves no memory, only a pending promotion, so it need not wait a turn among saves. A caller given None
+        promotes with no reference, which searches again and moves the memory in its turn.
+        """
+        location, _, _, project = self._promotable(caller, path, level)
+        return self._similar(caller, path, location, level, project)
+
+    def _promotable(self, caller: Caller, path: str, level: str) -> tuple[Location, Level, str | None, Project]:
+        """Refuse a promotion that can't happen; otherwise where the memory is, its new level and who promotes it."""
+        project = caller.require_project()
+        if level not in ("project", "team"):
+            raise Refused(f"Promote into 'project' or 'team' memory, not {level!r}.")
+        location = locate(path)
+        self._store.read(caller.team, location.path)  # refuses a memory that isn't there
+        if location.level != "personal":
+            raise Refused(f"This is already {location.level} memory. Only personal memory can be promoted.")
+        promoted_by: str | None = None
+        if location.member_id != caller.member_id:
+            if location.member_id is None or not self._identity.is_removed(caller.team, location.member_id):
+                raise Refused(
+                    "You can only promote your own personal memory, or the personal memory of a member who has "
+                    "been removed from the team."
+                )
+            promoted_by = caller.member_id
+        if location.project_id != project.project_id:
+            raise Refused("This memory belongs to another project. Promote it from a session in that project.")
+        waiting = self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)])
+        if waiting:
+            raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
+        target: Level = "team" if level == "team" else "project"
+        return location, target, promoted_by, project
+
+    def _similar(
+        self, caller: Caller, path: str, location: Location, level: str, project: Project
+    ) -> dict[str, Any] | None:
+        similar = self._index.similar(
+            caller.team, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
+        )
+        if not similar:
+            return None
+        reference = secrets.token_urlsafe(12)
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO promotions (reference, team, member_id, path, level, similar_paths, created_at)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (reference, caller.team, caller.member_id, path, level, [p for p, _ in similar], self._clock()),
+            )
+        return {
+            "status": "similar_memories",
+            "reference": reference,
+            "similar": [
+                {**describe(PurePosixPath(p), self._store.read(caller.team, PurePosixPath(p))), "similarity": round(s, 3)}
+                for p, s in similar
+            ],
+            "next": "Judge whether each similar memory contradicts this one, ask the member, then call promote "
+            "again with this reference and a resolution (supersede, keep_both or cancel) for every similar memory.",
+        }
 
     def _forget(self, reference: str) -> None:
         with self._db.transaction() as conn:
