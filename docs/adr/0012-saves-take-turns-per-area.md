@@ -8,5 +8,6 @@ We rejected a repository per project: team memory would need its own repository,
 
 - Moving `main` is a save's last step, after its database work is ready to commit. A failure before it leaves `main` untouched. If the database then fails to commit, a revert commit puts the files back. `main` is never reset, because other areas' commits may already sit on top.
 - A folder's `index.md` is written only when its listing changes. Otherwise every save would rewrite the folders shared by every area, and they would take turns again.
+- The folders above the areas (a team's root, `projects/`, a project's folder, its `people/`) belong to no area. A save that creates or removes an area's own folder, such as a member's first memory in a project, also takes the team's shared-folders turn, and holds it until the save has landed or been undone, so no two saves rewrite a shared folder's `index.md` at once.
 - The git index file in the memory folder is not kept up to date; the memory files and the commits on `main` are what count.
 - Only one server process saves. Several servers would need the turns held somewhere they all share, which is out of scope for now.
