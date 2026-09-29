@@ -455,10 +455,18 @@ class MemoryStore:
         self, team: str, folder: PurePosixPath
     ) -> tuple[list[tuple[PurePosixPath, Memory]], list[PurePosixPath]]:
         """The memories directly in a folder (sorted by title) and its subfolders."""
-        directory = self._file(team, folder)
+        return self._list(self._file(team, folder), folder)
+
+    def _list(
+        self, directory: Path, folder: PurePosixPath
+    ) -> tuple[list[tuple[PurePosixPath, Memory]], list[PurePosixPath]]:
+        """list_folder for a folder already confined to its team's memory.
+
+        A subfolder that is a link is left out, so a walk that goes down by these names never leaves the team's folder.
+        """
         try:
             with os.scandir(directory) as listing:
-                entries = [(entry.name, entry.is_dir()) for entry in listing]
+                entries = [(entry.name, entry.is_dir(follow_symlinks=False)) for entry in listing]
         except (FileNotFoundError, NotADirectoryError):
             return [], []
         memories: list[tuple[PurePosixPath, Memory]] = []
@@ -477,11 +485,19 @@ class MemoryStore:
         return memories, sorted(folders)
 
     def walk(self, team: str, root: PurePosixPath) -> Iterator[tuple[PurePosixPath, list[tuple[PurePosixPath, Memory]]]]:
-        """Every folder under root, depth first in path order, with the memories directly in it."""
-        memories, folders = self.list_folder(team, root)
-        yield root, memories
-        for folder in folders:
-            yield from self.walk(team, folder)
+        """Every folder under root, depth first in path order, with the memories directly in it.
+
+        Only root is confined: the folders under it are reached by the names in their parent, never through a link.
+        """
+        yield from self._walk(self._file(team, root), root)
+
+    def _walk(
+        self, directory: Path, folder: PurePosixPath
+    ) -> Iterator[tuple[PurePosixPath, list[tuple[PurePosixPath, Memory]]]]:
+        memories, folders = self._list(directory, folder)
+        yield folder, memories
+        for below in folders:
+            yield from self._walk(directory / below.name, below)
 
     def _write_index(self, team: str, folder: PurePosixPath, before: dict[PurePosixPath, str | None]) -> bool:
         """Bring a folder's index up to date, touching the file only when its text changes, and noting in `before`
