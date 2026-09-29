@@ -17,6 +17,7 @@ from starlette.applications import Starlette
 from starlette.datastructures import Headers
 from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from shared_memory import hooks
 from shared_memory.agents import agent_named
@@ -57,6 +58,30 @@ INSTRUCTIONS = (
 
 F = TypeVar("F", bound=Callable[..., Any])
 log = logging.getLogger("shared_memory")
+
+# Everything under these paths answers one member: their memory, their briefing, their console. A CDN in front of the
+# server must never keep one of those answers and hand it to someone else.
+PRIVATE_PATHS = ("/api/", "/mcp", "/hooks/")
+
+
+class NeverCached:
+    """Marks every answer under the private paths `Cache-Control: no-store`, refusals and errors included."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not scope["path"].startswith(PRIVATE_PATHS):
+            await self.app(scope, receive, send)
+            return
+
+        async def no_store(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = [(name, value) for name, value in message.get("headers", []) if name.lower() != b"cache-control"]
+                message = {**message, "headers": [*headers, (b"cache-control", b"no-store")]}
+            await send(message)
+
+        await self.app(scope, receive, no_store)
 
 
 def _refusals_as_tool_errors(fn: F) -> F:
@@ -484,4 +509,5 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
             saves,
         ).routes()
     )
+    app.add_middleware(NeverCached)
     return app

@@ -88,6 +88,20 @@ The console is served at the domain by the same Caddy that fronts the server, so
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
 
+## Behind a CDN
+
+The server can sit behind a CDN such as Cloudflare or CloudFront, for DDoS protection and to keep the host's address private. It is suited to it: the MCP endpoint answers plain JSON with no session to keep, hooks and console requests are short, and nothing reads the client's IP. Five things need setting on the CDN.
+
+1. **Forward the real `Host` header.** The server accepts only requests addressed to `SHARED_MEMORY_DOMAIN` (it is the server's `allowed_hosts`), and Caddy picks its site by the same name. A CDN that rewrites `Host` to its own origin name gets every MCP call refused. Cloudflare forwards it as it is; on CloudFront, use an origin request policy that forwards the viewer's `Host`.
+2. **Encrypt all the way to Caddy, and check its certificate.** On Cloudflare that is **SSL/TLS → Full (strict)**; Flexible sends personal tokens to the host unencrypted. With the CDN in front, Caddy's usual way of proving it owns the domain can fail, so give it a certificate another way:
+   - a **DNS challenge**: build Caddy with your DNS provider's module (for example `caddy-dns/cloudflare`) and add `tls { dns cloudflare {env.CF_API_TOKEN} }` to the site in `deploy/Caddyfile`; or
+   - an **origin certificate** from the CDN (Cloudflare's Origin CA, valid only between Cloudflare and the host): mount it into the Caddy container and use `tls /certs/origin.pem /certs/origin.key`.
+3. **Refuse bodies over 1 MB at the CDN too.** Caddy refuses anything bigger (`request_body` in `deploy/Caddyfile`), and no request the server needs comes near it. Matching the limit at the edge stops the oversized ones before they reach the host: on Cloudflare, a WAF custom rule blocking `http.request.body.size gt 1048576`; on CloudFront, an AWS WAF size constraint.
+4. **Never cache `/api/*`, `/mcp*` or `/hooks/*`.** Every answer on those paths is one member's: their memory, their briefing, their console. The server marks each of them `Cache-Control: no-store`, but set the CDN to bypass its cache for them as well, so a rule set elsewhere can't override it: a Cloudflare cache rule set to **Bypass cache**, or CloudFront behaviours for those paths using the `CachingDisabled` policy with every method allowed. Everything else is the console's own files, which can be cached.
+5. **Wait longer for the origin than the slowest save can take.** Saves take their turn one at a time, so a busy team's save can wait for tens of seconds before it answers; under heavy load in testing, a queued save took around 25 seconds. Keep the CDN's origin timeout well above that, at 60 seconds or more. Cloudflare's default of 100 seconds is enough; CloudFront's default of 30 is not, so raise its origin response timeout.
+
+Then run step 7 of [Deploy](#deploy) against the domain again: it now goes through the CDN.
+
 ## Backups
 
 Every night at `BACKUP_TIME`, the backup container pushes two branches to the backup repository:
