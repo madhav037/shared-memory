@@ -1730,6 +1730,11 @@ li[aria-expanded="true"] > .tree-row .twist {
   word-break: break-word;
   color: var(--ink);
 }
+.tracked-folded {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
 .tracked del,
 .tracked-key del {
   color: var(--danger);
