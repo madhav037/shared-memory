@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
-const fakeGitHub = "http://127.0.0.1:8124";
+/** The fake GitHub the journey server starts; tests/console_e2e_server.py reads the same variable, with the same default. */
+export const fakeGitHub = `http://127.0.0.1:${process.env.SHARED_MEMORY_E2E_GITHUB_PORT ?? "8126"}`;
 
 /** Sign in as this GitHub account, through the fake GitHub the journeys run against. */
 export async function signInAs(page: Page, id: number, login: string) {

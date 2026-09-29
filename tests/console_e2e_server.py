@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 from anyio.from_thread import start_blocking_portal
@@ -23,11 +25,19 @@ from tests.support import (
 
 CONSOLE = "http://127.0.0.1:4273"
 PORT = 8123
+# The fake GitHub's port. It is not 8124: a local sign-in stack has run its own stand-in GitHub there, and the journeys
+# then could not start at all. Set SHARED_MEMORY_E2E_GITHUB_PORT when something else holds this one too; the browser
+# side reads the same variable (console/e2e/helpers.ts).
+DEFAULT_GITHUB_PORT = 8126
+
+
+def github_port(env: Mapping[str, str] = os.environ) -> int:
+    return int(env.get("SHARED_MEMORY_E2E_GITHUB_PORT", DEFAULT_GITHUB_PORT))
 
 if __name__ == "__main__":
     memory = Path(tempfile.mkdtemp(prefix="console-e2e-")) / "memory"
     with start_blocking_portal() as portal:
-        github = FakeGitHub(portal, Settings("", memory, memory), port=8124)
+        github = FakeGitHub(portal, Settings("", memory, memory), port=github_port())
         github.as_(1, "olive")
         settings = Settings(
             database_url=fresh_database("shared_memory_console_e2e"),
