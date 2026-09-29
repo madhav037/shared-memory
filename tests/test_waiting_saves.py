@@ -78,3 +78,35 @@ def test_a_read_and_a_hook_answer_promptly_while_many_saves_wait(slow_saving_ser
     assert money in recalled
     paths = {save.result(timeout=120)["path"] for save in saves}
     assert len(paths) == QUEUED_SAVES
+
+
+def test_promote_finds_similar_memories_promptly_while_many_saves_wait(slow_saving_server: RunningServer) -> None:
+    team = new_team(slow_saving_server)
+    project = team.owner().call("create_project", name="Billing")["project_id"]
+    owner = team.owner().in_project(project, "billing-api")
+    money = promote_now(owner, MONEY)
+    cents = owner.call("remember", **{**MONEY, "title": "Money in cents"})["path"]
+
+    saves = [
+        owner.call_soon(
+            "remember",
+            title=f"Queued note {number}",
+            summary=f"Note number {number}.",
+            type="gotcha",
+            body=f"Note number {number} was saved while many other saves waited their turn.",
+        )
+        for number in range(QUEUED_SAVES)
+    ]
+    time.sleep(1.5)
+
+    started = time.monotonic()
+    proposal = owner.call("promote", path=cents, level="project")
+    took = time.monotonic() - started
+    still_waiting = sum(not save.done() for save in saves)
+
+    assert still_waiting > 0
+    assert took < 3, f"promote's first call took {took:.1f} s behind {still_waiting} waiting saves"
+    assert proposal["status"] == "similar_memories"
+    assert money in [similar["path"] for similar in proposal["similar"]]
+    for save in saves:
+        save.result(timeout=120)

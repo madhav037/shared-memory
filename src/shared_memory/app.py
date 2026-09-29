@@ -403,10 +403,23 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         """
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
-    @server.tool()
-    @saving
     @_refusals_as_tool_errors
-    def promote(
+    def similar_before_promoting(path: str, level: str, ctx: Context) -> dict[str, Any] | None:
+        return lifecycle.similar_before_promoting(caller(ctx), path, level)
+
+    @_refusals_as_tool_errors
+    def promoting(
+        path: str,
+        level: str,
+        ctx: Context,
+        reference: str | None,
+        resolutions: dict[str, str] | None,
+        reasoning: str | None,
+    ) -> dict[str, Any]:
+        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
+
+    @server.tool()
+    async def promote(
         path: str,
         level: str,
         ctx: Context,
@@ -422,7 +435,12 @@ def build_app(settings: Settings, clock: Clock = system_clock, embedder: Embedde
         keep_both or cancel. Pass reasoning for why any memory resolved as supersede should give way to this one,
         so whoever decides the resulting challenge hears your reasoning.
         """
-        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
+        if reference is None:
+            # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
+            proposal = await anyio.to_thread.run_sync(similar_before_promoting, path, level, ctx)
+            if proposal is not None:
+                return proposal
+        return await saves.run(promoting, path, level, ctx, reference, resolutions, reasoning)
 
     @server.tool()
     @saving
