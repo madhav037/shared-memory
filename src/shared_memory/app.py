@@ -10,6 +10,7 @@ from typing import Any, TypeVar
 import anyio
 import anyio.from_thread
 import anyio.to_thread
+import mcp.server._streamable_http_modern as _modern_http
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -58,6 +59,28 @@ INSTRUCTIONS = (
 
 F = TypeVar("F", bound=Callable[..., Any])
 log = logging.getLogger("shared_memory")
+
+# Before every tool call with arguments, the MCP SDK checks the call's `Mcp-Param-*` headers against the tool's input
+# schema, and finds that schema by running a whole `tools/list` through its request pipeline: every tool's schema
+# built and serialized, for every call. Under load that was a fifth of the time the server held the GIL. The tools
+# here are registered once, at start, and every caller is shown the same list, so each tool's schema is looked up once.
+_listed_tool_schema = _modern_http._tool_input_schema
+_tool_schemas: dict[tuple[int, str], Any] = {}
+
+
+async def _tool_input_schema(
+    app: Any, request: Any, request_id: Any, verdict: Any, lifespan_state: Any, name: str
+) -> Any | None:
+    key = (id(app), name)
+    if key not in _tool_schemas:
+        schema = await _listed_tool_schema(app, request, request_id, verdict, lifespan_state, name)
+        if schema is None:
+            return None  # the listing failed or never named the tool: look again next time
+        _tool_schemas[key] = schema
+    return _tool_schemas[key]
+
+
+_modern_http._tool_input_schema = _tool_input_schema
 
 # Everything under these paths answers one member: their memory, their briefing, their console. A CDN in front of the
 # server must never keep one of those answers and hand it to someone else.
