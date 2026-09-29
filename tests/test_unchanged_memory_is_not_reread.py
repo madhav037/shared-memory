@@ -125,8 +125,8 @@ def test_a_retired_memory_reads_as_retired_straight_away(member: Session) -> Non
 def test_an_edit_that_fails_and_is_undone_reads_as_it_was(team: Team, member: Session) -> None:
     path = remember(member, "Edited and undone", "As first saved.")
     assert member.call("read", path=path)["summary"] == "As first saved."
-    # git's index held by a process that died holding it, so the edit fails once its file is written.
-    lock = team.server.settings.memory_root / ".git" / "index.lock"
+    # main held by a process that died holding it, so the edit fails once its file is written.
+    lock = team.server.settings.memory_root / ".git" / "refs" / "heads" / "main.lock"
     lock.write_text("")
     try:
         refusal = member.refusal("edit_memory", path=path, summary="Never landed.")
