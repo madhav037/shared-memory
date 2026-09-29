@@ -336,7 +336,11 @@ class MemoryStore:
         for folder in folders:
             yield from self.walk(team, folder)
 
-    def _write_index(self, team: str, folder: PurePosixPath) -> None:
+    def _write_index(self, team: str, folder: PurePosixPath) -> bool:
+        """Bring a folder's index up to date, touching the file only when its text changes.
+
+        Returns whether the folder still exists afterwards: an emptied folder loses its index and is removed.
+        """
         directory = self._file(team, folder)
         index = directory / INDEX_NAME
         memories, folders = self.list_folder(team, folder)
@@ -344,7 +348,7 @@ class MemoryStore:
             _settled(lambda: index.unlink(missing_ok=True))
             if folder.parts and directory.is_dir() and not any(directory.iterdir()):
                 _settled(directory.rmdir)
-            return
+            return directory.is_dir()
         lines = [f"# {folder if folder.parts else 'Memory'}", ""]
         if memories:
             lines += ["## Memories", ""]
@@ -354,7 +358,14 @@ class MemoryStore:
             lines += ["## Folders", ""]
             lines += [f"- [{sub.name}/]({sub.name}/{INDEX_NAME})" for sub in folders]
             lines.append("")
-        write_whole(index, "\n".join(lines))
+        text = "\n".join(lines)
+        try:
+            unchanged = read_whole(index) == text
+        except FileNotFoundError:
+            unchanged = False
+        if not unchanged:
+            write_whole(index, text)
+        return True
 
     def text(self, team: str, path: PurePosixPath) -> str:
         """The memory file exactly as it is on disk: its header and its body, as every Claude reads it."""
@@ -436,8 +447,15 @@ class MemoryStore:
             for path in change.deletes:
                 file = self._file(team, path)
                 _settled(lambda: file.unlink(missing_ok=True))
+            # A folder's index lists its memories and its subfolders' names, so a parent's listing changes only when
+            # a folder under it appeared or disappeared.
+            pending = {path.parent for path in memories}
             for folder in folders:
-                self._write_index(team, folder)
+                if folder not in pending:
+                    continue
+                exists = self._write_index(team, folder)
+                if exists == (folder in created) and folder.parts:
+                    pending.add(folder.parent)
             with ExitStack() as listening:
                 for listener in self._listeners:
                     listening.enter_context(listener.on_change(team, dict(change.writes), set(change.deletes)))
