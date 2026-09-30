@@ -275,7 +275,11 @@ async def subagent(
                     await asyncio.sleep(0.2)
                 await asyncio.sleep(rng.uniform(*pace))  # the coding agent thinks between calls
     except Exception as error:
-        results.failures[f"connect: {type(error).__name__} {str(error)[:120]}"] += 1
+        # The MCP client wraps what failed in exception groups: name the innermost error, which says what went wrong.
+        cause: BaseException = error
+        while isinstance(cause, BaseExceptionGroup) and cause.exceptions:
+            cause = cause.exceptions[0]
+        results.failures[f"connect: {type(cause).__name__} {str(cause)[:120]}"] += 1
 
 
 # --- races ---------------------------------------------------------------------------------------------------------

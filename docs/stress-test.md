@@ -78,3 +78,15 @@ On Windows, keep the memory folder's path short: the server's paths inside it ar
 | prompt hook | 1.3 s | 2.6 s | 3.0 s |
 
 No failures; recall added memories to 52% of prompts; files, git and the search index agreed. A shorter run with `--races` lost a change in 6 of 20 concurrent edits, brought a deleted memory back in 3 of 20, and promoted one memory twice in 1 of 10 (spec #129).
+
+The same load with 4 workers (`up --workers 4`), after spec #172, on the same laptop:
+
+| Operation | p50 | p95 | max |
+|---|---|---|---|
+| `remember` | 0.68 s | 3.3 s | 7.2 s |
+| `edit_memory` | 0.61 s | 3.5 s | 4.4 s |
+| `search` | 0.11 s | 0.35 s | 2.3 s |
+| `tree` | 0.58 s | 1.9 s | 2.9 s |
+| prompt hook | 0.15 s | 0.43 s | 2.3 s |
+
+78 calls/s, no failures, races 0, files, git and the search index agreed. At 200 agents (50 x 4) the server stays near 70 calls/s and everything waits longer (saves about 2 s at p50, the prompt hook about 3 s), still with no failures.
