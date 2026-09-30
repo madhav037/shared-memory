@@ -23,6 +23,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from shared_memory import hooks
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
+from shared_memory.board import Board
 from shared_memory.briefing import Briefing
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_memory import ConsoleMemory
@@ -182,6 +183,7 @@ def build_app(
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
+    board = Board(settings, db, identity, audit, clock)
     saves = Saves()
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
@@ -521,6 +523,81 @@ def build_app(
     def delete_memory(path: str, ctx: Context) -> dict[str, Any]:
         """Delete your own personal memory."""
         return service.delete_memory(caller(ctx), path)
+
+    @server.tool(name="board")
+    @_refusals_as_tool_errors
+    def the_board(
+        ctx: Context,
+        column: str | None = None,
+        assignee: str | None = None,
+        label: str | None = None,
+        priority: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, Any]:
+        """Read this project's board: its cards in To do, Doing, Blocked and Done, top first, each known by its
+        number. Cards are the project's work, not memory; search does not find them.
+
+        Narrow it with any of: column (to_do, doing, blocked, done), assignee (a member ID), label, priority (high,
+        normal, low) and text (found in a card's title or description). labels lists every label already on the board.
+        """
+        return board.read(caller(ctx), column, assignee, label, priority, text)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def add_card(
+        title: str,
+        ctx: Context,
+        description: str = "",
+        priority: str | None = None,
+        labels: list[str] | None = None,
+        due_date: str | None = None,
+        memories: list[str] | None = None,
+        files: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Add a card to the bottom of To do on this project's board; it is numbered next in the project.
+
+        priority is high, normal (the default) or low. Reuse labels already on the board (board lists them) rather
+        than inventing near-duplicates. due_date is YYYY-MM-DD. memories are memory paths the card relates to; files
+        are written as repository:path, for example billing-api:src/webhooks/retry.py.
+        """
+        return board.add(caller(ctx), title, description, priority, labels, due_date, memories, files)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def update_card(
+        number: int,
+        ctx: Context,
+        title: str | None = None,
+        description: str | None = None,
+        priority: str | None = None,
+        labels: list[str] | None = None,
+        due_date: str | None = None,
+        memories: list[str] | None = None,
+        files: list[str] | None = None,
+        assignee: str | None = None,
+        column: str | None = None,
+        position: int | None = None,
+    ) -> dict[str, Any]:
+        """Change a card on this project's board, by its number. Only the fields you pass change; labels, memories
+        and files replace the card's whole list. An empty due_date or assignee clears it.
+
+        column (to_do, doing, blocked, done) moves the card to the bottom of that column, or to position if you pass
+        one. position alone reorders the card within its column: 1 is the top.
+        """
+        return board.update(
+            caller(ctx),
+            number,
+            title=title,
+            description=description,
+            priority=priority,
+            labels=labels,
+            due_date=due_date,
+            memories=memories,
+            files=files,
+            assignee=assignee,
+            column=column,
+            position=position,
+        )
 
     security = None
     if settings.allowed_hosts:

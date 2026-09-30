@@ -1466,7 +1466,10 @@
               "memory_pinned",
               "memory_unpinned",
               "challenge_raised",
-              "challenge_decided"
+              "challenge_decided",
+              "card_added",
+              "card_edited",
+              "card_moved"
             ],
             "title": "Kind",
             "type": "string"

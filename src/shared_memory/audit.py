@@ -53,6 +53,9 @@ Kind = Literal[
     "memory_unpinned",
     "challenge_raised",
     "challenge_decided",
+    "card_added",
+    "card_edited",
+    "card_moved",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -84,6 +87,9 @@ MEMORY_PINNED: Kind = "memory_pinned"
 MEMORY_UNPINNED: Kind = "memory_unpinned"
 CHALLENGE_RAISED: Kind = "challenge_raised"
 CHALLENGE_DECIDED: Kind = "challenge_decided"
+CARD_ADDED: Kind = "card_added"
+CARD_EDITED: Kind = "card_edited"
+CARD_MOVED: Kind = "card_moved"
 
 
 @dataclass(frozen=True)
@@ -152,6 +158,13 @@ class Audit:
             target=path,
             detail=detail,
         )
+
+    def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: Any) -> None:
+        """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
+        these entries (ADR-0014)."""
+        if caller.agent is not None:
+            detail = {**detail, "agent": caller.agent}
+        self.record(change, member=caller.member, project_id=project_id, target=f"card {number}", detail=detail)
 
     def read(
         self,

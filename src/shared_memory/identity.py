@@ -449,6 +449,23 @@ class Identity:
         ).fetchone()
         return found is not None
 
+    def member_reaching(self, caller: Caller, project_id: str, member_id: str) -> int:
+        """A member of the caller's team who can reach this project, such as a card's assignee; refused otherwise."""
+        with self._db.transaction() as conn:
+            pk = self._member_pk(conn, caller, member_id)
+            row = conn.execute(
+                "SELECT NOT p.restricted OR m.is_owner OR m.is_admin"
+                " OR EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
+                " OR EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
+                " AS reaches FROM projects p, members m WHERE p.project_id = %s AND m.id = %s",
+                (project_id, pk),
+            ).fetchone()
+        if row is None or not row["reaches"]:
+            raise Refused(
+                f"{member_id!r} can't reach project {project_id!r}: it is restricted and they aren't on its access list."
+            )
+        return pk
+
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
         """The member as a caller of the memory services, working in one of their team's projects."""
         with self._db.transaction() as conn:
