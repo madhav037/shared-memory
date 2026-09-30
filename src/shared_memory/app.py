@@ -720,6 +720,7 @@ def build_app(
             lifecycle,
             challenges,
             saves,
+            board,
         ).routes()
     )
     app.add_middleware(NeverCached)

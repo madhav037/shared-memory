@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 
 import { createProject, fetchChallenges, fetchFolder, signInUrl, type SignedInMember, type Status } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
+import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { day, folderUrl, longDay, memoryUrl, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -111,6 +112,8 @@ export function Front({ member }: { member: SignedInMember }) {
                       ? "No project lead."
                       : `Led by ${project.leads.map((lead) => lead.name).join(", ")}.`}
                     {project.you_lead ? " You lead this." : ""}{" "}
+                    <Link to={boardUrl(project.project_id)}>Board</Link>
+                    {" · "}
                     <Link to={`/projects/${encodeURIComponent(project.project_id)}/settings`}>Settings</Link>
                   </p>
                 )}

@@ -17,6 +17,7 @@ import { ContentsTree } from "./components/Contents";
 import { ContentsProvider } from "./lib/contents";
 import { folderUrl, memoryUrl } from "./lib/format";
 import { AuditLog } from "./pages/AuditLog";
+import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
@@ -203,6 +204,7 @@ function SignedIn({
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/challenges" element={<Challenges />} />
+            <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />

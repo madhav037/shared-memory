@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { useContents } from "../lib/contents";
+import { boardUrl, cardChange } from "../lib/board";
 import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
 import { agentLabel } from "../lib/versions";
 
@@ -60,8 +61,28 @@ function FileLink({ path }: { path: string }) {
   );
 }
 
+/** A card the record names, as "card 12", opened on its project's board. */
+function CardLink({ projectId, target }: { projectId: string; target: string }) {
+  const number = Number(target.replace(/^card /, ""));
+  if (!number) return <>{target}</>;
+  return <Link to={boardUrl(projectId, { card: number })}>Card {number}</Link>;
+}
+
 /** What else the record says about a change, in words rather than field names. */
-function Details({ detail, nameOf }: { detail: Record<string, unknown>; nameOf: (memberId: string) => string }) {
+function Details({
+  kind,
+  detail,
+  nameOf,
+}: {
+  kind: Kind;
+  detail: Record<string, unknown>;
+  nameOf: (memberId: string) => string;
+}) {
+  if (kind.startsWith("card_")) {
+    const said = cardChange(detail, nameOf);
+    if (typeof detail.agent === "string") said.unshift(agentLabel(detail.agent));
+    return <>{said.join(" · ")}</>;
+  }
   const text = (name: string) => {
     const value = detail[name];
     return value === null || value === undefined || value === "" ? null : String(value);
@@ -149,7 +170,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       <h1 className="page-title wide">Audit log</h1>
       <p className="standfirst">
         {wholeTeam
-          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens and memory, from the console and from every coding agent.`
+          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens, memory and cards, from the console and from every coding agent.`
           : "Every change in the projects you lead, newest first."}{" "}
         What a memory said lives in its history; this records who changed it and when.
       </p>
@@ -235,6 +256,8 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                           <div style={{ overflowWrap: "anywhere" }}>
                             {isMemory ? (
                               <FileLink path={event.target} />
+                            ) : event.kind.startsWith("card_") && event.project_id ? (
+                              <CardLink projectId={event.project_id} target={event.target} />
                             ) : /^(team|projects)\//.test(event.target) ? (
                               <Link to={folderUrl(event.target)} title={event.target} className="path">
                                 {event.target.split("/").pop()}/
@@ -248,7 +271,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                         )}
                       </td>
                       <td style={{ fontSize: "0.8125rem" }}>
-                        <Details detail={event.detail} nameOf={nameOf} />
+                        <Details kind={event.kind} detail={event.detail} nameOf={nameOf} />
                       </td>
                     </tr>
                   );

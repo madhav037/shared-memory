@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, time
+from typing import Any
 from urllib.parse import quote
 
 import anyio.to_thread
@@ -38,16 +39,19 @@ from shared_memory.audit import (
     TOKEN_ISSUED,
     Audit,
 )
+from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
 from shared_memory.challenges import Challenge, Challenges, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
-    AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, ChallengeDetail, ChallengeList, ChallengedMemory,
+    AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardDetail,
+    ChallengeDetail, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, NewMember, PREFIX, Pin, PinState,
-    Pins, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge, RepositoryName,
+    Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge,
+    RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
 from shared_memory.errors import Refused
@@ -118,8 +122,10 @@ class ConsoleApi:
         lifecycle: Lifecycle,
         challenges: Challenges,
         saves: Saves,
+        board: Board,
     ) -> None:
         self._settings = settings
+        self._board = board
         self._saves = saves
         self._sessions = sessions
         self._audit = audit
@@ -144,6 +150,9 @@ class ConsoleApi:
             "remove_lead": self._remove_lead,
             "add_repository": self._add_repository,
             "remove_repository": self._remove_repository,
+            "board": self._board_of,
+            "board_archive": self._board_archive,
+            "card": self._card,
             "restrict_project": self._restrict_project,
             "grant_access": self._grant_access,
             "revoke_access": self._revoke_access,
@@ -351,6 +360,79 @@ class ConsoleApi:
 
     def _names(self, member: Member) -> dict[str, str]:
         return {one["member_id"]: one["name"] for one in self._identity.members(member)}
+
+    # --- a project's board, read ---
+
+    def _board_of(self, request: Request) -> Response:
+        def read(caller: Caller) -> ProjectBoard:
+            found = self._board.read(caller, *self._card_filters(request))
+            names = self._names(caller.member)
+            columns = [
+                BoardColumn.model_validate(
+                    {"column": column, "name": name, "cards": [self._card_of(one, names) for one in cards]}
+                )
+                for column, name in COLUMNS.items()
+                for cards in [found["columns"][column]]
+            ]
+            return ProjectBoard(
+                project_id=found["project_id"],
+                project_name=caller.require_project().name,
+                columns=columns,
+                labels=found["labels"],
+            )
+
+        return self._browse(request, read)
+
+    def _board_archive(self, request: Request) -> Response:
+        def read(caller: Caller) -> BoardArchive:
+            found = self._board.read(caller, *self._card_filters(request), archive=True)
+            names = self._names(caller.member)
+            return BoardArchive(
+                project_id=found["project_id"],
+                project_name=caller.require_project().name,
+                cards=[self._card_of(one, names) for one in found["archive"]],
+            )
+
+        return self._browse(request, read)
+
+    def _card(self, request: Request) -> Response:
+        def read(caller: Caller) -> CardDetail:
+            try:
+                number = int(request.path_params["number"])
+            except ValueError:
+                raise Refused(f"{request.path_params['number']!r} isn't a card number.") from None
+            found = self._board.card(caller, number)
+            titles: dict[str, str] = {}
+            for path in [*found["memories"], *found["known_issues"]]:
+                try:
+                    titles[path] = self._service.read(caller, path)["title"]
+                except Refused:
+                    continue  # gone, or out of this member's reach: the console shows its path instead
+            card = self._card_of(found, self._names(caller.member))
+            return CardDetail(**card.model_dump(), titles=titles)
+
+        return self._browse(request, read)
+
+    @staticmethod
+    def _card_filters(request: Request) -> tuple[None, str | None, str | None, str | None]:
+        """The board's filters as the console asks for them: no column (the board shows all four), then assignee,
+        label and priority."""
+        asked = request.query_params
+        return None, asked.get("assignee") or None, asked.get("label") or None, asked.get("priority") or None
+
+    @staticmethod
+    def _card_of(card: dict[str, Any], names: dict[str, str]) -> Card:
+        """A card as the board module gives it, with every member it names also named in words."""
+        assignee = card["assignee"]
+        comments = [{**one, "author_name": names.get(one["author"], one["author"])} for one in card["comments"]]
+        return Card(
+            **{
+                **card,
+                "creator_name": names.get(card["creator"], card["creator"]),
+                "assignee_name": None if assignee is None else names.get(assignee, assignee),
+                "comments": comments,
+            }
+        )
 
     # --- memory by its path, wherever it lives ---
 

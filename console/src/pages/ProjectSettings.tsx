@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { ConnectionFiles } from "../components/ConnectionFiles";
+import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { folderUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -70,6 +71,9 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         )}
         <Link to={folderUrl(home)} className="quiet-link">
           Browse its memory
+        </Link>
+        <Link to={boardUrl(project.project_id)} className="quiet-link">
+          Its board
         </Link>
       </div>
 

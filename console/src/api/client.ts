@@ -26,6 +26,11 @@ export type ChallengeDetail = components["schemas"]["ChallengeDetail"];
 export type RaisedChallenge = components["schemas"]["RaisedChallenge"];
 export type Retired = components["schemas"]["Retired"];
 export type MemberSummary = components["schemas"]["MemberSummary"];
+export type ProjectBoard = components["schemas"]["ProjectBoard"];
+export type BoardArchive = components["schemas"]["BoardArchive"];
+export type BoardColumn = components["schemas"]["BoardColumn"];
+export type Card = components["schemas"]["Card"];
+export type CardDetail = components["schemas"]["CardDetail"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -229,3 +234,23 @@ export function removeRepository(projectId: string, name: string): Promise<Proje
 }
 
 export const signInUrl = "/api/sign-in/github";
+
+/** What a board is narrowed to: an assignee by member ID, a label and a priority. */
+export type BoardFilters = { assignee?: string; label?: string; priority?: string };
+
+/** A project's board, column by column, top first. */
+export function fetchBoard(projectId: string, filters: BoardFilters, signal?: AbortSignal): Promise<ProjectBoard> {
+  return ask<ProjectBoard>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/board`, filters), { signal });
+}
+
+/** The cards that have left a project's board, the most recently done first. */
+export function fetchArchive(projectId: string, filters: BoardFilters, signal?: AbortSignal): Promise<BoardArchive> {
+  return ask<BoardArchive>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/board/archive`, filters), {
+    signal,
+  });
+}
+
+/** One card whole, with its links and comments. */
+export function fetchCard(projectId: string, number: number, signal?: AbortSignal): Promise<CardDetail> {
+  return ask<CardDetail>(`/api/projects/${encodeURIComponent(projectId)}/cards/${number}`, { signal });
+}

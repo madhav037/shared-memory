@@ -7,6 +7,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
+import psycopg
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
@@ -68,7 +69,7 @@ if __name__ == "__main__":
             type="convention",
             body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
         )
-        in_project.call("promote", path=saved["path"], level="project")
+        pnpm = in_project.call("promote", path=saved["path"], level="project")["path"]
 
         # A second project memory, and a challenge against it waiting for the owner to decide, with Raj's Reasoning.
         staging = in_project.call(
@@ -161,6 +162,34 @@ if __name__ == "__main__":
             promote_keeping_both(
                 in_project,
                 {"title": title, "summary": f"{title}.", "type": "convention", "body": body, "topic": "invoicing"},
+            )
+        # Billing's board, for the board journeys: a card in each column, a memory and a file linked from one, a
+        # comment of Raj's, and a card done three weeks ago that has left the board for the archive.
+        in_project.call("add_card", title="Retry failed webhooks", priority="high", labels=["webhooks"])
+        in_project.call("add_card", title="Split the invoice module", priority="low", labels=["cleanup"])
+        in_project.call("add_card", title="Upgrade the queue client", labels=["webhooks"])
+        in_project.call("add_card", title="Drop the legacy exporter", labels=["cleanup"])
+        in_project.call("add_card", title="Move receipts to the new template")
+        in_project.call("claim_card", number=1)
+        in_project.call(
+            "update_card",
+            number=1,
+            description="Webhooks that fail are dropped. Retry them with backoff before giving up.",
+            memories=[pnpm],
+            files=["billing-api:src/webhooks/retry.ts"],
+            due_date="2026-09-15",
+        )
+        dana.call("comment_card", number=1, text="The provider retries three times on its side too.")
+        in_project.call(
+            "update_card", number=3, column="blocked", blocked_reason="Needs the new retry rules first.", waits_on=1
+        )
+        in_project.call("update_card", number=4, column="done")
+        in_project.call("update_card", number=5, column="done")
+        with psycopg.connect(settings.database_url, autocommit=True) as conn:
+            # Done three weeks before the journeys' clock, which never moves: the only way a card reaches the archive.
+            conn.execute(
+                "UPDATE cards SET moved_at = moved_at - interval '21 days' WHERE project_id = %s AND number = 5",
+                (project,),
             )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
