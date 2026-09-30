@@ -1469,7 +1469,11 @@
               "challenge_decided",
               "card_added",
               "card_edited",
-              "card_moved"
+              "card_moved",
+              "card_claimed",
+              "card_commented",
+              "card_deleted",
+              "card_returned"
             ],
             "title": "Kind",
             "type": "string"

@@ -256,3 +256,25 @@ def test_linking_to_an_existing_known_issue_links_a_named_card_to_it(owner: Sess
     assert (result["status"], result["path"], result["card"]) == ("linked", existing, number)
     assert [card["known_issues"] for card in cards(owner) if card["number"] == number] == [[existing]]
     assert len(cards(owner)) == 2
+
+
+def test_a_member_links_a_known_issue_to_a_card_with_no_assignee(owner: Session, dana: Session) -> None:
+    number = owner.call("add_card", title="Move uploads to direct-to-storage")["number"]
+
+    result = dana.call("save_known_issue", **FLAKY_UPLOADS, card=number)
+
+    assert [card["known_issues"] for card in cards(owner)] == [[result["path"]]]
+
+
+def test_a_card_someone_else_is_assigned_is_refused_and_nothing_is_saved(
+    owner: Session, dana: Session, cole: Session
+) -> None:
+    number = owner.call("add_card", title="Move uploads to direct-to-storage")["number"]
+    cole.call("claim_card", number=number)
+
+    refusal = dana.refusal("save_known_issue", **FLAKY_UPLOADS, card=number)
+
+    assert "Cole Coder (emp-3)" in refusal
+    assert owner.call("tree", level="project") == {"folders": []}
+    assert [card["known_issues"] for card in cards(owner)] == [[]]
+    assert cole.call("save_known_issue", **FLAKY_UPLOADS, card=number)["card"] == number

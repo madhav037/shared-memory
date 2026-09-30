@@ -185,6 +185,7 @@ def build_app(
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
     board = Board(settings, db, identity, audit, clock)
+    identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
 
@@ -638,6 +639,10 @@ def build_app(
 
         column (to_do, doing, blocked, done) moves the card to the bottom of that column, or to position if you pass
         one. position alone reorders the card within its column: 1 is the top.
+
+        Any member may change a card with no assignee. A card with one is changed only by its assignee, the project's
+        leads and the team's admins, and only they set an assignee: to take a card yourself, use claim_card. To say
+        something about a card you can't change, use comment_card.
         """
         return board.update(
             caller(ctx),
@@ -653,6 +658,33 @@ def build_app(
             column=column,
             position=position,
         )
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def claim_card(number: int, ctx: Context) -> dict[str, Any]:
+        """Claim a card on this project's board: you become its assignee and it moves to Doing. Claim only when
+        your member asks you to work on a card. Only a card in To do with no assignee can be claimed; if someone
+        claimed it first, you are told who has it.
+        """
+        return board.claim(caller(ctx), number)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def comment_card(number: int, text: str, ctx: Context) -> dict[str, Any]:
+        """Comment on a card on this project's board: a finding, or a question for its assignee. Anyone in the
+        project may comment on any card. Keep it to a few sentences; longer knowledge belongs in a memory linked
+        from the card.
+        """
+        return board.comment(caller(ctx), number, text)
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def delete_card(number: int, ctx: Context) -> dict[str, Any]:
+        """Delete a card from this project's board, with its comments. Its assignee, the project's leads and the
+        team's admins may delete a card; so may its creator while it has no assignee. Delete only when your member
+        asks: finished work goes to Done instead.
+        """
+        return board.delete(caller(ctx), number)
 
     security = None
     if settings.allowed_hosts:

@@ -145,6 +145,17 @@ CREATE TABLE IF NOT EXISTS card_links (
     PRIMARY KEY (card_id, kind, target)
 );
 
+-- What members said on a card, oldest first. Anyone who reaches the project may comment, whoever the assignee is.
+CREATE TABLE IF NOT EXISTS card_comments (
+    id BIGSERIAL PRIMARY KEY,
+    card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    author_id BIGINT NOT NULL REFERENCES members(id),
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS card_comments_by_card ON card_comments (card_id, id);
+
 -- A save's marker under one of its turns: the paths it may touch there, recorded before it writes any, and cleared
 -- once it has landed or been undone. One found by the turn's next holder was left by a save cut off mid-turn.
 CREATE TABLE IF NOT EXISTS save_markers (
