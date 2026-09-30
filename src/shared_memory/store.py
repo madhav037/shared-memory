@@ -569,16 +569,20 @@ class MemoryStore:
         listeners: Iterable[ChangeListener] = (),
         parsed_characters: int = PARSED_CHARACTERS,
         transaction: Callable[[], AbstractContextManager[SaveTransaction]] | None = None,
+        sets_up: bool = True,
     ) -> None:
         """transaction opens one save's database transaction, which holds its turns and all of its listeners' and
-        actions' work. Without one, turns are taken in this process only and there is no database work to hold."""
+        actions' work. Without one, turns are taken in this process only and there is no database work to hold.
+
+        sets_up says whether this makes the folder and its git repository when they are missing, or finds them made."""
         self._root = root.resolve()
         self._transaction = transaction or OneProcess()
         self._parsed = ParsedMemories(parsed_characters)
-        self._root.mkdir(parents=True, exist_ok=True)
+        if sets_up:
+            self._root.mkdir(parents=True, exist_ok=True)
         self._turns = Turns()
         self._listeners = list(listeners)
-        if not (self._root / ".git").exists():
+        if sets_up and not (self._root / ".git").exists():
             repository = pygit2.init_repository(str(self._root), initial_head="main")
             # For the git CLI that reads history and takes the backup.
             repository.config["core.autocrlf"] = "false"

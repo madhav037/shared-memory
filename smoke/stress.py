@@ -473,6 +473,8 @@ def main(argv: list[str] | None = None) -> int:
                              help=f"The stack's compose project name (default {DEFAULT_COMPOSE_PROJECT}).")
         command.add_argument("--port", type=int, default=DEFAULT_PORT,
                              help=f"The port the stack's server listens on, on 127.0.0.1 (default {DEFAULT_PORT}).")
+    commands.choices["up"].add_argument("--workers", type=int, default=2,
+                                        help="Server processes in the stack (SHARED_MEMORY_WORKERS, default 2).")
     run_command = commands.choices["run"]
     run_command.add_argument("--members", type=int, default=20)
     run_command.add_argument("--subagents", type=int, default=3, help="Subagents per member, each its own session.")
@@ -490,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "up":
         subprocess.run([*compose(args.compose_project), "up", "-d", "--build", "--wait"], check=True,
-                       env={**os.environ, "STRESS_PORT": str(args.port)})
+                       env={**os.environ, "STRESS_PORT": str(args.port), "STRESS_WORKERS": str(args.workers)})
         wait_until_answering(f"http://127.0.0.1:{args.port}")
         print(f"The stress test's stack answers at http://127.0.0.1:{args.port}.")
         return 0

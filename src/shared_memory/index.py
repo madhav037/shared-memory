@@ -98,27 +98,29 @@ class SearchIndex:
         self._embedder = embedder
         self._prepared: OrderedDict[str, list[float]] = OrderedDict()
         self._prepared_lock = threading.Lock()
-        with db.transaction() as conn:
-            conn.execute(SCHEMA)
-            # Indexing a database that already holds many sections takes longer than any request is allowed.
-            conn.execute("SET LOCAL statement_timeout = 0")
-            conn.execute(_EMBEDDING_INDEX)
-            conn.execute("RESET statement_timeout")
-            conn.execute("LOCK TABLE sections IN ACCESS EXCLUSIVE MODE")
-            self._unchunked = (
-                conn.execute(
-                    "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()"
-                    " AND table_name = 'sections' AND column_name = 'chunk_no'"
-                ).fetchone()
-                is None
-            )
-            if self._unchunked:
-                # Built before long sections were split: every section so far is its own first chunk.
-                conn.execute(
-                    "ALTER TABLE sections ADD COLUMN chunk_no INT NOT NULL DEFAULT 0, DROP CONSTRAINT sections_pkey,"
-                    " ADD PRIMARY KEY (team, path, section_no, chunk_no)"
+        self._unchunked = False
+        if db.sets_up:
+            with db.transaction() as conn:
+                conn.execute(SCHEMA)
+                # Indexing a database that already holds many sections takes longer than any request is allowed.
+                conn.execute("SET LOCAL statement_timeout = 0")
+                conn.execute(_EMBEDDING_INDEX)
+                conn.execute("RESET statement_timeout")
+                conn.execute("LOCK TABLE sections IN ACCESS EXCLUSIVE MODE")
+                self._unchunked = (
+                    conn.execute(
+                        "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()"
+                        " AND table_name = 'sections' AND column_name = 'chunk_no'"
+                    ).fetchone()
+                    is None
                 )
-                conn.execute("ALTER TABLE sections ALTER COLUMN chunk_no DROP DEFAULT")
+                if self._unchunked:
+                    # Built before long sections were split: every section so far is its own first chunk.
+                    conn.execute(
+                        "ALTER TABLE sections ADD COLUMN chunk_no INT NOT NULL DEFAULT 0, DROP CONSTRAINT sections_pkey,"
+                        " ADD PRIMARY KEY (team, path, section_no, chunk_no)"
+                    )
+                    conn.execute("ALTER TABLE sections ALTER COLUMN chunk_no DROP DEFAULT")
 
     def catch_up(self, store: MemoryStore) -> None:
         """Index every memory again if the index was built before long sections were split into chunks.

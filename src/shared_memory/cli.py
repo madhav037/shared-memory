@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from typing import TextIO
 
@@ -35,6 +36,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     serve = commands.add_parser("serve", help="Run the server.")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--workers", type=int, help="How many server processes to run (default: SHARED_MEMORY_WORKERS).")
 
     args = parser.parse_args(argv)
     settings = settings or Settings.from_env()
@@ -89,11 +91,21 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         return 0
 
     if args.command == "serve":
+        import os
+
         import uvicorn
 
-        from shared_memory.app import build_app
+        from shared_memory import app
 
-        uvicorn.run(build_app(settings), host=args.host, port=args.port)
+        workers = max(1, args.workers if args.workers is not None else settings.workers)
+        # Each worker builds its own app from the environment (`app.worker_app`), so the count that sizes its share of
+        # the connections has to be the one that was asked for here.
+        os.environ["SHARED_MEMORY_WORKERS"] = str(workers)
+        app.setup(settings)
+        if workers == 1:
+            uvicorn.run(app.build_app(dataclasses.replace(settings, workers=1), setup=False), host=args.host, port=args.port)
+        else:
+            uvicorn.run("shared_memory.app:worker_app", factory=True, workers=workers, host=args.host, port=args.port)
         return 0
 
     return 2

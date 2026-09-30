@@ -53,6 +53,31 @@ class FastEmbedEmbedder:
         return [len(encoding.ids) for encoding in encodings]
 
 
+class LazyEmbedder:
+    """The local model, loaded the first time something needs an embedding instead of when this is built. Setup uses
+    it so the process that prepares the database holds the model only if a catch-up really embeds something."""
+
+    def __init__(self, cache_dir: Path) -> None:
+        self._cache_dir = cache_dir
+        self._loaded: FastEmbedEmbedder | None = None
+        self._guard = threading.Lock()
+
+    def _model(self) -> FastEmbedEmbedder:
+        with self._guard:
+            if self._loaded is None:
+                self._loaded = FastEmbedEmbedder(self._cache_dir)
+            return self._loaded
+
+    def passages(self, texts: list[str]) -> list[list[float]]:
+        return self._model().passages(texts) if texts else []
+
+    def query(self, text: str) -> list[float]:
+        return self._model().query(text)
+
+    def tokens(self, words: list[str]) -> list[int]:
+        return self._model().tokens(words) if words else []
+
+
 class CachedQueries:
     """An embedder that remembers the embeddings of its most recent queries, so a repeated search or recall doesn't
     embed its query again. Passages are embedded afresh: a save always carries new text.

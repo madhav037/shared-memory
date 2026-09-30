@@ -67,6 +67,22 @@ Members use `https://memory.example.com` as the **Shared Memory server URL** in 
 
 To update the server later, pull this repository and run `docker compose up -d --build` again.
 
+## Sizing
+
+The server runs several worker processes, so saves and reads in different areas use more than one CPU (ADR-0013). Two
+settings in `.env` (both optional) size them:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `SHARED_MEMORY_WORKERS` | 2 | Server processes. `shared-memory serve` prepares the database and the memory folder once, then starts this many workers. |
+| `SHARED_MEMORY_DATABASE_CONNECTIONS` | 40 | Postgres connections all workers may hold together. Each worker's pool is its share (never fewer than 4), and saves may hold half of it. |
+
+- **Two workers fit an e2-small (2 vCPU, 2GB).** Each worker loads the embedding model, about 350MB, so memory grows
+  with the worker count: on 2GB, stay at 2 workers, and add swap if you also build on the host.
+- **Keep the connections under Postgres's `max_connections`** (100 by default) **minus what the backup and your own
+  tools take.** The default 40 leaves plenty of room.
+- One worker (`SHARED_MEMORY_WORKERS=1`) runs the server in a single process, as before.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).
