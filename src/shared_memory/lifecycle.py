@@ -129,9 +129,15 @@ class Lifecycle:
         self._forget(reference)
         if challenged is not None:
             challenge_id = self._challenges.raise_challenge(
-                caller, "supersede", challenged[0], challenged[1].author, str(location.path), target, promoted_by,
-                reasoning,
-            )  # fmt: skip
+                caller,
+                kind="supersede",
+                target_path=challenged[0],
+                target_author=challenged[1].author,
+                level=target,
+                challenger_path=str(location.path),
+                promoted_by=promoted_by,
+                reasoning=reasoning,
+            )
             return self._challenge_raised(challenge_id, challenged[0], challenged[1].author)
         result = self._move(
             caller, location, target, supersede=supersede, exception_to=exception_to, promoted_by=promoted_by
@@ -284,7 +290,12 @@ class Lifecycle:
         areas = [area for area in [area_of(location.path)] if area is not None]
         if memory.author != caller.member_id:
             challenge_id = self._challenges.raise_challenge(
-                caller, "retire", str(location.path), memory.author, None, location.level, reasoning=reasoning
+                caller,
+                kind="retire",
+                target_path=str(location.path),
+                target_author=memory.author,
+                level=location.level,
+                reasoning=reasoning,
             )
             return self._challenge_raised(challenge_id, str(location.path), memory.author)
         with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}", areas=areas) as change:

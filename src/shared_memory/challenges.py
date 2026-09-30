@@ -109,11 +109,12 @@ class Challenges:
     def raise_challenge(
         self,
         caller: Caller,
+        *,
         kind: str,
         target_path: str,
         target_author: str,
-        challenger_path: str | None,
         level: str,
+        challenger_path: str | None = None,
         promoted_by: str | None = None,
         reasoning: str | None = None,
     ) -> int:
