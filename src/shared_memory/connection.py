@@ -225,8 +225,8 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
 
 
 # The board habits every agent is given, in AGENTS.md and in Cursor's rule alike. The skill says the same at length.
-# The board habits every agent is given, in AGENTS.md and Cursor's rule alike. The skill says the same at length.
-  now, call `add_card` for it and tell the member.
+BOARD_HABITS = """\
+- When you notice follow-up work you won't do now, call `add_card` for it and tell the member.
 - Call `claim_card` only when the member asks you to work on a card. On "take the next card", claim the top card of
   the highest priority in To do.
 - Move a card to Done only once the member confirms the work is finished, and tell them what happened to any known
