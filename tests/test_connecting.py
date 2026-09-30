@@ -14,12 +14,21 @@ def test_an_agent_is_told_on_connecting_how_to_use_the_teams_memory(team: Team) 
         assert step in opening, step
 
 
+def test_an_agent_is_told_on_connecting_how_to_keep_the_board(team: Team) -> None:
+    instructions, _ = team.owner().on_connecting()
+
+    for habit in ("add_card", "claim_card", "highest priority", "Done", "save_known_issue"):
+        assert habit in instructions, habit
+
+
 def test_guidance_an_agent_must_not_miss_is_in_the_tools_themselves(team: Team) -> None:
     _, tools = team.owner().on_connecting()
 
     assert "start of a task" in tools["briefing"]
     assert "before answering" in tools["search"]
     assert "teammate would need" in tools["remember"]
+    assert "tell your member" in tools["add_card"]
+    assert "take the next card" in tools["claim_card"]
 
 
 def test_a_session_without_a_token_is_told_how_to_give_one_in_any_agent(team: Team) -> None:

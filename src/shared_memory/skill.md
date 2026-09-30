@@ -1,6 +1,6 @@
 ---
 name: shared-memory
-description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team memory, or when a briefing or recall mentions memory.
+description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team memory, when working with cards on the board, or when a briefing or recall mentions memory.
 ---
 
 # Shared Memory
@@ -78,6 +78,24 @@ If the member chooses **supersede** for a memory someone else wrote, nobody's me
 ## Retiring a memory
 
 When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge they decide. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
+
+## The board
+
+The project's work is tracked as cards on its board, in To do, Doing, Blocked and Done. Cards aren't memory: `board` reads them and `search` doesn't find them.
+
+- **Follow-up work you won't do now**: `add_card` for it, and tell the member you did.
+- **Claiming**: `claim_card` only when the member asks you to work on a card. On "take the next card", claim the top card of the highest priority in To do.
+- **Done**: move a card to Done only once the member confirms the work is finished. That retires the known issues the card was to fix, or raises a challenge to the author of one someone else wrote; tell the member which.
+- **Blocked**: moving a card to Blocked needs a `blocked_reason`, what it waits for; if that is another card, pass its number as `waits_on`.
+- **The briefing** lists the member's overdue and due-today cards, their Doing and Blocked cards, and the project's known issues. Mention the ones that bear on the task.
+
+## Known issues
+
+When you find something broken that teammates will trip over, `save_known_issue` rather than `remember`: it goes straight into project memory, so every teammate's agent is warned at once.
+
+- The title and summary name the symptom; the body carries a line `Workaround: ...`, or `Workaround: none known`.
+- If it returns similar memories, show them to the member and resolve each with them, as with promote: `link` (it already is this known issue), `keep_both` or `cancel`.
+- Pass `card` when a card already covers the fix; otherwise a To do card is added for it. Tell the member which.
 
 ## Challenges
 

@@ -219,6 +219,32 @@ def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_ser
     assert (ran.returncode, ran.stdout) == (0, "")
 
 
+#: The board habits every agent is given, one marker each: add a card for follow-up work and say so, claim only when
+#: asked (the top card of the highest priority on "take the next card"), Done only on the member's word, Blocked with a
+#: reason, known issues with a symptom and a workaround, and the board items the briefing shows.
+BOARD_HABITS = (
+    "add_card",
+    "tell the member",
+    "claim_card",
+    "take the next card",
+    "highest priority",
+    "confirms",
+    "blocked_reason",
+    "save_known_issue",
+    "Workaround: none known",
+    "briefing",
+)
+
+
+def test_every_agent_is_given_the_same_board_habits(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
+        for habit in BOARD_HABITS:
+            assert habit in files[path]["contents"], (path, habit)
+
+
 def test_cursor_is_briefed_by_a_hook_and_told_by_a_rule_to_search(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
