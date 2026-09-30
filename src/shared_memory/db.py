@@ -106,6 +106,45 @@ CREATE TABLE IF NOT EXISTS audit_events (
 
 CREATE INDEX IF NOT EXISTS audit_events_by_team ON audit_events (team_id, id DESC);
 
+-- A project's board (ADR-0014). Its row numbers the project's cards, and every change to the board locks it, so two
+-- changes never interleave their numbering or their ordering.
+CREATE TABLE IF NOT EXISTS boards (
+    project_id TEXT PRIMARY KEY REFERENCES projects(project_id),
+    last_number INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cards (
+    id BIGSERIAL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES boards(project_id),
+    number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    board_column TEXT NOT NULL,
+    -- Its place within its column, 1 at the top.
+    position INTEGER NOT NULL,
+    priority TEXT NOT NULL,
+    labels TEXT[] NOT NULL DEFAULT '{}',
+    due_date DATE,
+    creator_id BIGINT NOT NULL REFERENCES members(id),
+    assignee_id BIGINT REFERENCES members(id),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    -- When it came into the column it is in.
+    moved_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (project_id, number)
+);
+
+CREATE INDEX IF NOT EXISTS cards_by_column ON cards (project_id, board_column, position);
+
+-- What a card points at, in the order it was given: a memory by its path, or a file as repository:path.
+CREATE TABLE IF NOT EXISTS card_links (
+    card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    target TEXT NOT NULL,
+    place INTEGER NOT NULL,
+    PRIMARY KEY (card_id, kind, target)
+);
+
 -- A save's marker under one of its turns: the paths it may touch there, recorded before it writes any, and cleared
 -- once it has landed or been undone. One found by the turn's next holder was left by a save cut off mid-turn.
 CREATE TABLE IF NOT EXISTS save_markers (
