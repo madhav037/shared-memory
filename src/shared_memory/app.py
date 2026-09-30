@@ -56,6 +56,10 @@ INSTRUCTIONS = (
     "promote makes it project or team memory and returns similar memories: judge with the member whether it "
     "contradicts them, then supersede, keep both, or cancel. Superseding another author's memory raises a challenge "
     "that its author decides.\n\n"
+    "The board holds this project's cards. When you notice follow-up work you won't do now, add_card and tell the "
+    "member. claim_card only when the member asks; on \"take the next card\", claim the top card of the highest "
+    "priority in To do. Move a card to Done only once the member confirms it is finished. When you find something "
+    "broken that teammates will trip over, save_known_issue with its symptom and a workaround.\n\n"
     "If a tool says this repository isn't connected, offer to connect it with create_project."
 )
 
@@ -614,7 +618,8 @@ def build_app(
         memories: list[str] | None = None,
         files: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add a card to the bottom of To do on this project's board; it is numbered next in the project.
+        """Add a card to the bottom of To do on this project's board; it is numbered next in the project. When you
+        notice follow-up work you won't do now, add a card for it and tell your member.
 
         priority is high, normal (the default) or low. Reuse labels already on the board (board lists them) rather
         than inventing near-duplicates. due_date is YYYY-MM-DD. memories are memory paths the card relates to; files
@@ -676,7 +681,8 @@ def build_app(
     @_refusals_as_tool_errors
     def claim_card(number: int, ctx: Context) -> dict[str, Any]:
         """Claim a card on this project's board: you become its assignee and it moves to Doing. Claim only when
-        your member asks you to work on a card. Only a card in To do with no assignee can be claimed; if someone
+        your member asks you to work on a card; on "take the next card", read To do with board and claim the top card
+        of the highest priority there. Only a card in To do with no assignee can be claimed; if someone
         claimed it first, you are told who has it.
         """
         return board.claim(caller(ctx), number)
