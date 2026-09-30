@@ -135,6 +135,9 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 
 CREATE INDEX IF NOT EXISTS cards_by_column ON cards (project_id, board_column, position);
+-- Why a card in Blocked is waiting, and the card it waits on, if it waits on one; both cleared when it leaves Blocked.
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS blocked_reason TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS waits_on_id BIGINT REFERENCES cards(id) ON DELETE SET NULL;
 
 -- What a card points at, in the order it was given: a memory by its path, or a file as repository:path.
 CREATE TABLE IF NOT EXISTS card_links (

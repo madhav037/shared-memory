@@ -184,7 +184,7 @@ def build_app(
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
-    board = Board(settings, db, identity, audit, clock)
+    board = Board(settings, db, identity, audit, clock, challenges.tell)
     identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
@@ -589,14 +589,18 @@ def build_app(
         label: str | None = None,
         priority: str | None = None,
         text: str | None = None,
+        archive: bool = False,
     ) -> dict[str, Any]:
         """Read this project's board: its cards in To do, Doing, Blocked and Done, top first, each known by its
         number. Cards are the project's work, not memory; search does not find them.
 
         Narrow it with any of: column (to_do, doing, blocked, done), assignee (a member ID), label, priority (high,
         normal, low) and text (found in a card's title or description). labels lists every label already on the board.
+
+        A card done more than 14 days ago leaves the board for the archive: pass archive=true to read the archive
+        instead, the most recently done first, narrowed by the same filters.
         """
-        return board.read(caller(ctx), column, assignee, label, priority, text)
+        return board.read(caller(ctx), column, assignee, label, priority, text, archive)
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -633,12 +637,19 @@ def build_app(
         assignee: str | None = None,
         column: str | None = None,
         position: int | None = None,
+        blocked_reason: str | None = None,
+        waits_on: int | None = None,
     ) -> dict[str, Any]:
         """Change a card on this project's board, by its number. Only the fields you pass change; labels, memories
         and files replace the card's whole list. An empty due_date or assignee clears it.
 
         column (to_do, doing, blocked, done) moves the card to the bottom of that column, or to position if you pass
         one. position alone reorders the card within its column: 1 is the top.
+
+        Moving a card to Blocked needs blocked_reason, what it is waiting for; if that is another card, pass its
+        number as waits_on (0 clears it), and the blocked card's assignee is told when that card is done. Moving a card
+        out of Blocked clears both. Move a card to Done only once your member confirms the work is finished; only its
+        assignee, the project's leads and the team's admins can reopen a Done card.
 
         Any member may change a card with no assignee. A card with one is changed only by its assignee, the project's
         leads and the team's admins, and only they set an assignee: to take a card yourself, use claim_card. To say
@@ -657,6 +668,8 @@ def build_app(
             assignee=assignee,
             column=column,
             position=position,
+            blocked_reason=blocked_reason,
+            waits_on=waits_on,
         )
 
     @server.tool()
