@@ -81,7 +81,7 @@ def test_two_claims_racing_on_one_card_exactly_one_wins(owner: Session, dana: Se
 
 def test_only_a_card_in_to_do_can_be_claimed(owner: Session, dana: Session) -> None:
     card(owner, "Retry failed webhooks")
-    owner.call("update_card", number=1, column="blocked")
+    owner.call("update_card", number=1, column="blocked", blocked_reason="Waiting on the sandbox.")
 
     assert "only cards in To do" in dana.refusal("claim_card", number=1)
     assert the_card(owner, 1)["assignee"] is None
@@ -95,7 +95,7 @@ def test_any_member_edits_and_moves_an_unassigned_card(owner: Session, dana: Ses
     card(owner, "Retry failed webhooks")
 
     dana.call("update_card", number=1, title="Retry failed webhooks with backoff", labels=["billing"])
-    moved = dana.call("update_card", number=1, column="blocked")
+    moved = dana.call("update_card", number=1, column="blocked", blocked_reason="Waiting on the sandbox.")
 
     assert moved["title"] == "Retry failed webhooks with backoff"
     assert moved["labels"] == ["billing"]
@@ -127,7 +127,9 @@ def test_the_assignee_edits_moves_hands_over_and_deletes_their_card(owner: Sessi
     dana.call("claim_card", number=1)
     dana.call("claim_card", number=2)
 
-    edited = dana.call("update_card", number=1, title="Retry failed webhooks with backoff", column="blocked")
+    edited = dana.call(
+        "update_card", number=1, title="Retry failed webhooks with backoff", column="blocked", blocked_reason="Waiting."
+    )
     handed_over = dana.call("update_card", number=1, assignee="emp-3")
     dana.call("delete_card", number=2)
 
@@ -252,7 +254,7 @@ def test_a_removed_members_doing_and_blocked_cards_go_back_to_to_do_unassigned(
         card(owner, title)
     for number in (1, 2, 3, 4):
         (cole if number == 4 else dana).call("claim_card", number=number)
-    dana.call("update_card", number=2, column="blocked")
+    dana.call("update_card", number=2, column="blocked", blocked_reason="Waiting on the sandbox.")
     dana.call("update_card", number=3, column="done")
 
     owner.call("remove_member", member_id="emp-2")

@@ -103,7 +103,13 @@ def test_a_priority_or_column_the_board_does_not_have_is_refused(owner: Session)
 def test_a_card_moves_between_to_do_doing_blocked_and_done(owner: Session) -> None:
     card(owner, "Retry failed webhooks")
 
-    moved = [owner.call("update_card", number=1, column=name)["column"] for name in ("doing", "blocked", "done", "to_do")]
+    moves: list[dict[str, Any]] = [
+        {"column": "doing"},
+        {"column": "blocked", "blocked_reason": "Waiting on the sandbox."},
+        {"column": "done"},
+        {"column": "to_do"},
+    ]
+    moved = [owner.call("update_card", number=1, **move)["column"] for move in moves]
 
     assert moved == ["doing", "blocked", "done", "to_do"]
     assert column(owner, "to_do") == [1]
