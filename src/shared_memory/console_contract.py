@@ -425,6 +425,77 @@ class IssuedToken(BaseModel):
     server_url: str
 
 
+Column = Literal["to_do", "doing", "blocked", "done"]
+Priority = Literal["high", "normal", "low"]
+
+
+class CardComment(BaseModel):
+    """A remark on a card, and who made it."""
+
+    author: str
+    author_name: str
+    text: str
+    created_at: datetime
+
+
+class Card(BaseModel):
+    """One piece of work on a board, known by its number within the project. Memories and known issues are linked by
+    path, files as repository:path. waits_on is the number of the card a blocked card waits on."""
+
+    number: int
+    title: str
+    description: str
+    column: Column
+    position: int
+    priority: Priority
+    labels: list[str]
+    due_date: str | None
+    creator: str
+    creator_name: str
+    assignee: str | None
+    assignee_name: str | None
+    blocked_reason: str | None
+    waits_on: int | None
+    memories: list[str]
+    files: list[str]
+    known_issues: list[str]
+    comments: list[CardComment]
+    created_at: datetime
+    updated_at: datetime
+    moved_at: datetime
+
+
+class CardDetail(Card):
+    """A card whole, with the titles of the memories and known issues it links to that the member can read."""
+
+    titles: dict[str, str]
+
+
+class BoardColumn(BaseModel):
+    """One of a board's four columns, its cards top first."""
+
+    column: Column
+    name: str
+    cards: list[Card]
+
+
+class ProjectBoard(BaseModel):
+    """A project's board: To do, Doing, Blocked and Done, and every label already on it."""
+
+    project_id: str
+    project_name: str
+    columns: list[BoardColumn]
+    labels: list[str]
+
+
+class BoardArchive(BaseModel):
+    """Cards done more than 14 days ago, which have left the board: the most recently done first."""
+
+    project_id: str
+    project_name: str
+    cards: list[Card]
+
+
 @dataclass(frozen=True)
 class Declaration:
     """One call the console can make, and what it answers with. A call that answers `None` redirects instead."""
@@ -552,6 +623,29 @@ DECLARATIONS: tuple[Declaration, ...] = (
         summary="Forget a repository of this project.",
         answers=ProjectDetail,
         changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/board",
+        method="GET",
+        operation_id="board",
+        summary="A project's board, column by column, narrowed by assignee (a member ID), label and priority.",
+        answers=ProjectBoard,
+        query=("assignee", "label", "priority"),
+    ),
+    Declaration(
+        path="/projects/{project_id}/board/archive",
+        method="GET",
+        operation_id="board_archive",
+        summary="The cards that have left a project's board, done more than 14 days ago, under the board's filters.",
+        answers=BoardArchive,
+        query=("assignee", "label", "priority"),
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}",
+        method="GET",
+        operation_id="card",
+        summary="One card on a project's board or in its archive, with its links and comments.",
+        answers=CardDetail,
     ),
     Declaration(
         path="/audit",

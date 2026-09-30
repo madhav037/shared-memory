@@ -1,10 +1,11 @@
 import { Button } from "@mantine/core";
-import { IconPin, IconPinnedOff, IconSettings } from "@tabler/icons-react";
+import { IconLayoutColumns, IconPin, IconPinnedOff, IconSettings } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
 import { ChallengedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
+import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { day, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -82,6 +83,12 @@ export function FolderPage({ member }: { member: SignedInMember }) {
           {folder.inside.length > 0 ? ` in ${plural(folder.inside.length, "folder")}` : ""}
         </span>
         {project?.restricted && <RestrictedMark />}
+        {folder.kind === "project" && projectId && (
+          <Link to={boardUrl(projectId)} className="quiet-link" data-testid="to-board">
+            <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
+            Board
+          </Link>
+        )}
         {folder.kind === "project" && projectId && (
           <Link to={`/projects/${encodeURIComponent(projectId)}/settings`} className="quiet-link">
             <IconSettings size={14} stroke={1.6} aria-hidden />

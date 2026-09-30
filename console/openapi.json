@@ -415,6 +415,146 @@
         }
       }
     },
+    "/api/projects/{project_id}/board": {
+      "get": {
+        "operationId": "board",
+        "summary": "A project's board, column by column, narrowed by assignee (a member ID), label and priority.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's board, column by column, narrowed by assignee (a member ID), label and priority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectBoard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/board/archive": {
+      "get": {
+        "operationId": "board_archive",
+        "summary": "The cards that have left a project's board, done more than 14 days ago, under the board's filters.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cards that have left a project's board, done more than 14 days ago, under the board's filters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BoardArchive"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards/{number}": {
+      "get": {
+        "operationId": "card",
+        "summary": "One card on a project's board or in its archive, with its links and comments.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One card on a project's board or in its archive, with its links and comments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit": {
       "get": {
         "operationId": "audit",
@@ -1418,6 +1558,495 @@
           "name"
         ],
         "title": "RepositoryName",
+        "type": "object"
+      },
+      "BoardColumn": {
+        "description": "One of a board's four columns, its cards top first.",
+        "properties": {
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Card"
+            },
+            "title": "Cards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "column",
+          "name",
+          "cards"
+        ],
+        "title": "BoardColumn",
+        "type": "object"
+      },
+      "Card": {
+        "description": "One piece of work on a board, known by its number within the project. Memories and known issues are linked by\npath, files as repository:path. waits_on is the number of the card a blocked card waits on.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "priority": {
+            "enum": [
+              "high",
+              "normal",
+              "low"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "creator": {
+            "title": "Creator",
+            "type": "string"
+          },
+          "creator_name": {
+            "title": "Creator Name",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "assignee_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Name"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "waits_on": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits On"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "known_issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Issues",
+            "type": "array"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/CardComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "moved_at": {
+            "format": "date-time",
+            "title": "Moved At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "description",
+          "column",
+          "position",
+          "priority",
+          "labels",
+          "due_date",
+          "creator",
+          "creator_name",
+          "assignee",
+          "assignee_name",
+          "blocked_reason",
+          "waits_on",
+          "memories",
+          "files",
+          "known_issues",
+          "comments",
+          "created_at",
+          "updated_at",
+          "moved_at"
+        ],
+        "title": "Card",
+        "type": "object"
+      },
+      "CardComment": {
+        "description": "A remark on a card, and who made it.",
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "author_name",
+          "text",
+          "created_at"
+        ],
+        "title": "CardComment",
+        "type": "object"
+      },
+      "ProjectBoard": {
+        "description": "A project's board: To do, Doing, Blocked and Done, and every label already on it.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/BoardColumn"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "columns",
+          "labels"
+        ],
+        "title": "ProjectBoard",
+        "type": "object"
+      },
+      "BoardArchive": {
+        "description": "Cards done more than 14 days ago, which have left the board: the most recently done first.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Card"
+            },
+            "title": "Cards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "cards"
+        ],
+        "title": "BoardArchive",
+        "type": "object"
+      },
+      "CardDetail": {
+        "description": "A card whole, with the titles of the memories and known issues it links to that the member can read.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "priority": {
+            "enum": [
+              "high",
+              "normal",
+              "low"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "creator": {
+            "title": "Creator",
+            "type": "string"
+          },
+          "creator_name": {
+            "title": "Creator Name",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "assignee_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Name"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "waits_on": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits On"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "known_issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Issues",
+            "type": "array"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/CardComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "moved_at": {
+            "format": "date-time",
+            "title": "Moved At",
+            "type": "string"
+          },
+          "titles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "description",
+          "column",
+          "position",
+          "priority",
+          "labels",
+          "due_date",
+          "creator",
+          "creator_name",
+          "assignee",
+          "assignee_name",
+          "blocked_reason",
+          "waits_on",
+          "memories",
+          "files",
+          "known_issues",
+          "comments",
+          "created_at",
+          "updated_at",
+          "moved_at",
+          "titles"
+        ],
+        "title": "CardDetail",
         "type": "object"
       },
       "AuditEvent": {

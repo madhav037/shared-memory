@@ -291,6 +291,16 @@ class Board:
             columns[row["board_column"]].append(_shown(row))
         return {"project_id": project_id, "columns": columns, "labels": [row["label"] for row in labels]}
 
+    def card(self, caller: Caller, number: int) -> dict[str, Any]:
+        """One card by its number, whole: its fields, links and comments, wherever it is on the board or in the
+        archive."""
+        project_id = self._project(caller)
+        with self._db.transaction() as conn:
+            row = conn.execute(f"{_CARD} WHERE c.project_id = %s AND c.number = %s", (project_id, number)).fetchone()
+        if row is None:
+            raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+        return _shown(row)
+
     def add(
         self,
         caller: Caller,

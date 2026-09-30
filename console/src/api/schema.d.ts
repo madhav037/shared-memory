@@ -226,6 +226,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's board, column by column, narrowed by assignee (a member ID), label and priority. */
+        get: operations["board"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/board/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The cards that have left a project's board, done more than 14 days ago, under the board's filters. */
+        get: operations["board_archive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One card on a project's board or in its archive, with its links and comments. */
+        get: operations["card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit": {
         parameters: {
             query?: never;
@@ -727,6 +778,195 @@ export interface components {
         RepositoryName: {
             /** Name */
             name: string;
+        };
+        /**
+         * BoardColumn
+         * @description One of a board's four columns, its cards top first.
+         */
+        BoardColumn: {
+            /**
+             * Column
+             * @enum {string}
+             */
+            column: "to_do" | "doing" | "blocked" | "done";
+            /** Name */
+            name: string;
+            /** Cards */
+            cards: components["schemas"]["Card"][];
+        };
+        /**
+         * Card
+         * @description One piece of work on a board, known by its number within the project. Memories and known issues are linked by
+         *     path, files as repository:path. waits_on is the number of the card a blocked card waits on.
+         */
+        Card: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Column
+             * @enum {string}
+             */
+            column: "to_do" | "doing" | "blocked" | "done";
+            /** Position */
+            position: number;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "high" | "normal" | "low";
+            /** Labels */
+            labels: string[];
+            /** Due Date */
+            due_date: string | null;
+            /** Creator */
+            creator: string;
+            /** Creator Name */
+            creator_name: string;
+            /** Assignee */
+            assignee: string | null;
+            /** Assignee Name */
+            assignee_name: string | null;
+            /** Blocked Reason */
+            blocked_reason: string | null;
+            /** Waits On */
+            waits_on: number | null;
+            /** Memories */
+            memories: string[];
+            /** Files */
+            files: string[];
+            /** Known Issues */
+            known_issues: string[];
+            /** Comments */
+            comments: components["schemas"]["CardComment"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Moved At
+             * Format: date-time
+             */
+            moved_at: string;
+        };
+        /**
+         * CardComment
+         * @description A remark on a card, and who made it.
+         */
+        CardComment: {
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Text */
+            text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ProjectBoard
+         * @description A project's board: To do, Doing, Blocked and Done, and every label already on it.
+         */
+        ProjectBoard: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Columns */
+            columns: components["schemas"]["BoardColumn"][];
+            /** Labels */
+            labels: string[];
+        };
+        /**
+         * BoardArchive
+         * @description Cards done more than 14 days ago, which have left the board: the most recently done first.
+         */
+        BoardArchive: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Cards */
+            cards: components["schemas"]["Card"][];
+        };
+        /**
+         * CardDetail
+         * @description A card whole, with the titles of the memories and known issues it links to that the member can read.
+         */
+        CardDetail: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Column
+             * @enum {string}
+             */
+            column: "to_do" | "doing" | "blocked" | "done";
+            /** Position */
+            position: number;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "high" | "normal" | "low";
+            /** Labels */
+            labels: string[];
+            /** Due Date */
+            due_date: string | null;
+            /** Creator */
+            creator: string;
+            /** Creator Name */
+            creator_name: string;
+            /** Assignee */
+            assignee: string | null;
+            /** Assignee Name */
+            assignee_name: string | null;
+            /** Blocked Reason */
+            blocked_reason: string | null;
+            /** Waits On */
+            waits_on: number | null;
+            /** Memories */
+            memories: string[];
+            /** Files */
+            files: string[];
+            /** Known Issues */
+            known_issues: string[];
+            /** Comments */
+            comments: components["schemas"]["CardComment"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Moved At
+             * Format: date-time
+             */
+            moved_at: string;
+            /** Titles */
+            titles: {
+                [key: string]: string;
+            };
         };
         /**
          * AuditEvent
@@ -1571,6 +1811,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    board: {
+        parameters: {
+            query?: {
+                assignee?: string;
+                label?: string;
+                priority?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's board, column by column, narrowed by assignee (a member ID), label and priority. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBoard"];
+                };
+            };
+        };
+    };
+    board_archive: {
+        parameters: {
+            query?: {
+                assignee?: string;
+                label?: string;
+                priority?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cards that have left a project's board, done more than 14 days ago, under the board's filters. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardArchive"];
+                };
+            };
+        };
+    };
+    card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One card on a project's board or in its archive, with its links and comments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
                 };
             };
         };
