@@ -37,6 +37,7 @@ from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
+from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
@@ -184,6 +185,7 @@ def build_app(
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
     board = Board(settings, db, identity, audit, clock)
+    known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
 
     server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
@@ -421,7 +423,7 @@ def build_app(
 
         Covers team memory, project memory and every member's personal memory in this project. Other members'
         personal memory is labeled as not accepted by the team. level is team, project or personal; type is
-        convention, decision, architecture or gotcha.
+        convention, decision, architecture, gotcha or known_issue.
         """
         return service.search(caller(ctx), query, level, type, limit)
 
@@ -501,6 +503,59 @@ def build_app(
             if proposal is not None:
                 return proposal
         return await saves.run(promoting, path, level, ctx, reference, resolutions, reasoning)
+
+    @_refusals_as_tool_errors
+    def similar_before_saving(
+        title: str, summary: str, body: str, related_files: list[str] | None, card: int | None, ctx: Context
+    ) -> dict[str, Any] | None:
+        return known_issues.similar_before_saving(caller(ctx), title, summary, body, related_files, card)
+
+    @_refusals_as_tool_errors
+    def saving_known_issue(
+        title: str,
+        summary: str,
+        body: str,
+        related_files: list[str] | None,
+        card: int | None,
+        ctx: Context,
+        reference: str | None,
+        resolutions: dict[str, str] | None,
+    ) -> dict[str, Any]:
+        return known_issues.save(caller(ctx), title, summary, body, related_files, reference, resolutions, card)
+
+    @server.tool()
+    async def save_known_issue(
+        title: str,
+        summary: str,
+        body: str,
+        ctx: Context,
+        related_files: list[str] | None = None,
+        card: int | None = None,
+        reference: str | None = None,
+        resolutions: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Save a known issue: something in this project that is broken now and expected to be fixed. It goes
+        straight into project memory, so every member's agent is warned at once; retire it once it is fixed.
+
+        title and summary name the symptom. body must say how to work around it, in a line 'Workaround: ...', or
+        'Workaround: none known'. related_files are written as repository:path. card is the number of the card on
+        this project's board that will fix it, when the member names one; otherwise a To do card is added for it.
+
+        Call it first without a reference. If similar project memories exist, nothing is saved yet: you get them back
+        with a reference. Judge with the member whether each describes the same problem, then call save_known_issue
+        again with the same known issue, the reference and resolutions mapping every similar memory's path to link
+        (it already is this known issue, so none is saved), keep_both or cancel.
+        """
+        if reference is None:
+            # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
+            proposal = await anyio.to_thread.run_sync(
+                similar_before_saving, title, summary, body, related_files, card, ctx
+            )
+            if proposal is not None:
+                return proposal
+        return await saves.run(
+            saving_known_issue, title, summary, body, related_files, card, ctx, reference, resolutions
+        )
 
     @server.tool()
     @saving

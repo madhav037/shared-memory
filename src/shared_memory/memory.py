@@ -11,7 +11,15 @@ import yaml
 
 from shared_memory.errors import Refused
 
-TYPE_FOLDERS = {"convention": "conventions", "decision": "decisions", "architecture": "architecture", "gotcha": "gotchas"}
+TYPE_FOLDERS = {
+    "convention": "conventions",
+    "decision": "decisions",
+    "architecture": "architecture",
+    "gotcha": "gotchas",
+    "known_issue": "known-issues",
+}
+# A known issue skips personal memory: it is saved straight into project memory (ADR-0015).
+KNOWN_ISSUE = "known_issue"
 FOLDER_TYPES = {folder: kind for kind, folder in TYPE_FOLDERS.items()}
 INDEX_NAME = "index.md"
 
@@ -143,7 +151,7 @@ def level_folder(level: Level, kind: str, project_id: str | None = None, member_
 
 def type_folder(kind: str) -> str:
     if kind not in TYPE_FOLDERS:
-        raise Refused(f"Unknown memory type {kind!r}: use convention, decision, architecture or gotcha.")
+        raise Refused(f"Unknown memory type {kind!r}: use convention, decision, architecture, gotcha or known_issue.")
     return TYPE_FOLDERS[kind]
 
 

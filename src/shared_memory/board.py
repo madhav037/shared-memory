@@ -33,7 +33,9 @@ _CARD = (
     " creator.member_id AS creator, assignee.member_id AS assignee, c.created_at, c.updated_at,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'memory' ORDER BY l.place)"
     " AS memories,"
-    " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'file' ORDER BY l.place) AS files"
+    " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'file' ORDER BY l.place) AS files,"
+    " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'known_issue' ORDER BY l.place)"
+    " AS known_issues"
     " FROM cards c JOIN members creator ON creator.id = c.creator_id"
     " LEFT JOIN members assignee ON assignee.id = c.assignee_id"
 )
@@ -146,6 +148,7 @@ def _shown(row: dict[str, Any]) -> dict[str, Any]:
         "assignee": row["assignee"],
         "memories": list(row["memories"]),
         "files": list(row["files"]),
+        "known_issues": list(row["known_issues"]),
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat(),
     }
@@ -216,8 +219,10 @@ class Board:
         due_date: str | None = None,
         memories: list[str] | None = None,
         files: list[str] | None = None,
+        known_issues: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Add a card at the bottom of To do, numbered next in its project."""
+        """Add a card at the bottom of To do, numbered next in its project. known_issues are the known issues it
+        fixes, linked by path as a known issue is saved."""
         project_id = self._project(caller)
         fields = {
             "title": _title(title),
@@ -227,6 +232,8 @@ class Board:
             "due_date": _due_date(due_date or ""),
         }
         links = {"memory": _memories(caller, memories or []), "file": _files(files or [])}
+        if known_issues:
+            links["known_issue"] = _memories(caller, known_issues)
         now = self._clock()
         with self._db.transaction() as conn:
             numbered = conn.execute(
@@ -318,6 +325,37 @@ class Board:
         if to_column is not None or position is not None:
             moved = {"from": from_column, "to": card["column"], "position": card["position"]}
             self._audit.card(caller, CARD_MOVED, project_id, number, **moved)
+        return card
+
+    def require_card(self, caller: Caller, number: int) -> None:
+        """Refuse a card number this project's board doesn't have."""
+        project_id = self._project(caller)
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT 1 FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
+            ).fetchone()
+        if found is None:
+            raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+
+    def link_known_issue(self, caller: Caller, number: int, path: str) -> dict[str, Any]:
+        """Link a known issue to the card that will fix it, after the card's other known issues."""
+        project_id = self._project(caller)
+        (target,) = _memories(caller, [path])
+        with self._db.transaction() as conn:
+            conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
+            found = conn.execute(
+                "SELECT id FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
+            ).fetchone()
+            if found is None:
+                raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+            conn.execute(
+                "INSERT INTO card_links (card_id, kind, target, place) VALUES (%(card)s, 'known_issue', %(target)s,"
+                " (SELECT COUNT(*) FROM card_links WHERE card_id = %(card)s AND kind = 'known_issue'))"
+                " ON CONFLICT DO NOTHING",
+                {"card": found["id"], "target": target},
+            )
+            card = self._card(conn, found["id"])
+        self._audit.card(caller, CARD_EDITED, project_id, number, changed=["known_issues"])
         return card
 
     @staticmethod
