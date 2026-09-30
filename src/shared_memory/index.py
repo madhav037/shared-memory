@@ -384,6 +384,35 @@ class SearchIndex:
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 
+    def similar_to(self, team: str, memory: Memory, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
+        """Active memories in one project's project memory whose sections come close in meaning to any section of a
+        memory not yet saved, such as a known issue about to land."""
+        texts, hashes = self._plan(memory)
+        found: dict[str, list[float]] = {}
+        with self._prepared_lock:
+            for digest in hashes.values():
+                if digest in self._prepared:
+                    found[digest] = self._prepared[digest]
+        with self._db.transaction() as conn:
+            found.update(self._stored_vectors(conn, team, [d for d in hashes.values() if d not in found]))
+        missing = {digest: texts[key] for key, digest in hashes.items() if digest not in found}
+        if missing:
+            found.update(zip(missing, self._embedder.passages(list(missing.values())), strict=True))
+        best: dict[str, float] = {}
+        with self._db.transaction() as conn:
+            conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
+            for vector in {digest: found[digest] for digest in hashes.values()}.values():
+                rows = conn.execute(
+                    "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"
+                    " WHERE team = %(team)s AND status = 'active' AND level = 'project' AND project_id = %(project)s"
+                    f" ORDER BY embedding <=> %(vector)s LIMIT {_SIMILAR_CANDIDATES}",
+                    {"team": team, "project": project_id, "vector": Vector(vector)},
+                ).fetchall()
+                for row in rows:
+                    best[str(row["path"])] = max(best.get(str(row["path"]), -1.0), float(row["similarity"]))
+        close = sorted(((path, s) for path, s in best.items() if s >= threshold), key=lambda item: -item[1])
+        return close[:_SIMILAR_LIMIT]
+
     @staticmethod
     def _keyword(conn: Conn, columns: str, where: str, params: dict[str, object]) -> list[dict[str, Any]]:
         return conn.execute(

@@ -14,7 +14,7 @@ from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
-from shared_memory.memory import Area, Location, Memory, area_of, level_folder, locate, slugify
+from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.validation import validate
 
@@ -138,6 +138,10 @@ class MemoryService:
         topic: str | None = None,
     ) -> dict[str, Any]:
         project = caller.require_project()
+        if type == KNOWN_ISSUE:
+            raise Refused(
+                "A known issue goes straight into project memory, never personal memory: save it with save_known_issue."
+            )
         memory = Memory(
             title=title.strip(),
             summary=summary.strip(),

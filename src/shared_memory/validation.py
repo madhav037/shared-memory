@@ -8,7 +8,7 @@ from collections import Counter
 
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN
-from shared_memory.memory import Memory, type_folder
+from shared_memory.memory import KNOWN_ISSUE, Memory, type_folder
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("an AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -29,6 +29,12 @@ _CANDIDATE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
 # The word limit bounds what a memory says; this bounds what it weighs, so a few enormous "words" can't slip past it.
 # At twenty characters a word, a memory at the word limit still fits, paths and identifiers included.
 CHARACTER_LIMIT = 12_000
+# A workaround line ("Workaround: ...", as a list item or in bold too) or a "Workaround" heading over its own section.
+_WORKAROUND = re.compile(
+    r"^\s*(?:(?P<heading>#{1,6})\s+|[-*>]\s+)?[*_]*workarounds?[*_]*\s*(?P<colon>:)?[*_]*\s*(?P<rest>.*?)\s*$",
+    re.IGNORECASE,
+)
+_HEADING = re.compile(r"^\s*#{1,6}\s")
 _SPLIT_IT = "Split the subject into a topic: save several shorter memories under one topic name, each covering one part."
 
 
@@ -60,6 +66,20 @@ def _single_line(field: str, value: str, limit: int) -> None:
         raise Refused(f"The {field} must be at most {limit} characters.")
 
 
+def _has_workaround(body: str) -> bool:
+    lines = body.splitlines()
+    for number, line in enumerate(lines):
+        match = _WORKAROUND.match(line)
+        if match is None or not (match.group("heading") or match.group("colon")):
+            continue
+        if match.group("rest").strip("*_ "):
+            return True
+        following = next((later for later in lines[number + 1 :] if later.strip()), None)
+        if following is not None and not _HEADING.match(following):
+            return True
+    return False
+
+
 def validate(memory: Memory, word_limit: int) -> None:
     _single_line("title", memory.title, 200)
     _single_line("summary", memory.summary, 300)
@@ -68,6 +88,11 @@ def validate(memory: Memory, word_limit: int) -> None:
         repository, _, path = entry.partition(":")
         if not NAME_PATTERN.match(repository) or not path.strip() or "\n" in entry:
             raise Refused(f"Related file {entry!r} must be written as repository:path, for example billing-api:package.json.")
+    if memory.type == KNOWN_ISSUE and not _has_workaround(memory.body):
+        raise Refused(
+            "A known issue must say how to work around it: add a line 'Workaround: ...', or 'Workaround: none known' "
+            "if there isn't one yet."
+        )
     words = len(memory.body.split())
     if words > word_limit:
         raise Refused(f"This memory is {words} words; the limit is {word_limit} words. {_SPLIT_IT}")

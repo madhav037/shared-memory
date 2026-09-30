@@ -16,7 +16,13 @@ from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 
-TYPE_NAMES = {"conventions": "Conventions", "decisions": "Decisions", "architecture": "Architecture", "gotchas": "Gotchas"}
+TYPE_NAMES = {
+    "conventions": "Conventions",
+    "decisions": "Decisions",
+    "architecture": "Architecture",
+    "gotchas": "Gotchas",
+    "known-issues": "Known issues",
+}
 
 
 def accepted_first(folder: PurePosixPath) -> tuple[tuple[int, str], ...]:
