@@ -184,7 +184,7 @@ def build_app(
     recall = Recall(settings, index, store)
     briefing = Briefing(settings, db, store, audit, clock)
     store.subscribe(briefing)
-    board = Board(settings, db, identity, audit, clock, challenges.tell)
+    board = Board(settings, db, identity, audit, clock, challenges.tell, lifecycle.retire_fixed)
     identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
@@ -623,6 +623,7 @@ def build_app(
         return board.add(caller(ctx), title, description, priority, labels, due_date, memories, files)
 
     @server.tool()
+    @saving
     @_refusals_as_tool_errors
     def update_card(
         number: int,
@@ -649,7 +650,9 @@ def build_app(
         Moving a card to Blocked needs blocked_reason, what it is waiting for; if that is another card, pass its
         number as waits_on (0 clears it), and the blocked card's assignee is told when that card is done. Moving a card
         out of Blocked clears both. Move a card to Done only once your member confirms the work is finished; only its
-        assignee, the project's leads and the team's admins can reopen a Done card.
+        assignee, the project's leads and the team's admins can reopen a Done card. Moving a card to Done retires the
+        known issues it was to fix, or raises a challenge to the author of one you didn't write; known_issues_fixed
+        says which.
 
         Any member may change a card with no assignee. A card with one is changed only by its assignee, the project's
         leads and the team's admins, and only they set an assignee: to take a card yourself, use claim_card. To say
