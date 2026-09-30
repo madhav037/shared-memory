@@ -9,9 +9,11 @@ puts those paths back to what main holds, and indexes them again. Here the next 
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import uuid
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any, Literal
 
 import psycopg
@@ -81,6 +83,17 @@ def listed(session: Session) -> list[str]:
 
 def found(session: Session, word: str) -> list[str]:
     return [hit["path"] for hit in session.call("search", query=word)["results"]]
+
+
+def dangling(team: Team) -> list[str]:
+    """Every link in the team's indexes to a memory or folder that isn't there."""
+    folder = team.server.settings.memory_root / team.code
+    return [
+        f"{index.relative_to(folder).as_posix()} -> {target}"
+        for index in folder.rglob("index.md")
+        for target in re.findall(r"\]\(([^)]+)\)", index.read_text(encoding="utf-8"))
+        if not (index.parent / Path(target)).exists()
+    ]
 
 
 @pytest.fixture
@@ -227,3 +240,26 @@ def test_saves_that_land_or_are_undone_leave_no_marker(team: Team, owner: Sessio
     owner.call("delete_memory", path=path)
     assert markers(team) == []
     assert uncommitted(team) == []
+
+
+def test_repair_that_removes_a_cut_off_area_folder_takes_it_out_of_the_shared_index(
+    team: Team, owner: Session, dana: Session, second_server: RunningServer, dies: Dies
+) -> None:
+    # The owner's first save in their area is cut off: their area's folder is left on disk, uncommitted.
+    tag = uuid.uuid4().hex[:8]
+    dies("before main moves")
+    owner.refusal("remember", title=f"Cut off {tag}", summary="Half saved.", type="gotcha", body=word())
+    (file,) = files_named(team, tag)
+    path = file.relative_to(team.server.settings.memory_root / team.code).as_posix()
+
+    # Dana's first save changes the folders the areas share, and lists them as they stand: the owner's folder too.
+    remember(on(second_server, dana), f"Dana's first {uuid.uuid4().hex[:6]}", word())
+    assert uncommitted(team) != []
+
+    # The owner's next save in their area repairs it, even though that save is itself refused.
+    owner.refusal("delete_memory", path=path)
+
+    assert files_named(team, tag) == []
+    assert dangling(team) == []
+    assert uncommitted(team) == []
+    assert markers(team) == []

@@ -746,6 +746,49 @@ class MemoryStore:
         if shared in left:
             # The cut-off save also changed the folders its areas share; their turn comes last, so it can be taken now.
             self._shared_folders_turn(transaction, team)
+        gone = [area.folder for area in sorted(areas, key=Area.order) if not self._file(team, area.folder).is_dir()]
+        if gone:
+            self._unlist(transaction, team, gone)
+
+    def _unlist(self, transaction: SaveTransaction, team: str, gone: list[PurePosixPath]) -> None:
+        """Take area folders repair removed out of the indexes of the shared folders above them, committed by the
+        server apart from this save.
+
+        While a cut-off save's folder was left on disk, a save in another area that changed the shared folders could
+        list it and commit that listing (#179). Like any save's, the shared folders' turn is taken after the areas'.
+        """
+        self._shared_folders_turn(transaction, team)
+        above = sorted({f for folder in gone for f in folder.parents}, key=lambda f: len(f.parts), reverse=True)
+        transaction.mark(team, {self._turns.shared(team): [str(folder / INDEX_NAME) for folder in above]})
+        before: dict[PurePosixPath, str | None] = {}
+        pending = {folder.parent for folder in gone}
+        try:
+            # Deepest first, as a save does: a parent is listed again only when a folder under it went away.
+            for folder in above:
+                if folder in pending and not self._write_index(team, folder, before) and folder.parts:
+                    pending.add(folder.parent)
+            if before:
+                repository = self._repository()
+                blobs: dict[str, pygit2.Oid | None] = {}
+                for path in before:
+                    file = self._file(team, path)
+                    blobs[f"{team}/{path}"] = repository.create_blob(file.read_bytes()) if file.is_file() else None
+                message = (
+                    "Unlist folders a cut-off save left\n\nA save cut off before it ended left them, and they were "
+                    "removed.\n"
+                )
+                _land(repository, blobs, message, pygit2.Signature(*SERVER), self._turns.moving_main(transaction))
+        except Exception:
+            # The indexes go back to what main holds; if that fails too, the marker has the next holder do it.
+            for path, text in before.items():
+                file = self._file(team, path)
+                if text is None:
+                    _settled(lambda: file.unlink(missing_ok=True))
+                else:
+                    write_whole(file, text)
+            transaction.unmark()
+            raise
+        transaction.unmark()
 
     def _put_back(
         self,
