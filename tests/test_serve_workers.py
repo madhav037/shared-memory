@@ -220,4 +220,17 @@ def test_serve_with_one_worker_still_sets_up_then_builds_the_app(monkeypatch: py
 
     serve(workers=1)
 
-    assert events == ["setup", "build setup=False", "run app ['host', 'port']"]
+    assert events == ["setup", "build setup=False", "run app ['host', 'port', 'timeout_keep_alive']"]
+
+@pytest.mark.parametrize("workers", [1, 3])
+def test_serve_keeps_idle_connections_open_longer_than_a_proxy_in_front_does(
+    monkeypatch: pytest.MonkeyPatch, workers: int
+) -> None:
+    started = Started(monkeypatch)
+    if workers == 1:
+        monkeypatch.setattr(app_module, "build_app", lambda *args, **kwargs: "app")
+
+    serve(workers=workers)
+
+    [(_, kwargs)] = started.runs
+    assert kwargs["timeout_keep_alive"] == cli.KEEP_ALIVE_SECONDS > 120  # Caddy keeps its connections 2 minutes

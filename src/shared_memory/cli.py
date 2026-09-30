@@ -13,6 +13,11 @@ from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity
 
+# How long a worker keeps an idle connection open. Longer than a proxy in front keeps its own open to the server
+# (Caddy: 2 minutes) or a coding agent waits between calls: uvicorn's 5 seconds made a client, sending on a
+# connection just as the server closed it, get no response at all under load (#176).
+KEEP_ALIVE_SECONDS = 130
+
 
 def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.stdout) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
@@ -102,10 +107,11 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         # the connections has to be the one that was asked for here.
         os.environ["SHARED_MEMORY_WORKERS"] = str(workers)
         app.setup(settings)
+        served = {"host": args.host, "port": args.port, "timeout_keep_alive": KEEP_ALIVE_SECONDS}
         if workers == 1:
-            uvicorn.run(app.build_app(dataclasses.replace(settings, workers=1), setup=False), host=args.host, port=args.port)
+            uvicorn.run(app.build_app(dataclasses.replace(settings, workers=1), setup=False), **served)
         else:
-            uvicorn.run("shared_memory.app:worker_app", factory=True, workers=workers, host=args.host, port=args.port)
+            uvicorn.run("shared_memory.app:worker_app", factory=True, workers=workers, **served)
         return 0
 
     return 2
