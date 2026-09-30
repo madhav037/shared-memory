@@ -112,6 +112,10 @@ _Avoid_: Design, overview
 A surprising fact that wastes time if you don't know it.
 _Avoid_: Pitfall, trap, lesson
 
+**Known issue**:
+Something in a project that is broken now and expected to be fixed, with how to work around it; it lives in project memory and is retired once fixed.
+_Avoid_: Bug, open issue, defect
+
 ### Changing memory
 
 **Promote**:
@@ -141,7 +145,7 @@ _Avoid_: Delete, archive
 ### Reading memory
 
 **Briefing**:
-What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, and any notice waiting for the member, such as a challenge they must decide.
+What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, the project's known issues, the member's own cards, and any notice waiting for the member, such as a challenge they must decide.
 _Avoid_: Pinned set
 
 **Pin**:
@@ -163,8 +167,30 @@ The web app where members browse memory and admins run the team; members sign in
 _Avoid_: Dashboard, admin panel, web UI
 
 **Audit log**:
-The record of who changed members, roles, access, tokens or memory, and when. It is not the memory's git history, which holds what memory said.
+The record of who changed members, roles, access, tokens, memory or cards, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail
+
+### The board
+
+**Board**:
+A project's list of work its members track, laid out in four columns: To do, Doing, Blocked and Done.
+_Avoid_: Kanban, tracker, backlog, todo list
+
+**Card**:
+One piece of work on a board, known by its number within the project.
+_Avoid_: Ticket, task, todo, item, issue
+
+**Assignee**:
+The member working on a card.
+_Avoid_: Owner, holder
+
+**Claim**:
+To make yourself a card's assignee by moving it from To do to Doing; only one member can claim a card.
+_Avoid_: Grab, take, lock
+
+**Blocked**:
+The column for a card that cannot go on, with the reason it is waiting and, if it is another card, which one.
+_Avoid_: Stuck, on hold
 
 ### Sessions and collisions
 
