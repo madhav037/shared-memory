@@ -257,7 +257,7 @@ def test_your_card_moved_out_of_blocked_by_someone_else_is_in_your_next_briefing
 
     told = briefing(dana)
     assert 'Olive Owner (owner-1) unblocked your card 1 "Retry failed webhooks"' in told
-    assert "card 2" not in told
+    assert "unblocked your card 2" not in told
 
 
 def test_a_project_lead_is_told_when_a_members_cards_go_back_to_to_do(team: Team, dana: Session) -> None:

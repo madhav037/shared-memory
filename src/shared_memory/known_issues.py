@@ -77,6 +77,19 @@ class KnownIssues:
         """
         return self._similar(caller, self._known_issue(caller, title, summary, body, related_files, card))
 
+    def titles(self, caller: Caller) -> list[str]:
+        """The title of every active known issue in the session's project, as its briefing lists them. Nothing for a
+        session outside a project, or in a project the member can't reach."""
+        if caller.project is None or caller.project.project_id in caller.unreachable:
+            return []
+        folder = level_folder("project", KNOWN_ISSUE, caller.project.project_id)
+        return [
+            memory.title
+            for _, memories in self._store.walk(caller.team, folder)
+            for _, memory in memories
+            if memory.status == "active" and memory.type == KNOWN_ISSUE
+        ]
+
     def save(
         self,
         caller: Caller,

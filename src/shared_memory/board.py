@@ -220,6 +220,11 @@ def _who(caller: Caller) -> str:
     return f"{caller.member.name} ({caller.member_id})"
 
 
+def _short(text: str, limit: int = 80) -> str:
+    """Text cut to a briefing line's length."""
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
 def _named_card(number: int, title: str, project_id: str) -> str:
     return f'card {number} "{title}" in {project_id}'
 
@@ -467,6 +472,37 @@ class Board:
         reasoning = f'Card {card["number"]} "{card["title"]}", which was to fix this known issue, is done.'
         outcomes = (self._retire_fixed(caller, path, reasoning) for path in card["known_issues"])
         return [outcome for outcome in outcomes if outcome is not None]
+
+    def for_briefing(self, caller: Caller) -> tuple[list[str], list[str]]:
+        """The member's own open cards as their briefing lists them, one short line each: first those overdue or due
+        today, the longest overdue first, then the rest of their cards in Doing and then Blocked, top first. Nothing
+        for a session outside a project, or in a project the member can't reach."""
+        if caller.project is None or caller.project.project_id in caller.unreachable:
+            return [], []
+        today = self._clock().date()
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT c.number, c.title, c.board_column, c.position, c.due_date, c.blocked_reason FROM cards c"
+                " JOIN members m ON m.id = c.assignee_id WHERE c.project_id = %s AND m.member_id = %s"
+                " AND c.board_column <> 'done' AND (c.board_column IN ('doing', 'blocked') OR c.due_date <= %s)"
+                " ORDER BY c.due_date, c.position",
+                (caller.project.project_id, caller.member_id, today),
+            ).fetchall()
+        due: list[str] = []
+        working: list[tuple[bool, int, str]] = []
+        for row in rows:
+            state = COLUMNS[row["board_column"]]
+            if row["board_column"] == "blocked":
+                state += ": " + _short(row["blocked_reason"] or "")
+            overdue_or_today = row["due_date"] is not None and row["due_date"] <= today
+            if overdue_or_today:
+                state += ", due today" if row["due_date"] == today else f", overdue: due {row['due_date'].isoformat()}"
+            line = f'- card {row["number"]} "{_short(row["title"])}" ({state})'
+            if overdue_or_today:
+                due.append(line)
+            else:
+                working.append((row["board_column"] == "blocked", row["position"], line))
+        return due, [line for _, _, line in sorted(working)]
 
     def require_card(self, caller: Caller, number: int) -> None:
         """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
