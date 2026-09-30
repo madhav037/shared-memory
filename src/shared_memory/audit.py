@@ -56,6 +56,10 @@ Kind = Literal[
     "card_added",
     "card_edited",
     "card_moved",
+    "card_claimed",
+    "card_commented",
+    "card_deleted",
+    "card_returned",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -90,6 +94,11 @@ CHALLENGE_DECIDED: Kind = "challenge_decided"
 CARD_ADDED: Kind = "card_added"
 CARD_EDITED: Kind = "card_edited"
 CARD_MOVED: Kind = "card_moved"
+CARD_CLAIMED: Kind = "card_claimed"
+CARD_COMMENTED: Kind = "card_commented"
+CARD_DELETED: Kind = "card_deleted"
+# A card whose assignee lost the project, put back in To do with no assignee.
+CARD_RETURNED: Kind = "card_returned"
 
 
 @dataclass(frozen=True)

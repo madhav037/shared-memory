@@ -11,7 +11,16 @@ import re
 from datetime import date, datetime
 from typing import Any
 
-from shared_memory.audit import CARD_ADDED, CARD_EDITED, CARD_MOVED, Audit
+from shared_memory.audit import (
+    CARD_ADDED,
+    CARD_CLAIMED,
+    CARD_COMMENTED,
+    CARD_DELETED,
+    CARD_EDITED,
+    CARD_MOVED,
+    CARD_RETURNED,
+    Audit,
+)
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
@@ -26,6 +35,9 @@ PRIORITIES = {"high": "High", "normal": "Normal", "low": "Low"}
 
 TITLE_LIMIT = 200
 LABEL_LIMIT = 40
+# A comment is a remark on a card, smaller than its description, which is held to the memory word limit.
+COMMENT_WORD_LIMIT = 150
+COMMENT_CHARACTER_LIMIT = 1_500
 
 # One card with everything it says, its creator and assignee by member ID, and its links in the order they were given.
 _CARD = (
@@ -35,7 +47,10 @@ _CARD = (
     " AS memories,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'file' ORDER BY l.place) AS files,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'known_issue' ORDER BY l.place)"
-    " AS known_issues"
+    " AS known_issues,"
+    " COALESCE((SELECT json_agg(json_build_object('author', a.member_id, 'text', k.body, 'created_at', k.created_at)"
+    " ORDER BY k.id) FROM card_comments k JOIN members a ON a.id = k.author_id WHERE k.card_id = c.id), '[]')"
+    " AS comments"
     " FROM cards c JOIN members creator ON creator.id = c.creator_id"
     " LEFT JOIN members assignee ON assignee.id = c.assignee_id"
 )
@@ -127,6 +142,26 @@ def _files(entries: list[str]) -> list[str]:
     return linked
 
 
+def _comment(value: str) -> str:
+    text = value.strip()
+    if not text:
+        raise Refused("A comment can't be empty.")
+    words = len(text.split())
+    if words > COMMENT_WORD_LIMIT:
+        raise Refused(
+            f"This comment is {words} words; the limit is {COMMENT_WORD_LIMIT} words. "
+            "Say what matters in a few sentences, and put anything longer in a memory linked from the card."
+        )
+    if len(text) > COMMENT_CHARACTER_LIMIT:
+        raise Refused(f"This comment is {len(text)} characters; the limit is {COMMENT_CHARACTER_LIMIT} characters.")
+    return text
+
+
+def _held_by(row: dict[str, Any]) -> str:
+    """A card's assignee as a refusal names them."""
+    return f"{row['assignee_name']} ({row['assignee']})"
+
+
 def _like(text: str) -> str:
     """A pattern matching the text anywhere, with the text's own wildcards taken literally."""
     escaped = text.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -149,6 +184,7 @@ def _shown(row: dict[str, Any]) -> dict[str, Any]:
         "memories": list(row["memories"]),
         "files": list(row["files"]),
         "known_issues": list(row["known_issues"]),
+        "comments": list(row["comments"]),
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat(),
     }
@@ -276,7 +312,10 @@ class Board:
         position: int | None = None,
     ) -> dict[str, Any]:
         """Change a card: only what is given changes. column moves it (to the bottom, unless a position is given);
-        position alone moves it within its column, 1 being the top. An empty assignee takes the assignee off."""
+        position alone moves it within its column, 1 being the top. An empty assignee takes the assignee off.
+
+        A card with an assignee is changed only by them, the project's leads and the team's admins; any member may
+        change an unassigned one, but only those three set its assignee: a member takes a card by claiming it."""
         project_id = self._project(caller)
         edits: dict[str, Any] = {}
         if title is not None:
@@ -301,12 +340,12 @@ class Board:
         to_column = column_named(column) if column is not None else None
         now = self._clock()
         with self._db.transaction() as conn:
-            conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
-            found = conn.execute(
-                "SELECT id, board_column FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
-            ).fetchone()
-            if found is None:
-                raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+            found = self._may_edit(conn, caller, project_id, number)
+            if assignee is not None and assignee.strip() and not self._runs(conn, caller, project_id, found):
+                raise Refused(
+                    "Only a card's assignee, the project's leads and the team's admins give a card an assignee. To "
+                    f"work on card {number} yourself, claim it with claim_card."
+                )
             card_id, from_column = found["id"], found["board_column"]
             if edits:
                 assignments = ", ".join(f"{name} = %s" for name in edits)
@@ -328,26 +367,19 @@ class Board:
         return card
 
     def require_card(self, caller: Caller, number: int) -> None:
-        """Refuse a card number this project's board doesn't have."""
+        """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
+        names its card before it lands, so a link that would be refused is refused before anything is saved."""
         project_id = self._project(caller)
         with self._db.transaction() as conn:
-            found = conn.execute(
-                "SELECT 1 FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
-            ).fetchone()
-        if found is None:
-            raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+            self._may_edit(conn, caller, project_id, number)
 
     def link_known_issue(self, caller: Caller, number: int, path: str) -> dict[str, Any]:
-        """Link a known issue to the card that will fix it, after the card's other known issues."""
+        """Link a known issue to the card that will fix it, after the card's other known issues. Linking edits the
+        card, so it takes what editing takes."""
         project_id = self._project(caller)
         (target,) = _memories(caller, [path])
         with self._db.transaction() as conn:
-            conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
-            found = conn.execute(
-                "SELECT id FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
-            ).fetchone()
-            if found is None:
-                raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+            found = self._may_edit(conn, caller, project_id, number)
             conn.execute(
                 "INSERT INTO card_links (card_id, kind, target, place) VALUES (%(card)s, 'known_issue', %(target)s,"
                 " (SELECT COUNT(*) FROM card_links WHERE card_id = %(card)s AND kind = 'known_issue'))"
@@ -357,6 +389,134 @@ class Board:
             card = self._card(conn, found["id"])
         self._audit.card(caller, CARD_EDITED, project_id, number, changed=["known_issues"])
         return card
+
+    def claim(self, caller: Caller, number: int) -> dict[str, Any]:
+        """Make the caller a card's assignee and move it to the bottom of Doing. Only a card in To do with no
+        assignee can be claimed, and the first claim wins: the card is taken by one conditional update."""
+        project_id = self._project(caller)
+        now = self._clock()
+        with self._db.transaction() as conn:
+            conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
+            claimed = conn.execute(
+                "UPDATE cards SET assignee_id = %s, updated_at = %s WHERE project_id = %s AND number = %s"
+                " AND assignee_id IS NULL AND board_column = 'to_do' RETURNING id",
+                (caller.member.pk, now, project_id, number),
+            ).fetchone()
+            if claimed is None:
+                found = self._found(conn, project_id, number)
+                if found["assignee_id"] == caller.member.pk:
+                    raise Refused(f"Card {number} is already yours.")
+                if found["assignee_id"] is not None:
+                    raise Refused(f"Card {number} is already claimed by {_held_by(found)}. Pick another card.")
+                raise Refused(
+                    f"Card {number} is in {COLUMNS[found['board_column']]}, and only cards in To do can be claimed. "
+                    "A project lead can assign it to you, or move it back to To do first."
+                )
+            self._place(conn, project_id, claimed["id"], "to_do", "doing", None, now)
+            card = self._card(conn, claimed["id"])
+        self._audit.card(caller, CARD_CLAIMED, project_id, number)
+        return card
+
+    def comment(self, caller: Caller, number: int, text: str) -> dict[str, Any]:
+        """Add a comment to a card. Anyone who reaches the project may, whoever the card's assignee is."""
+        project_id = self._project(caller)
+        body = _comment(text)
+        with self._db.transaction() as conn:
+            found = self._found(conn, project_id, number)
+            conn.execute(
+                "INSERT INTO card_comments (card_id, author_id, body, created_at) VALUES (%s, %s, %s, %s)",
+                (found["id"], caller.member.pk, body, self._clock()),
+            )
+            card = self._card(conn, found["id"])
+        self._audit.card(caller, CARD_COMMENTED, project_id, number)
+        return card
+
+    def delete(self, caller: Caller, number: int) -> dict[str, Any]:
+        """Delete a card, its links and its comments. Its assignee, the project's leads and the team's admins may;
+        so may its creator while it has no assignee. Its number is not used again."""
+        project_id = self._project(caller)
+        with self._db.transaction() as conn:
+            found = self._found(conn, project_id, number)
+            if not self._runs(conn, caller, project_id, found):
+                if found["assignee_id"] is not None:
+                    raise Refused(
+                        f"Card {number} is assigned to {_held_by(found)}: only they, the project's leads and the "
+                        "team's admins can delete it. Say what you want with comment_card instead."
+                    )
+                if found["creator_id"] != caller.member.pk:
+                    raise Refused(
+                        f"Card {number} has no assignee, so only its creator, the project's leads and the team's "
+                        "admins can delete it. Say why it should go with comment_card instead."
+                    )
+            conn.execute("DELETE FROM cards WHERE id = %s", (found["id"],))
+            self._arrange(conn, project_id, found["board_column"])
+        self._audit.card(caller, CARD_DELETED, project_id, number, title=found["title"])
+        return {"deleted": number}
+
+    def return_cards(self, caller: Caller) -> None:
+        """Put back in To do, with no assignee, every open card whose assignee can no longer reach its project:
+        removed from the team, or shut out of a restricted project. Done cards keep their assignee, as a record of
+        who did them. Identity calls this after any change that may have cost a member a project."""
+        now = self._clock()
+        with self._db.transaction() as conn:
+            conn.execute(
+                "SELECT b.project_id FROM boards b JOIN projects p ON p.project_id = b.project_id"
+                " WHERE p.team_id = %s ORDER BY b.project_id FOR UPDATE OF b",
+                (caller.member.team_pk,),
+            )
+            stranded = conn.execute(
+                "SELECT c.id, c.project_id, c.number, c.board_column, m.member_id FROM cards c"
+                " JOIN projects p ON p.project_id = c.project_id JOIN members m ON m.id = c.assignee_id"
+                " WHERE p.team_id = %s AND c.board_column <> 'done' AND (m.removed_at IS NOT NULL OR (p.restricted"
+                " AND NOT m.is_owner AND NOT m.is_admin"
+                " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
+                " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
+                ")) ORDER BY c.project_id, c.number",
+                (caller.member.team_pk,),
+            ).fetchall()
+            for row in stranded:
+                conn.execute("UPDATE cards SET assignee_id = NULL, updated_at = %s WHERE id = %s", (now, row["id"]))
+                if row["board_column"] != "to_do":
+                    self._place(conn, row["project_id"], row["id"], row["board_column"], "to_do", None, now)
+        for row in stranded:
+            returned = {"from": row["board_column"], "assignee": row["member_id"]}
+            self._audit.card(caller, CARD_RETURNED, row["project_id"], row["number"], **returned)
+
+    @staticmethod
+    def _found(conn: Conn, project_id: str, number: int) -> dict[str, Any]:
+        """A card by its number, with its board locked so no other change to the board interleaves; refused if the
+        board has no such card."""
+        conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
+        found = conn.execute(
+            "SELECT c.id, c.title, c.board_column, c.creator_id, c.assignee_id, a.member_id AS assignee,"
+            " a.name AS assignee_name FROM cards c LEFT JOIN members a ON a.id = c.assignee_id"
+            " WHERE c.project_id = %s AND c.number = %s",
+            (project_id, number),
+        ).fetchone()
+        if found is None:
+            raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+        return dict(found)
+
+    def _may_edit(self, conn: Conn, caller: Caller, project_id: str, number: int) -> dict[str, Any]:
+        """A card the caller may edit or move: any card with no assignee, or one they run; refused otherwise."""
+        found = self._found(conn, project_id, number)
+        if found["assignee_id"] is not None and not self._runs(conn, caller, project_id, found):
+            raise Refused(
+                f"Card {number} is assigned to {_held_by(found)}: only they, the project's leads and the team's "
+                "admins can change it. Say what you want with comment_card instead."
+            )
+        return found
+
+    @staticmethod
+    def _runs(conn: Conn, caller: Caller, project_id: str, card: dict[str, Any]) -> bool:
+        """Whether the caller may do anything to this card: its assignee, the project's leads and the team's admins."""
+        member = caller.member
+        if member.is_owner or member.is_admin or card["assignee_id"] == member.pk:
+            return True
+        leads = conn.execute(
+            "SELECT 1 FROM project_leads WHERE project_id = %s AND member_id = %s", (project_id, member.pk)
+        ).fetchone()
+        return leads is not None
 
     @staticmethod
     def _link(conn: Conn, card_id: int, links: dict[str, list[str]]) -> None:
