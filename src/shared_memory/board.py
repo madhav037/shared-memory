@@ -44,6 +44,9 @@ DONE_KEPT = timedelta(days=14)
 
 # Tell a member something in their next briefing: team, member ID, text.
 Tell = Callable[[str, str, str], None]
+# Retire a known issue whose card is done, or challenge its author: caller, path, reasoning. None when there is nothing
+# to retire.
+RetireFixed = Callable[[Caller, str, str], dict[str, Any] | None]
 
 # One card with everything it says, its creator and assignee by member ID, and its links in the order they were given.
 _CARD = (
@@ -223,7 +226,14 @@ def _named_card(number: int, title: str, project_id: str) -> str:
 
 class Board:
     def __init__(
-        self, settings: Settings, db: Database, identity: Identity, audit: Audit, clock: Clock, tell: Tell
+        self,
+        settings: Settings,
+        db: Database,
+        identity: Identity,
+        audit: Audit,
+        clock: Clock,
+        tell: Tell,
+        retire_fixed: RetireFixed,
     ) -> None:
         self._settings = settings
         self._db = db
@@ -231,6 +241,7 @@ class Board:
         self._audit = audit
         self._clock = clock
         self._tell = tell
+        self._retire_fixed = retire_fixed
 
     @staticmethod
     def _project(caller: Caller) -> str:
@@ -367,7 +378,12 @@ class Board:
 
         A card with an assignee is changed only by them, the project's leads and the team's admins; any member may
         change an unassigned one, but only those three set its assignee: a member takes a card by claiming it. Only
-        those three reopen a Done card, assigned or not."""
+        those three reopen a Done card, assigned or not.
+
+        A card that lands in Done retires the known issues linked to it, through retire's rules: each one the caller
+        wrote is retired, and each one another member wrote is challenged. The card moves first, in its own
+        transaction, and each known issue is retired after it in a commit of its own: a move that is refused retires
+        nothing, and a known issue that fails to retire leaves the card in Done, to be retired by hand."""
         project_id = self._project(caller)
         edits: dict[str, Any] = {}
         if title is not None:
@@ -432,7 +448,15 @@ class Board:
             self._audit.card(caller, CARD_MOVED, project_id, number, **moved)
         for member_id, text in notices:
             self._tell(caller.team, member_id, text)
+        if from_column != "done" and card["column"] == "done":
+            card["known_issues_fixed"] = self._fixed(caller, card)
         return card
+
+    def _fixed(self, caller: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
+        """Retire, or challenge, each still-active known issue a card that is done was to fix."""
+        reasoning = f'Card {card["number"]} "{card["title"]}", which was to fix this known issue, is done.'
+        outcomes = (self._retire_fixed(caller, path, reasoning) for path in card["known_issues"])
+        return [outcome for outcome in outcomes if outcome is not None]
 
     def require_card(self, caller: Caller, number: int) -> None:
         """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
@@ -577,7 +601,10 @@ class Board:
 
     def delete(self, caller: Caller, number: int) -> dict[str, Any]:
         """Delete a card, its links and its comments. Its assignee, the project's leads and the team's admins may;
-        so may its creator while it has no assignee. Its number is not used again."""
+        so may its creator while it has no assignee. Its number is not used again.
+
+        The known issues it was to fix stay active, unlinked, and the project's leads are told, so that someone adds a
+        card for any that is still real."""
         project_id = self._project(caller)
         with self._db.transaction() as conn:
             found = self._found(conn, project_id, number)
@@ -592,9 +619,26 @@ class Board:
                         f"Card {number} has no assignee, so only its creator, the project's leads and the team's "
                         "admins can delete it. Say why it should go with comment_card instead."
                     )
+            known_issues = self._card(conn, found["id"])["known_issues"]
+            leads = self._leads(conn, caller, project_id) if known_issues else []
             conn.execute("DELETE FROM cards WHERE id = %s", (found["id"],))
             self._arrange(conn, project_id, found["board_column"])
         self._audit.card(caller, CARD_DELETED, project_id, number, title=found["title"])
+        if known_issues:
+            deleted = f"{_who(caller)} deleted {_named_card(number, found['title'], project_id)}"
+            if len(known_issues) == 1:
+                text = (
+                    f"{deleted}, which was to fix the known issue {known_issues[0]}. It is still active: add a card "
+                    "to fix it if it is still real, or retire it."
+                )
+            else:
+                text = (
+                    f"{deleted}, which was to fix the known issues {', '.join(known_issues)}. They are still active: "
+                    "add a card to fix each one that is still real, or retire it."
+                )
+            for lead in leads:
+                if lead != caller.member_id:
+                    self._tell(caller.team, lead, text)
         return {"deleted": number}
 
     def return_cards(self, caller: Caller) -> None:

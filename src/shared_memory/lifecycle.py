@@ -305,6 +305,22 @@ class Lifecycle:
         self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, "its author retired it.")
         return {"status": "retired", "path": str(location.path)}
 
+    def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
+        """Retire a known issue whose card is done, as retire does: at once when the caller wrote it, as a challenge
+        to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do."""
+        location = locate(path)
+        if not self._store.exists(caller.team, location.path):
+            return None
+        if self._store.read(caller.team, location.path).status != "active":
+            return None
+        try:
+            return self.retire(caller, path, reasoning)
+        except Refused:
+            # A save that went first retired or superseded it after it was read: nothing is left to do.
+            if self._store.read(caller.team, location.path).status != "active":
+                return None
+            raise
+
     # Deciding challenges
 
     def decide_challenge(self, caller: Caller, challenge_id: int, decision: str) -> dict[str, Any]:
