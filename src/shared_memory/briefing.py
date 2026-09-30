@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -43,8 +43,66 @@ class PinTarget:
     project_id: str | None
 
 
+@dataclass(frozen=True)
+class Work:
+    """What the board adds to a member's briefing, one short line each: their cards overdue or due today, their other
+    cards in Doing and Blocked, and the titles of their project's active known issues."""
+
+    due: list[str] = field(default_factory=list)
+    working: list[str] = field(default_factory=list)
+    known_issues: list[str] = field(default_factory=list)
+
+
+# Room kept within the cap for the line counting the work that didn't fit.
+COUNTS_TOKENS = 50
+
+
 def _tokens(text: str) -> int:
     return (len(text) + 3) // 4
+
+
+def _work_sections(work: Work, budget: int) -> list[str]:
+    """The member's work, part by part in order, each line only while it fits in the budget. Once a line doesn't fit,
+    it and every line after it are counted instead."""
+    parts = [
+        ("[your cards] Overdue or due today:", work.due, True),
+        ("[your cards] In Doing and Blocked:", work.working, True),
+        (
+            "[known issues] Broken in this project now; search memory for a workaround:",
+            [f"- {title}" for title in work.known_issues],
+            False,
+        ),
+    ]
+    budget -= COUNTS_TOKENS
+    sections: list[str] = []
+    cards_left = issues_left = 0
+    full = False
+    for heading, lines, cards in parts:
+        shown: list[str] = []
+        for line in lines:
+            cost = _tokens(line) + 1 + (0 if shown else _tokens(heading) + 1)
+            if not full and cost <= budget:
+                shown.append(line)
+                budget -= cost
+                continue
+            full = True
+            if cards:
+                cards_left += 1
+            else:
+                issues_left += 1
+        if shown:
+            sections.append("\n".join([heading, *shown]))
+    counted = []
+    if cards_left:
+        counted.append(f"{cards_left} more of your cards")
+    if issues_left:
+        counted.append(f"{issues_left} more known issue{'' if issues_left == 1 else 's'}")
+    if counted:
+        sections.append(
+            f"[briefing cap] {' and '.join(counted)} did not fit within the briefing cap: the board tool lists your "
+            "cards, and search finds the known issues."
+        )
+    return sections
 
 
 def pin_target(path: str) -> PinTarget:
@@ -181,8 +239,9 @@ class Briefing:
                     conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, str(path)))
             yield
 
-    def for_session(self, caller: Caller, extra: list[str] | None = None) -> str | None:
-        """The briefing: pinned memories for the session's project within the cap, plus any extra notices."""
+    def for_session(self, caller: Caller, extra: list[str] | None = None, work: Work | None = None) -> str | None:
+        """The briefing: pinned memories for the session's project within the cap, any extra notices, then the member's
+        work from the board in what is left of the cap, with counts of what didn't fit."""
         if caller.project is None:
             return None
         budget = self._settings.briefing_cap_tokens - _tokens(FRAMING)
@@ -194,12 +253,16 @@ class Briefing:
                 budget -= _tokens(text)
             else:
                 left_out.append(path)
+        notes = list(extra or [])
         if left_out:
-            sections.append(
+            notes.insert(
+                0,
                 f"[briefing cap] These pins did not fit within the briefing cap and were left out: {', '.join(left_out)}. "
-                "Suggest the member unpin something to make room."
+                "Suggest the member unpin something to make room.",
             )
-        sections.extend(extra or [])
+        sections.extend(notes)
+        budget -= sum(_tokens(note) for note in notes)
+        sections.extend(_work_sections(work or Work(), budget))
         if not sections:
             return None
         return "<shared-memory-briefing>\n" + FRAMING + "\n\n" + "\n\n".join(sections) + "\n</shared-memory-briefing>"
