@@ -119,6 +119,10 @@ On Windows, Cline runs the `.ps1` script beside each of its others, and Codex ru
 
 Wherever a hook doesn't brief a session, the server's instructions and the `AGENTS.md` section ask the agent to call `briefing` at the start of a task and `search` before answering. Each change is recorded with the agent it came from, whichever way it was made.
 
+### Bring what you already have
+
+A repository that already has a `CLAUDE.md`, an `AGENTS.md`, a `docs/` folder, ADRs or other agents' rule files need not start from empty memory, and neither does a coding agent with its own local memory. Ask your agent to **onboard**, or run the `onboard` command where the agent offers one (`/shared-memory:onboard` in Claude Code). It lists the **sources**, cuts them into memories and shows them to you ten at a time; what you approve is saved as your personal memory, then promoted one at a time so each is checked against similar memories. Where git blame shows that one member wrote a passage, that member becomes the memory's **author** and is told in their next briefing; you are recorded as its **importer**. Nothing starts onboarding unasked, and it changes no file in the repository.
+
 ## 5. Decide what every session is briefed with
 
 Open a project in the console and a memory shows whether it is **pinned**. Pinning a project or team memory — or a topic folder, which pins its index — puts it into the briefing every session in that project receives. The project page lists everything pinned in it with roughly how many tokens each one costs; when a pin would take the briefing over its cap, the console says so and shows what is already pinned, so you can choose what to unpin. The same thing can be done from a session with the `pin` and `unpin` tools.

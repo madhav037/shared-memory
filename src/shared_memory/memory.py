@@ -39,6 +39,10 @@ class Memory:
     exception_to: str | None = None
     related_files: list[str] = field(default_factory=list)
     promoted_by: str | None = None
+    # Set when an imported memory was promoted in its writer's name (ADR-0016): the importer, and the source it was
+    # cut from, written repository:path.
+    imported_by: str | None = None
+    imported_from: str | None = None
 
     def to_text(self) -> str:
         header: dict[str, Any] = {}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -19,11 +19,12 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, Project
+from shared_memory.identity import NAME_PATTERN, Caller, Identity, Project
 from shared_memory.index import SearchIndex
 from shared_memory.memory import Area, Level, Location, Memory, area_of, level_folder, locate
 from shared_memory.service import committer, describe
 from shared_memory.store import Change, MemoryStore
+from shared_memory.validation import refuse_secret
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS promotions (
@@ -35,9 +36,29 @@ CREATE TABLE IF NOT EXISTS promotions (
     similar_paths TEXT[] NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS imports (
+    team TEXT NOT NULL,
+    path TEXT NOT NULL,
+    author TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (team, path)
+);
 """
 
 RESOLUTIONS = ("supersede", "keep_both", "cancel")
+SOURCE_LIMIT = 300
+
+
+@dataclass(frozen=True)
+class Imported:
+    """What an imported memory is promoted with (ADR-0016): the member who wrote the passage it was cut from, who
+    becomes its author, and its source, written repository:path. It is kept by the personal memory's path from
+    promote's first call until the memory moves, so it holds through the similar-memory check and a challenge."""
+
+    author: str
+    source: str
 
 
 class Lifecycle:
@@ -74,8 +95,11 @@ class Lifecycle:
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
         reasoning: str | None = None,
+        author: str | None = None,
+        imported_from: str | None = None,
     ) -> dict[str, Any]:
         location, target, promoted_by, project = self._promotable(caller, path, level)
+        self._keep_import(caller, location, project, author, imported_from, first_call=reference is None)
         if reference is None:
             proposal = self._similar(caller, path, location, level, project)
             if proposal is None:
@@ -101,6 +125,7 @@ class Lifecycle:
             raise Refused(f"Unknown resolution {unknown[0]!r}: use supersede, keep_both or cancel.")
         if "cancel" in chosen.values():
             self._forget(reference)
+            self._forget_import(caller.team, location.path)
             return {"status": "cancelled", "path": path}
         supersede: str | None = None
         exception_to: str | None = None
@@ -149,14 +174,98 @@ class Lifecycle:
             )
         return result
 
-    def similar_before_promoting(self, caller: Caller, path: str, level: str) -> dict[str, Any] | None:
+    def similar_before_promoting(
+        self, caller: Caller, path: str, level: str, author: str | None = None, imported_from: str | None = None
+    ) -> dict[str, Any] | None:
         """Promote's first call up to the move: the similar memories to judge, or None when there are none.
 
         It saves no memory, only a pending promotion, so it need not wait a turn among saves. A caller given None
         promotes with no reference, which searches again and moves the memory in its turn.
         """
         location, _, _, project = self._promotable(caller, path, level)
+        self._keep_import(caller, location, project, author, imported_from, first_call=True)
         return self._similar(caller, path, location, level, project)
+
+    # Promoting an imported memory in its writer's name
+
+    def _keep_import(
+        self,
+        caller: Caller,
+        location: Location,
+        project: Project,
+        author: str | None,
+        imported_from: str | None,
+        *,
+        first_call: bool,
+    ) -> None:
+        """Keep the author and source a promotion names until its memory moves. A promotion starting again without
+        them forgets what an earlier one kept, so a memory is never promoted in a name its last promote didn't give."""
+        if author is None and imported_from is None:
+            if first_call:
+                self._forget_import(caller.team, location.path)
+            return
+        imported = self._imported(caller, location, project, author, imported_from)
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO imports (team, path, author, source, created_at) VALUES (%s, %s, %s, %s, %s)"
+                " ON CONFLICT (team, path) DO UPDATE SET author = EXCLUDED.author, source = EXCLUDED.source,"
+                " created_at = EXCLUDED.created_at",
+                (caller.team, str(location.path), imported.author, imported.source, self._clock()),
+            )
+
+    def _imported(
+        self, caller: Caller, location: Location, project: Project, author: str | None, imported_from: str | None
+    ) -> Imported:
+        """Refuse an author who can't be named; otherwise the member to name and the source to record."""
+        if author is None or imported_from is None:
+            raise Refused(
+                "An imported memory is promoted with both author, the member who wrote the passage it was cut from, "
+                "and imported_from, the file it came from. Pass both, or neither to stay its author yourself."
+            )
+        if location.member_id != caller.member_id:
+            raise Refused("Only a memory you imported yourself can be promoted in its writer's name.")
+        source = imported_from.strip()
+        repository, _, file = source.partition(":")
+        if not NAME_PATTERN.match(repository) or not file.strip() or "\n" in source or len(source) > SOURCE_LIMIT:
+            raise Refused(
+                f"imported_from {imported_from!r} must be one file written as repository:path, for example "
+                "billing-api:CLAUDE.md."
+            )
+        refuse_secret(source, "imported_from")
+        named = author.strip()
+        if named.startswith("@"):
+            member_id = self._identity.member_with_github(caller, named)
+            if member_id is None:
+                raise Refused(
+                    f"No member of your team signs in with the GitHub account {named}, so they can't be the author. "
+                    "Promote without author and imported_from, and name the original writer in the memory's body."
+                )
+        else:
+            member_id = named
+        if member_id == caller.member_id:
+            raise Refused("You are already its author: promote it without author and imported_from.")
+        self._identity.member_reaching(caller, project.project_id, member_id)
+        return Imported(member_id, source)
+
+    def _kept_import(self, team: str, path: PurePosixPath) -> Imported | None:
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT author, source FROM imports WHERE team = %s AND path = %s", (team, str(path))
+            ).fetchone()
+        return None if row is None else Imported(row["author"], row["source"])
+
+    def _forget_import(self, team: str, path: PurePosixPath) -> None:
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM imports WHERE team = %s AND path = %s", (team, str(path)))
+
+    def _tell_author(self, team: str, imported: Imported, importer: str, title: str, path: PurePosixPath, level: Level) -> None:
+        """Tell a member, in their next briefing, that a memory now stands in their name."""
+        self._challenges.tell(
+            team,
+            imported.author,
+            f'{importer} promoted a memory in your name: "{title}" ({path}), imported from {imported.source}, is now '
+            f"{level} memory and you are its author. If it is wrong, retire it or supersede it.",
+        )
 
     def _promotable(self, caller: Caller, path: str, level: str) -> tuple[Location, Level, str | None, Project]:
         """Refuse a promotion that can't happen; otherwise where the memory is, its new level and who promotes it."""
@@ -226,8 +335,10 @@ class Lifecycle:
     ) -> dict[str, Any]:
         """Move a personal memory into project or team memory, reading it in the same save that moves it.
 
-        A memory moved or deleted by a save that went first is refused here, so it is never promoted twice.
+        A memory moved or deleted by a save that went first is refused here, so it is never promoted twice. An imported
+        memory whose promotion named its writer moves in that member's name, with its importer and source recorded.
         """
+        imported = self._kept_import(caller.team, location.path)
         # Every area the move touches, known before it takes a turn: where the memory is, where it goes, and the
         # memories it supersedes or is an exception to.
         areas = {area_of(location.path), Area(target, location.project_id if target == "project" else None)}
@@ -240,10 +351,14 @@ class Lifecycle:
                 folder = folder / location.topic
             new_path = change.new_path(folder, location.path.stem)
             change.delete(location.path)
-            change.write(
-                new_path,
-                replace(memory, replaces=supersede, exception_to=exception_to, promoted_by=promoted_by or memory.promoted_by),
+            moved = replace(
+                memory, replaces=supersede, exception_to=exception_to, promoted_by=promoted_by or memory.promoted_by
             )
+            names: dict[str, str] = {}
+            if imported is not None:
+                names = {"author": imported.author, "imported_by": memory.author, "imported_from": imported.source}
+                moved = replace(moved, author=imported.author, imported_by=memory.author, imported_from=imported.source)
+            change.write(new_path, moved)
             if supersede is not None:
                 old = PurePosixPath(supersede)
                 change.write(old, replace(self._active(change, old), status="superseded", superseded_by=str(new_path)))
@@ -251,12 +366,19 @@ class Lifecycle:
             def audited() -> None:
                 where = location.project_id
                 self._audit.memory(
-                    caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path)
-                )
+                    caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path),
+                    **names,
+                )  # fmt: skip
                 if supersede is not None:
                     self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
 
+            def credited() -> None:
+                if imported is not None:
+                    self._tell_author(caller.team, imported, memory.author, memory.title, new_path, target)
+                    self._forget_import(caller.team, location.path)
+
             change.also(audited)
+            change.also(credited)
         return {"status": "promoted", "path": str(new_path)}
 
     @staticmethod

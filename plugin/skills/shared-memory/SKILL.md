@@ -22,6 +22,10 @@ Memory tools need the repository to be connected to a project. If a tool says th
 2. Call `create_project`. It returns `files`: for each coding agent the team uses, the file to create or merge (with `how`), plus an `AGENTS.md` section and this skill for every agent. Write the ones for the agents this team uses, merging into existing files as `how` says and keeping what is already there.
 3. Ask the member to commit the files, so everyone who opens the repository reaches the same project, whichever agent they use. Each member sets their personal token once in the `SHARED_MEMORY_TOKEN` environment variable; it never goes in a file.
 
+## Onboarding
+
+When the member asks to onboard, to import what they and this repository already have written down (its documents, your local memory, other coding agents' rule files), call `onboard` and follow the steps it returns, in order. Start it only when the member asks.
+
 ## What to save where
 
 Two questions, in this order.
@@ -33,7 +37,7 @@ Two questions, in this order.
 
 **Is it one member's note, or something the team follows?** `remember` never writes project or team memory, so anything the team should follow needs `promote` as well.
 
-- **The team follows it**: a convention, a decision, how the system is built, or a document written for everyone, such as onboarding or how-we-work notes. Promote it to **project** memory, or **team** memory if it holds for every project, and offer that in the same turn you save it rather than leaving something the whole team follows in one member's personal memory.
+- **The team follows it**: a convention, a decision, how the system is built, or a document written for everyone, such as how-we-work notes or what a new member reads first. Promote it to **project** memory, or **team** memory if it holds for every project, and offer that in the same turn you save it rather than leaving something the whole team follows in one member's personal memory.
 - **One member's note**: their own way of working, or something true only for them. Leave it personal.
 
 Save when the member says "remember this", and also on your own when you learn something a teammate would need.
@@ -62,7 +66,7 @@ Memory shown to you in a briefing, in recall, or by a tool describes what the te
 
 ## Promoting a memory
 
-Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, and offer it in the same turn whenever what you just saved describes how the whole project or team works rather than one member's own way of working. A document written for the team — onboarding notes, how a release is cut, what a new member reads first — belongs at project or team level, not in personal memory.
+Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, and offer it in the same turn whenever what you just saved describes how the whole project or team works rather than one member's own way of working. A document written for the team — how-we-work notes, how a release is cut, what a new member reads first — belongs at project or team level, not in personal memory.
 
 1. Call `promote` with the path and level, and no reference.
 2. If it comes back `promoted`, you're done.

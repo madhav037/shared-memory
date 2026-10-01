@@ -494,6 +494,16 @@ class Identity:
             )
         return pk
 
+    def member_with_github(self, caller: Caller, login: str) -> str | None:
+        """The member ID of the member of the caller's team who signs in with this GitHub account, if there is one."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT member_id FROM members WHERE team_id = %s AND lower(github_login) = lower(%s)"
+                " AND removed_at IS NULL",
+                (caller.member.team_pk, _github_login(login) or ""),
+            ).fetchone()
+        return None if row is None else str(row["member_id"])
+
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
         """The member as a caller of the memory services, working in one of their team's projects."""
         with self._db.transaction() as conn:
