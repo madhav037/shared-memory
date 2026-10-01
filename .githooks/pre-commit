@@ -1,0 +1,4 @@
+#!/bin/sh
+# Lints the Python before a commit, so a syntax error never reaches a push. Ruff only: the tests are CI's.
+# Enabled once per clone with: git config core.hooksPath .githooks
+exec uv run ruff check

@@ -48,6 +48,7 @@ Run the seam you're touching while iterating, and the whole table once before ea
 
 | Seam | Command |
 | --- | --- |
+| Python lint | `uv run ruff check` |
 | Python tests | `uv run pytest` |
 | Python types | `uv run mypy` |
 | Console build and types | `cd console && npm run build` |
