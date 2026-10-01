@@ -122,6 +122,33 @@ def test_an_old_holder_with_no_prompt_hook_is_told_in_the_result_of_its_next_tak
     assert FILE not in told(dana), "told once, wherever it was told"
 
 
+def test_an_old_holder_with_no_prompt_hook_is_told_in_the_result_of_its_next_set_activity(
+    dana: Session, cole: Session
+) -> None:
+    take(dana)
+    take_over(cole)
+
+    stated = dana.call("set_activity", activity="Retrying webhooks", session=dana.identifier)
+    again = dana.call("set_activity", activity="Retrying webhooks in billing-api", session=dana.identifier)
+
+    assert len(stated["notices"]) == 1
+    assert f"billing-api:{FILE}" in stated["notices"][0]
+    assert "Cole Coder (emp-3)" in stated["notices"][0]
+    assert again["notices"] == []
+
+
+def test_the_old_holder_is_told_the_activity_of_the_session_that_took_the_file_over(
+    dana: Session, cole: Session
+) -> None:
+    take(dana)
+    cole.call("set_activity", activity="Adding retries to the webhook sender", session=cole.identifier)
+
+    take_over(cole)
+
+    assert "Their activity: Adding retries to the webhook sender" in told(dana)
+    assert "Their activity: Adding retries to the webhook sender" in refused(dana)
+
+
 def test_a_refused_take_leaves_the_notice_waiting_for_the_old_holder(dana: Session, cole: Session) -> None:
     take(dana)
     take_over(cole)
@@ -247,8 +274,8 @@ def test_two_takeovers_racing_each_other_leave_one_holder_and_tell_each_session_
             "Erin Eng": (erin, elsewhere(erin).call_soon("take_lock", **arguments)),
         }
 
-        for _, future in racing.values():
-            assert future.result(timeout=30)["locked"] is True
+        answers = {name: future.result(timeout=30) for name, (_, future) in racing.items()}
+        assert all(answer["locked"] is True for answer in answers.values())
 
         refusal = refused(dana, path)
         holders = [name for name in racing if name in refusal]
@@ -256,9 +283,12 @@ def test_two_takeovers_racing_each_other_leave_one_holder_and_tell_each_session_
         (holder,) = holders
         (lost,) = [name for name in racing if name != holder]
         for_dana = told(dana)
-        for_the_loser = told(racing[lost][0])
+        # The session that lost the file is told with its own answer when the other takeover landed before that
+        # answer was written, and on its next prompt otherwise: once, either way.
+        for_the_loser = "\n".join([*answers[lost]["notices"], told(racing[lost][0])])
         assert for_dana.count(path) == 1, "Dana's lock was taken over once"
         assert lost in for_dana, "by whoever got there first"
-        assert path in for_the_loser
+        assert for_the_loser.count(path) == 1
         assert holder in for_the_loser
+        assert answers[holder]["notices"] == []
         assert path not in told(racing[holder][0])

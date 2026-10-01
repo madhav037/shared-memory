@@ -433,9 +433,13 @@ def build_app(
         replaces the old. Say what is being changed and where, such as "Adding retries to the webhook sender in
         billing-api". The activity ends with the session.
 
-        session is this session's identifier, as its briefing named it."""
+        session is this session's identifier, as its briefing named it.
+
+        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
+        editing that file and tell your member."""
         known = sessions.touch(caller(ctx), session)
-        return {"session": known.identifier, "activity": activities.state(known, activity)}
+        stated = activities.state(known, activity)
+        return {"session": known.identifier, "activity": stated, "notices": locks.waiting_notices(known)}
 
     def onboarding_steps(current: Caller) -> str:
         current.require_project()

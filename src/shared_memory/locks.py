@@ -367,8 +367,10 @@ class Locks:
             return NeverLocks(repository, path, pattern)
         file = (session.project_id, repository, path)
         now = self._clock()
+        # Asked before the lock's row is held, so nothing else is read while a racing session waits for it.
+        activity = self._activity_of(session) if takeover else None
         for _ in range(_ATTEMPTS):
-            mine, kept = self._take(file, session, now, takeover)
+            mine, kept = self._take(file, session, now, takeover, activity)
             if mine is not None:
                 return self._lock(mine, session)
             # The holder was active when the row was read. One that ended since has left the file free: look again.
@@ -378,7 +380,9 @@ class Locks:
                 raise Held(self._lock(kept, holder), now)
         raise Refused(f"{named(repository, path)} kept changing hands, so its lock wasn't taken. Call take_lock again.")
 
-    def _take(self, file: tuple[str, str, str], session: Session, now: datetime, takeover: bool) -> tuple[Any, Any]:
+    def _take(
+        self, file: tuple[str, str, str], session: Session, now: datetime, takeover: bool, activity: str | None
+    ) -> tuple[Any, Any]:
         """One try: the lock's row if the session now holds it, or else the row of the active holder's lock. Neither
         means the file changed hands between the write and the read."""
         with self._db.transaction() as conn:
@@ -407,7 +411,7 @@ class Locks:
             # so it moves: a release or another takeover racing this one waits, and then finds this session its
             # holder. Only an active holder had a lock to lose, so only it is told.
             if held:
-                self._tell(conn, kept, session, now)
+                self._tell(conn, kept, session, activity, now)
             moved = conn.execute(
                 "UPDATE locks SET session_id = %s, taken_at = %s, last_used_at = %s"
                 f" WHERE project_id = %s AND repository = %s AND path = %s RETURNING {_COLUMNS}",
@@ -415,8 +419,8 @@ class Locks:
             ).fetchone()
             return moved, None
 
-    def _tell(self, conn: Conn, kept: Any, by: Session, now: datetime) -> None:
-        """Keep, for the holder of this lock's row, the word that `by` took the file over."""
+    def _tell(self, conn: Conn, kept: Any, by: Session, activity: str | None, now: datetime) -> None:
+        """Keep, for the holder of this lock's row, the word that `by` took the file over, and for what activity."""
         conn.execute(
             "INSERT INTO takeovers"
             " (session_id, repository, path, by_name, by_member_id, by_agent, by_activity, taken_over_at)"
@@ -428,7 +432,7 @@ class Locks:
                 by.member_name,
                 by.member_id,
                 by.agent,
-                self._activity_of(by),
+                activity,
                 now,
             ),
         )

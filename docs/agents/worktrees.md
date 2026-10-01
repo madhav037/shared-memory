@@ -100,10 +100,9 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
   said so, never on its own. `Held`'s message and `take_lock`'s description both say this, and every agent's
   guidance says the same.
 - **The old holder is told once**: `locks.waiting_notices(session)` gives the takeovers of locks that session held
-  and marks them told. The prompt hook's `notices` asks it, and so does `take_lock`, whose answer carries them as
-  `notices`, for an agent with no prompt hook. Another tool that takes `session` and should carry them
-  (`set_activity`) adds `"notices": locks.waiting_notices(session)` to its answer after its own work succeeded: a
-  refusal carries none, so they stay waiting. An agent told of a takeover stops editing that file and tells its
+  and marks them told. The prompt hook's `notices` asks it, and so do `take_lock` and `set_activity`, whose answers
+  carry them as `notices`, for an agent with no prompt hook. They ask after their own work succeeded: a refusal
+  carries none, so they stay waiting. An agent told of a takeover stops editing that file and tells its
   member.
 
 ### The before-edit hook
