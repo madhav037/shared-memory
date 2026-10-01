@@ -553,6 +553,252 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "edit_card",
+        "summary": "Change a card's title, description, priority, labels, due date or assignee.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardFields"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change a card's title, description, priority, labels, due date or assignee.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards": {
+      "post": {
+        "operationId": "add_card",
+        "summary": "Add a card to the bottom of To do on a project's board, numbered next in the project.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewCard"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add a card to the bottom of To do on a project's board, numbered next in the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards/{number}/move": {
+      "post": {
+        "operationId": "move_card",
+        "summary": "Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardMove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovedCard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards/{number}/claim": {
+      "post": {
+        "operationId": "claim_card",
+        "summary": "Claim an unassigned card in To do: the member becomes its assignee and it moves to Doing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claim an unassigned card in To do: the member becomes its assignee and it moves to Doing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards/{number}/comment": {
+      "post": {
+        "operationId": "comment_card",
+        "summary": "Comment on a card; its assignee is told.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardCommentText"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Comment on a card; its assignee is told.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/cards/{number}/delete": {
+      "post": {
+        "operationId": "delete_card",
+        "summary": "Delete a card, with its links and comments.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete a card, with its links and comments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedCard"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/audit": {
@@ -2049,6 +2295,459 @@
         "title": "CardDetail",
         "type": "object"
       },
+      "NewCard": {
+        "description": "A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written\nYYYY-MM-DD.",
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "normal",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Priority"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Due Date"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "NewCard",
+        "type": "object"
+      },
+      "CardFields": {
+        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the team's admins give it an assignee.",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "normal",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Priority"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Labels"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Due Date"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assignee"
+          }
+        },
+        "title": "CardFields",
+        "type": "object"
+      },
+      "Retired": {
+        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "challenge_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenge Id"
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "challenge_id"
+        ],
+        "title": "Retired",
+        "type": "object"
+      },
+      "MovedCard": {
+        "description": "A card where it now is. One that has just entered Done says what became of each still-active known issue it\nwas to fix: retired, or its author asked to retire it by a challenge.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "priority": {
+            "enum": [
+              "high",
+              "normal",
+              "low"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "creator": {
+            "title": "Creator",
+            "type": "string"
+          },
+          "creator_name": {
+            "title": "Creator Name",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "assignee_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Name"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "waits_on": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits On"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "known_issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Issues",
+            "type": "array"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/CardComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "moved_at": {
+            "format": "date-time",
+            "title": "Moved At",
+            "type": "string"
+          },
+          "titles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "object"
+          },
+          "known_issues_fixed": {
+            "items": {
+              "$ref": "#/components/schemas/Retired"
+            },
+            "title": "Known Issues Fixed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "description",
+          "column",
+          "position",
+          "priority",
+          "labels",
+          "due_date",
+          "creator",
+          "creator_name",
+          "assignee",
+          "assignee_name",
+          "blocked_reason",
+          "waits_on",
+          "memories",
+          "files",
+          "known_issues",
+          "comments",
+          "created_at",
+          "updated_at",
+          "moved_at",
+          "titles",
+          "known_issues_fixed"
+        ],
+        "title": "MovedCard",
+        "type": "object"
+      },
+      "CardMove": {
+        "description": "Where a card goes: a column, and a position in it (1 is the top; without one it goes to the bottom). A card\ngoes to Blocked only with a blocked_reason, and may name the card it waits on.",
+        "properties": {
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Position"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocked Reason"
+          },
+          "waits_on": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Waits On"
+          }
+        },
+        "required": [
+          "column"
+        ],
+        "title": "CardMove",
+        "type": "object"
+      },
+      "CardCommentText": {
+        "description": "A comment to add to a card.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CardCommentText",
+        "type": "object"
+      },
+      "DeletedCard": {
+        "description": "The number of the card that was deleted, which is not used again.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "number"
+        ],
+        "title": "DeletedCard",
+        "type": "object"
+      },
       "AuditEvent": {
         "description": "One thing that happened, and who did it.",
         "properties": {
@@ -2850,37 +3549,6 @@
           "path"
         ],
         "title": "MemoryPath",
-        "type": "object"
-      },
-      "Retired": {
-        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "challenge_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Challenge Id"
-          }
-        },
-        "required": [
-          "status",
-          "path",
-          "challenge_id"
-        ],
-        "title": "Retired",
         "type": "object"
       },
       "SearchHit": {

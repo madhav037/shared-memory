@@ -2415,6 +2415,100 @@ li[aria-expanded="true"] > .tree-row .twist {
 .card-comment-by b {
   color: var(--ink);
 }
+.card-comments + .card-form,
+.empty + .card-form {
+  margin-top: 16px;
+}
+
+/*
+ * Changing the board. A card is picked up and put down: while one is held, the column under it is marked and an ink
+ * bar shows the gap it will land in. Forms keep to the page's ruled look, one field to a line.
+ */
+.card-tile {
+  cursor: grab;
+  user-select: none;
+}
+.card-tile.lifted {
+  opacity: 0.45;
+}
+.board-column {
+  min-height: 140px;
+  padding-bottom: 12px;
+}
+.board-column.aimed {
+  background: var(--paper-3);
+  box-shadow: 0 0 0 6px var(--paper-3);
+}
+.board-cards li {
+  position: relative;
+}
+.board-cards li.drop-above::before,
+.board-cards.drop-last::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--ink);
+  pointer-events: none;
+}
+.board-cards li.drop-above::before {
+  top: -6px;
+}
+.board-cards.drop-last {
+  position: relative;
+}
+.board-cards.drop-last::after {
+  bottom: -6px;
+}
+.board-told {
+  margin: 20px 0 0;
+  padding: 12px 14px 11px;
+  border: 1px solid var(--accent);
+  border-bottom-width: 4px;
+  background: var(--accent-wash);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+.board-told p {
+  margin: 0;
+}
+.board-page > .refusal {
+  margin: 20px 0 0;
+}
+.card-panel > .refusal,
+.card-panel > .board-told,
+.card-form > .refusal {
+  margin: 0;
+}
+.card-actions,
+.card-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.card-confirm {
+  display: grid;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--danger);
+}
+.card-column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.card-form {
+  display: grid;
+  gap: 14px;
+}
+.card-form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
 /* Narrower screens scroll the board sideways, a column at a time, rather than squeezing four columns in. */
 @media (max-width: 1180px) {
   .board {

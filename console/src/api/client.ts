@@ -31,6 +31,13 @@ export type BoardArchive = components["schemas"]["BoardArchive"];
 export type BoardColumn = components["schemas"]["BoardColumn"];
 export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
+// What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
+type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
+export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
+export type CardFields = Partial<components["schemas"]["CardFields"]>;
+export type CardMove = Asked<components["schemas"]["CardMove"], "column">;
+export type MovedCard = components["schemas"]["MovedCard"];
+export type DeletedCard = components["schemas"]["DeletedCard"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -253,4 +260,40 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
 /** One card whole, with its links and comments. */
 export function fetchCard(projectId: string, number: number, signal?: AbortSignal): Promise<CardDetail> {
   return ask<CardDetail>(`/api/projects/${encodeURIComponent(projectId)}/cards/${number}`, { signal });
+}
+
+function cardPath(projectId: string, number?: number, what = ""): string {
+  const card = number === undefined ? "" : `/${number}${what ? `/${what}` : ""}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/cards${card}`;
+}
+
+/** Add a card to the bottom of To do. */
+export function addCard(projectId: string, card: NewCard): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId), card);
+}
+
+/** Change a card's fields: only those given change. */
+export function editCard(projectId: string, number: number, fields: CardFields): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number), fields);
+}
+
+/**
+ * Move a card to a column, at a position in it (1 is the top); Blocked takes a reason. A card entering Done says what
+ * became of the known issues it fixes.
+ */
+export function moveCard(projectId: string, number: number, move: CardMove): Promise<MovedCard> {
+  return change<MovedCard>(cardPath(projectId, number, "move"), move);
+}
+
+/** Claim a card in To do: the member becomes its assignee and it moves to Doing. */
+export function claimCard(projectId: string, number: number): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number, "claim"));
+}
+
+export function commentCard(projectId: string, number: number, text: string): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number, "comment"), { text });
+}
+
+export function deleteCard(projectId: string, number: number): Promise<DeletedCard> {
+  return change<DeletedCard>(cardPath(projectId, number, "delete"));
 }

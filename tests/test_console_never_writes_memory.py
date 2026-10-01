@@ -81,6 +81,23 @@ def test_doing_everything_the_console_may_do_to_memory_never_writes_edits_or_pro
     decided = signed_out.post_json(f"/api/challenges/{raised['challenge_id']}/decide", {"decision": "accept"})
     assert decided.status_code == 200, decided.text
 
+    # Running the project's board, which is not memory (ADR-0014): every change the console makes to a card.
+    cards = f"/api/projects/{project}/cards"
+    board_changes = [
+        signed_out.post_json(cards, {"title": "Retry failed webhooks"}),
+        signed_out.post_json(cards, {"title": "Drop the legacy exporter"}),
+        signed_out.post_json(f"{cards}/1", {"description": "Stripe retries for three days.", "labels": ["billing"]}),
+        signed_out.post_json(f"{cards}/1/claim", {}),
+        signed_out.post_json(f"{cards}/1/comment", {"text": "Started on this."}),
+        signed_out.post_json(f"{cards}/1/move", {"column": "blocked", "blocked_reason": "Waiting on finance."}),
+        signed_out.post_json(f"{cards}/1/move", {"column": "done"}),
+        signed_out.post_json(f"{cards}/2/delete", {}),
+    ]
+    assert [one.status_code for one in board_changes] == [200] * len(board_changes), [
+        one.text for one in board_changes
+    ]
+    ask(signed_out, f"/api/projects/{project}/board")
+
     # And the reading it does all day.
     ask(signed_out, "/api/files")
     ask(signed_out, "/api/memory", path=target)

@@ -46,10 +46,10 @@ from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
-    AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardDetail,
-    ChallengeDetail, ChallengeList, ChallengedMemory,
+    AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardCommentText,
+    CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
-    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, NewMember, PREFIX, Pin, PinState,
+    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, MovedCard, NewMember, PREFIX, Pin, PinState,
     Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
@@ -63,9 +63,27 @@ from shared_memory.service import MemoryService
 
 CONSOLE_HEADER = "x-shared-memory-console"
 
-# The calls that save memory (retiring, and deciding a challenge). They wait for their turn with every other save,
-# without holding a worker thread (see `saves.py`).
-SAVING = frozenset({"retire_at", "decide_challenge"})
+# The calls that save memory (retiring, deciding a challenge, and moving a card, which retires the known issues it
+# fixes when it lands in Done). They wait for their turn with every other save, without holding a worker thread (see
+# `saves.py`).
+SAVING = frozenset({"retire_at", "decide_challenge", "move_card"})
+
+
+# The board's refusals are written for a coding agent and name its tools and their fields. In the console the same
+# refusal names what a member has in front of them instead.
+_BOARD_WORDS = (
+    (" with claim_card", ""),
+    ("with comment_card", "in a comment"),
+    ("A blocked_reason", "The reason"),
+    ("a blocked_reason", "a reason"),
+)
+
+
+def _on_the_board(refusal: str) -> str:
+    """One of the board's refusals, as the console says it."""
+    for tool_word, console_word in _BOARD_WORDS:
+        refusal = refusal.replace(tool_word, console_word)
+    return refusal
 
 
 def _plainly(wrong: Exception) -> str:
@@ -153,6 +171,12 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "card": self._card,
+            "add_card": self._add_card,
+            "edit_card": self._edit_card,
+            "move_card": self._move_card,
+            "claim_card": self._claim_card,
+            "comment_card": self._comment_card,
+            "delete_card": self._delete_card,
             "restrict_project": self._restrict_project,
             "grant_access": self._grant_access,
             "revoke_access": self._revoke_access,
@@ -397,21 +421,81 @@ class ConsoleApi:
 
     def _card(self, request: Request) -> Response:
         def read(caller: Caller) -> CardDetail:
-            try:
-                number = int(request.path_params["number"])
-            except ValueError:
-                raise Refused(f"{request.path_params['number']!r} isn't a card number.") from None
-            found = self._board.card(caller, number)
-            titles: dict[str, str] = {}
-            for path in [*found["memories"], *found["known_issues"]]:
-                try:
-                    titles[path] = self._service.read(caller, path)["title"]
-                except Refused:
-                    continue  # gone, or out of this member's reach: the console shows its path instead
-            card = self._card_of(found, self._names(caller.member))
-            return CardDetail(**card.model_dump(), titles=titles)
+            return self._card_detail(caller, self._board.card(caller, self._card_number(request)))
 
         return self._browse(request, read)
+
+    def _card_detail(self, caller: Caller, found: dict[str, Any]) -> CardDetail:
+        """A card as the board module gives it, whole: with its members named and its links' titles."""
+        titles: dict[str, str] = {}
+        for path in [*found["memories"], *found["known_issues"]]:
+            try:
+                titles[path] = self._service.read(caller, path)["title"]
+            except Refused:
+                continue  # gone, or out of this member's reach: the console shows its path instead
+        card = self._card_of(found, self._names(caller.member))
+        return CardDetail(**card.model_dump(), titles=titles)
+
+    @staticmethod
+    def _card_number(request: Request) -> int:
+        try:
+            return int(request.path_params["number"])
+        except ValueError:
+            raise Refused(f"{request.path_params['number']!r} isn't a card number.") from None
+
+    # --- a project's board, changed: through the board module, so the tools' rules and refusals hold (ADR-0014) ---
+
+    def _add_card(self, request: Request) -> Response:
+        def add(caller: Caller) -> CardDetail:
+            asked: NewCard = request.state.asked
+            found = self._board.add(
+                caller, asked.title, asked.description, asked.priority, asked.labels, asked.due_date
+            )
+            return self._card_detail(caller, found)
+
+        return self._browse(request, add, _on_the_board)
+
+    def _edit_card(self, request: Request) -> Response:
+        def edit(caller: Caller) -> CardDetail:
+            asked: CardFields = request.state.asked
+            found = self._board.update(caller, self._card_number(request), **asked.model_dump(exclude_none=True))
+            return self._card_detail(caller, found)
+
+        return self._browse(request, edit, _on_the_board)
+
+    def _move_card(self, request: Request) -> Response:
+        def move(caller: Caller) -> MovedCard:
+            asked: CardMove = request.state.asked
+            found = self._board.update(caller, self._card_number(request), **asked.model_dump(exclude_none=True))
+            # The board retires what the card fixed as the tools do (ADR-0014); each outcome is retire's own.
+            fixed = [
+                Retired(
+                    status=one["status"], path=one.get("path") or one["challenges"], challenge_id=one.get("challenge_id")
+                )
+                for one in found.get("known_issues_fixed", [])
+            ]
+            return MovedCard(**self._card_detail(caller, found).model_dump(), known_issues_fixed=fixed)
+
+        return self._browse(request, move, _on_the_board)
+
+    def _claim_card(self, request: Request) -> Response:
+        def claim(caller: Caller) -> CardDetail:
+            return self._card_detail(caller, self._board.claim(caller, self._card_number(request)))
+
+        return self._browse(request, claim, _on_the_board)
+
+    def _comment_card(self, request: Request) -> Response:
+        def comment(caller: Caller) -> CardDetail:
+            asked: CardCommentText = request.state.asked
+            return self._card_detail(caller, self._board.comment(caller, self._card_number(request), asked.text))
+
+        return self._browse(request, comment, _on_the_board)
+
+    def _delete_card(self, request: Request) -> Response:
+        def delete(caller: Caller) -> DeletedCard:
+            return DeletedCard(number=self._board.delete(caller, self._card_number(request))["deleted"])
+
+        return self._browse(request, delete, _on_the_board)
 
     @staticmethod
     def _card_filters(request: Request) -> tuple[None, str | None, str | None, str | None]:
@@ -599,8 +683,11 @@ class ConsoleApi:
             project_id = reachable[0].project_id if reachable else None
         return self._identity.caller_in(member, project_id)
 
-    def _browse(self, request: Request, look: Callable[[Caller], BaseModel]) -> Response:
-        """Everything a member reads about one project's memory, through the same services their Claude uses."""
+    def _browse(
+        self, request: Request, look: Callable[[Caller], BaseModel], said: Callable[[str], str] = str
+    ) -> Response:
+        """Everything a member reads about one project, or does to its board, through the services their Claude uses.
+        `said` puts a refusal into the console's words where the service's own are an agent's."""
         member = self._member(request)
         if member is None:
             return _sign_in_first()
@@ -608,7 +695,7 @@ class ConsoleApi:
             caller = self._identity.caller_in(member, request.path_params["project_id"])
             return JSONResponse(look(caller).model_dump(mode="json"))
         except Refused as refused:
-            return JSONResponse({"message": str(refused)}, status_code=403)
+            return JSONResponse({"message": said(str(refused))}, status_code=403)
         except ValueError:
             return JSONResponse({"message": "That request wasn't understood."}, status_code=422)
 
