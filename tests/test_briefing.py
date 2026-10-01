@@ -140,8 +140,9 @@ def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Sessi
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
 
-    # Each starts a session of its own, so they differ only in the identifier their last line names.
-    prompted, fetched = owner.run_prompt("briefing"), owner.call("briefing")
+    # The prompt starts a session and names its identifier last; the tool is then asked for that session's briefing.
+    prompted = owner.run_prompt("briefing")
+    fetched = owner.call("briefing", session=prompted.split("identifier in Shared Memory is `")[1].split("`")[0])
 
     assert f"[project memory] Use pnpm, not npm ({path})" in prompted
-    assert prompted.rsplit("\n\n", 1)[0] == fetched.rsplit("\n\n", 1)[0]
+    assert prompted == fetched

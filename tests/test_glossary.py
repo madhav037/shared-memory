@@ -86,6 +86,11 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
     Allow("share", "the product's name; avoided only for promoting", text="shared memory"),
     Allow("share", "the shared folders of the memory repository, not promoting", (SERVER + "store.py",)),
+    Allow(
+        "activity",
+        "a session's Activity, the glossary's own term; avoided only for the audit log",
+        (SERVER + "activity.py", SERVER + "app.py"),
+    ),
     # Words with another technical meaning.
     Allow("status", "an HTTP status, the server's status or a memory's status; avoided only for a session's activity"),
     Allow("root", "the root of a folder tree or of the page; avoided only for the team's owner"),

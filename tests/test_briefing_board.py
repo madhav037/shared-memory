@@ -71,9 +71,10 @@ def test_other_members_cards_never_appear_in_your_briefing(owner: Session, dana:
     card(owner, "Split the invoice module")
     owner.call("claim_card", number=2)
 
-    assert "Retry failed webhooks" not in briefed(owner)
+    # A teammate's card in Doing may still be named as their session's activity, which is not a card of yours.
+    assert 'card 1 "Retry failed webhooks"' not in briefed(owner)
     assert 'card 1 "Retry failed webhooks" (Doing)' in briefed(dana)
-    assert "Split the invoice module" not in briefed(dana)
+    assert 'card 2 "Split the invoice module"' not in briefed(dana)
 
 
 def test_past_the_cap_what_does_not_fit_is_counted(owner: Session) -> None:

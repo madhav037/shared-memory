@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -536,6 +536,19 @@ class Board:
             else:
                 working.append((row["board_column"] == "blocked", row["position"], line))
         return due, [line for _, _, line in sorted(working)]
+
+    def doing_titles(self, project_id: str, member_ids: Sequence[str]) -> dict[str, str]:
+        """For each of these members with a card in Doing on the project's board, the title of the one that got there
+        last: their most recently claimed. It is what a session that stated no activity is shown with."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT ON (m.member_id) m.member_id, c.title FROM cards c"
+                " JOIN members m ON m.id = c.assignee_id"
+                " WHERE c.project_id = %s AND c.board_column = 'doing' AND m.member_id = ANY(%s)"
+                " ORDER BY m.member_id, c.moved_at DESC NULLS LAST, c.position DESC",
+                (project_id, list(member_ids)),
+            ).fetchall()
+        return {row["member_id"]: row["title"] for row in rows}
 
     def require_card(self, caller: Caller, number: int) -> None:
         """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
