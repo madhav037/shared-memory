@@ -112,6 +112,16 @@ A session stops counting as active once it has made no call for `SHARED_MEMORY_S
 optional in `.env`): its activity and its locks end with it. Any hook from the session, and any tool call that names
 it, counts as a call. Raise it if your members' sessions run long tasks with no prompt in between.
 
+## How alike two activities must be for a collision warning
+
+A session is warned on its next prompt when another active session in its project has an activity that means nearly
+the same thing as its own. "Nearly the same" is the similarity of the two activities' embeddings, from the server's
+own model, at or above `SHARED_MEMORY_COLLISION_THRESHOLD` (default 0.75, optional in `.env`; from 0 to 1).
+
+**The default is a guess and needs tuning.** Activity lines are short, and short lines score high against each other
+with a small embedding model. Raise it if members are warned about work that isn't the same; lower it if two sessions
+doing the same work were not warned.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

@@ -42,6 +42,9 @@ class Settings:
     query_cache_log_minutes: float = 15
     # How long a session may go without a call before it stops counting as active.
     session_idle_minutes: float = 30
+    # How similar two sessions' activities must be, as embeddings, for a collision warning. 0.75 is a guess that
+    # needs tuning on real activity lines: they are short, and short lines score high against each other.
+    collision_threshold: float = 0.75
 
     @property
     def github_sign_in(self) -> bool:
@@ -78,4 +81,5 @@ class Settings:
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
+            collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
         )

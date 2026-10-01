@@ -34,6 +34,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
+from shared_memory.collisions import Collisions
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
@@ -199,7 +200,8 @@ def build_app(
     audit = Audit(db, clock, identity)
     # The model loads here, before the server takes its first request.
     counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
-    index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache), counts=counts))
+    model = embedder or FastEmbedEmbedder(settings.model_cache)
+    index = SearchIndex(db, CachedQueries(model, counts=counts))
     store = MemoryStore(settings.memory_root, listeners=[index], transaction=db.save_transaction, sets_up=setup)
     index.catch_up(store)
     history = MemoryHistory(settings.memory_root)
@@ -218,6 +220,7 @@ def build_app(
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
+    collisions = Collisions(settings, db, sessions, activities, model)
 
     server =MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -332,6 +335,7 @@ def build_app(
             session = session_of(current, payload)
             told = [challenges.prompt_notices(current), *(sessions.waiting_notices(session) if session else [])]
             told += locks.waiting_notices(session) if session else []
+            told += collisions.warnings(current, session) if session else []
             return "\n\n".join(part for part in told if part) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
@@ -446,6 +450,7 @@ def build_app(
         editing that file and tell your member."""
         known = sessions.touch(caller(ctx), session)
         stated = activities.state(known, activity)
+        collisions.embed(known, stated)
         return {"session": known.identifier, "activity": stated, "notices": locks.waiting_notices(known)}
 
     def onboarding_steps(current: Caller) -> str:
