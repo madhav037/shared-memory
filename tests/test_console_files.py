@@ -111,7 +111,7 @@ def test_retired_memory_keeps_its_place_and_says_so(console: Console, signed_out
     retired = signed_out.post_json("/api/memory/retire", {"path": it["pnpm"]})
     conventions = files(signed_out, f"projects/{it['billing']}/shared/conventions")
 
-    assert retired.json() == {"status": "retired", "path": it["pnpm"], "challenge_id": None}
+    assert retired.json() == {"status": "retired", "path": it["pnpm"], "challenge_id": None, "reason": None}
     assert [(one["title"], one["status"]) for one in conventions["memories"]] == [("Use pnpm, not npm", "retired")]
 
 
