@@ -92,7 +92,18 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
 - **A path** reaches `take` as the agent wrote it and is kept by `from_root(path)`: relative to the repository's
   root, with forward slashes. An absolute path is refused as outside the repository, so a hook that is handed one
   makes it relative first.
-- **Moving a lock** (a takeover) has no method yet: `take` moves only a lock whose holder is no longer active.
+- **A takeover** is `locks.take(session, path, repository, takeover=True)`, which the `take_lock` tool reaches with
+  `takeover: true`: another active session's lock moves to the caller with no consent from its holder. On a free
+  file, or one the caller holds, it is an ordinary take and nobody is told.
+- **When an agent offers a takeover**: only after `take_lock` (or the before-edit hook) refused it with `Held`. It
+  tells its member who holds the file and offers the takeover; it passes `takeover: true` only once the member has
+  said so, never on its own. `Held`'s message and `take_lock`'s description both say this, and every agent's
+  guidance says the same.
+- **The old holder is told once**: `locks.waiting_notices(session)` gives the takeovers of locks that session held
+  and marks them told. The prompt hook's `notices` asks it, and so do `take_lock` and `set_activity`, whose answers
+  carry them as `notices`, for an agent with no prompt hook. They ask after their own work succeeded: a refusal
+  carries none, so they stay waiting. An agent told of a takeover stops editing that file and tells its
+  member.
 
 ### The before-edit hook
 
