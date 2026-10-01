@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import threading
@@ -39,8 +40,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CLAUDE_EVENTS = {"session-start": "SessionStart", "prompt-submitted": "UserPromptSubmit"}
 
 
+# Each checkout names its own test databases, so two worktrees can run their tests against one Postgres at once.
+CHECKOUT = hashlib.sha1(str(REPO_ROOT).encode()).hexdigest()[:8]
+
+
 def fresh_database(name: str) -> str:
-    """Drop and recreate a database on the test Postgres; return its URL."""
+    """Drop and recreate this checkout's database of that name on the test Postgres; return its URL."""
+    name = f"{name}_{CHECKOUT}"
     try:
         with psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=5) as conn:
             conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
