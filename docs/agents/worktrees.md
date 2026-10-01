@@ -8,6 +8,8 @@ What a coding agent needs when it implements a ticket in its own worktree, next 
 - The tests need the Postgres from `docker compose up -d db`, run once from the main checkout. Each checkout names
   its own test databases, so worktrees share that one Postgres. `SHARED_MEMORY_TEST_ADMIN_URL` (`tests/support.py`)
   points the tests at another Postgres.
+- The pre-commit hook in `.githooks/` runs `uv run ruff check`. `git config core.hooksPath .githooks`, run once in
+  the main checkout, turns it on for that clone and every worktree made from it.
 
 ## Running tests
 

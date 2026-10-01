@@ -47,10 +47,20 @@ files = ["src", "tests", "smoke"]
 module = ["fastembed.*", "pgvector.*"]
 ignore_missing_imports = true
 
+[tool.ruff]
+# The length the code is written to. E501 stays off until the lines already past it are wrapped.
+line-length = 120
+
+[tool.ruff.lint]
+# Syntax errors, pyflakes and pycodestyle: the families the code already passes. Nothing here reformats.
+select = ["E", "W", "F"]
+ignore = ["E501"]
+
 [dependency-groups]
 dev = [
     "httpx2>=2.13.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
+    "ruff>=0.16.9",
     "types-pyyaml>=6.0.12.20260906",
 ]

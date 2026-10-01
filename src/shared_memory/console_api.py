@@ -7,7 +7,6 @@ description and can't drift away from it. This module turns each declaration int
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, time
@@ -50,7 +49,7 @@ from shared_memory.console_contract import (
     AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
-    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
+    MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
     Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge,
     RepositoryName,

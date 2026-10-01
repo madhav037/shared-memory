@@ -1,6 +1,6 @@
 name: Checks
 
-# Everything that must hold for every change: the server's tests and types, and the console's types, build and journeys.
+# Everything that must hold for every change: the server's lint, tests and types, and the console's types, build and journeys.
 # The smoke tests with real Claude Code are separate and run nightly.
 
 on:
@@ -49,6 +49,9 @@ jobs:
         with:
           path: .cache/fastembed
           key: fastembed-${{ hashFiles('uv.lock') }}
+
+      - name: Server lint
+        run: uv run ruff check
 
       - name: Server tests
         run: uv run pytest
