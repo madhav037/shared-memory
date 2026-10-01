@@ -67,6 +67,12 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("history", "a memory's git history, as the Audit log entry calls it; avoided only for the audit log"),
     Allow("archive", "the board's Archive of done cards; avoided only for retiring a memory", BOARD),
     Allow(
+        "setup",
+        "setting a new server's first team up; avoided only for onboarding",
+        (SERVER + "app.py", SERVER + "cli.py", SERVER + "identity.py"),
+    ),
+    Allow("input", "what a tool call is given; avoided only for an import's source", (SERVER + "app.py",), "tool input"),
+    Allow(
         "owner",
         "the team's Owner; avoided only for an author, an assignee or a lock's holder",
         (
