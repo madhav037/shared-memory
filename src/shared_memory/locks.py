@@ -18,6 +18,15 @@ What other modules stand on, all of it on `Locks`:
 
 `file_of(session, path, repository)` is the file a session means, refusing with `OutsideRepository` or `NoRepository`.
 Only this module reads the `locks` table; a holder is a `Session`, which is the sessions module's.
+
+A project's own never-lock patterns are `ProjectPatterns`, beside the built-in `NEVER_LOCK`:
+
+- `of(project_id)`: the project's patterns, oldest first, each a `NeverLockPattern`.
+- `add(caller, pattern)` and `remove(caller, pattern)`: for the project's leads and the team's admins. Each writes an
+  audit log entry. A lock held on a file the added pattern matches ends there.
+
+Only this module reads the `never_lock_patterns` table, and `Locks.never_locks` is still the one place a path is
+matched against them.
 """
 
 from __future__ import annotations
@@ -29,10 +38,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from shared_memory.audit import NEVER_LOCK_PATTERN_ADDED, NEVER_LOCK_PATTERN_REMOVED, Audit
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.identity import check_name
+from shared_memory.identity import Caller, Identity, check_name
 from shared_memory.sessions import Session, Sessions
 
 SCHEMA = """
@@ -49,6 +59,16 @@ CREATE TABLE IF NOT EXISTS locks (
 );
 
 CREATE INDEX IF NOT EXISTS locks_by_session ON locks (session_id);
+
+-- A project's own never-lock patterns, beside the built-in list. One list for all of the project's repositories.
+CREATE TABLE IF NOT EXISTS never_lock_patterns (
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    pattern TEXT NOT NULL,
+    -- The member ID of whoever added it.
+    added_by TEXT NOT NULL,
+    added_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (project_id, pattern)
+);
 """
 
 # The files that never lock in any project: every session touches them, and none is edited by hand. Each is a glob.
@@ -80,6 +100,12 @@ NEVER_LOCK: tuple[str, ...] = (
 
 # The longest path kept.
 PATH_LIMIT = 500
+
+# The longest never-lock pattern a project keeps.
+PATTERN_LIMIT = 200
+
+# What a glob in another dialect uses and these patterns don't read.
+_UNREAD = "[]{}"
 
 # How often taking a lock looks again when the file changed hands between two looks.
 _ATTEMPTS = 3
@@ -210,6 +236,52 @@ def matching(patterns: Sequence[str], path: str) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class NeverLockPattern:
+    """One of a project's own never-lock patterns."""
+
+    pattern: str
+    # The member ID of whoever added it.
+    added_by: str
+    added_at: datetime
+
+
+class UnusablePattern(Refused):
+    """What was written is not a glob these patterns can be matched with."""
+
+    def __init__(self, pattern: str, reason: str) -> None:
+        super().__init__(
+            f"{pattern!r} isn't a usable never-lock pattern: {reason}. A pattern is a glob of at most {PATTERN_LIMIT} "
+            "characters, in which `*`, `?` and `**` are read: `*` and `?` stay within one folder and `**` crosses "
+            "folders. One without a slash matches a file's name in any folder, for example *.snap; one with a slash "
+            "matches the whole path from the repository's root, for example src/generated/**."
+        )
+
+
+def usable(pattern: str) -> str:
+    """A never-lock pattern as a project keeps it, with forward slashes. Refused with `UnusablePattern` when it
+    could not match a file inside a repository, would match every file, or is written in a glob dialect that isn't
+    read here."""
+    written = pattern.strip().replace("\\", "/")
+    if not written:
+        raise UnusablePattern(pattern, "it is empty")
+    if len(written) > PATTERN_LIMIT:
+        raise UnusablePattern(pattern, f"it is longer than {PATTERN_LIMIT} characters")
+    if any(ord(character) < 32 for character in written):
+        raise UnusablePattern(pattern, "it has a control character in it")
+    if written.startswith("/") or _DRIVE.match(written):
+        raise UnusablePattern(pattern, "a path is matched from the repository's root, so it starts with no slash")
+    if written.endswith("/"):
+        raise UnusablePattern(pattern, f"it names a folder, and files are what lock; write {written}** for its files")
+    if any(part in (".", "..", "") for part in written.split("/")):
+        raise UnusablePattern(pattern, "it has an empty, `.` or `..` part, which no path kept for a lock has")
+    if written.startswith("!") or any(character in _UNREAD for character in written):
+        raise UnusablePattern(pattern, "`!`, `[...]` and `{...}` are not read")
+    if not any(character.isalnum() for character in written):
+        raise UnusablePattern(pattern, "it would match every file, and then nothing in the project would lock")
+    return written
+
+
 def _glob(pattern: str) -> re.Pattern[str]:
     parts = re.split(r"(\*\*|\*|\?)", pattern)
     translated = {"**": ".*", "*": "[^/]*", "?": "[^/]"}
@@ -241,8 +313,13 @@ class Locks:
 
     def never_locks(self, project_id: str, path: str) -> str | None:
         """The never-lock pattern this path, written from its repository's root, matches in this project, or None
-        when the file locks. Every question of whether a file locks is asked here."""
-        return matching(NEVER_LOCK, path)
+        when the file locks: one of the built-in list, or else one of the project's own. Every question of whether a
+        file locks is asked here."""
+        built_in = matching(NEVER_LOCK, path)
+        if built_in is not None:
+            return built_in
+        with self._db.transaction() as conn:
+            return matching(_patterns_of(conn, project_id), path)
 
     def take(self, session: Session, path: str, repository: str | None = None) -> Lock | NeverLocks:
         """Take the lock on a file for this session, or keep the one it holds, moving when it was last used. A file
@@ -348,3 +425,93 @@ class Locks:
             taken_at=row["taken_at"].astimezone(UTC),
             last_used_at=row["last_used_at"].astimezone(UTC),
         )
+
+
+def _patterns_of(conn: Conn, project_id: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT pattern FROM never_lock_patterns WHERE project_id = %s ORDER BY added_at, pattern", (project_id,)
+    ).fetchall()
+    return [row["pattern"] for row in rows]
+
+
+class ProjectPatterns:
+    """A project's own never-lock patterns: one list for all of its repositories, beside the built-in list, which
+    always applies. Its table is set up with `Locks`'s, so build `Locks` first."""
+
+    def __init__(self, db: Database, identity: Identity, audit: Audit, clock: Clock) -> None:
+        self._db = db
+        self._identity = identity
+        self._audit = audit
+        self._clock = clock
+
+    def of(self, project_id: str) -> list[NeverLockPattern]:
+        """The project's own patterns, oldest first. Whether the asker may reach the project is the asker's to
+        check."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT pattern, added_by, added_at FROM never_lock_patterns WHERE project_id = %s"
+                " ORDER BY added_at, pattern",
+                (project_id,),
+            ).fetchall()
+        return [NeverLockPattern(row["pattern"], row["added_by"], row["added_at"].astimezone(UTC)) for row in rows]
+
+    def add(self, caller: Caller, pattern: str) -> NeverLockPattern:
+        """Add a pattern to the caller's project. A lock held on a file it matches ends: the file never locks from
+        here on, so the lock would block nobody and only be listed."""
+        project_id = self._changeable_by(caller)
+        written = usable(pattern)
+        if written in NEVER_LOCK:
+            raise Refused(f"{written!r} is built in: it already never locks in every project.")
+        added = NeverLockPattern(written, caller.member_id, self._clock())
+        with self._db.transaction() as conn:
+            kept = conn.execute(
+                "INSERT INTO never_lock_patterns (project_id, pattern, added_by, added_at) VALUES (%s, %s, %s, %s)"
+                " ON CONFLICT (project_id, pattern) DO NOTHING RETURNING pattern",
+                (project_id, written, added.added_by, added.added_at),
+            ).fetchone()
+            if kept is None:
+                raise Refused(f"{written!r} is already one of this project's never-lock patterns.")
+            held = conn.execute("SELECT repository, path FROM locks WHERE project_id = %s", (project_id,)).fetchall()
+            for lock in held:
+                if matching([written], lock["path"]) is not None:
+                    conn.execute(
+                        "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s",
+                        (project_id, lock["repository"], lock["path"]),
+                    )
+        self._record(caller, NEVER_LOCK_PATTERN_ADDED, project_id, written)
+        return added
+
+    def remove(self, caller: Caller, pattern: str) -> str:
+        """Remove one of the caller's project's own patterns, and give it back as it was kept. Files it matched lock
+        again."""
+        project_id = self._changeable_by(caller)
+        written = pattern.strip().replace("\\", "/")
+        if written in NEVER_LOCK:
+            raise Refused(f"{written!r} is built in: it applies to every project and can't be removed.")
+        with self._db.transaction() as conn:
+            removed = conn.execute(
+                "DELETE FROM never_lock_patterns WHERE project_id = %s AND pattern = %s RETURNING pattern",
+                (project_id, written),
+            ).fetchone()
+        if removed is None:
+            raise Refused(
+                f"{written!r} isn't one of this project's never-lock patterns. Call never_lock with nothing to read "
+                "them."
+            )
+        self._record(caller, NEVER_LOCK_PATTERN_REMOVED, project_id, written)
+        return written
+
+    def _changeable_by(self, caller: Caller) -> str:
+        """The caller's project, when they may change its patterns."""
+        project_id = caller.require_project().project_id
+        member = caller.member
+        if not (member.is_owner or member.is_admin or project_id in self._identity.leads_of(member)):
+            raise Refused(
+                "Only this project's leads and the team's admins can add or remove its never-lock patterns. Any "
+                "member of the project can read them, by calling never_lock with nothing."
+            )
+        return project_id
+
+    def _record(self, caller: Caller, change: str, project_id: str, pattern: str) -> None:
+        detail = {"agent": caller.agent} if caller.agent is not None else {}
+        self._audit.record(change, member=caller.member, project_id=project_id, target=pattern, detail=detail)

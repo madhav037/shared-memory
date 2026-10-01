@@ -31,6 +31,8 @@ const WORDS: Record<Kind, string> = {
   card_commented: "Card commented on",
   card_deleted: "Card deleted",
   card_returned: "Card returned to To do",
+  never_lock_pattern_added: "Never-lock pattern added",
+  never_lock_pattern_removed: "Never-lock pattern removed",
   signed_in: "Signed in",
   sign_in_refused: "Sign-in refused",
   token_issued: "Token issued",

@@ -1,6 +1,6 @@
 """The audit log: who changed what, and when.
 
-It answers "who did this" for changes that leave no memory file behind — signing in, members, roles, access and tokens —
+It answers "who did this" for changes that leave no memory file behind — signing in, members, roles, access, tokens and a project's never-lock patterns —
 alongside the memory changes themselves. It is append-only and holds no memory content: it points at paths, and the
 memory folder's git history holds what they said.
 
@@ -60,6 +60,8 @@ Kind = Literal[
     "card_commented",
     "card_deleted",
     "card_returned",
+    "never_lock_pattern_added",
+    "never_lock_pattern_removed",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -99,6 +101,9 @@ CARD_COMMENTED: Kind = "card_commented"
 CARD_DELETED: Kind = "card_deleted"
 # A card whose assignee lost the project, put back in To do with no assignee.
 CARD_RETURNED: Kind = "card_returned"
+# A project's own never-lock pattern; the entry's target is the pattern.
+NEVER_LOCK_PATTERN_ADDED: Kind = "never_lock_pattern_added"
+NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
 
 
 @dataclass(frozen=True)

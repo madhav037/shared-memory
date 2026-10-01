@@ -185,7 +185,7 @@ The web app where members browse memory and admins run the team; members sign in
 _Avoid_: Dashboard, admin panel, web UI
 
 **Audit log**:
-The record of who changed members, roles, access, tokens, memory or cards, and when. It is not the memory's git history, which holds what memory said.
+The record of who changed members, roles, access, tokens, memory, cards or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail
 
 ### The board
@@ -230,6 +230,10 @@ _Avoid_: Status, working-on line
 
 **Lock**:
 A session's claim on a file in a repository that its coding agent is editing.
+
+**Never-lock pattern**:
+A glob naming files that never lock: one of the built-in list, which holds in every project, or one a project's leads or the team's admins added for all of that project's repositories.
+_Avoid_: Ignore pattern, lock exclusion, lock exemption, skip list
 
 **Holder**:
 The session holding a lock.

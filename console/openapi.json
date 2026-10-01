@@ -2875,7 +2875,9 @@
               "card_claimed",
               "card_commented",
               "card_deleted",
-              "card_returned"
+              "card_returned",
+              "never_lock_pattern_added",
+              "never_lock_pattern_removed"
             ],
             "title": "Kind",
             "type": "string"
