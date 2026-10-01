@@ -10,6 +10,7 @@ from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Aud
 from shared_memory.challenges import Challenges
 from shared_memory.config import Settings
 from shared_memory.connection import claude_settings, connection_kit
+from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
@@ -276,6 +277,7 @@ class MemoryService:
             levels=None if level is None else [level],
             type=type,
             limit=max(1, min(limit, 50)),
+            source=QuerySource.SEARCH,
         )
         return {"results": self._found(caller, hits)}
 
@@ -294,6 +296,7 @@ class MemoryService:
             levels=None if level is None else [level],
             type=type,
             limit=max(1, min(limit, 50)),
+            source=QuerySource.CONSOLE_SEARCH,
         )
         return {"results": self._found(caller, hits)}
 

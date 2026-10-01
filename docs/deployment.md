@@ -83,6 +83,29 @@ settings in `.env` (both optional) size them:
   tools take.** The default 40 leaves plenty of room.
 - One worker (`SHARED_MEMORY_WORKERS=1`) runs the server in a single process, as before.
 
+## The query cache's counts
+
+Every recall and search turns its query into an embedding by running the model. Each worker keeps the embeddings of
+its last 1,024 queries, so a query repeated word for word on the same worker skips the model. Each worker counts how
+often that happens and writes the counts to its log, which `docker compose logs server | grep "Query cache"` shows:
+
+```
+INFO:     Query cache worker=17 minutes=15 | period: recall hits=3 misses=41, search hits=6 misses=9, console-search hits=0 misses=2 | since start: recall hits=40 misses=512, search hits=71 misses=120, console-search hits=4 misses=19
+```
+
+- **`worker`** is the worker's process ID. Each worker has its own cache and writes its own lines; add the lines of
+  every worker together for the whole server.
+- **A hit** is a query the cache answered; **a miss** is one the model had to run for. The share of hits,
+  hits ÷ (hits + misses), is how much the cache saves.
+- The counts are split by where the query came from: **`recall`** (recall on a prompt), **`search`** (a session's
+  `search` tool) and **`console-search`** (search in the console).
+- **`period`** counts the queries since the worker's last line (or since it started), and **`minutes`** is how long
+  that was. **`since start`** counts everything since the worker started. A restart sets every count to zero, as it
+  empties the cache.
+- A worker writes its line on the first query that arrives once `SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES` (default 15,
+  optional in `.env`) have passed since its last one. A worker nobody queries writes nothing, so after a quiet
+  stretch `minutes` is longer than the setting.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

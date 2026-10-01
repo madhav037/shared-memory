@@ -20,7 +20,7 @@ from typing import Any
 from pgvector import Vector
 
 from shared_memory.db import Conn, Database
-from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, Embedder
+from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, CachedQueries, QuerySource
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 
@@ -93,7 +93,7 @@ def split_sections(memory: Memory) -> list[tuple[str, str]]:
 
 
 class SearchIndex:
-    def __init__(self, db: Database, embedder: Embedder) -> None:
+    def __init__(self, db: Database, embedder: CachedQueries) -> None:
         self._db = db
         self._embedder = embedder
         self._prepared: OrderedDict[str, list[float]] = OrderedDict()
@@ -313,10 +313,12 @@ class SearchIndex:
         levels: Iterable[str] | None = None,
         type: str | None = None,
         limit: int = 10,
+        source: QuerySource,
     ) -> list[Hit]:
         """Active sections visible from a project, or from several, ranked by meaning and exact words together.
 
-        member_id, when given, limits personal memory to that member's own.
+        member_id, when given, limits personal memory to that member's own. `source` is where the query came from,
+        for the query cache's counts.
         """
         projects = [project_id] if isinstance(project_id, str) else list(project_id)
         conditions = ["team = %(team)s", "status = 'active'", "(level = 'team' OR project_id = ANY(%(projects)s))"]
@@ -330,7 +332,7 @@ class SearchIndex:
         if type is not None:
             conditions.append("type = %(type)s")
             params["type"] = type
-        params["query"] = Vector(self._embedder.query(query))
+        params["query"] = Vector(self._embedder.query(query, source))
         where = " AND ".join(conditions)
         columns = "path, section_no, level, member_id, type, author, 1 - (embedding <=> %(query)s) AS similarity"
         with self._db.transaction() as conn:

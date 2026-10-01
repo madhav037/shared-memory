@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 from shared_memory.config import Settings
+from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
 from shared_memory.index import SearchIndex, split_sections
@@ -34,6 +35,7 @@ class Recall:
             project_id=caller.project.project_id,
             member_id=caller.member_id,
             limit=self._settings.recall_limit * 3,
+            source=QuerySource.RECALL,
         )
         strong = sorted(
             (hit for hit in hits if hit.similarity >= self._settings.recall_threshold),
