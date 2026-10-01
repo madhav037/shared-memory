@@ -30,8 +30,9 @@ Writing to a temporary file first keeps a failed command from emptying `console/
 
 - `signed_in` and `signed_in_owner` in `tests/support.py` give a signed-in console client. A request that answers
   "Sign in to the console first." came from a client that isn't.
-- Every test signs in with its own GitHub account number. Two logins sharing a number also answer "Sign in to the
-  console first.", so search the tests for the number before using it.
+- Every test signs in with its own GitHub account number. When a second login uses a number another login in the
+  module already used, `FakeGitHub` fails the test at once with "GitHub account number N is already 'one-login' in
+  this fake GitHub, so 'other-login' cannot sign in with it." Give one of the two tests an unused number.
 
 ## Editing
 
