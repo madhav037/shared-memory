@@ -191,25 +191,36 @@ class KnownIssues:
             "memory: link (it is already this known issue, so none is saved), keep_both, or cancel.",
         }
 
+    def _track(self, caller: Caller, memory: Memory, path: str, card: int | None) -> int:
+        """Link the known issue to the card named, or to a new To do card, and answer the card's number."""
+        if card is not None:
+            self._board.link_known_issue(caller, card, path)
+            return card
+        fix = f"Fix: {memory.title}"
+        fix = fix if len(fix) <= TITLE_LIMIT else fix[: TITLE_LIMIT - 3].rstrip() + "..."
+        number: int = self._board.add(caller, fix, memory.summary, known_issues=[path])["number"]
+        return number
+
     def _forget(self, reference: str) -> None:
         with self._db.transaction() as conn:
             conn.execute("DELETE FROM known_issue_saves WHERE reference = %s", (reference,))
 
     def _land(self, caller: Caller, memory: Memory, card: int | None) -> dict[str, Any]:
-        """Save the known issue into its project's project memory, one commit like any save, then link its card."""
+        """Save the known issue into its project's project memory, one commit like any save, with its card.
+
+        Memory is in git and cards in Postgres, so the card is added or linked as part of the save, in the save's own
+        transaction: a card that can't be had undoes the save, and no known issue lands without one tracking it.
+        """
         project = caller.require_project()
         area = Area("project", project.project_id)
         folder = level_folder("project", KNOWN_ISSUE, project.project_id)
+        tracking: list[int] = []
         with self._store.change(caller.team, committer(caller), f"Known issue: {memory.title}", areas=[area]) as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type, level="project"))
-        if card is None:
-            fix = f"Fix: {memory.title}"
-            fix = fix if len(fix) <= TITLE_LIMIT else fix[: TITLE_LIMIT - 3].rstrip() + "..."
-            card = self._board.add(caller, fix, memory.summary, known_issues=[str(path)])["number"]
-        else:
-            self._board.link_known_issue(caller, card, str(path))
+            change.also(lambda: tracking.append(self._track(caller, memory, str(path), card)))
+        (card,) = tracking
         return {
             "status": "saved",
             "path": str(path),

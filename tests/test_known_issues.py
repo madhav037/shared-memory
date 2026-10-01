@@ -3,6 +3,9 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
+import pytest
+
+from shared_memory.board import Board
 from tests.support import Session, Team, added_context
 
 FLAKY_UPLOADS = {
@@ -238,6 +241,38 @@ def test_a_card_the_board_lacks_is_refused_and_nothing_is_saved(owner: Session) 
     assert "no card 42" in refusal
     assert owner.call("tree", level="project") == {"folders": []}
     assert cards(owner) == []
+
+
+def card_step_fails(monkeypatch: pytest.MonkeyPatch, step: str) -> None:
+    def fails(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("the board is unavailable")
+
+    monkeypatch.setattr(Board, step, fails)
+
+
+def test_a_known_issue_whose_card_cannot_be_added_is_not_saved(owner: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Fails once the card is in its table, so the card is undone with the save too.
+    card_step_fails(monkeypatch, "_link")
+
+    refusal = owner.refusal("save_known_issue", **FLAKY_UPLOADS)
+
+    assert "not saved" in refusal
+    assert owner.call("tree", level="project") == {"folders": []}
+    assert cards(owner) == []
+    assert owner.call("search", query="large upload 504 gateway timeout")["results"] == []
+
+
+def test_a_known_issue_whose_named_card_cannot_be_linked_is_not_saved(
+    owner: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    number = owner.call("add_card", title="Move uploads to direct-to-storage")["number"]
+    card_step_fails(monkeypatch, "link_known_issue")
+
+    refusal = owner.refusal("save_known_issue", **FLAKY_UPLOADS, card=number)
+
+    assert "not saved" in refusal
+    assert owner.call("tree", level="project") == {"folders": []}
+    assert [card["known_issues"] for card in cards(owner)] == [[]]
 
 
 def test_linking_to_an_existing_known_issue_links_a_named_card_to_it(owner: Session, dana: Session) -> None:
