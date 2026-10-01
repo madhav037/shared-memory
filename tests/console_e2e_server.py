@@ -221,6 +221,14 @@ if __name__ == "__main__":
                 "UPDATE cards SET moved_at = moved_at - interval '21 days' WHERE project_id = %s AND number = 5",
                 (project,),
             )
+        # Billing's active sessions, for the Sessions journey: Raj's, in Claude Code, with an activity it stated and a
+        # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the
+        # journeys' clock never moves. Reporting has no session, for the page that says so.
+        raj = dana.as_agent("claude-code").as_session("raj-backoff")
+        raj.call("set_activity", activity="Adding backoff to the webhook retries", session=raj.identifier)
+        raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
+        olive = in_project.as_agent("codex").as_session("olive-invoices")
+        olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         try:
             server.join()

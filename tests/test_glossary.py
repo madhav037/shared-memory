@@ -102,6 +102,16 @@ ALLOWED: tuple[Allow, ...] = (
         "a session's lock on a file, the glossary's Lock; avoided only for claiming a card",
         (SERVER + "app.py", SERVER + "locks.py"),
     ),
+    Allow(
+        "lock",
+        "the locks a project's active sessions hold, shown on the console's Sessions page; the glossary's Lock",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx"),
+    ),
+    Allow(
+        "activity",
+        "a session's Activity, shown on the console's Sessions page; avoided only for the audit log",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx"),
+    ),
     Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "locks.py",)),
     Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "app.py",), "take lock"),
     Allow("holder", "the session holding a lock, the glossary's Holder", (SERVER + "locks.py",)),

@@ -2534,6 +2534,58 @@ li[aria-expanded="true"] > .tree-row .twist {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+/*
+ * A project's active sessions, set as entries are: who and where on one line, the activity as the entry's text, and
+ * the files the session holds beneath it, as a card lists its files.
+ */
+.sessions {
+  margin-top: 28px;
+}
+.session-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+.session-member {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.session-repository {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+.session-activity {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-size: 1.1875rem;
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}
+.session-activity.none {
+  font-family: var(--sans);
+  font-size: 1rem;
+  color: var(--ink-3);
+}
+.session-locks {
+  margin-top: 16px;
+}
+.session-locks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 14px;
+}
+.session-lock-times {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
 /* Narrower screens scroll the board sideways, a column at a time, rather than squeezing four columns in. */
 @media (max-width: 1180px) {
   .board {

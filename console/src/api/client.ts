@@ -33,6 +33,8 @@ export type BoardArchive = components["schemas"]["BoardArchive"];
 export type BoardColumn = components["schemas"]["BoardColumn"];
 export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
+export type ProjectSessions = components["schemas"]["ProjectSessions"];
+export type ActiveSession = components["schemas"]["ActiveSession"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
 export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
@@ -264,6 +266,11 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
   return ask<BoardArchive>(withQuery(`/api/projects/${encodeURIComponent(projectId)}/board/archive`, filters), {
     signal,
   });
+}
+
+/** A project's active sessions, the oldest first, each with its activity and the files it holds a lock on. */
+export function fetchSessions(projectId: string, signal?: AbortSignal): Promise<ProjectSessions> {
+  return ask<ProjectSessions>(`/api/projects/${encodeURIComponent(projectId)}/sessions`, { signal });
 }
 
 /** One card whole, with its links and comments. */

@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
+from shared_memory.activity import Activities
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -46,18 +47,22 @@ from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
-    AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardCommentText,
+    AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card,
+    CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
+    ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge,
+    Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
+    RaisedChallenge,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
 from shared_memory.lifecycle import Lifecycle
+from shared_memory.locks import Locks
 from shared_memory.memory import locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -165,9 +170,13 @@ class ConsoleApi:
         challenges: Challenges,
         saves: Saves,
         board: Board,
+        activities: Activities,
+        locks: Locks,
     ) -> None:
         self._settings = settings
         self._board = board
+        self._activities = activities
+        self._locks = locks
         self._saves = saves
         self._sessions = sessions
         self._audit = audit
@@ -194,6 +203,7 @@ class ConsoleApi:
             "remove_repository": self._remove_repository,
             "board": self._board_of,
             "board_archive": self._board_archive,
+            "project_sessions": self._project_sessions,
             "card": self._card,
             "add_card": self._add_card,
             "edit_card": self._edit_card,
@@ -440,6 +450,44 @@ class ConsoleApi:
                 project_id=found["project_id"],
                 project_name=caller.require_project().name,
                 cards=[self._card_of(one, names) for one in found["archive"]],
+            )
+
+        return self._browse(request, read)
+
+    # --- a project's active sessions, read: nothing here changes a session, an activity or a lock (ADR-0009) ---
+
+    def _project_sessions(self, request: Request) -> Response:
+        def read(caller: Caller) -> ProjectSessions:
+            # `_browse` placed the caller in the project, which refuses a member who can't reach it: neither read
+            # below checks reach itself.
+            project = caller.require_project()
+            held: dict[int, list[HeldLock]] = {}
+            for lock in self._locks.held(project.project_id):
+                held.setdefault(lock.holder.id, []).append(
+                    HeldLock(
+                        repository=lock.repository,
+                        path=lock.path,
+                        taken_at=lock.taken_at,
+                        last_used_at=lock.last_used_at,
+                    )
+                )
+            return ProjectSessions(
+                project_id=project.project_id,
+                project_name=project.name,
+                sessions=[
+                    ActiveSession(
+                        member_id=each.session.member_id,
+                        member_name=each.session.member_name,
+                        agent=each.session.agent,
+                        repository=each.session.repository,
+                        activity=each.activity,
+                        from_card=each.from_card,
+                        started_at=each.session.started_at,
+                        last_seen_at=each.session.last_seen_at,
+                        locks=held.get(each.session.id, []),
+                    )
+                    for each in self._activities.in_project(project.project_id)
+                ],
             )
 
         return self._browse(request, read)
