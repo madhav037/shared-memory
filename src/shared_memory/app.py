@@ -41,7 +41,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
-from shared_memory.locks import Held, Lock, Locks, NoRepository, OutsideRepository
+from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, NoRepository, OutsideRepository, ProjectPatterns
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -211,6 +211,7 @@ def build_app(
     identity.on_access_lost(sessions.end_unreachable)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
+    project_patterns = ProjectPatterns(db, identity, audit, clock)
 
     server =MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -767,6 +768,33 @@ def build_app(
         ended = locks.release(sessions.touch(caller(ctx), session), path, repository)
         return {"released": True, "repository": ended.repository, "path": ended.path}
 
+    @server.tool()
+    @_refusals_as_tool_errors
+    def never_lock(ctx: Context, add: str | None = None, remove: str | None = None) -> dict[str, Any]:
+        """Read, or change, the never-lock patterns: the files that never lock in this project, which you edit
+        without taking a lock. Call it with nothing to read them: built_in applies to every project and can't be
+        removed, and project holds this project's own, which apply to every one of its repositories.
+
+        add and remove are for the project's leads and the team's admins, one pattern and one at a time, and only
+        when the member asks. A pattern is a glob: `*` and `?` stay within one folder, `**` crosses folders. One
+        without a slash matches a file's name in any folder (*.snap); one with a slash matches the whole path from
+        the repository's root (src/generated/**). A lock already held on a file that an added pattern matches ends.
+        """
+        current = caller(ctx)
+        project_id = current.require_project().project_id
+        if add is not None and remove is not None:
+            raise Refused("Pass add or remove, not both: never-lock patterns change one at a time.")
+        changed: dict[str, Any] = {}
+        if add is not None:
+            changed = {"added": project_patterns.add(current, add).pattern}
+        elif remove is not None:
+            changed = {"removed": project_patterns.remove(current, remove)}
+        own = [
+            {"pattern": one.pattern, "added_by": one.added_by, "added_at": one.added_at.isoformat()}
+            for one in project_patterns.of(project_id)
+        ]
+        return {**changed, "built_in": list(NEVER_LOCK), "project": own}
+
     @server.tool(name="board")
     @_refusals_as_tool_errors
     def the_board(
@@ -918,6 +946,7 @@ def build_app(
     app.state.database = db
     app.state.sessions = sessions
     app.state.locks = locks
+    app.state.project_patterns = project_patterns
     return app
 
 

@@ -78,9 +78,17 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
 - **A holder's activity** is `activities.of(holder)`, which `Locks` is built with: what the session stated, else its
   member's card in Doing, else None. It is one read per lock.
 - **Never-lock patterns** are consulted in one place, `locks.never_locks(project_id, path)`, which gives the pattern
-  matched or None. Today it reads the built-in `NEVER_LOCK`; a project's own patterns join it there, matched with
-  `matching(patterns, path)`. A pattern without a slash is matched against the file's name at any depth, one with a
-  slash against the whole path from the repository's root.
+  matched or None: one of the built-in `NEVER_LOCK`, or else one of the project's own. A pattern without a slash is
+  matched against the file's name at any depth, one with a slash against the whole path from the repository's root.
+- **A project's own never-lock patterns** are `ProjectPatterns` in `locks.py`, built in `build_app` as
+  `project_patterns` and kept on `app.state.project_patterns`. One list holds for all of a project's repositories.
+  To read them: `project_patterns.of(project_id)`, a list of `NeverLockPattern` (`pattern`, `added_by` as a member
+  ID, `added_at`), oldest first; it doesn't check reach, which is the asker's. The built-in list is the constant
+  `NEVER_LOCK`, which always applies. Only `locks.py` reads the `never_lock_patterns` table.
+- **The `never_lock` tool**: with nothing, any member of the project gets `built_in` and `project`; `add` or
+  `remove` (one pattern, one at a time) is for the project's leads and the team's admins, and each writes a
+  `never_lock_pattern_added` or `never_lock_pattern_removed` audit log entry whose target is the pattern. It takes
+  no `session`, so it doesn't keep one active. Adding a pattern ends the locks held on files it matches.
 - **A path** reaches `take` as the agent wrote it and is kept by `from_root(path)`: relative to the repository's
   root, with forward slashes. An absolute path is refused as outside the repository, so a hook that is handed one
   makes it relative first.
