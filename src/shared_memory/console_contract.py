@@ -496,6 +496,13 @@ class BoardArchive(BaseModel):
     cards: list[Card]
 
 
+class MovedCard(CardDetail):
+    """A card where it now is. One that has just entered Done says what became of each still-active known issue it
+    was to fix: retired, or its author asked to retire it by a challenge."""
+
+    known_issues_fixed: list[Retired]
+
+
 class NewCard(BaseModel):
     """A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written
     YYYY-MM-DD."""
@@ -714,8 +721,9 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/projects/{project_id}/cards/{number}/move",
         method="POST",
         operation_id="move_card",
-        summary="Move a card to a column, or to another place in its own; Blocked takes a reason.",
-        answers=CardDetail,
+        summary="Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering "
+        "Done retires the known issues it fixes, or asks their authors to.",
+        answers=MovedCard,
         changes=True,
         accepts=CardMove,
     ),

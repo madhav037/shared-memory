@@ -1,4 +1,4 @@
-import type { Card } from "../api/client";
+import type { Card, CardFields, MovedCard } from "../api/client";
 
 export type Column = Card["column"];
 export type Priority = Card["priority"];
@@ -87,4 +87,47 @@ export function dropPlace(dragged: Placed, column: Column, before: Placed | null
   if (before === null) return staying && lastInColumn ? null : undefined;
   const position = staying && dragged.position < before.position ? before.position - 1 : before.position;
   return staying && position === dragged.position ? null : position;
+}
+
+/** A card's fields as a member fills them in. An empty due date is none; no assignee is `null`. */
+export type CardDraft = {
+  title: string;
+  description: string;
+  priority: Priority;
+  labels: string[];
+  due_date: string;
+  assignee: string | null;
+};
+
+export function draftOf(card?: Card): CardDraft {
+  return {
+    title: card?.title ?? "",
+    description: card?.description ?? "",
+    priority: card?.priority ?? "normal",
+    labels: card?.labels ?? [],
+    due_date: card?.due_date ?? "",
+    assignee: card?.assignee ?? null,
+  };
+}
+
+/** What a filled-in card changes about the card it started from: only those fields are sent, so nothing else is touched. */
+export function cardEdits(card: Card, draft: CardDraft): CardFields {
+  const fields: CardFields = {};
+  if (draft.title.trim() !== card.title) fields.title = draft.title;
+  if (draft.description.trim() !== card.description) fields.description = draft.description;
+  if (draft.priority !== card.priority) fields.priority = draft.priority;
+  if (draft.labels.join("|") !== card.labels.join("|")) fields.labels = draft.labels;
+  if (draft.due_date !== (card.due_date ?? "")) fields.due_date = draft.due_date;
+  if (draft.assignee !== card.assignee) fields.assignee = draft.assignee ?? "";
+  return fields;
+}
+
+/** What moving a card to Done did to the known issues it fixes, a sentence for each. */
+export function fixedWords(moved: Pick<MovedCard, "known_issues_fixed" | "titles">): string[] {
+  return moved.known_issues_fixed.map((one) => {
+    const named = `the known issue “${moved.titles[one.path] ?? one.path.split("/").pop()}”`;
+    return one.status === "retired"
+      ? `Retired ${named}: the card that fixes it is done.`
+      : `Asked the author of ${named} to retire it. Until they decide, it stands.`;
+  });
 }

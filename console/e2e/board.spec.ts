@@ -86,9 +86,9 @@ test("card changes are in the audit log, and a card there opens on its board", a
   await page.getByTestId("filter-kind").click();
   await page.getByRole("option", { name: "Card commented on" }).click();
 
-  const rows = page.getByTestId("audit-table").locator("tbody tr");
+  // Raj's is the one comment on Billing's board; other journeys comment on boards of their own.
+  const rows = page.getByTestId("audit-table").locator("tbody tr").filter({ hasText: "Raj Raiser" });
   await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText("Raj Raiser");
   await rows.first().getByRole("link", { name: "Card 1" }).click();
   await expect(page.getByTestId("card-panel")).toContainText("Retry failed webhooks");
 });

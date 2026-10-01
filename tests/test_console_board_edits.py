@@ -7,8 +7,9 @@ from typing import Any
 
 import httpx
 
-from tests.support import Console, ConsoleClient, add, ask, signed_in
+from tests.support import Console, ConsoleClient, Session, add, signed_in
 from tests.test_console_board import a_board, board, in_column
+from tests.test_known_issues import FLAKY_UPLOADS, saved
 
 
 def change(client: ConsoleClient, project: str, what: str, body: dict[str, Any] | None = None) -> httpx.Response:
@@ -114,7 +115,7 @@ def test_a_card_moves_to_blocked_only_with_a_reason(console: Console, signed_out
         {"column": "blocked", "blocked_reason": "Needs the new Stripe client.", "waits_on": 2},
     )
 
-    assert "needs a blocked_reason" in refused(without)
+    assert refused(without) == "Moving a card to Blocked needs a reason: say what it is waiting for."
     assert (blocked["column"], blocked["blocked_reason"], blocked["waits_on"]) == (
         "blocked", "Needs the new Stripe client.", 2,
     )  # fmt: skip
@@ -154,6 +155,9 @@ def test_anyone_on_the_project_comments_but_only_the_assignee_changes_their_card
     ]
     assert "assigned to" in refused(edit)
     assert "assigned to" in refused(move)
+    # The board's own refusal names the agent's tool; the console says the same in a member's words.
+    assert refused(edit).endswith("Say what you want in a comment instead.")
+    assert "comment_card" not in refused(move)
     assert in_column(board(signed_out, project), "doing") == ["Retry failed webhooks"]
     dana.close()
 
@@ -215,3 +219,32 @@ def test_changing_the_board_needs_the_console_and_a_sign_in(console: Console, si
     assert signed_out_claim.status_code == 401
     assert in_column(board(signed_out, project), "to_do") == ["Retry failed webhooks"]
     stranger.close()
+
+
+def test_moving_a_card_to_done_retires_the_known_issue_it_fixes(console: Console, signed_out: ConsoleClient) -> None:
+    project, agent = a_board(console, signed_out, "olive-edits-twelve", 1416)
+    issue = saved(agent, FLAKY_UPLOADS)
+    (number,) = [one["number"] for one in agent.call("board")["columns"]["to_do"] if one["known_issues"]]
+
+    doing = changed(signed_out, project, f"cards/{number}/move", {"column": "doing"})
+    done = changed(signed_out, project, f"cards/{number}/move", {"column": "done"})
+
+    assert doing["known_issues_fixed"] == []
+    assert done["known_issues_fixed"] == [{"status": "retired", "path": issue, "challenge_id": None}]
+    assert agent.call("read", path=issue)["status"] == "retired"
+
+
+def test_moving_a_card_to_done_asks_another_author_to_retire_their_known_issue(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, _ = a_board(console, signed_out, "olive-edits-thirteen", 1417)
+    added = add(signed_out, "emp-2", "Dana Dev", "dana-edits-thirteen")
+    dana = Session(console.server, added["personal_token"], project, "billing-api")
+    issue = saved(dana, FLAKY_UPLOADS)
+    (number,) = [one["number"] for one in dana.call("board")["columns"]["to_do"] if one["known_issues"]]
+
+    (asked,) = changed(signed_out, project, f"cards/{number}/move", {"column": "done"})["known_issues_fixed"]
+
+    assert (asked["status"], asked["path"]) == ("challenge_raised", issue)
+    assert isinstance(asked["challenge_id"], int)
+    assert dana.call("read", path=issue)["status"] == "active", "its author decides"

@@ -304,7 +304,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Move a card to a column, or to another place in its own; Blocked takes a reason. */
+        /** Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to. */
         post: operations["move_card"];
         delete?: never;
         options?: never;
@@ -1118,6 +1118,88 @@ export interface components {
             assignee: string | null;
         };
         /**
+         * Retired
+         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
+         */
+        Retired: {
+            /** Status */
+            status: string;
+            /** Path */
+            path: string;
+            /** Challenge Id */
+            challenge_id: number | null;
+        };
+        /**
+         * MovedCard
+         * @description A card where it now is. One that has just entered Done says what became of each still-active known issue it
+         *     was to fix: retired, or its author asked to retire it by a challenge.
+         */
+        MovedCard: {
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /**
+             * Column
+             * @enum {string}
+             */
+            column: "to_do" | "doing" | "blocked" | "done";
+            /** Position */
+            position: number;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "high" | "normal" | "low";
+            /** Labels */
+            labels: string[];
+            /** Due Date */
+            due_date: string | null;
+            /** Creator */
+            creator: string;
+            /** Creator Name */
+            creator_name: string;
+            /** Assignee */
+            assignee: string | null;
+            /** Assignee Name */
+            assignee_name: string | null;
+            /** Blocked Reason */
+            blocked_reason: string | null;
+            /** Waits On */
+            waits_on: number | null;
+            /** Memories */
+            memories: string[];
+            /** Files */
+            files: string[];
+            /** Known Issues */
+            known_issues: string[];
+            /** Comments */
+            comments: components["schemas"]["CardComment"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Moved At
+             * Format: date-time
+             */
+            moved_at: string;
+            /** Titles */
+            titles: {
+                [key: string]: string;
+            };
+            /** Known Issues Fixed */
+            known_issues_fixed: components["schemas"]["Retired"][];
+        };
+        /**
          * CardMove
          * @description Where a card goes: a column, and a position in it (1 is the top; without one it goes to the bottom). A card
          *     goes to Blocked only with a blocked_reason, and may name the card it waits on.
@@ -1462,18 +1544,6 @@ export interface components {
         MemoryPath: {
             /** Path */
             path: string;
-        };
-        /**
-         * Retired
-         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
-         */
-        Retired: {
-            /** Status */
-            status: string;
-            /** Path */
-            path: string;
-            /** Challenge Id */
-            challenge_id: number | null;
         };
         /** SearchHit */
         SearchHit: {
@@ -2151,13 +2221,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Move a card to a column, or to another place in its own; Blocked takes a reason. */
+            /** @description Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CardDetail"];
+                    "application/json": components["schemas"]["MovedCard"];
                 };
             };
         };

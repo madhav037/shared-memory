@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { boardUrl, cardChange, dropPlace, dueness, fileLink } from "./board";
+import type { Card } from "../api/client";
+import { boardUrl, cardChange, cardEdits, draftOf, dropPlace, dueness, fileLink, fixedWords } from "./board";
 
 describe("when a card is due, against today", () => {
   it("says a card due before today is overdue, and one due today is due today", () => {
@@ -73,5 +74,43 @@ describe("where a dropped card goes", () => {
     expect(dropPlace({ column: "to_do", position: 1 }, "to_do", { column: "to_do", position: 2 })).toBeNull();
     expect(dropPlace({ column: "to_do", position: 2 }, "to_do", { column: "to_do", position: 2 })).toBeNull();
     expect(dropPlace({ column: "to_do", position: 4 }, "to_do", null, true)).toBeNull();
+  });
+});
+
+describe("what an edited card changes", () => {
+  const card = {
+    title: "Retry failed webhooks",
+    description: "",
+    priority: "normal",
+    labels: ["webhooks"],
+    due_date: "2026-10-15",
+    assignee: null,
+  } as Card;
+
+  it("sends nothing when nothing was changed", () => {
+    expect(cardEdits(card, draftOf(card))).toEqual({});
+  });
+
+  it("sends only the fields that changed, an empty due date or assignee to take it off", () => {
+    expect(cardEdits(card, { ...draftOf(card), priority: "high", due_date: "" })).toEqual({ priority: "high", due_date: "" });
+    expect(cardEdits({ ...card, assignee: "emp-2" }, { ...draftOf(card), labels: [] })).toEqual({ labels: [], assignee: "" });
+  });
+});
+
+describe("what a card moved to Done did to its known issues", () => {
+  const path = "projects/billing/known_issue/uploads-flake.md";
+
+  it("says which were retired and whose authors were asked", () => {
+    const titles = { [path]: "Uploads flake" };
+    expect(fixedWords({ titles, known_issues_fixed: [{ status: "retired", path, challenge_id: null }] })).toEqual([
+      "Retired the known issue “Uploads flake”: the card that fixes it is done.",
+    ]);
+    expect(fixedWords({ titles: {}, known_issues_fixed: [{ status: "challenge_raised", path, challenge_id: 4 }] })).toEqual([
+      "Asked the author of the known issue “uploads-flake.md” to retire it. Until they decide, it stands.",
+    ]);
+  });
+
+  it("says nothing when the card fixed none", () => {
+    expect(fixedWords({ titles: {}, known_issues_fixed: [] })).toEqual([]);
   });
 });

@@ -640,7 +640,7 @@
     "/api/projects/{project_id}/cards/{number}/move": {
       "post": {
         "operationId": "move_card",
-        "summary": "Move a card to a column, or to another place in its own; Blocked takes a reason.",
+        "summary": "Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to.",
         "parameters": [
           {
             "name": "project_id",
@@ -671,11 +671,11 @@
         },
         "responses": {
           "200": {
-            "description": "Move a card to a column, or to another place in its own; Blocked takes a reason.",
+            "description": "Move a card to a column, or to another place in its own; Blocked takes a reason. A card entering Done retires the known issues it fixes, or asks their authors to.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CardDetail"
+                  "$ref": "#/components/schemas/MovedCard"
                 }
               }
             }
@@ -2437,6 +2437,231 @@
         "title": "CardFields",
         "type": "object"
       },
+      "Retired": {
+        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "challenge_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenge Id"
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "challenge_id"
+        ],
+        "title": "Retired",
+        "type": "object"
+      },
+      "MovedCard": {
+        "description": "A card where it now is. One that has just entered Done says what became of each still-active known issue it\nwas to fix: retired, or its author asked to retire it by a challenge.",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "column": {
+            "enum": [
+              "to_do",
+              "doing",
+              "blocked",
+              "done"
+            ],
+            "title": "Column",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "priority": {
+            "enum": [
+              "high",
+              "normal",
+              "low"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "creator": {
+            "title": "Creator",
+            "type": "string"
+          },
+          "creator_name": {
+            "title": "Creator Name",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "assignee_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee Name"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "waits_on": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waits On"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "known_issues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Issues",
+            "type": "array"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/CardComment"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "moved_at": {
+            "format": "date-time",
+            "title": "Moved At",
+            "type": "string"
+          },
+          "titles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "object"
+          },
+          "known_issues_fixed": {
+            "items": {
+              "$ref": "#/components/schemas/Retired"
+            },
+            "title": "Known Issues Fixed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "description",
+          "column",
+          "position",
+          "priority",
+          "labels",
+          "due_date",
+          "creator",
+          "creator_name",
+          "assignee",
+          "assignee_name",
+          "blocked_reason",
+          "waits_on",
+          "memories",
+          "files",
+          "known_issues",
+          "comments",
+          "created_at",
+          "updated_at",
+          "moved_at",
+          "titles",
+          "known_issues_fixed"
+        ],
+        "title": "MovedCard",
+        "type": "object"
+      },
       "CardMove": {
         "description": "Where a card goes: a column, and a position in it (1 is the top; without one it goes to the bottom). A card\ngoes to Blocked only with a blocked_reason, and may name the card it waits on.",
         "properties": {
@@ -3324,37 +3549,6 @@
           "path"
         ],
         "title": "MemoryPath",
-        "type": "object"
-      },
-      "Retired": {
-        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "challenge_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Challenge Id"
-          }
-        },
-        "required": [
-          "status",
-          "path",
-          "challenge_id"
-        ],
-        "title": "Retired",
         "type": "object"
       },
       "SearchHit": {
