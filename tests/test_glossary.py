@@ -92,6 +92,19 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "lock", "a lock between threads; avoided only for claiming a card", (SERVER + "index.py", SERVER + "store.py")
     ),
+    Allow(
+        "lock",
+        "a session's lock on a file, the glossary's Lock; avoided only for claiming a card",
+        (SERVER + "app.py", SERVER + "locks.py"),
+    ),
+    Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "locks.py",)),
+    Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "app.py",), "take lock"),
+    Allow("holder", "the session holding a lock, the glossary's Holder", (SERVER + "locks.py",)),
+    Allow(
+        "activity",
+        "the activity of a lock's holder, the glossary's Activity; avoided only for the audit log",
+        (SERVER + "locks.py",),
+    ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py",)),
     Allow(
         "context",
