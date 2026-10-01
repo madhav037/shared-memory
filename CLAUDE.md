@@ -66,7 +66,10 @@ seam.
 - Merge when CI is green.
 - **Stacked PRs:** merge the base with `gh pr merge --squash` and leave its branch in place.
   Deleting the base branch makes GitHub close the stacked PR instead of retargeting it, so
-  `--delete-branch` waits until every PR stacked on it has merged.
+  `--delete-branch` waits until every PR stacked on it has merged. Then move the stacked branch
+  onto the squashed base with `git rebase --onto origin/main <old base>`.
+- **Several agents at once:** each works in its own worktree. See `docs/agents/worktrees.md`.
+- **Review** reads `CODING_STANDARDS.md`.
 
 ## Agent skills
 
