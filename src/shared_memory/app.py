@@ -325,6 +325,7 @@ def build_app(
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
             told = [challenges.prompt_notices(current), *(sessions.waiting_notices(session) if session else [])]
+            told += locks.waiting_notices(session) if session else []
             return "\n\n".join(part for part in told if part) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
@@ -728,7 +729,9 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
-    def take_lock(path: str, session: str, ctx: Context, repository: str | None = None) -> dict[str, Any]:
+    def take_lock(
+        path: str, session: str, ctx: Context, repository: str | None = None, takeover: bool = False
+    ) -> dict[str, Any]:
         """Take the lock on a file before you edit it, so no other session changes it underneath you. Taking a lock
         this session already holds keeps it.
 
@@ -740,8 +743,17 @@ def build_app(
         member. A lockfile or a generated file never locks: the answer says so, and you edit it without one. Your
         locks end when the session ends or sits idle. When your work on a file is finished, release it with
         release_lock, so nobody waits for a file you are done with.
+
+        takeover moves the lock to this session when another session holds it, without asking the holder, who is told
+        on its next prompt. A takeover is your member's decision: when you are refused, tell them who holds the file
+        and offer it, and pass takeover as true only once your member has said so, never on your own.
+
+        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
+        editing that file and tell your member.
         """
-        taken = locks.take(sessions.touch(caller(ctx), session), path, repository)
+        calling = sessions.touch(caller(ctx), session)
+        taken = locks.take(calling, path, repository, takeover)
+        notices = locks.waiting_notices(calling)
         if isinstance(taken, Lock):
             return {
                 "locked": True,
@@ -749,6 +761,7 @@ def build_app(
                 "path": taken.path,
                 "since": taken.taken_at.isoformat(),
                 "last_used": taken.last_used_at.isoformat(),
+                "notices": notices,
             }
         return {
             "locked": False,
@@ -756,6 +769,7 @@ def build_app(
             "path": taken.path,
             "never_locks": taken.pattern,
             "message": taken.message,
+            "notices": notices,
         }
 
     @server.tool()

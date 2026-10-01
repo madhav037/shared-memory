@@ -2,14 +2,16 @@
 
 A lock is on one file: a project, a repository and the file's path from that repository's root, with forward slashes.
 Its holder is the session that took it. It ends when its holder releases it, when the holder's session ends, or when
-that session goes idle. Nothing sweeps: a lock whose holder is no longer active counts as gone wherever it is read, and
+that session goes idle; a takeover moves it to another session, and the old holder is told once. Nothing sweeps: a lock whose holder is no longer active counts as gone wherever it is read, and
 is cleared or moved when next touched. Who gets a file is decided by Postgres, in one row per file, so every worker
 agrees (ADR-0013).
 
 What other modules stand on, all of it on `Locks`:
 
 - `take(session, path, repository)`: the lock, taken or kept, as a `Lock`; a `NeverLocks` for a file that never
-  locks; or the refusal `Held`, whose `lock` says who holds the file.
+  locks; or the refusal `Held`, whose `lock` says who holds the file. With `takeover=True` another active session's
+  lock moves to this session instead of refusing it.
+- `waiting_notices(session)`: what a session is told once of each takeover of a lock it held.
 - `release(session, path, repository)`: the holder gives the file up. Any other session is refused with `NotHeld`.
 - `of(project_id, repository, path)`: the file's lock, with its holder, or None.
 - `held(project_id)`: a project's locks, oldest first.
@@ -69,6 +71,23 @@ CREATE TABLE IF NOT EXISTS never_lock_patterns (
     added_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (project_id, pattern)
 );
+
+-- A takeover its old holder has not been told of yet.
+CREATE TABLE IF NOT EXISTS takeovers (
+    id BIGSERIAL PRIMARY KEY,
+    -- The old holder.
+    session_id BIGINT NOT NULL REFERENCES sessions(id),
+    repository TEXT NOT NULL,
+    path TEXT NOT NULL,
+    -- Who took the file over, as the old holder is told it: the notice says what was so at the takeover.
+    by_name TEXT NOT NULL,
+    by_member_id TEXT NOT NULL,
+    by_agent TEXT,
+    by_activity TEXT,
+    taken_over_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS takeovers_by_session ON takeovers (session_id);
 """
 
 # The files that never lock in any project: every session touches them, and none is edited by hand. Each is a glob.
@@ -164,7 +183,9 @@ class Held(Refused):
             f"{named(lock.repository, lock.path)} is locked by another session: {holder.member_name} "
             f"({holder.member_id}) in {holder.agent or 'a coding agent that has not said which it is'}, who last used "
             f"the lock {_ago(now, lock.last_used_at)} ({lock.last_used_at.isoformat()}). {activity} Don't edit the "
-            "file: tell your member who holds it."
+            "file: tell your member who holds it. Your member can ask for a takeover, which moves the lock to this "
+            "session at once and tells the holder on its next prompt. That is your member's decision, never yours: "
+            "only once they have said so, call take_lock again with `takeover` true."
         )
 
 
@@ -295,6 +316,17 @@ def _ago(now: datetime, then: datetime) -> str:
     return "1 minute ago" if minutes == 1 else f"{minutes} minutes ago"
 
 
+def _taken_over(row: Any) -> str:
+    """What an old holder is told of one takeover."""
+    by = f"{row['by_name']} ({row['by_member_id']})" + (f" in {row['by_agent']}" if row["by_agent"] else "")
+    activity = f"Their activity: {row['by_activity']}" if row["by_activity"] else "Their session has stated no activity."
+    return (
+        f"[session] This session no longer holds the lock on {named(row['repository'], row['path'])}: {by} moved it "
+        f"to their own session with a takeover. {activity} Stop editing the file and tell your member; taking its "
+        "lock again will be refused while their session holds it."
+    )
+
+
 class Locks:
     def __init__(self, db: Database, sessions: Sessions, clock: Clock, activity_of: ActivityOf | None = None) -> None:
         """activity_of supplies each holder's activity; without it no lock carries one."""
@@ -310,6 +342,7 @@ class Locks:
     def _end(self, conn: Conn, session_ids: Sequence[int]) -> None:
         """A session that ended or is back from idle holds nothing."""
         conn.execute("DELETE FROM locks WHERE session_id = ANY(%s)", (list(session_ids),))
+        conn.execute("DELETE FROM takeovers WHERE session_id = ANY(%s)", (list(session_ids),))
 
     def never_locks(self, project_id: str, path: str) -> str | None:
         """The never-lock pattern this path, written from its repository's root, matches in this project, or None
@@ -321,10 +354,13 @@ class Locks:
         with self._db.transaction() as conn:
             return matching(_patterns_of(conn, project_id), path)
 
-    def take(self, session: Session, path: str, repository: str | None = None) -> Lock | NeverLocks:
+    def take(
+        self, session: Session, path: str, repository: str | None = None, takeover: bool = False
+    ) -> Lock | NeverLocks:
         """Take the lock on a file for this session, or keep the one it holds, moving when it was last used. A file
         that never locks is answered so, and no lock is taken. Refused with `Held` when another active session holds
-        it."""
+        it, unless this is a takeover: then the lock moves to this session, and the old holder is told with
+        `waiting_notices`. A takeover of a file no other active session holds is an ordinary take."""
         repository, path = file_of(session, path, repository)
         pattern = self.never_locks(session.project_id, path)
         if pattern is not None:
@@ -332,7 +368,7 @@ class Locks:
         file = (session.project_id, repository, path)
         now = self._clock()
         for _ in range(_ATTEMPTS):
-            mine, kept = self._take(file, session, now)
+            mine, kept = self._take(file, session, now, takeover)
             if mine is not None:
                 return self._lock(mine, session)
             # The holder was active when the row was read. One that ended since has left the file free: look again.
@@ -342,7 +378,7 @@ class Locks:
                 raise Held(self._lock(kept, holder), now)
         raise Refused(f"{named(repository, path)} kept changing hands, so its lock wasn't taken. Call take_lock again.")
 
-    def _take(self, file: tuple[str, str, str], session: Session, now: datetime) -> tuple[Any, Any]:
+    def _take(self, file: tuple[str, str, str], session: Session, now: datetime, takeover: bool) -> tuple[Any, Any]:
         """One try: the lock's row if the session now holds it, or else the row of the active holder's lock. Neither
         means the file changed hands between the write and the read."""
         with self._db.transaction() as conn:
@@ -364,15 +400,49 @@ class Locks:
             ).fetchone()
             if kept is None:
                 return None, None
-            if self._sessions.still_active([kept["session_id"]], conn):
+            held = bool(self._sessions.still_active([kept["session_id"]], conn))
+            if held and not takeover:
                 return None, kept
-            # Its holder ended or went idle without the lock being cleared: the row is held here, so it moves.
+            # A takeover, or a holder that ended or went idle without the lock being cleared. The row is held here,
+            # so it moves: a release or another takeover racing this one waits, and then finds this session its
+            # holder. Only an active holder had a lock to lose, so only it is told.
+            if held:
+                self._tell(conn, kept, session, now)
             moved = conn.execute(
                 "UPDATE locks SET session_id = %s, taken_at = %s, last_used_at = %s"
                 f" WHERE project_id = %s AND repository = %s AND path = %s RETURNING {_COLUMNS}",
                 (session.id, now, now, *file),
             ).fetchone()
             return moved, None
+
+    def _tell(self, conn: Conn, kept: Any, by: Session, now: datetime) -> None:
+        """Keep, for the holder of this lock's row, the word that `by` took the file over."""
+        conn.execute(
+            "INSERT INTO takeovers"
+            " (session_id, repository, path, by_name, by_member_id, by_agent, by_activity, taken_over_at)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                kept["session_id"],
+                kept["repository"],
+                kept["path"],
+                by.member_name,
+                by.member_id,
+                by.agent,
+                self._activity_of(by),
+                now,
+            ),
+        )
+
+    def waiting_notices(self, session: Session) -> list[str]:
+        """What this session is told once, with its next prompt or the result of its next tool call: each takeover
+        of a lock it held, oldest first. Asking marks them told."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "DELETE FROM takeovers WHERE session_id = %s"
+                " RETURNING id, repository, path, by_name, by_member_id, by_agent, by_activity",
+                (session.id,),
+            ).fetchall()
+        return [_taken_over(row) for row in sorted(rows, key=lambda row: row["id"])]
 
     def release(self, session: Session, path: str, repository: str | None = None) -> Lock:
         """Release a file this session holds, and give back the lock that ended. Refused with `NotHeld` for a session
