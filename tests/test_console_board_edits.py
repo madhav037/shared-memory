@@ -61,6 +61,23 @@ def test_a_card_without_a_title_is_refused_with_the_reason(console: Console, sig
     assert change(signed_out, project, "cards", {}).status_code == 422
 
 
+def test_a_secret_in_a_card_is_refused_from_the_console_too(console: Console, signed_out: ConsoleClient) -> None:
+    project, agent = a_board(console, signed_out, "olive-edits-secret", 1420)
+    agent.call("add_card", title="Retry failed webhooks")
+    secret = "AKIAIOSFODNN7EXAMPLE"
+
+    refusals = [
+        change(signed_out, project, "cards", {"title": f"Rotate {secret}"}),
+        change(signed_out, project, "cards/1", {"description": f"The key is {secret}."}),
+        change(signed_out, project, "cards/1/move", {"column": "blocked", "blocked_reason": f"Needs {secret}."}),
+        change(signed_out, project, "cards/1/comment", {"text": f"Use {secret} for now."}),
+    ]
+
+    for response in refusals:
+        assert "looks like it contains a secret (an AWS access key)" in refused(response)
+    assert in_column(board(signed_out, project), "to_do") == ["Retry failed webhooks"]
+
+
 def test_a_member_edits_a_cards_fields(console: Console, signed_out: ConsoleClient) -> None:
     project, agent = a_board(console, signed_out, "olive-edits-three", 1403)
     agent.call("add_card", title="Retry webhooks", labels=["billing"])

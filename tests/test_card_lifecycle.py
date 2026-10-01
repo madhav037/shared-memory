@@ -201,7 +201,7 @@ def test_reopening_a_done_card_is_refused_for_anyone_else(owner: Session, dana: 
     unassigned = cole.refusal("update_card", number=2, column="to_do")
 
     assert "Dana Dev (emp-2)" in assigned
-    assert "reopen" in unassigned
+    assert "only its assignee, the project's leads and the team's admins can reopen it" in unassigned
     assert column(owner, "done") == [1, 2]
 
 

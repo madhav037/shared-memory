@@ -88,6 +88,46 @@ def test_only_a_card_in_to_do_can_be_claimed(owner: Session, dana: Session) -> N
     assert "no card 7" in dana.refusal("claim_card", number=7)
 
 
+def test_claiming_with_no_number_claims_the_top_card_of_the_highest_priority(owner: Session, dana: Session) -> None:
+    card(owner, "Retry failed webhooks")
+    card(owner, "Split the invoice module", priority="low")
+    card(owner, "Drop the legacy exporter", priority="high")
+    card(owner, "Refund partial charges", priority="high")
+    owner.call("update_card", number=4, position=1)
+    owner.call("update_card", number=4, assignee="owner-1")
+
+    claimed = [dana.call("claim_card")["number"] for _ in range(3)]
+
+    assert claimed == [3, 1, 2]
+    assert column(owner, "doing") == [3, 1, 2]
+    assert the_card(owner, 3)["assignee"] == "emp-2"
+    assert (the_card(owner, 4)["column"], the_card(owner, 4)["assignee"]) == ("to_do", "owner-1")
+
+
+def test_claiming_the_next_card_is_refused_when_to_do_has_no_unassigned_card(owner: Session, dana: Session) -> None:
+    assert "no unassigned card" in dana.refusal("claim_card")
+
+    card(owner, "Retry failed webhooks")
+    owner.call("update_card", number=1, assignee="owner-1")
+
+    assert "no unassigned card" in dana.refusal("claim_card")
+    assert the_card(owner, 1)["assignee"] == "owner-1"
+
+
+def test_two_claims_of_the_next_card_racing_each_get_a_card_of_their_own(
+    owner: Session, dana: Session, cole: Session
+) -> None:
+    for attempt in range(5):
+        first = card(owner, f"Retry failed webhooks, attempt {attempt}")["number"]
+        second = card(owner, f"Split the invoice module, attempt {attempt}")["number"]
+        racing = [dana.call_soon("claim_card"), cole.call_soon("claim_card")]
+
+        claimed = [future.result(timeout=30) for future in racing]
+
+        assert sorted(one["number"] for one in claimed) == [first, second]
+        assert {one["assignee"] for one in claimed} == {"emp-2", "emp-3"}
+
+
 # Who may change a card
 
 

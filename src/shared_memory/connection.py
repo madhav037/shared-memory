@@ -227,8 +227,8 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
 # The board habits every agent is given, in AGENTS.md and in Cursor's rule alike. The skill says the same at length.
 BOARD_HABITS = """\
 - When you notice follow-up work you won't do now, call `add_card` for it and tell the member.
-- Call `claim_card` only when the member asks you to work on a card. On "take the next card", claim the top card of
-  the highest priority in To do.
+- Call `claim_card` only when the member asks you to work on a card. On "take the next card", call it with no
+  number: it claims the top card of the highest priority in To do.
 - Move a card to Done only once the member confirms the work is finished, and tell them what happened to any known
   issue linked to it. Moving a card to Blocked needs a `blocked_reason`; pass `waits_on` if it waits on another card.
 - When you find something broken that teammates will trip over, call `save_known_issue` with its symptom and a
