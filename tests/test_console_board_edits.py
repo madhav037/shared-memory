@@ -30,6 +30,13 @@ def refused(response: httpx.Response) -> str:
     return message
 
 
+def on_the_board(agent: Session, number: int) -> dict[str, Any]:
+    """A card in To do as the member's coding agent reads it."""
+    (card,) = [one for one in agent.call("board")["columns"]["to_do"] if one["number"] == number]
+    found: dict[str, Any] = card
+    return found
+
+
 def test_a_member_adds_a_card_from_the_console(console: Console, signed_out: ConsoleClient) -> None:
     project, _ = a_board(console, signed_out, "olive-edits-one", 1401)
 
@@ -247,7 +254,7 @@ def test_moving_a_card_to_done_retires_the_known_issue_it_fixes(console: Console
     done = changed(signed_out, project, f"cards/{number}/move", {"column": "done"})
 
     assert doing["known_issues_fixed"] == []
-    assert done["known_issues_fixed"] == [{"status": "retired", "path": issue, "challenge_id": None}]
+    assert done["known_issues_fixed"] == [{"status": "retired", "path": issue, "challenge_id": None, "reason": None}]
     assert agent.call("read", path=issue)["status"] == "retired"
 
 
@@ -265,3 +272,56 @@ def test_moving_a_card_to_done_asks_another_author_to_retire_their_known_issue(
     assert (asked["status"], asked["path"]) == ("challenge_raised", issue)
     assert isinstance(asked["challenge_id"], int)
     assert dana.call("read", path=issue)["status"] == "active", "its author decides"
+
+
+def test_a_card_is_added_with_links_to_memories_and_files(console: Console, signed_out: ConsoleClient) -> None:
+    project, agent = a_board(console, signed_out, "olive-edits-fourteen", 1418)
+    issue = saved(agent, FLAKY_UPLOADS)
+
+    card = changed(
+        signed_out,
+        project,
+        "cards",
+        {"title": "Chunk large uploads", "memories": [issue], "files": ["billing-api:src/uploads.py"]},
+    )
+
+    assert (card["memories"], card["files"]) == ([issue], ["billing-api:src/uploads.py"])
+    assert card["titles"] == {issue: FLAKY_UPLOADS["title"]}
+    assert on_the_board(agent, card["number"])["files"] == ["billing-api:src/uploads.py"]
+
+
+def test_a_cards_links_are_changed_and_taken_off(console: Console, signed_out: ConsoleClient) -> None:
+    project, agent = a_board(console, signed_out, "olive-edits-fifteen", 1419)
+    issue = saved(agent, FLAKY_UPLOADS)
+    agent.call("add_card", title="Chunk large uploads", files=["billing-api:src/uploads.py"])
+    (number,) = [one["number"] for one in agent.call("board")["columns"]["to_do"] if not one["known_issues"]]
+
+    linked = changed(
+        signed_out,
+        project,
+        f"cards/{number}",
+        {"memories": [issue], "files": ["billing-api:src/uploads.py", "billing-api:README.md"]},
+    )
+    renamed = changed(signed_out, project, f"cards/{number}", {"title": "Chunk every large upload"})
+    cleared = changed(signed_out, project, f"cards/{number}", {"memories": [], "files": []})
+
+    assert (linked["memories"], linked["files"]) == ([issue], ["billing-api:src/uploads.py", "billing-api:README.md"])
+    assert (renamed["memories"], renamed["files"]) == (linked["memories"], linked["files"]), "only what is given changes"
+    assert (cleared["memories"], cleared["files"]) == ([], [])
+
+
+def test_a_link_the_board_cant_keep_is_refused_with_the_reason(console: Console, signed_out: ConsoleClient) -> None:
+    project, agent = a_board(console, signed_out, "olive-edits-sixteen", 1421)
+    agent.call("add_card", title="Chunk large uploads")
+
+    no_repository = change(signed_out, project, "cards", {"title": "Another", "files": ["src/uploads.py"]})
+    not_a_memory = change(signed_out, project, "cards/1", {"memories": ["somewhere/else.md"]})
+    out_of_reach = change(signed_out, project, "cards/1", {"memories": ["projects/not-this-one/shared/facts/a.md"]})
+
+    assert refused(no_repository) == (
+        "File 'src/uploads.py' must be written as repository:path, for example billing-api:package.json."
+    )
+    assert refused(not_a_memory)
+    assert refused(out_of_reach)
+    assert on_the_board(agent, 1)["memories"] == []
+    assert len(agent.call("board")["columns"]["to_do"]) == 1

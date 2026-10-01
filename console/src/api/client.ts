@@ -24,6 +24,8 @@ export type Pin = components["schemas"]["Pin"];
 export type ChallengeList = components["schemas"]["ChallengeList"];
 export type ChallengeDetail = components["schemas"]["ChallengeDetail"];
 export type RaisedChallenge = components["schemas"]["RaisedChallenge"];
+export type Notices = components["schemas"]["Notices"];
+export type Notice = components["schemas"]["Notice"];
 export type Retired = components["schemas"]["Retired"];
 export type MemberSummary = components["schemas"]["MemberSummary"];
 export type ProjectBoard = components["schemas"]["ProjectBoard"];
@@ -153,6 +155,13 @@ export function fetchPins(projectId: string, signal?: AbortSignal): Promise<Pins
 /** Challenges waiting for this member's decision, and the ones they raised. */
 export function fetchChallenges(signal?: AbortSignal): Promise<ChallengeList> {
   return ask<ChallengeList>("/api/challenges", { signal });
+}
+
+/**
+ * What this member has been told, newest first. Only a read: each notice still waits for their next briefing.
+ */
+export function fetchNotices(signal?: AbortSignal): Promise<Notices> {
+  return ask<Notices>("/api/notices", { signal });
 }
 
 /** Accept a challenge or reject it. */

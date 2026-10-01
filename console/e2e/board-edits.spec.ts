@@ -142,3 +142,40 @@ test("a change the member may not make is refused, and the board says why", asyn
   await expect(page.getByTestId("change-refused")).toContainText("Say what you want in a comment instead.");
   await expect(column(page, "doing").getByTestId("card").filter({ hasText: "Rotate the payment keys" })).toBeVisible();
 });
+
+test("a member links a card to a memory and a file, and takes a link off", async ({ page }) => {
+  const project = await checkout(page);
+  const found = (await (await page.request.get("/api/search?query=pnpm")).json()) as {
+    results: { path: string; title: string }[];
+  };
+  const memory = found.results.find((one) => one.title === "Use pnpm, not npm")!.path;
+  await openBoard(page, project);
+
+  await page.getByTestId("add-card").click();
+  await page.getByTestId("card-title").fill("Pin the pnpm version");
+  await page.getByTestId("card-memory-links").fill(memory);
+  await page.getByTestId("card-memory-links").press("Enter");
+  await page.getByTestId("card-file-links").fill("checkout-web:package.json");
+  await page.getByTestId("card-file-links").press("Enter");
+  await page.getByTestId("card-form-submit").click();
+
+  await tile(page, "Pin the pnpm version").click();
+  const panel = page.getByTestId("card-panel");
+  await expect(panel.getByTestId("card-memories")).toContainText("Use pnpm, not npm");
+  await expect(panel.getByTestId("card-files")).toContainText("checkout-web");
+  await expect(panel.getByTestId("card-files")).toContainText("package.json");
+
+  // A file link the board can't keep is refused in its words, with what was typed left in place.
+  await panel.getByTestId("edit-card").click();
+  await page.getByTestId("card-file-links").fill("no-repository");
+  await page.getByTestId("card-file-links").press("Enter");
+  await page.getByTestId("card-form-submit").click();
+  await expect(page.getByTestId("card-form-refused")).toContainText("must be written as repository:path");
+
+  // Both file links come off again; the memory link stays.
+  await page.getByTestId("card-file-links").press("Backspace");
+  await page.getByTestId("card-file-links").press("Backspace");
+  await page.getByTestId("card-form-submit").click();
+  await expect(panel.getByTestId("card-memories")).toContainText("Use pnpm, not npm");
+  await expect(panel.getByTestId("card-files")).toHaveCount(0);
+});

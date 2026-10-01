@@ -1,13 +1,21 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconArrowRight, IconBrandGithub, IconScale } from "@tabler/icons-react";
+import { IconArrowRight, IconBell, IconBrandGithub, IconScale } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { createProject, fetchChallenges, fetchFolder, signInUrl, type SignedInMember, type Status } from "../api/client";
+import {
+  createProject,
+  fetchChallenges,
+  fetchFolder,
+  fetchNotices,
+  signInUrl,
+  type SignedInMember,
+  type Status,
+} from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, longDay, memoryUrl, plural } from "../lib/format";
+import { day, folderUrl, longDay, memoryUrl, moment, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Before signing in: the title page of the team's memory, and what the console is for. */
@@ -85,6 +93,7 @@ export function Front({ member }: { member: SignedInMember }) {
 
       <div style={{ marginTop: 32 }}>
         <Waiting />
+        <Told />
       </div>
 
       {!root ? (
@@ -198,6 +207,46 @@ function Waiting() {
           Compare and decide
         </Link>
       </p>
+    </section>
+  );
+}
+
+/**
+ * What this member has been told about their cards and challenges: the notices their coding agent passes on in a
+ * briefing, here for a member who isn't in a session. Reading them here leaves them waiting for that briefing.
+ */
+function Told() {
+  const { answer } = useAsked((signal) => fetchNotices(signal), []);
+  if (!answer || answer.notices.length === 0) return null;
+  const count = answer.notices.length;
+  return (
+    <section className="notice told appear" aria-labelledby="told-heading" data-testid="notices">
+      <h2 className="notice-title" id="told-heading">
+        <IconBell size={17} stroke={1.6} aria-hidden />
+        {count === 1 ? "A notice for you" : `${count} notices for you`}
+      </h2>
+      <ol>
+        {answer.notices.map((notice) => (
+          <li key={notice.notice_id} data-testid="notice">
+            <span className="notice-text">{notice.text}</span>
+            <span className="notice-when">
+              {moment(notice.created_at)}
+              {notice.project_id && (
+                <>
+                  {" · "}
+                  <Link
+                    className="quiet-link"
+                    to={boardUrl(notice.project_id, { card: notice.card ?? undefined })}
+                    data-testid="notice-link"
+                  >
+                    {notice.card === null ? "Open the board" : `Open card ${notice.card}`}
+                  </Link>
+                </>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

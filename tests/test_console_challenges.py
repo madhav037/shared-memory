@@ -185,7 +185,7 @@ def test_a_member_retires_their_own_memory_from_the_console(console: Console, si
     retired = signed_out.post_json("/api/memory/retire", {"path": mine})
 
     assert retired.status_code == 200, retired.text
-    assert retired.json() == {"status": "retired", "path": mine, "challenge_id": None}
+    assert retired.json() == {"status": "retired", "path": mine, "challenge_id": None, "reason": None}
     assert ask(signed_out, "/api/memory", path=mine)["status"] == "retired"
 
 

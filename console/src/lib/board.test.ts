@@ -51,7 +51,7 @@ describe("what the audit log says a change to a card did", () => {
   it("names the card a change was made to, and a returned card's assignee", () => {
     expect(cardChange({ title: "Retry failed webhooks" })).toEqual(["“Retry failed webhooks”"]);
     expect(cardChange({ from: "doing", assignee: "emp-2" }, (id) => (id === "emp-2" ? "Dana Dev" : id))).toEqual([
-      "From Doing, taken from Dana Dev",
+      "From Doing, Dana Dev no longer its assignee",
     ]);
   });
 });
@@ -85,6 +85,8 @@ describe("what an edited card changes", () => {
     labels: ["webhooks"],
     due_date: "2026-10-15",
     assignee: null,
+    memories: ["team/shared/conventions/use-pnpm.md"],
+    files: ["billing-api:package.json"],
   } as Card;
 
   it("sends nothing when nothing was changed", () => {
@@ -97,16 +99,35 @@ describe("what an edited card changes", () => {
   });
 });
 
+describe("what an edited card changes about its links", () => {
+  const card = { title: "", description: "", priority: "normal", labels: [], due_date: null, assignee: null } as unknown as Card;
+  const linked = { ...card, memories: ["team/shared/conventions/use-pnpm.md"], files: ["billing-api:package.json"] } as Card;
+
+  it("sends the links of a kind whole when one was added or removed, and leaves the other kind alone", () => {
+    const draft = { ...draftOf(linked), files: ["billing-api:package.json", "billing-api:README.md"] };
+    expect(cardEdits(linked, draft)).toEqual({ files: ["billing-api:package.json", "billing-api:README.md"] });
+    expect(cardEdits(linked, { ...draftOf(linked), memories: [] })).toEqual({ memories: [] });
+  });
+});
+
 describe("what a card moved to Done did to its known issues", () => {
   const path = "projects/billing/known_issue/uploads-flake.md";
 
   it("says which were retired and whose authors were asked", () => {
     const titles = { [path]: "Uploads flake" };
-    expect(fixedWords({ titles, known_issues_fixed: [{ status: "retired", path, challenge_id: null }] })).toEqual([
+    expect(fixedWords({ titles, known_issues_fixed: [{ status: "retired", path, challenge_id: null, reason: null }] })).toEqual([
       "Retired the known issue “Uploads flake”: the card that fixes it is done.",
     ]);
-    expect(fixedWords({ titles: {}, known_issues_fixed: [{ status: "challenge_raised", path, challenge_id: 4 }] })).toEqual([
+    expect(fixedWords({ titles: {}, known_issues_fixed: [{ status: "challenge_raised", path, challenge_id: 4, reason: null }] })).toEqual([
       "Asked the author of the known issue “uploads-flake.md” to retire it. Until they decide, it stands.",
+    ]);
+  });
+
+  it("says which could not be retired, why, and how to retry", () => {
+    const failed = { status: "not_retired", path, challenge_id: null, reason: "The memory store is busy." };
+    expect(fixedWords({ titles: { [path]: "Uploads flake" }, known_issues_fixed: [failed] })).toEqual([
+      "Couldn’t retire the known issue “Uploads flake”: The memory store is busy. It is still active. " +
+        "Move the card to Done again to retry, or retire the known issue from its own page.",
     ]);
   });
 

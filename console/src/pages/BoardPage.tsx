@@ -14,6 +14,7 @@ import {
   fetchCard,
   fetchMembers,
   moveCard,
+  type BoardColumn,
   type BoardFilters,
   type Card,
   type CardDetail,
@@ -22,7 +23,6 @@ import { Placeholder, Refusal, Trail } from "../components/Bits";
 import { BlockedForm, CardForm, CommentForm } from "../components/CardEdits";
 import { Prose } from "../components/Prose";
 import {
-  COLUMN_NAMES,
   PRIORITY_NAMES,
   cardEdits,
   draftOf,
@@ -366,6 +366,7 @@ export function BoardPage() {
             number={opened}
             people={people}
             labels={board.labels}
+            columns={board.columns}
             changes={changes}
             said={said}
             attempt={attempt}
@@ -391,6 +392,8 @@ export function BoardPage() {
               priority: draft.priority,
               labels: draft.labels,
               due_date: draft.due_date || null,
+              memories: draft.memories,
+              files: draft.files,
             });
             setAdding(false);
             setRefusal(null);
@@ -525,6 +528,7 @@ function CardPanel({
   number,
   people,
   labels,
+  columns,
   changes,
   said,
   attempt,
@@ -535,6 +539,8 @@ function CardPanel({
   number: number;
   people: Map<string, string>;
   labels: string[];
+  /** The board's columns, as the server names them. */
+  columns: Pick<BoardColumn, "column" | "name">[];
   changes: number;
   said: ReactNode;
   attempt: Attempt;
@@ -638,15 +644,15 @@ function CardPanel({
       <dl className="card-fields">
         <dt>Column</dt>
         <dd className="card-column">
-          {COLUMN_NAMES[card.column]}
+          {columns.find((one) => one.column === card.column)?.name}
           <Select
             aria-label="Move to another column"
             placeholder="Move to…"
             size="xs"
             value={null}
-            data={Object.entries(COLUMN_NAMES)
-              .filter(([value]) => value !== card.column)
-              .map(([value, label]) => ({ value, label }))}
+            data={columns
+              .filter((one) => one.column !== card.column)
+              .map((one) => ({ value: one.column, label: one.name }))}
             onChange={(value) => value && move(card, value as Column)}
             data-testid="move-card"
             style={{ width: 130 }}
