@@ -99,6 +99,12 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("user", "GitHub's /user address, which is theirs to name", (SERVER + "console_sessions.py",), "/user"),
     Allow("trail", "the folders leading to a memory, or its versions in order; not the audit log"),
     Allow("item", "one element of a list being sorted; not a card", (SERVER + "index.py", SERVER + "store.py")),
+    Allow(
+        "setup",
+        "setting up the server and a team (`shared-memory setup`); avoided only for onboarding",
+        (SERVER + "app.py", SERVER + "cli.py", SERVER + "identity.py"),
+    ),
+    Allow("input", "a tool's input schema, which is MCP's to name; not a source", (SERVER + "app.py",), "input schema"),
     # Ordinary English.
     Allow("delete", "cards, pins and files are deleted; avoided only for retiring a memory"),
     Allow("update", "cards and indexes are updated; avoided only for superseding a memory"),
