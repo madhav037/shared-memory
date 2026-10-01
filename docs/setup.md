@@ -129,9 +129,9 @@ Open a project in the console and a memory shows whether it is **pinned**. Pinni
 
 ## 6. Decide what the team no longer believes
 
-The console opens on the **challenges** waiting for your decision, with both memories side by side: what the memory says now, and what is offered in its place. Accepting one supersedes the memory; rejecting leaves it as it is and the challenger's memory stays personal memory. Several challenges against one memory are shown together, and accepting one closes the others, telling whoever raised them why. Until the fallback period passes the author decides; after it, or once the author has left the team, any member can.
+The console opens on the **challenges** waiting for your decision, with both memories side by side: what the memory says now, and what is offered in its place. Accepting one supersedes the memory; rejecting leaves it as it is and the challenger's memory stays personal memory. Several challenges against one memory are shown together, and accepting one closes the others, telling whoever raised them why. A challenge is decided by the challenged memory's author, by a lead of the project that memory is in, or by one of the team's admins; on team memory, by its author or an admin. A lead or an admin who raised the challenge can't decide it in that capacity. Each challenge says why it is yours to decide, and when someone other than the author decides, the author is told who did and in what capacity. Once the fallback period passes, or once the author has left the team, any member can decide.
 
-A memory that is no longer true and has nothing to replace it is **retired** from its own page. Retiring your own memory takes effect at once; retiring another member's raises a challenge for that author to decide. The **Challenges** page also shows every challenge you raised and how each one ended.
+A memory that is no longer true and has nothing to replace it is **retired** from its own page. Retiring your own memory takes effect at once; retiring another member's raises a challenge, decided as any other is. The **Challenges** page also shows every challenge you raised and how each one ended.
 
 ## 7. Repositories without a project
 

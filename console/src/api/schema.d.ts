@@ -508,7 +508,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retire a memory that is no longer true; another author's raises a challenge they decide. */
+        /** Retire a memory that is no longer true; another author's raises a challenge instead. */
         post: operations["retire_at"];
         delete?: never;
         options?: never;
@@ -1468,6 +1468,8 @@ export interface components {
             challenger_path: string | null;
             /** May Decide */
             may_decide: boolean;
+            /** Decides As */
+            decides_as: ("author" | "lead" | "admin" | "fallback" | "author_left") | null;
         };
         /**
          * PendingChallenge
@@ -1631,6 +1633,11 @@ export interface components {
             raised_at: string;
             /** Yours */
             yours: boolean;
+            /**
+             * Decides As
+             * @enum {string}
+             */
+            decides_as: "author" | "lead" | "admin" | "fallback" | "author_left";
             target: components["schemas"]["ChallengedMemory"];
             challenger: components["schemas"]["ChallengedMemory"] | null;
             /** Reasoning */
@@ -2573,7 +2580,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Retire a memory that is no longer true; another author's raises a challenge they decide. */
+            /** @description Retire a memory that is no longer true; another author's raises a challenge instead. */
             200: {
                 headers: {
                     [name: string]: unknown;

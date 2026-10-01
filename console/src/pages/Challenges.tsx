@@ -29,8 +29,9 @@ export function Challenges() {
     <div className="medium">
       <h1 className="page-title wide">Challenges</h1>
       <p className="standfirst">
-        A challenge asks a memory’s author to let it be superseded or retired. Its author decides; if they haven’t after a
-        few days, or they have left the team, anyone can.
+        A challenge asks for a memory to be superseded or retired. Its author can decide it, and so can a lead of its
+        project or an admin, unless they raised it; for team memory, its author or an admin. If nobody has after a few
+        days, or its author has left the team, anyone can.
       </p>
 
       {refused && <Refusal>{refused}</Refusal>}
@@ -118,6 +119,14 @@ function Waiting({
   );
 }
 
+/** Why a challenge against another member's memory is this member's to decide. */
+const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string> = {
+  lead: "yours to decide as a project lead",
+  admin: "yours to decide as an admin",
+  fallback: "nobody has decided in time, so anyone may",
+  author_left: "its author has left the team, so anyone may",
+};
+
 function Proposal({
   challenge,
   who,
@@ -138,7 +147,9 @@ function Proposal({
         <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
         <b>{who(challenge.raised_by)}</b> wants to {challenge.kind === "retire" ? "retire it" : "supersede it"} ·{" "}
         {moment(challenge.raised_at)}
-        {!challenge.yours && " · its author hasn’t decided in time, so anyone may"}
+        {challenge.decides_as !== "author" && (
+          <span data-testid="decides-as"> · {WHY_YOURS[challenge.decides_as]}</span>
+        )}
       </p>
       {challenge.reasoning && (
         <div className="reasoning" data-testid="reasoning">

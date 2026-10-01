@@ -77,11 +77,11 @@ Personal memory becomes what the team follows only when it is promoted with `pro
 
 Never resolve a real contradiction as keep_both to get a promotion through: project and team memory must never contradict each other.
 
-If the member chooses **supersede** for a memory someone else wrote, nobody's memory is superseded without their say: promote returns `challenge_raised`, the member's memory stays personal (labeled pending), and the other author decides.
+If the member chooses **supersede** for a memory someone else wrote, it is not superseded on the member's word alone: promote returns `challenge_raised`, the member's memory stays personal (labeled pending), and the other author, a lead of that memory's project or one of the team's admins decides.
 
 ## Retiring a memory
 
-When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge they decide. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
+When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge, decided as any challenge is. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
 
 ## The board
 
@@ -103,13 +103,15 @@ When you find something broken that teammates will trip over, `save_known_issue`
 
 ## Challenges
 
-When the briefing or a prompt shows **challenges waiting for your decision**, they are about memories this member wrote:
+A challenge is decided by the challenged memory's author. A lead of the project that memory is in, or one of the team's admins, may decide it too, unless they raised it themselves; on team memory only the admins may. Once a challenge has been open 3 days, or its author has left the team, any member may decide it.
 
-1. Show the member each challenge: the memory being challenged, who challenged it, and what they want to replace it with (or that they want to retire it). Several challenges against the same memory are alternatives: at most one can be accepted.
+When the briefing or a prompt shows **challenges waiting for your decision**, each is one this member may decide. One marked *yours to decide as a project lead* or *as an admin* is about another member's memory:
+
+1. Show the member each challenge: the memory being challenged, who challenged it, what they want to replace it with (or that they want to retire it), and, where the memory isn't the member's own, why it is theirs to decide. Several challenges against the same memory are alternatives: at most one can be accepted.
 2. Ask the member to accept or reject each one. Don't decide for them.
 3. Record the decision with `decide_challenge` (challenge_id, and `accept` or `reject`).
 
-News about challenges this member raised (accepted, rejected, closed) appears as **shared memory news**. Tell the member.
+News about challenges this member raised (accepted, rejected, closed) appears as **shared memory news**, and so does a challenge against the member's own memory that someone else decided, with who decided it and in what capacity. Tell the member.
 
 ## Briefing and pins
 

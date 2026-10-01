@@ -6,14 +6,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from shared_memory.audit import CHALLENGE_RAISED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity
+from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import locate
 from shared_memory.store import MemoryStore
 
@@ -77,6 +77,19 @@ class Challenge:
             row["raised_at"],
             row["reasoning"],
         )
+
+
+# In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
+# of the team's admins (the owner is one), because the fallback period has passed, or because its author has left.
+DecidesAs = Literal["author", "lead", "admin", "fallback", "author_left"]
+
+
+@dataclass(frozen=True)
+class Waiting:
+    """An open challenge a member may decide, and in what capacity it is theirs to decide."""
+
+    challenge: Challenge
+    decides_as: DecidesAs
 
 
 def project_of(challenge: Challenge) -> str | None:
@@ -192,26 +205,34 @@ class Challenges:
         return labels
 
     def against(self, caller: Caller, path: str) -> list[dict[str, Any]]:
-        """Every open challenge against one memory, and whether this member is the one who may decide it."""
-        return [
-            {
-                "challenge_id": c.id,
-                "kind": c.kind,
-                "raised_by": c.raised_by,
-                "challenger_path": c.challenger_path,
-                "may_decide": self.may_decide(caller, c),
-            }
-            for c in self.open_challenges(caller.team, target_path=path)
-        ]
+        """Every open challenge against one memory, and whether this member may decide it and in what capacity."""
+        listed = []
+        for c in self.open_challenges(caller.team, target_path=path):
+            decides_as = self.decides_as(caller, c)
+            listed.append(
+                {
+                    "challenge_id": c.id,
+                    "kind": c.kind,
+                    "raised_by": c.raised_by,
+                    "challenger_path": c.challenger_path,
+                    "may_decide": decides_as is not None,
+                    "decides_as": decides_as,
+                }
+            )
+        return listed
 
-    def waiting_for(self, caller: Caller) -> list[Challenge]:
-        """Every open challenge this member may decide, in the projects they can reach."""
+    def waiting_for(self, caller: Caller) -> list[Waiting]:
+        """Every open challenge this member may decide, in the projects they can reach, each with the capacity it is
+        theirs in."""
         reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
-        return [
-            challenge
-            for challenge in self.open_challenges(caller.team)
-            if self.may_decide(caller, challenge) and project_of(challenge) in reachable
-        ]
+        waiting = []
+        for challenge in self.open_challenges(caller.team):
+            if project_of(challenge) not in reachable:
+                continue
+            decides_as = self.decides_as(caller, challenge)
+            if decides_as is not None:
+                waiting.append(Waiting(challenge, decides_as))
+        return waiting
 
     def raised_by(self, caller: Caller) -> list[dict[str, Any]]:
         """Every challenge this member raised, newest first, and how each one ended."""
@@ -239,20 +260,80 @@ class Challenges:
 
     # Who decides
 
-    def may_decide(self, caller: Caller, challenge: Challenge) -> bool:
-        """The author decides; after the fallback period, or once the author has left, any member may."""
-        if challenge.target_author == caller.member_id:
-            return True
-        if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
-            return True
-        return self._identity.is_removed(caller.team, challenge.target_author)
+    def decides_as(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
+        """In what capacity this member may decide a challenge, or None when they may not (ADR-0016).
 
-    def require_decider(self, caller: Caller, challenge: Challenge) -> None:
-        if not self.may_decide(caller, challenge):
+        The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
+        the team's admins, unless they raised the challenge themselves; team memory has no project, so only admins
+        stand there. Once the author has left, or after the fallback period, any member may.
+        """
+        if challenge.target_author == caller.member_id:
+            return "author"
+        if challenge.raised_by != caller.member_id:
+            if self._leads_the_challenged(caller, challenge):
+                return "lead"
+            if caller.member.is_owner or caller.member.is_admin:
+                return "admin"
+        if self._identity.is_removed(caller.team, challenge.target_author):
+            return "author_left"
+        if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
+            return "fallback"
+        return None
+
+    def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
+        """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
+        nobody standing."""
+        project_id = project_in(challenge.target_path)
+        return project_id is not None and project_id in self._identity.leads_of(caller.member)
+
+    def require_decider(self, caller: Caller, challenge: Challenge) -> DecidesAs:
+        """The capacity this member decides the challenge in; refused when it isn't theirs to decide."""
+        decides_as = self.decides_as(caller, challenge)
+        if decides_as is not None:
+            return decides_as
+        days = self._settings.challenge_fallback_days
+        in_project = project_in(challenge.target_path) is not None
+        if challenge.raised_by == caller.member_id and (
+            caller.member.is_owner or caller.member.is_admin or self._leads_the_challenged(caller, challenge)
+        ):
             raise Refused(
-                f"Only {challenge.target_author}, the author of the challenged memory, can decide this challenge "
-                f"until it has been open for {self._settings.challenge_fallback_days} days."
+                f"You raised challenge {challenge.id}, so you can't decide it as a project lead or an admin. "
+                f"{challenge.target_author}, the author of the challenged memory, "
+                f"{'another project lead or an admin' if in_project else 'or another admin'} can; "
+                f"anyone may once it has been open for {days} days."
             )
+        others = "a lead of its project and the team's admins" if in_project else "and the team's admins"
+        raise Refused(
+            f"Only {challenge.target_author}, the author of the challenged memory, {others} can decide this challenge "
+            f"until it has been open for {days} days."
+        )
+
+    def tell_author(self, caller: Caller, challenge: Challenge, decides_as: DecidesAs, decision: str) -> None:
+        """Tell the challenged memory's author that someone else decided a challenge against it, and in what
+        capacity. An author who decided it themselves, or who has left, is told nothing."""
+        if decides_as in ("author", "author_left"):
+            return
+        if decision == "rejected":
+            outcome = "your memory stands as it is"
+        else:
+            outcome = "your memory is now retired" if challenge.challenger_path is None else "your memory is now superseded"
+        self.tell(
+            caller.team,
+            challenge.target_author,
+            f"Challenge {challenge.id} by {challenge.raised_by} against your memory {challenge.target_path} was "
+            f"{decision} by {caller.member_id}, deciding {self._capacity(decides_as)}: {outcome}.",
+        )
+
+    def _capacity(self, decides_as: DecidesAs) -> str:
+        """The capacity in words, to follow "decide" or "deciding"."""
+        if decides_as == "fallback":
+            return f"as any member may after {self._settings.challenge_fallback_days} days"
+        return {
+            "author": "as its author",
+            "lead": "as a project lead",
+            "admin": "as an admin",
+            "author_left": "as any member may once its author has left the team",
+        }[decides_as]
 
     # What sessions are told
 
@@ -277,18 +358,22 @@ class Challenges:
                 conn.execute(
                     "UPDATE challenges SET author_notified_at = %s WHERE id = ANY(%s)", (self._clock(), [c.id for c in shown])
                 )
-        text = "\n\n".join(part for part in (self._render(caller, shown), self._news(caller)) if part)
+        told = [Waiting(c, "author") for c in shown]
+        text = "\n\n".join(part for part in (self._render(caller, told), self._news(caller)) if part)
         return f"<shared-memory-notices>\n{text}\n</shared-memory-notices>" if text else None
 
-    def _render(self, caller: Caller, challenges: list[Challenge]) -> str | None:
-        if not challenges:
+    def _render(self, caller: Caller, waiting: list[Waiting]) -> str | None:
+        if not waiting:
             return None
         lines = ["[challenges waiting for your decision]"]
-        for target_path in dict.fromkeys(c.target_path for c in challenges):
+        for target_path in dict.fromkeys(one.challenge.target_path for one in waiting):
             lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
-            for c in (c for c in challenges if c.target_path == target_path):
+            for one in (one for one in waiting if one.challenge.target_path == target_path):
+                c = one.challenge
+                # A challenge against the member's own memory needs no reason; any other says why it is theirs.
+                whose = "" if one.decides_as == "author" else f", yours to decide {self._capacity(one.decides_as)}"
                 if c.challenger_path is None:
-                    line = f"- Challenge {c.id} by {c.raised_by}: retire it"
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: retire it"
                     line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 else:
                     try:
@@ -296,13 +381,14 @@ class Challenges:
                         replacement = f'"{challenger.title}" ({c.challenger_path}): {challenger.summary}'
                     except Refused:
                         replacement = c.challenger_path
-                    line = f"- Challenge {c.id} by {c.raised_by}: supersede it with {replacement}"
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: supersede it with {replacement}"
                     if c.reasoning:
                         line += f" — reasoning: {c.reasoning}"
                 lines.append(line)
         lines.append(
             "Show these to the member and record their decision with decide_challenge (accept or reject). "
-            "At most one challenge per memory can be accepted."
+            "At most one challenge per memory can be accepted. Where the memory is another member's, its author is "
+            "told who decided and in what capacity."
         )
         return "\n".join(lines)
 

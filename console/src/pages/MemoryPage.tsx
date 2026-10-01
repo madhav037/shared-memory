@@ -247,7 +247,10 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
                 Until you decide, it stands as it is. <Link to="/challenges">Compare and decide</Link>
               </>
             ) : (
-              <>Until {memory.author_name} decides, it stands as it is.</>
+              <>
+                Until {memory.author_name}
+                {memory.level === "team" ? "" : ", a project lead"} or an admin decides, it stands as it is.
+              </>
             )}
           </p>
         )}
@@ -276,7 +279,9 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
                 {challenge.replaces ? <Link to={memoryUrl(challenge.replaces)}>another memory</Link> : "another memory"}
               </span>
             ))}
-            ; its author decides.
+            ; its author
+            {memory.pending.every((challenge) => challenge.replaces?.startsWith("team/")) ? "" : ", a project lead"} or
+            an admin decides.
           </p>
         )}
       </div>

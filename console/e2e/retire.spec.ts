@@ -26,7 +26,10 @@ test("retiring a memory someone else wrote asks its author instead", async ({ pa
 
   await expect(page.getByTestId("retired")).toContainText("Raj Raiser has been asked to retire it");
   await expect(page.getByTestId("open-challenges")).toContainText("Olive Owner wants to retire it");
-  await expect(page.getByTestId("open-challenges")).toContainText("Until Raj Raiser decides, it stands as it is");
+  // Olive is an admin, but she raised this challenge, so it isn't hers to decide.
+  await expect(page.getByTestId("open-challenges")).toContainText(
+    "Until Raj Raiser, a project lead or an admin decides, it stands as it is",
+  );
   await expect(page.getByTestId("retired-banner")).toHaveCount(0);
 
   await signOut(page);

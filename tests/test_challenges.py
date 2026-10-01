@@ -101,7 +101,7 @@ def test_rejecting_a_challenge_leaves_the_memory_personal(owner: Session, dana: 
     assert "was rejected" in added_context(dana.prompt("write a haiku about cats"))
 
 
-def test_only_the_challenged_memorys_author_can_decide(owner: Session, dana: Session, cole: Session) -> None:
+def test_a_member_who_neither_wrote_it_nor_leads_nor_administers_cant_decide_yet(owner: Session, dana: Session, cole: Session) -> None:
     target = promote_now(owner, NPM)
     raised = challenge(dana, PNPM, target)
 

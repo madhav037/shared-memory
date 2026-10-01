@@ -152,6 +152,36 @@ if __name__ == "__main__":
             stack,
             reasoning="Billing moved its queue to Kafka in March.",
         )
+        # A challenge for the journey where a project lead decides: in a project Lena leads, against a memory of
+        # Wes's, whom no journey signs in as. Olive raises it, so it isn't hers to decide as an admin, and the
+        # journeys that check she has nothing waiting still find nothing.
+        lena = Session(
+            server, owner.call("add_member", member_id="emp-lena", name="Lena Lead", github="lena")["personal_token"]
+        )
+        reporting = lena.call("create_project", name="Reporting", repository="reporting-api")["project_id"]
+        wes = Session(
+            server, owner.call("add_member", member_id="emp-wes", name="Wes Writer")["personal_token"]
+        ).in_project(reporting, "reporting-api")
+        reports = promote_now(
+            wes,
+            {
+                "title": "Reports are built at 06:00",
+                "summary": "The daily reports are built at 06:00 UTC.",
+                "type": "gotcha",
+                "body": "The daily reports are built at 06:00 UTC, before the finance team starts.",
+            },
+        )
+        challenge(
+            owner.in_project(reporting, "reporting-api"),
+            {
+                "title": "Reports are built at 05:00",
+                "summary": "The daily reports are built at 05:00 UTC.",
+                "type": "gotcha",
+                "body": "The daily reports are built at 05:00 UTC since finance moved its start an hour earlier.",
+            },
+            reports,
+            reasoning="Finance starts an hour earlier since June.",
+        )
         # Two memories filed under a topic, so the journeys have a topic folder to pin. A topic is a folder
         # inside a type folder, which the type folder itself is not: pinning one puts everything filed under
         # it into every briefing at once.

@@ -15,7 +15,7 @@ test("an offered memory says whose it is and that it is waiting on its author", 
 
   await expect(page.getByTestId("personal-banner")).toContainText("Personal memory of Olive Owner");
   await expect(page.getByTestId("pending")).toContainText("Waiting on a challenge");
-  await expect(page.getByTestId("pending")).toContainText("its author decides");
+  await expect(page.getByTestId("pending")).toContainText("its author, a project lead or an admin decides");
 });
 
 test("a member reads what a challenge would change and rejects it, and the memory stands", async ({ page }) => {
