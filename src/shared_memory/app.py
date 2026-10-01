@@ -21,7 +21,7 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from shared_memory import hooks
+from shared_memory import hooks, onboarding
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.board import Board
@@ -62,6 +62,8 @@ INSTRUCTIONS = (
     "top card of the highest priority in To do. Move a card to Done only once the member confirms it is finished. "
     "When you find something broken that teammates will trip over, save_known_issue with its symptom and a "
     "workaround.\n\n"
+    "When the member asks to onboard, to import what they already have written down, call onboard and follow its "
+    "steps.\n\n"
     "If a tool says this repository isn't connected, offer to connect it with create_project."
 )
 
@@ -338,6 +340,27 @@ def build_app(
         except Refused as refused:
             return str(refused)
 
+    def onboarding_steps(current: Caller) -> str:
+        current.require_project()
+        return onboarding.steps()
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def onboard(ctx: Context) -> str:
+        """Start onboarding: get the steps for importing what this member and this repository already have written
+        down (repository documents, your local memory, other coding agents' rule files) into Shared Memory, then
+        follow them in order. Call it only when the member asks to onboard or to import their existing setup; the
+        member approves every memory before it is saved and before it is promoted."""
+        return onboarding_steps(caller(ctx))
+
+    @server.prompt(name="onboard", description="Import what you already have written down into Shared Memory.")
+    def onboard_prompt(ctx: Context) -> str:
+        """Onboarding as a prompt, for agents that offer server prompts as commands."""
+        try:
+            return onboarding_steps(caller(ctx))
+        except Refused as refused:
+            return str(refused)
+
     @server.tool()
     @_refusals_as_tool_errors
     def pin(path: str, ctx: Context) -> dict[str, Any]:
@@ -477,8 +500,10 @@ def build_app(
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
     @_refusals_as_tool_errors
-    def similar_before_promoting(path: str, level: str, ctx: Context) -> dict[str, Any] | None:
-        return lifecycle.similar_before_promoting(caller(ctx), path, level)
+    def similar_before_promoting(
+        path: str, level: str, ctx: Context, author: str | None, imported_from: str | None
+    ) -> dict[str, Any] | None:
+        return lifecycle.similar_before_promoting(caller(ctx), path, level, author, imported_from)
 
     @_refusals_as_tool_errors
     def promoting(
@@ -488,8 +513,10 @@ def build_app(
         reference: str | None,
         resolutions: dict[str, str] | None,
         reasoning: str | None,
+        author: str | None,
+        imported_from: str | None,
     ) -> dict[str, Any]:
-        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning)
+        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning, author, imported_from)
 
     @server.tool()
     async def promote(
@@ -499,6 +526,8 @@ def build_app(
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
         reasoning: str | None = None,
+        author: str | None = None,
+        imported_from: str | None = None,
     ) -> dict[str, Any]:
         """Promote your personal memory into project memory or team memory (level: project or team).
 
@@ -507,13 +536,20 @@ def build_app(
         call promote again with the reference and resolutions mapping every similar memory's path to supersede,
         keep_both or cancel. Pass reasoning for why any memory resolved as supersede should give way to this one,
         so whoever decides the resulting challenge hears your reasoning.
+
+        author and imported_from are for a memory imported during onboarding, on the first call only: when git blame
+        shows one member wrote the passage it was cut from, pass author (their member ID, or their GitHub username
+        written @username) and imported_from (the file, as repository:path). That member becomes the author and is
+        told; you are recorded as its importer. Leave both out everywhere else.
         """
         if reference is None:
             # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
-            proposal = await anyio.to_thread.run_sync(similar_before_promoting, path, level, ctx)
+            proposal = await anyio.to_thread.run_sync(
+                similar_before_promoting, path, level, ctx, author, imported_from
+            )
             if proposal is not None:
                 return proposal
-        return await saves.run(promoting, path, level, ctx, reference, resolutions, reasoning)
+        return await saves.run(promoting, path, level, ctx, reference, resolutions, reasoning, author, imported_from)
 
     @_refusals_as_tool_errors
     def similar_before_saving(

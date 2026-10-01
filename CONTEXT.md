@@ -59,7 +59,7 @@ A folder of memories with an index, used when a subject is too long for one memo
 _Avoid_: Long memory, folder memory
 
 **Author**:
-The member who wrote a memory.
+The member who wrote a memory; for an imported memory promoted in its writer's name, the member who wrote the passage it was cut from.
 _Avoid_: Owner, creator
 
 **Level**:
@@ -67,7 +67,7 @@ Where a memory sits: local, personal, project or team.
 _Avoid_: Tier, scope, L1/L2/L3
 
 **Local memory**:
-A coding agent's own built-in memory on one member's machine, such as Claude Code's; it never reaches the team.
+A coding agent's own built-in memory on one member's machine, such as Claude Code's; it reaches the team only when that member imports from it.
 _Avoid_: Private memory, auto memory
 
 **Personal memory**:
@@ -141,6 +141,24 @@ _Avoid_: Argument, case, rationale, justification
 **Retire**:
 To mark a memory as no longer true without anything superseding it.
 _Avoid_: Delete, archive
+
+### Onboarding
+
+**Onboarding**:
+A session a member starts deliberately, in which their coding agent imports what they and the repository already have written down. It is not the welcoming of a new member to the team.
+_Avoid_: Migration, bulk import, bootstrap, setup
+
+**Import**:
+To cut a passage of a source into a memory during onboarding: saved as the importer's personal memory first, then promoted like any other.
+_Avoid_: Migrate, ingest, upload, sync
+
+**Source**:
+A file onboarding imports from: a repository document, a coding agent's local memory, or another coding agent's rule file.
+_Avoid_: Origin, input, provenance
+
+**Importer**:
+The member whose session imported a memory; recorded on the memory, with its source, when it is promoted in another member's name.
+_Avoid_: Migrator, uploader, submitter
 
 ### Reading memory
 

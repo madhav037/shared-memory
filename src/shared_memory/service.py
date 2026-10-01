@@ -29,8 +29,8 @@ def _promoting(path: str) -> str:
     return (
         f"Saved as this member's personal memory: the team can read it but hasn't accepted it. If everyone on this "
         f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'team' if it "
-        f"holds for every project in the team. Anything written for the whole team, such as onboarding or how-we-work "
-        f"notes, belongs at one of those levels. Leave it personal if it is only this member's own note."
+        f"holds for every project in the team. Anything written for the whole team, such as how-we-work notes or what a new "
+        f"member reads first, belongs at one of those levels. Leave it personal if it is only this member's own note."
     )
 
 
@@ -64,6 +64,8 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
         "exception_to": memory.exception_to,
         "related_files": memory.related_files,
         "promoted_by": memory.promoted_by,
+        "imported_by": memory.imported_by,
+        "imported_from": memory.imported_from,
         "body": memory.body,
     }
 
