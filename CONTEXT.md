@@ -175,7 +175,7 @@ Memories added to a prompt automatically because they match it.
 _Avoid_: Injection, auto-search
 
 **Hook**:
-Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, and as the session ends. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
+Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
 
 ### The console

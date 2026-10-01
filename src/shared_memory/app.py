@@ -41,7 +41,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
-from shared_memory.locks import Lock, Locks
+from shared_memory.locks import Held, Lock, Locks, NoRepository, OutsideRepository
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -98,6 +98,13 @@ _modern_http._tool_input_schema = _tool_input_schema
 # Everything under these paths answers one member: their memory, their briefing, their console. A CDN in front of the
 # server must never keep one of those answers and hand it to someone else.
 PRIVATE_PATHS = ("/api/", "/mcp", "/hooks/")
+
+# What a blocked edit's reason ends with, after who holds the file: the way on, which is the member's to choose.
+TAKEOVER_IS_POSSIBLE = (
+    "A takeover is possible: it moves the lock to this session at once, and the holder is told on their next prompt. "
+    "Ask your member first, and only once they say so call take_lock with this file's path from the repository's "
+    "root, this session and takeover: true, then edit the file."
+)
 
 
 class NeverCached:
@@ -202,8 +209,8 @@ def build_app(
     saves = Saves()
     sessions = Sessions(settings, db, clock)
     identity.on_access_lost(sessions.end_unreachable)
-    locks = Locks(db, sessions, clock)
     activities = Activities(db, clock, sessions, board.doing_titles)
+    locks = Locks(db, sessions, clock, activities.of)
 
     server =MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
@@ -256,9 +263,18 @@ def build_app(
         return None
 
     async def hook(
-        request: Request, event: str, required: HookPart, optional: HookPart | None = None, *, report_refusals: bool = False
+        request: Request,
+        event: str,
+        required: HookPart,
+        optional: HookPart | None = None,
+        *,
+        report_refusals: bool = False,
+        answer: Callable[[str | None, str, str], dict[str, Any]] = hooks.answered,
     ) -> Response:
         """Answer a coding agent's hook. Anything that goes wrong leaves the session unaffected.
+
+        What the parts give is carried to the agent by `answer`: as context added to the session, unless the hook is
+        the one that blocks, whose parts give the reason. Parts that give nothing are answered emptily.
 
         The caller is authenticated from the headers before the body is read, so a hook without a valid personal token
         costs next to nothing. The required part always runs to completion, because it marks news as delivered and so
@@ -299,7 +315,7 @@ def build_app(
         context = "\n\n".join(part for part in parts if part)
         if not context:
             return JSONResponse({})
-        return JSONResponse(hooks.answered(answer_format, named_event, context))
+        return JSONResponse(answer(answer_format, named_event, context))
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
@@ -334,6 +350,28 @@ def build_app(
             return None
 
         return await hook(request, "SessionEnd", ended)
+
+    @server.custom_route("/hooks/before-edit", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def before_edit(request: Request) -> Response:
+        # Where the hook says its repository's root is. Without it the payload's working folder stands in.
+        root = request.headers.get("x-shared-memory-root")
+
+        def held(current: Caller, payload: dict[str, Any]) -> str | None:
+            """Why the edit is blocked: another active session holds the file. None lets it through, with the file's
+            lock taken or kept for this session where the file locks."""
+            session = session_of(current, payload)
+            path = hooks.edited_file(payload, root)
+            if session is None or path is None:
+                return None
+            try:
+                locks.take(session, path)
+            except Held as refused:
+                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
+            except (OutsideRepository, NoRepository):
+                return None
+            return None
+
+        return await hook(request, "PreToolUse", held, answer=hooks.blocked)
 
     def composed_briefing(current: Caller, named: str | None, session: Session | None) -> str | None:
         """What a session starts with: its project's pins, any notices for this member, then their cards, the

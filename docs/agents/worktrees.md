@@ -75,8 +75,8 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
   `Session` (member, coding agent, identifier), with `taken_at`, `last_used_at` and `activity`.
 - **A project's locks**: `locks.held(project_id)`, oldest first. Both reads leave out a lock whose holder is no
   longer active, and neither checks reach: that is the asker's.
-- **A holder's activity** is None until `Locks` is built with `activity_of`, a function from a `Session` to its
-  activity.
+- **A holder's activity** is `activities.of(holder)`, which `Locks` is built with: what the session stated, else its
+  member's card in Doing, else None. It is one read per lock.
 - **Never-lock patterns** are consulted in one place, `locks.never_locks(project_id, path)`, which gives the pattern
   matched or None. Today it reads the built-in `NEVER_LOCK`; a project's own patterns join it there, matched with
   `matching(patterns, path)`. A pattern without a slash is matched against the file's name at any depth, one with a
@@ -85,6 +85,39 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
   root, with forward slashes. An absolute path is refused as outside the repository, so a hook that is handed one
   makes it relative first.
 - **Moving a lock** (a takeover) has no method yet: `take` moves only a lock whose holder is no longer active.
+
+### The before-edit hook
+
+`POST /hooks/before-edit` checks or takes the lock on the file an edit tool is about to change. Claude Code's plugin
+runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's kit posts to the same endpoint.
+
+- **Headers**: `Authorization`, `X-Shared-Memory-Project` and `X-Shared-Memory-Repository`, as every hook sends, and
+  `X-Shared-Memory-Root`, the absolute path of the repository's root where the agent gives its hook one (Claude
+  Code's `$CLAUDE_PROJECT_DIR`). `?format=` names the agent family, as on the other hooks.
+- **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the file, in
+  `tool_input.file_path` or `tool_input.notebook_path`, and the working folder, `cwd`, which stands in for the root
+  when the header is missing. An agent that names its file or its root in another field is added in
+  `hooks.edited_file`.
+- **The file's path from the root** is the file's absolute path with the root cut off the front
+  (`hooks.edited_file`); a file not under the root is outside the repository. A relative path is taken as written
+  from the root.
+- **Allowed** is answered `{}` in every family: a free file (now locked for the session), the session's own lock, a
+  never-lock file, a path outside the repository, an unreadable payload, a payload naming no session or no file, an
+  unknown personal token, a server error. Never an explicit "allow", which would skip the agent's own permission
+  prompt.
+- **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is `Held`'s message
+  followed by `TAKEOVER_IS_POSSIBLE` (`app.py`):
+  - `claude`: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+    "permissionDecisionReason": reason}}`
+  - `copilot-cli`: `{"permissionDecision": "deny", "permissionDecisionReason": reason}`
+  - `cursor`: `{"permission": "deny", "user_message": reason, "agent_message": reason}`
+  - `cline`: `{"cancel": true, "errorMessage": reason}`
+
+  Only Claude Code's shape has been run in the real agent; the other three are written from each agent's hook
+  reference and are checked by hand when that agent's kit is wired.
+- **The hook's own command** limits curl to 3 seconds and, when curl fails, prints a `systemMessage` warning instead,
+  so the edit goes ahead. The server always answers 200.
+- **In tests**, the driver's `Session.edit(path)` fires the hook as Claude Code's Edit tool does.
 
 ## Editing
 

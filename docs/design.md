@@ -179,7 +179,7 @@ flowchart TD
   - Released by its holder with `release_lock` once the work on the file is finished, when the session ends, or when it has made no call for 30 minutes ([ADR-0018](./adr/0018-a-session-is-known-by-the-identifier-its-hooks-send.md)).
   - Some files never lock: lockfiles, generated code.
 - **When Claude hits a lock:**
-  - Claude is blocked and told who the **holder** is, which branch they're on, and when they last edited.
+  - Claude is blocked and told who the **holder** is, their coding agent, their activity, and when they last used the lock. (Not their branch: nothing that reaches the server carries one.)
   - The member can ask for a **takeover**; the old holder is told on their next prompt.
 - **If the server is down or the check times out,** the edit goes ahead with a warning.
 - **Accepted limit:** locks only cover Claude's file-edit tools. They don't cover shell commands that change files, a person editing in their own editor, or members without the plugin.
