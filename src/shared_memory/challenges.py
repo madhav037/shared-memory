@@ -261,7 +261,7 @@ class Challenges:
     # Who decides
 
     def decides_as(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
-        """In what capacity this member may decide a challenge, or None when they may not (ADR-0016).
+        """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
         the team's admins, unless they raised the challenge themselves; team memory has no project, so only admins
