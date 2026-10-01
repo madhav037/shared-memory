@@ -16,6 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
+from shared_memory.challenges import DecidesAs
 
 PREFIX = "/api"
 
@@ -154,8 +155,10 @@ class OpenChallenge(BaseModel):
     kind: str
     raised_by: str
     challenger_path: str | None
-    # Whether the member reading this is the one who may decide it: its author, or anyone once the fallback passed.
+    # Whether the member reading this may decide it, and in what capacity: as its author, as a lead of its project, as
+    # an admin, or as anyone may once the fallback has passed or its author has left.
     may_decide: bool
+    decides_as: DecidesAs | None
 
 
 class Pin(BaseModel):
@@ -212,7 +215,9 @@ class ChallengeDetail(BaseModel):
     project_id: str | None
     raised_by: str
     raised_at: datetime
+    # Whether the challenged memory is this member's own, and in what capacity the challenge is theirs to decide.
     yours: bool
+    decides_as: DecidesAs
     target: ChallengedMemory
     challenger: ChallengedMemory | None
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
@@ -846,7 +851,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/memory/retire",
         method="POST",
         operation_id="retire_at",
-        summary="Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        summary="Retire a memory that is no longer true; another author's raises a challenge instead.",
         answers=Retired,
         changes=True,
         accepts=MemoryPath,

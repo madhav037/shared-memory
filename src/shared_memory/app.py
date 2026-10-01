@@ -56,7 +56,7 @@ INSTRUCTIONS = (
     "personal memory (one member's; readable by all, not accepted by the team). remember saves personal memory. "
     "promote makes it project or team memory and returns similar memories: judge with the member whether it "
     "contradicts them, then supersede, keep both, or cancel. Superseding another author's memory raises a challenge "
-    "that its author decides.\n\n"
+    "that its author, a project lead or an admin decides.\n\n"
     "The board holds this project's cards. When you notice follow-up work you won't do now, add_card and tell the "
     "member. claim_card only when the member asks; on \"take the next card\", call it with no number to claim the "
     "top card of the highest priority in To do. Move a card to Done only once the member confirms it is finished. "
@@ -473,6 +473,10 @@ def build_app(
 
         Accepting a supersede challenge promotes the challenging memory over the old one; every other open challenge
         against the same memory then closes. Rejecting leaves the challenging memory as personal memory.
+
+        The challenged memory's author may decide. So may a lead of the project it is in and the team's admins (for
+        team memory, the admins only), unless they raised the challenge themselves; its author is then told who
+        decided and in what capacity. Any member may once it has been open 3 days or its author has left the team.
         """
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 

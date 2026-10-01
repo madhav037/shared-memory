@@ -14,7 +14,7 @@ from shared_memory.audit import (
     MEMORY_SUPERSEDED,
     Audit,
 )
-from shared_memory.challenges import Challenge, Challenges, project_of
+from shared_memory.challenges import Challenge, Challenges, DecidesAs, project_of
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -337,12 +337,12 @@ class Lifecycle:
             raise Refused(f"There is no open challenge {challenge_id} in your team.")
         caller.require_reach(challenge.target_path)
         caller.require_reach(challenge.challenger_path)
-        self._challenges.require_decider(caller, challenge)
+        decides_as = self._challenges.require_decider(caller, challenge)
         decider = caller.member_id
 
         if decision == "reject":
             self._challenges.decide(challenge, "rejected", decider)
-            self._decided(caller, challenge, "rejected")
+            self._decided(caller, challenge, "rejected", decides_as)
             self._challenges.tell(
                 caller.team,
                 challenge.raised_by,
@@ -360,7 +360,7 @@ class Lifecycle:
         else:
             result, outcome = self._accept_supersede(caller, challenge, challenge.challenger_path)
         self._challenges.decide(challenge, "accepted", decider)
-        self._decided(caller, challenge, "accepted")
+        self._decided(caller, challenge, "accepted", decides_as)
         self._challenges.tell(caller.team, challenge.raised_by, outcome)
         self._challenges.close_all_against(
             caller.team,
@@ -370,11 +370,13 @@ class Lifecycle:
         )
         return result
 
-    def _decided(self, caller: Caller, challenge: Challenge, decision: str) -> None:
+    def _decided(self, caller: Caller, challenge: Challenge, decision: str, decides_as: DecidesAs) -> None:
+        """Record a decision with the capacity it was made in, and tell the author when it wasn't theirs."""
         self._audit.memory(
             caller, CHALLENGE_DECIDED, challenge.target_path, project_id=project_of(challenge),
-            challenge_id=challenge.id, decision=decision, challenge=challenge.kind,
+            challenge_id=challenge.id, decision=decision, challenge=challenge.kind, decided_as=decides_as,
         )  # fmt: skip
+        self._challenges.tell_author(caller, challenge, decides_as, decision)
 
     def _accept_supersede(self, caller: Caller, challenge: Challenge, challenger_path: str) -> tuple[dict[str, Any], str]:
         challenger_location = locate(challenger_path)

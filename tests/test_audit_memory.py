@@ -117,6 +117,7 @@ def test_a_challenge_raised_and_decided_from_a_session_is_recorded(
         "challenge_id": raised["challenge_id"],
         "decision": "accepted",
         "challenge": "supersede",
+        "decided_as": "author",
         "agent": "another agent",
     }
     assert decided[0]["actor"] == "E1001"

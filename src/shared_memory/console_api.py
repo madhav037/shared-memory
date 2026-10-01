@@ -41,7 +41,7 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenge, Challenges, project_of
+from shared_memory.challenges import Challenges, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
@@ -695,21 +695,23 @@ class ConsoleApi:
         return self._disputes(self._identity.caller_in(member, None))
 
     def _disputes(self, caller: Caller) -> Response:
-        waiting = [self._dispute(caller, challenge) for challenge in self._challenging.waiting_for(caller)]
+        waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
         raised = [
             RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
         return JSONResponse(ChallengeList(waiting=waiting, raised=raised).model_dump(mode="json"))
 
-    def _dispute(self, caller: Caller, challenge: Challenge) -> ChallengeDetail:
+    def _dispute(self, caller: Caller, waiting: Waiting) -> ChallengeDetail:
+        challenge = waiting.challenge
         return ChallengeDetail(
             challenge_id=challenge.id,
             kind=challenge.kind,
             project_id=project_of(challenge),
             raised_by=challenge.raised_by,
             raised_at=challenge.raised_at,
-            yours=challenge.target_author == caller.member_id,
+            yours=waiting.decides_as == "author",
+            decides_as=waiting.decides_as,
             target=self._side(caller, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,

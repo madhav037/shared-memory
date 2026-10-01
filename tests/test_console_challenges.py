@@ -175,6 +175,7 @@ def test_anyone_can_decide_once_the_fallback_has_passed(console: Console, signed
     assert before == []
     assert len(after) == 1
     assert after[0]["yours"] is False
+    assert after[0]["decides_as"] == "fallback"
     later.close()
 
 
@@ -364,6 +365,148 @@ def test_a_decision_from_the_console_is_in_the_audit_log(console: Console, signe
     assert [event["actor"] for event in log] == ["E1001"]
     assert log[0]["detail"]["decision"] == "accepted"
     assert log[0]["detail"]["challenge_id"] == challenge_id
+    assert log[0]["detail"]["decided_as"] == "author"
+
+
+# Who else may decide: a lead of the challenged memory's project and the team's admins (ADR-0016)
+
+
+def a_dispute_between_members(
+    console: Console, owner_client: ConsoleClient, github: str, account: int, level: str = "project"
+) -> tuple[str, str, int, Session]:
+    """Billing, where Dana (emp-2) wrote a memory that Ash (emp-3) has challenged; the owner wrote neither.
+    Returns the project, the challenged memory, the challenge and Ash's session."""
+    owner, project, in_project = a_team(console, owner_client, github, account)
+    dana = Session(console.server, add(owner_client, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    ash = Session(console.server, add(owner_client, "emp-3", "Ash Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    personal = remember(dana, "Use pnpm, not npm", "We use pnpm for every package.")
+    target: str = dana.call("promote", path=personal, level=level)["path"]
+    offered = remember(ash, "Use npm, not pnpm", "We use npm for every package.")
+    similar = ash.call("promote", path=offered, level=level)
+    raised = ash.call(
+        "promote",
+        path=offered,
+        level=level,
+        reference=similar["reference"],
+        resolutions={one["path"]: "supersede" for one in similar["similar"]},
+    )
+    return project, target, raised["challenge_id"], ash
+
+
+def a_lead(console: Console, owner_client: ConsoleClient, project: str, github: str, account: int) -> ConsoleClient:
+    """Lee (emp-4), signed in to the console and appointed a lead of the project."""
+    lee = a_member(console, owner_client, "emp-4", github, account)
+    appointed = owner_client.post_json(f"/api/projects/{project}/leads", {"member_id": "emp-4"})
+    assert appointed.status_code == 200, appointed.text
+    return lee
+
+
+def decided_as(client: ConsoleClient, project: str) -> list[tuple[str, str]]:
+    """Who decided the project's challenges and in what capacity, as the audit log records it."""
+    log = client.get(f"/api/audit?project={project}&kind=challenge_decided").json()["events"]
+    return [(event["actor"], event["detail"]["decided_as"]) for event in log]
+
+
+def test_a_project_lead_is_shown_a_challenge_against_another_members_memory_and_decides_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, target, challenge_id, _ = a_dispute_between_members(console, signed_out, "olive-lead-decides", 7901)
+    lee = a_lead(console, signed_out, project, "lee-lead-decides", 7902)
+
+    waiting = challenges(lee)["waiting"]
+    accepted = decide(lee, challenge_id, "accept")
+
+    assert [(one["challenge_id"], one["yours"], one["decides_as"]) for one in waiting] == [(challenge_id, False, "lead")]
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["waiting"] == []
+    assert ask(lee, "/api/memory", path=target)["status"] == "superseded"
+    assert decided_as(signed_out, project) == [("emp-4", "lead")]
+    lee.close()
+
+
+def test_an_admin_is_shown_a_challenge_in_a_project_they_reach_and_decides_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, target, challenge_id, _ = a_dispute_between_members(console, signed_out, "olive-admin-decides", 7903)
+    signed_out.post(f"/api/projects/{project}/leads/E1001/remove")
+
+    waiting = challenges(signed_out)["waiting"]
+    rejected = decide(signed_out, challenge_id, "reject")
+
+    assert [(one["challenge_id"], one["yours"], one["decides_as"]) for one in waiting] == [(challenge_id, False, "admin")]
+    assert rejected.status_code == 200, rejected.text
+    assert ask(signed_out, "/api/memory", path=target)["status"] == "active"
+    assert decided_as(signed_out, project) == [("E1001", "admin")]
+
+
+def test_a_challenge_against_team_memory_waits_for_an_admin_and_not_for_a_project_lead(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, target, challenge_id, _ = a_dispute_between_members(
+        console, signed_out, "olive-team-memory", 7904, level="team"
+    )
+    lee = a_lead(console, signed_out, project, "lee-team-memory", 7905)
+
+    for_the_lead = challenges(lee)["waiting"]
+    refused = decide(lee, challenge_id, "accept")
+    for_the_admin = challenges(signed_out)["waiting"]
+
+    assert for_the_lead == []
+    assert refused.status_code == 403
+    assert "and the team's admins can decide this challenge" in refused.json()["message"]
+    assert [(one["challenge_id"], one["decides_as"]) for one in for_the_admin] == [(challenge_id, "admin")]
+    assert [one["decides_as"] for one in ask(lee, "/api/memory", path=target)["open_challenges"]] == [None]
+    lee.close()
+
+
+def test_a_lead_who_raised_the_challenge_is_not_shown_it_and_cant_decide_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-lead-raised", 7906)
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    promoted(dana, remember(dana, "Use pnpm, not npm", "We use pnpm for every package."))
+    lee = a_lead(console, signed_out, project, "lee-lead-raised", 7907)
+    lees = Session(console.server, signed_out.post("/api/members/emp-4/token").json()["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    challenge_id = a_supersede_challenge(lees, remember(lees, "Use npm, not pnpm", "We use npm for every package."))
+
+    waiting = challenges(lee)["waiting"]
+    refused = decide(lee, challenge_id, "accept")
+    by_an_admin = decide(signed_out, challenge_id, "accept")
+
+    assert waiting == []
+    assert refused.status_code == 403
+    assert f"You raised challenge {challenge_id}" in refused.json()["message"]
+    assert by_an_admin.status_code == 200, by_an_admin.text
+    lee.close()
+
+
+def test_the_author_reads_in_the_console_who_decided_their_challenge_and_in_what_capacity(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-author-told", 7908)
+    dana_console, dana = a_challenger(console, signed_out, project, "dana-author-told", 7909)
+    target = promoted(dana, remember(dana, "Use pnpm, not npm", "We use pnpm for every package."))
+    ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    challenge_id = a_supersede_challenge(ash, remember(ash, "Use npm, not pnpm", "We use npm for every package."))
+
+    decide(signed_out, challenge_id, "reject")
+
+    told = [one["text"] for one in ask(dana_console, "/api/notices")["notices"]]
+    assert told == [
+        f"Challenge {challenge_id} by emp-3 against your memory {target} was rejected by E1001, "
+        "deciding as a project lead: your memory stands as it is."
+    ]
+    dana_console.close()
 
 
 def test_a_challenged_memory_says_whether_this_member_is_the_one_to_decide(

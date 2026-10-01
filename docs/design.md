@@ -116,8 +116,8 @@ flowchart TD
   C -- "No, or member chooses keep both" --> P["Promoted instantly"]
   C -- "Contradicts the member's own memory" --> S["Promoted instantly, supersedes it"]
   C -- "Promoting to project memory,<br/>contradicts a team memory" --> E["Promoted as an exception<br/>naming that team memory"]
-  C -- "Contradicts another author's memory" --> H["Challenge sent to that author"]
-  H --> D{"Author decides<br/>(any member after 3 days,<br/>or at once if the author has left)"}
+  C -- "Contradicts another author's memory" --> H["Challenge raised"]
+  H --> D{"The author, a project lead<br/>or an admin decides<br/>(any member after 3 days,<br/>or at once if the author has left)"}
   D -- Accept --> S2["New memory supersedes the old one"]
   D -- Reject --> R["Stays a personal memory"]
 ```
@@ -126,14 +126,21 @@ flowchart TD
 - **While a challenge is open:**
   - the challenger's memory stays personal memory, labeled *pending: replaces …*
   - the old memory stays active
-- **Where the author decides:** in their own Claude. The challenge appears in their next **briefing** or on their next prompt.
-- **Two or more challenges against the same memory** are shown to the author together. The author accepts one or rejects all, and the others close automatically with a note.
+- **Who decides** ([ADR-0016](./adr/0016-project-leads-and-admins-may-decide-a-challenge.md)):
+  - the challenged memory's author, at any time;
+  - on project memory, that project's leads and the team's admins, at any time. The challenged memory's project is the one that counts, not the challenger's;
+  - on team memory, the team's admins; a project lead has no standing there;
+  - a lead or an admin who raised the challenge can't decide it in that capacity: another lead or an admin can;
+  - any member, once it has been open 3 days.
+- **Where it is decided:** in the decider's own Claude, or in the console. The challenge appears in the author's next **briefing** or on their next prompt, and in the briefing of every lead and admin who may decide it, saying why it is theirs.
+- **When someone other than the author decides,** the author's next briefing says who decided and in what capacity, and the audit log records that capacity.
+- **Two or more challenges against the same memory** are shown together. Whoever decides accepts one or rejects all, and the others close automatically with a note.
 
 ### 5.3 Retiring and pins
 
 - **Retire** means marking a memory as no longer true when nothing supersedes it.
   - The author can retire instantly.
-  - Anyone else raises a challenge, with the same 3-day fallback.
+  - Anyone else raises a challenge, decided as any challenge is, with the same 3-day fallback.
 - **Pins:**
   - Any member can pin a project memory or team memory.
   - When a pinned memory is superseded, the pin **moves to the new memory**.
@@ -144,7 +151,7 @@ flowchart TD
 - Their personal token stops working.
 - Every memory they wrote stays, and they stay credited as its author.
 - **Any member can promote their personal memories.** The memory records who promoted it.
-- **Challenges they raised stay open.** The challenged author still decides.
+- **Challenges they raised stay open.** Whoever could decide them still can.
 - **Challenges against their memories** can be decided by any member straight away.
 
 ## 6. Reading memory

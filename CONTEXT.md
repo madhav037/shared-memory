@@ -131,7 +131,7 @@ To put a new memory in an old one's place, keeping the old one in history.
 _Avoid_: Replace, overwrite, update
 
 **Challenge**:
-A request to supersede or retire another author's memory, waiting for that author's decision.
+A request to supersede or retire another author's memory, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
 _Avoid_: Approval, proposal, change request
 
 **Reasoning**:

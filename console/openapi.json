@@ -1092,7 +1092,7 @@
     "/api/memory/retire": {
       "post": {
         "operationId": "retire_at",
-        "summary": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+        "summary": "Retire a memory that is no longer true; another author's raises a challenge instead.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1105,7 +1105,7 @@
         },
         "responses": {
           "200": {
-            "description": "Retire a memory that is no longer true; another author's raises a challenge they decide.",
+            "description": "Retire a memory that is no longer true; another author's raises a challenge instead.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3309,6 +3309,24 @@
           "may_decide": {
             "title": "May Decide",
             "type": "boolean"
+          },
+          "decides_as": {
+            "anyOf": [
+              {
+                "enum": [
+                  "author",
+                  "lead",
+                  "admin",
+                  "fallback",
+                  "author_left"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decides As"
           }
         },
         "required": [
@@ -3316,7 +3334,8 @@
           "kind",
           "raised_by",
           "challenger_path",
-          "may_decide"
+          "may_decide",
+          "decides_as"
         ],
         "title": "OpenChallenge",
         "type": "object"
@@ -3744,6 +3763,17 @@
             "title": "Yours",
             "type": "boolean"
           },
+          "decides_as": {
+            "enum": [
+              "author",
+              "lead",
+              "admin",
+              "fallback",
+              "author_left"
+            ],
+            "title": "Decides As",
+            "type": "string"
+          },
           "target": {
             "$ref": "#/components/schemas/ChallengedMemory"
           },
@@ -3776,6 +3806,7 @@
           "raised_by",
           "raised_at",
           "yours",
+          "decides_as",
           "target",
           "challenger",
           "reasoning"

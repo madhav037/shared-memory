@@ -52,6 +52,15 @@ const WORDS: Record<Kind, string> = {
   access_revoked: "Access taken away",
 };
 
+/** In what capacity a challenge was decided, as the record names it. */
+const DECIDED_AS: Record<string, string> = {
+  author: "Decided as its author",
+  lead: "Decided as a project lead",
+  admin: "Decided as an admin",
+  fallback: "Decided once it had waited long enough for anyone to",
+  author_left: "Decided because its author has left the team",
+};
+
 /** A memory file, named the way the contents name it, linked to where it can be read. */
 function FileLink({ path }: { path: string }) {
   return (
@@ -111,9 +120,11 @@ function Details({
   if (text("challenge_id"))
     said.push(
       `Challenge ${text("challenge_id")}${challenge ? `, to ${challenge === "retire" ? "retire it" : "supersede it"}` : ""}` +
-        (text("decision") ? `: ${text("decision") === "accept" ? "accepted" : "rejected"}` : ""),
+        (text("decision") ? `: ${text("decision")}` : ""),
     );
-  if (text("author")) said.push(`Its author, ${nameOf(text("author")!)}, decides`);
+  const decidedAs = text("decided_as");
+  if (decidedAs) said.push(DECIDED_AS[decidedAs] ?? decidedAs);
+  if (text("author")) said.push(`Against a memory by ${nameOf(text("author")!)}`);
   if (text("name")) said.push(`Named ${text("name")}`);
   if (text("github")) said.push(`GitHub @${text("github")}`);
   if (text("for")) said.push(text("for") === "themselves" ? "Their own token" : `For ${nameOf(text("for")!)}`);
