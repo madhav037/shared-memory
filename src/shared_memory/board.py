@@ -735,47 +735,57 @@ class Board:
                     self._tell(caller.team, lead, text)
         return {"deleted": number}
 
-    def return_cards(self, caller: Caller) -> None:
+    def return_cards(self, conn: Conn, caller: Caller) -> Callable[[], None]:
         """Put back in To do, with no assignee, every open card whose assignee can no longer reach its project:
         removed from the team, or shut out of a restricted project. Done cards keep their assignee, as a record of
-        who did them. The project's leads are told, or the team's owner and admins where it has none. Identity calls
-        this after any change that may have cost a member a project."""
+        who did them.
+
+        Identity calls this inside the transaction of any change that may have cost a member a project, so the change
+        and the cards' return happen together or not at all. What it gives back is called once that transaction has
+        committed: it notes each return in the audit log and tells the project's leads, or the team's owner and admins
+        where it has none."""
         now = self._clock()
-        with self._db.transaction() as conn:
-            conn.execute(
-                "SELECT b.project_id FROM boards b JOIN projects p ON p.project_id = b.project_id"
-                " WHERE p.team_id = %s ORDER BY b.project_id FOR UPDATE OF b",
-                (caller.member.team_pk,),
-            )
-            stranded = conn.execute(
-                "SELECT c.id, c.project_id, c.number, c.board_column, m.member_id, m.name FROM cards c"
-                " JOIN projects p ON p.project_id = c.project_id JOIN members m ON m.id = c.assignee_id"
-                " WHERE p.team_id = %s AND c.board_column <> 'done' AND (m.removed_at IS NOT NULL OR (p.restricted"
-                " AND NOT m.is_owner AND NOT m.is_admin"
-                " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
-                " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
-                ")) ORDER BY c.project_id, c.number",
-                (caller.member.team_pk,),
-            ).fetchall()
-            for row in stranded:
-                conn.execute("UPDATE cards SET assignee_id = NULL, updated_at = %s WHERE id = %s", (now, row["id"]))
-                if row["board_column"] != "to_do":
-                    self._place(conn, row["project_id"], row["id"], row["board_column"], "to_do", None, now)
-            returned: dict[tuple[str, str, str], list[int]] = {}
-            for row in stranded:
-                returned.setdefault((row["project_id"], row["member_id"], row["name"]), []).append(row["number"])
-            told = [
-                (lead, project_id, member_id, name, cards)
-                for (project_id, member_id, name), cards in returned.items()
-                for lead in self._leads(conn, caller, project_id)
-            ]
+        conn.execute(
+            "SELECT b.project_id FROM boards b JOIN projects p ON p.project_id = b.project_id"
+            " WHERE p.team_id = %s ORDER BY b.project_id FOR UPDATE OF b",
+            (caller.member.team_pk,),
+        )
+        stranded = conn.execute(
+            "SELECT c.id, c.project_id, c.number, c.board_column, m.member_id, m.name FROM cards c"
+            " JOIN projects p ON p.project_id = c.project_id JOIN members m ON m.id = c.assignee_id"
+            " WHERE p.team_id = %s AND c.board_column <> 'done' AND (m.removed_at IS NOT NULL OR (p.restricted"
+            " AND NOT m.is_owner AND NOT m.is_admin"
+            " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
+            " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
+            ")) ORDER BY c.project_id, c.number",
+            (caller.member.team_pk,),
+        ).fetchall()
         for row in stranded:
-            detail = {"from": row["board_column"], "assignee": row["member_id"]}
-            self._audit.card(caller, CARD_RETURNED, row["project_id"], row["number"], **detail)
-        for lead, project_id, member_id, name, cards in told:
-            listed = f"card {cards[0]}" if len(cards) == 1 else f"cards {', '.join(map(str, cards))}"
-            text = f"{name} ({member_id}) can no longer reach {project_id}, so {listed} went back to To do with no assignee."
-            self._tell(caller.team, lead, text)
+            conn.execute("UPDATE cards SET assignee_id = NULL, updated_at = %s WHERE id = %s", (now, row["id"]))
+            if row["board_column"] != "to_do":
+                self._place(conn, row["project_id"], row["id"], row["board_column"], "to_do", None, now)
+        returned: dict[tuple[str, str, str], list[int]] = {}
+        for row in stranded:
+            returned.setdefault((row["project_id"], row["member_id"], row["name"]), []).append(row["number"])
+        told = [
+            (lead, project_id, member_id, name, cards)
+            for (project_id, member_id, name), cards in returned.items()
+            for lead in self._leads(conn, caller, project_id)
+        ]
+
+        def committed() -> None:
+            for row in stranded:
+                detail = {"from": row["board_column"], "assignee": row["member_id"]}
+                self._audit.card(caller, CARD_RETURNED, row["project_id"], row["number"], **detail)
+            for lead, project_id, member_id, name, cards in told:
+                listed = f"card {cards[0]}" if len(cards) == 1 else f"cards {', '.join(map(str, cards))}"
+                text = (
+                    f"{name} ({member_id}) can no longer reach {project_id}, so {listed} went back to To do with no "
+                    "assignee."
+                )
+                self._tell(caller.team, lead, text)
+
+        return committed
 
     @staticmethod
     def _leads(conn: Conn, caller: Caller, project_id: str) -> list[str]:

@@ -17,6 +17,11 @@ from shared_memory.memory import slugify
 
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
+# What another module does when a member may have lost a project. It is called inside the transaction making the
+# change, with whoever made it, so its writes commit with the change or not at all; what it gives back is called once
+# that transaction has committed, for whatever has to wait until then.
+AccessLost = Callable[[Conn, "Caller"], Callable[[], None]]
+
 
 @dataclass(frozen=True)
 class Member:
@@ -114,9 +119,9 @@ def check_name(kind: str, value: str) -> str:
 
 class Identity:
     def __init__(self, db: Database, clock: Clock) -> None:
-        # Called with whoever made the change after a member may have lost a project: removed from the team, taken
-        # off an access list or a lead, no longer an admin, or a project restricted.
-        self._access_lost: list[Callable[[Caller], None]] = []
+        # Called when a member may have lost a project: removed from the team, taken off an access list or a lead, no
+        # longer an admin, or a project restricted.
+        self._access_lost: list[AccessLost] = []
         self._db = db
         self._clock = clock
 
@@ -185,12 +190,19 @@ class Identity:
                     )
             return Caller(member, project, repository or None, self._unreachable(conn, member))
 
-    def on_access_lost(self, listener: Callable[[Caller], None]) -> None:
+    def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
 
-    def _lost_access(self, caller: Caller) -> None:
-        for listener in self._access_lost:
-            listener(caller)
+    def _lost_access(self, conn: Conn, caller: Caller) -> Callable[[], None]:
+        """Have the listeners do their writes in the transaction that cost a member a project, so a listener that
+        fails undoes the change too. Call what this returns once that transaction has committed."""
+        afterwards = [listener(conn, caller) for listener in self._access_lost]
+
+        def committed() -> None:
+            for after in afterwards:
+                after()
+
+        return committed
 
     def _require_admin(self, caller: Caller) -> None:
         if not (caller.member.is_owner or caller.member.is_admin):
@@ -263,7 +275,8 @@ class Identity:
             now = self._clock()
             conn.execute("UPDATE members SET removed_at = %s WHERE id = %s", (now, pk))
             conn.execute("UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (now, pk))
-        self._lost_access(caller)
+            committed = self._lost_access(conn, caller)
+        committed()
 
     def reissue_token(self, caller: Caller, member_id: str) -> str:
         self._require_admin(caller)
@@ -396,8 +409,9 @@ class Identity:
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
             conn.execute("UPDATE members SET is_admin = %s WHERE id = %s", (admin, pk))
-        if not admin:
-            self._lost_access(caller)
+            committed = None if admin else self._lost_access(conn, caller)
+        if committed is not None:
+            committed()
 
     def hand_over_ownership(self, caller: Caller, member_id: str) -> None:
         """Make another member the team's owner. The member handing it over stays an admin."""
@@ -606,8 +620,9 @@ class Identity:
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
             conn.execute("UPDATE projects SET restricted = %s WHERE project_id = %s", (restricted, project_id))
-        if restricted:
-            self._lost_access(caller)
+            committed = self._lost_access(conn, caller) if restricted else None
+        if committed is not None:
+            committed()
 
     def grant_access(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Let a member into this project. It takes effect on their next call."""
@@ -631,9 +646,10 @@ class Identity:
                 "DELETE FROM project_access WHERE project_id = %s AND member_id = %s RETURNING member_id",
                 (project_id, pk),
             ).fetchone()
-        if gone is None:
-            raise Refused(f"{member_id!r} is not on this project's access list.")
-        self._lost_access(caller)
+            if gone is None:
+                raise Refused(f"{member_id!r} is not on this project's access list.")
+            committed = self._lost_access(conn, caller)
+        committed()
 
     def appoint_lead(self, caller: Caller, project_id: str, member_id: str) -> None:
         """Make a member a lead of this project. A lead can appoint another lead; so can an admin."""
@@ -658,9 +674,10 @@ class Identity:
                 "DELETE FROM project_leads WHERE project_id = %s AND member_id = %s RETURNING member_id",
                 (project_id, pk),
             ).fetchone()
-        if removed is None:
-            raise Refused(f"{member_id!r} does not lead this project.")
-        self._lost_access(caller)
+            if removed is None:
+                raise Refused(f"{member_id!r} does not lead this project.")
+            committed = self._lost_access(conn, caller)
+        committed()
 
     def add_repository(self, caller: Caller, project_id: str, repository: str) -> None:
         """Note a repository of this project, so its settings can be shown before anyone works in it."""
