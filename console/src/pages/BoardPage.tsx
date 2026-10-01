@@ -1,5 +1,13 @@
 import { Button, Drawer, Modal, SegmentedControl, Select } from "@mantine/core";
-import { IconAlertTriangle, IconMessage, IconPencil, IconPlus, IconSettings, IconTrash } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconMessage,
+  IconPencil,
+  IconPlus,
+  IconSettings,
+  IconTerminal2,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -34,7 +42,7 @@ import {
   type Column,
   type Priority,
 } from "../lib/board";
-import { day, folderUrl, memoryUrl, moment, plural } from "../lib/format";
+import { day, folderUrl, memoryUrl, moment, plural, sessionsUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 const FILTERS = ["assignee", "label", "priority"] as const;
@@ -189,6 +197,10 @@ export function BoardPage() {
         </span>
         <Link to={folderUrl(home)} className="quiet-link">
           Project memory
+        </Link>
+        <Link to={sessionsUrl(board.project_id)} className="quiet-link">
+          <IconTerminal2 size={14} stroke={1.6} aria-hidden />
+          Sessions
         </Link>
         <Link to={`/projects/${encodeURIComponent(board.project_id)}/settings`} className="quiet-link">
           <IconSettings size={14} stroke={1.6} aria-hidden />

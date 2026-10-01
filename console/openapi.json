@@ -519,6 +519,34 @@
         }
       }
     },
+    "/api/projects/{project_id}/sessions": {
+      "get": {
+        "operationId": "project_sessions",
+        "summary": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/cards/{number}": {
       "get": {
         "operationId": "card",
@@ -2125,6 +2153,144 @@
           "cards"
         ],
         "title": "BoardArchive",
+        "type": "object"
+      },
+      "ActiveSession": {
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          },
+          "from_card": {
+            "title": "From Card",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "locks": {
+            "items": {
+              "$ref": "#/components/schemas/HeldLock"
+            },
+            "title": "Locks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "activity",
+          "from_card",
+          "started_at",
+          "last_seen_at",
+          "locks"
+        ],
+        "title": "ActiveSession",
+        "type": "object"
+      },
+      "HeldLock": {
+        "description": "A file a session holds a lock on: its repository, and its path from that repository's root.",
+        "properties": {
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "taken_at": {
+            "format": "date-time",
+            "title": "Taken At",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "title": "Last Used At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "path",
+          "taken_at",
+          "last_used_at"
+        ],
+        "title": "HeldLock",
+        "type": "object"
+      },
+      "ProjectSessions": {
+        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveSession"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "sessions"
+        ],
+        "title": "ProjectSessions",
         "type": "object"
       },
       "CardDetail": {

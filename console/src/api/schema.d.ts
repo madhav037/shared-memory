@@ -260,6 +260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+        get: operations["project_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/cards/{number}": {
         parameters: {
             query?: never;
@@ -1003,6 +1020,72 @@ export interface components {
             project_name: string;
             /** Cards */
             cards: components["schemas"]["Card"][];
+        };
+        /**
+         * ActiveSession
+         * @description One active session of a member's coding agent. agent is None until the session has said which coding agent it
+         *     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
+         *     for a session that stated none it is the title of its member's card in Doing, and from_card says so; None when
+         *     there is neither. last_seen_at is when the session last called the server.
+         */
+        ActiveSession: {
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /** Activity */
+            activity: string | null;
+            /** From Card */
+            from_card: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Locks */
+            locks: components["schemas"]["HeldLock"][];
+        };
+        /**
+         * HeldLock
+         * @description A file a session holds a lock on: its repository, and its path from that repository's root.
+         */
+        HeldLock: {
+            /** Repository */
+            repository: string;
+            /** Path */
+            path: string;
+            /**
+             * Taken At
+             * Format: date-time
+             */
+            taken_at: string;
+            /**
+             * Last Used At
+             * Format: date-time
+             */
+            last_used_at: string;
+        };
+        /**
+         * ProjectSessions
+         * @description A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
+         *     or gone idle is not among them.
+         */
+        ProjectSessions: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Sessions */
+            sessions: components["schemas"]["ActiveSession"][];
         };
         /**
          * CardDetail
@@ -2199,6 +2282,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BoardArchive"];
+                };
+            };
+        };
+    };
+    project_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSessions"];
                 };
             };
         };

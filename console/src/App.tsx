@@ -25,6 +25,7 @@ import { Front, TitlePage } from "./pages/Front";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
+import { SessionsPage } from "./pages/SessionsPage";
 import { Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
@@ -205,6 +206,7 @@ function SignedIn({
             <Route path="/search" element={<SearchPage />} />
             <Route path="/challenges" element={<Challenges />} />
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
+            <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />

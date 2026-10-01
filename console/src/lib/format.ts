@@ -101,6 +101,11 @@ export function memoryUrl(path: string): string {
   return `/memory?path=${encodeURIComponent(path)}`;
 }
 
+/** Where a project's active sessions are listed. */
+export function sessionsUrl(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/sessions`;
+}
+
 /** The project a memory path or folder lives in, or nothing for team memory. */
 export function projectIn(path: string): string | null {
   const parts = path.split("/");

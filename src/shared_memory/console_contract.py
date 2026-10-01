@@ -560,6 +560,41 @@ class DeletedCard(BaseModel):
     number: int
 
 
+class HeldLock(BaseModel):
+    """A file a session holds a lock on: its repository, and its path from that repository's root."""
+
+    repository: str
+    path: str
+    taken_at: datetime
+    last_used_at: datetime
+
+
+class ActiveSession(BaseModel):
+    """One active session of a member's coding agent. agent is None until the session has said which coding agent it
+    runs in, and repository is None for a session whose connection names none. activity is what the session stated;
+    for a session that stated none it is the title of its member's card in Doing, and from_card says so; None when
+    there is neither. last_seen_at is when the session last called the server."""
+
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    activity: str | None
+    from_card: bool
+    started_at: datetime
+    last_seen_at: datetime
+    locks: list[HeldLock]
+
+
+class ProjectSessions(BaseModel):
+    """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
+    or gone idle is not among them."""
+
+    project_id: str
+    project_name: str
+    sessions: list[ActiveSession]
+
+
 class Notice(BaseModel):
     """Something the member was told, as their briefing words it. One about a card names its project, and the card's
     number while the card is still there to open."""
@@ -721,6 +756,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
         summary="The cards that have left a project's board, done more than 14 days ago, under the board's filters.",
         answers=BoardArchive,
         query=("assignee", "label", "priority"),
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions",
+        method="GET",
+        operation_id="project_sessions",
+        summary="A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        answers=ProjectSessions,
     ),
     Declaration(
         path="/projects/{project_id}/cards/{number}",

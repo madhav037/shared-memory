@@ -1,5 +1,5 @@
 import { Button } from "@mantine/core";
-import { IconLayoutColumns, IconPin, IconPinnedOff, IconSettings } from "@tabler/icons-react";
+import { IconLayoutColumns, IconPin, IconPinnedOff, IconSettings, IconTerminal2 } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -7,7 +7,7 @@ import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMe
 import { ChallengedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
+import { day, folderUrl, memoryUrl, plural, sessionsUrl, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** What each folder holds, in the words CONTEXT.md defines them with. */
@@ -87,6 +87,12 @@ export function FolderPage({ member }: { member: SignedInMember }) {
           <Link to={boardUrl(projectId)} className="quiet-link" data-testid="to-board">
             <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
             Board
+          </Link>
+        )}
+        {folder.kind === "project" && projectId && (
+          <Link to={sessionsUrl(projectId)} className="quiet-link" data-testid="to-sessions">
+            <IconTerminal2 size={14} stroke={1.6} aria-hidden />
+            Sessions
           </Link>
         )}
         {folder.kind === "project" && projectId && (

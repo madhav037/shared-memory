@@ -958,6 +958,8 @@ def build_app(
             challenges,
             saves,
             board,
+            activities,
+            locks,
         ).routes()
     )
     app.add_middleware(NeverCached)
