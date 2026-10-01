@@ -55,10 +55,18 @@ def test_a_renamed_github_account_still_signs_in(console: Console, signed_out: C
     signed_out.sign_in()
     signed_out.sign_out()
 
-    console.github.as_(104, "olive-four-renamed")
+    console.github.as_(104, "olive-four-renamed", renamed=True)
     signed_out.sign_in()
 
     assert signed_out.status()["member"]["member_id"] == "E1001"
+
+
+def test_the_fake_github_refuses_an_account_number_two_logins_share(console: Console) -> None:
+    console.github.as_(110, "olive-ten")
+    console.github.as_(110, "olive-ten")
+
+    with pytest.raises(AssertionError, match="account number 110 is already 'olive-ten'.*'dana-ten' cannot sign in"):
+        console.github.as_(110, "dana-ten")
 
 
 def test_one_github_account_cannot_belong_to_two_members(console: Console) -> None:

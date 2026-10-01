@@ -333,6 +333,9 @@ class FakeGitHub:
     def __init__(self, portal: BlockingPortal, settings: Settings, port: int = 0) -> None:
         self.account_id = 1
         self.login = "olive"
+        # The login each account number was first used with. It lives as long as this fake GitHub does, which is as
+        # long as the server whose database remembers the same thing.
+        self._logins: dict[int, str] = {}
 
         async def authorize(request: Request) -> Response:
             redirect_uri = request.query_params["redirect_uri"]
@@ -348,7 +351,10 @@ class FakeGitHub:
 
         async def as_account(request: Request) -> Response:
             body = await request.json()
-            self.as_(int(body["id"]), str(body["login"]))
+            try:
+                self.as_(int(body["id"]), str(body["login"]))
+            except AssertionError as refused:
+                return JSONResponse({"error": str(refused)}, status_code=409)
             return JSONResponse({"id": self.account_id, "login": self.login})
 
         app = Starlette(
@@ -362,8 +368,19 @@ class FakeGitHub:
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)
         self.url = self._server.url
 
-    def as_(self, account_id: int, login: str) -> None:
-        """Whoever signs in next is this GitHub account."""
+    def as_(self, account_id: int, login: str, renamed: bool = False) -> None:
+        """Whoever signs in next is this GitHub account.
+
+        An account number belongs to the first login that used it here. The server links a number to one member, so
+        a second login under that number would be refused at sign-in with nothing to say why; this fails first, and
+        names both. `renamed` is for the test that means it: the same account, under a new login.
+        """
+        taken_by = self._logins.setdefault(account_id, login)
+        assert taken_by == login or renamed, (
+            f"GitHub account number {account_id} is already {taken_by!r} in this fake GitHub, so {login!r} cannot "
+            "sign in with it. Give one of the two tests a number no other test in the module uses."
+        )
+        self._logins[account_id] = login
         self.account_id, self.login = account_id, login
 
     def stop(self) -> None:
