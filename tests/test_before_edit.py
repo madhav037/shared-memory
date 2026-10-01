@@ -6,11 +6,15 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
+from shared_memory.connection import connection_kit
 from tests.support import CLAUDE_EVENTS, REPO_ROOT, WORKING_FOLDER, Session, Team, edit_tool
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
@@ -130,12 +134,16 @@ def test_a_file_is_free_to_edit_once_its_holders_session_ends(dana: Session, col
 # What an agent of each family reads as "this edit is blocked", and where it reads the reason.
 BLOCKED: dict[str | None, tuple[dict[str, Any], tuple[str, ...]]] = {
     None: ({"hookEventName": "PreToolUse", "permissionDecision": "deny"}, ("hookSpecificOutput",)),
+    "gemini": ({"decision": "deny"}, ()),
+    "devin": ({"decision": "block"}, ()),
     "copilot-cli": ({"permissionDecision": "deny"}, ()),
     "cursor": ({"permission": "deny"}, ()),
     "cline": ({"cancel": True}, ()),
 }
 REASON_FIELDS: dict[str | None, tuple[str, ...]] = {
     None: ("permissionDecisionReason",),
+    "gemini": ("reason",),
+    "devin": ("reason",),
     "copilot-cli": ("permissionDecisionReason",),
     "cursor": ("agent_message", "user_message"),  # glossary: Cursor's own field names
     "cline": ("errorMessage",),
@@ -166,6 +174,271 @@ def test_a_format_this_server_does_not_know_is_blocked_as_claude_code_is(dana: S
 
     assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert dana.edit(FILE, format="nonesuch") == ALLOWED
+
+
+# Every agent's own payload
+
+PATCH = """*** Begin Patch
+*** Update File: {file}
+@@
+-retries = 3
++retries = 5
+*** End Patch"""
+
+
+def codex_edit(session: Session, *files: str) -> dict[str, Any]:
+    """Codex's PreToolUse payload for apply_patch, whose one argument is the patch."""
+    return {
+        "session_id": session.identifier,
+        "cwd": WORKING_FOLDER,
+        "hook_event_name": "PreToolUse",
+        "turn_id": "turn-1",
+        "tool_name": "apply_patch",
+        "tool_use_id": "call_1",
+        "tool_input": {"command": "\n".join(PATCH.format(file=file) for file in files)},
+    }
+
+
+#: What each coding agent's own hook sends before a file edit, from that agent's hook reference, the format its kit
+#: asks to be answered in, and the header its kit names the repository's root in. None of them was captured from the
+#: real agent.
+AGENTS_OWN: dict[str, tuple[Callable[[Session, str], dict[str, Any]], str | None, bool]] = {
+    "Codex": (codex_edit, None, False),
+    "Gemini CLI": (
+        lambda session, file: {
+            "session_id": session.identifier,
+            "cwd": f"{WORKING_FOLDER}/src",
+            "hook_event_name": "BeforeTool",
+            "timestamp": "2026-10-02T09:00:00Z",
+            "tool_name": "replace",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}", "old_string": "3", "new_string": "5"},
+        },
+        "gemini",
+        True,
+    ),
+    "Devin Desktop": (
+        lambda session, file: {
+            "hook_event_name": "PreToolUse",
+            "session_id": session.identifier,
+            "prompt_id": "prompt-1",
+            "tool_name": "edit",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}", "old_string": "3", "new_string": "5"},
+        },
+        "devin",
+        True,
+    ),
+    "Copilot CLI": (
+        lambda session, file: {
+            "sessionId": session.identifier,
+            "timestamp": 1790931600000,
+            "cwd": WORKING_FOLDER,
+            "toolName": "edit",
+            "toolArgs": json.dumps({"path": f"{WORKING_FOLDER}/{file}", "old_str": "3", "new_str": "5"}),
+        },
+        "copilot-cli",
+        False,
+    ),
+    "Cursor": (
+        lambda session, file: {
+            "conversation_id": session.identifier,
+            "generation_id": "generation-1",
+            "hook_event_name": "preToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}", "old_string": "3", "new_string": "5"},
+            "tool_use_id": "tool-1",
+            "workspace_roots": [WORKING_FOLDER],
+        },
+        "cursor",
+        False,
+    ),
+    "Cline": (
+        lambda session, file: {
+            "taskId": session.identifier,
+            "hookName": "PreToolUse",
+            "clineVersion": "3.36.0",
+            "timestamp": "1790931600000",
+            "workspaceRoots": [WORKING_FOLDER],
+            "preToolUse": {"tool": "write_to_file", "parameters": {"path": file, "content": "retries = 5"}},
+        },
+        "cline",
+        False,
+    ),
+}
+
+
+def own_edit(session: Session, agent: str, file: str = FILE) -> dict[str, Any]:
+    """Fire the before-edit hook as this coding agent's kit does: its own payload, format and headers."""
+    payload, format, names_root = AGENTS_OWN[agent]
+    answer = httpx.post(
+        f"{session.server.url}/hooks/before-edit",
+        json=payload(session, file),
+        params={"format": format} if format else None,
+        headers={**session.headers(), **({"X-Shared-Memory-Root": WORKING_FOLDER} if names_root else {})},
+        timeout=60,
+    )
+    assert answer.status_code == 200, answer.text
+    said: dict[str, Any] = answer.json()
+    return said
+
+
+@pytest.mark.parametrize("agent", list(AGENTS_OWN))
+def test_every_agents_own_before_edit_payload_takes_a_free_file_and_is_blocked_on_a_held_one(
+    dana: Session, cole: Session, agent: str
+) -> None:
+    allowed = own_edit(dana, agent)
+
+    answer = own_edit(cole, agent)
+
+    says, within = BLOCKED[AGENTS_OWN[agent][1]]
+    for field in within:
+        answer = answer[field]
+    assert allowed == ALLOWED
+    assert "Dana Dev (emp-2)" in refused(cole), "the file is locked by its path from the repository's root"
+    assert says.items() <= answer.items()
+    assert all("Dana Dev (emp-2)" in answer[field] for field in REASON_FIELDS[AGENTS_OWN[agent][1]])
+    assert own_edit(dana, agent) == ALLOWED, "its holder goes on editing it"
+
+
+def test_a_codex_patch_of_several_files_takes_each_lock_and_is_blocked_when_one_is_held(
+    dana: Session, cole: Session
+) -> None:
+    assert dana.hook_payload("before-edit", codex_edit(dana, FILE, "docs/retries.md")) == ALLOWED
+
+    answer = cole.hook_payload("before-edit", codex_edit(cole, "README.md", "docs/retries.md"))
+
+    assert "Dana Dev" in refused(cole) and "Dana Dev" in refused(cole, "docs/retries.md")
+    assert "billing-api:docs/retries.md" in reason_in(answer)
+
+
+def test_a_tool_that_only_reads_a_file_takes_no_lock(dana: Session, cole: Session) -> None:
+    viewed = {
+        "sessionId": dana.identifier,
+        "cwd": WORKING_FOLDER,
+        "toolName": "view",
+        "toolArgs": {"path": f"{WORKING_FOLDER}/{FILE}"},
+    }
+    read = {
+        "taskId": dana.identifier,
+        "hookName": "PreToolUse",
+        "workspaceRoots": [WORKING_FOLDER],
+        "preToolUse": {"tool": "read_file", "parameters": {"path": FILE}},
+    }
+
+    assert dana.hook_payload("before-edit", viewed, "copilot-cli") == ALLOWED
+    assert dana.hook_payload("before-edit", read, "cline") == ALLOWED
+
+    assert take(cole)["locked"] is True, "nobody holds a file that was only read"
+
+
+def test_cursors_session_is_the_one_its_edits_name_when_its_end_names_two(dana: Session, cole: Session) -> None:
+    """Cursor's session end sends a session_id beside the conversation_id that every one of its payloads carries."""
+    own_edit(dana, "Cursor")
+
+    dana.hook_payload(
+        "session-end",
+        {"conversation_id": dana.identifier, "session_id": "another-name", "reason": "user_close"},
+        "cursor",
+    )
+
+    assert own_edit(cole, "Cursor") == ALLOWED
+
+
+# The hooks the connection kit hands each agent, run as the agent runs them
+
+
+def kit(session: Session, server_url: str | None = None) -> dict[str, str]:
+    """The connection kit's files for this session's repository, by path, pointed at this server or another."""
+    assert session.project is not None and session.repository is not None
+    files = connection_kit(
+        server_url=server_url or session.server.url,
+        marketplace="madhav037/shared-memory",
+        project_id=session.project,
+        project_name="Billing",
+        repository=session.repository,
+    )
+    return {file["path"]: file["contents"] for file in files}
+
+
+#: Where each agent's kit keeps the command its before-edit hook runs in a POSIX shell. Cline's is a whole script.
+KIT_COMMANDS: dict[str, Callable[[dict[str, str]], str]] = {
+    "Codex": lambda files: tomllib.loads(files[".codex/config.toml"])["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+    "Cursor": lambda files: json.loads(files[".cursor/hooks.json"])["hooks"]["preToolUse"][0]["command"],
+    "Devin Desktop": lambda files: json.loads(files[".devin/hooks.v1.json"])["PreToolUse"][0]["hooks"][0]["command"],
+    "Cline": lambda files: files[".clinerules/hooks/PreToolUse"],
+}
+
+
+def run_kit(argv: list[str], session: Session, agent: str) -> subprocess.CompletedProcess[str]:
+    """Run a kit's before-edit hook the way its agent does: the agent's own payload on stdin, the member's personal
+    token and the agent's own word for the repository's root in the environment."""
+    assert session.token is not None
+    return subprocess.run(
+        argv,
+        input=json.dumps(AGENTS_OWN[agent][0](session, FILE)),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={
+            **os.environ,
+            "SHARED_MEMORY_TOKEN": session.token,
+            "DEVIN_PROJECT_DIR": WORKING_FOLDER,
+            "GEMINI_PROJECT_DIR": WORKING_FOLDER,
+        },
+    )
+
+
+needs_a_shell = pytest.mark.skipif(
+    shutil.which("sh") is None or shutil.which("curl") is None,
+    reason="these hooks run curl in a POSIX shell, which aren't both here",
+)
+
+
+@needs_a_shell
+@pytest.mark.parametrize("agent", list(KIT_COMMANDS))
+def test_a_kits_before_edit_command_takes_the_lock_and_hands_its_agent_the_block(
+    dana: Session, cole: Session, agent: str
+) -> None:
+    command = KIT_COMMANDS[agent](kit(dana))
+
+    allowed = run_kit(["sh", "-c", command], dana, agent)
+    blocked = run_kit(["sh", "-c", command], cole, agent)
+
+    says, within = BLOCKED[AGENTS_OWN[agent][1]]
+    answer = json.loads(blocked.stdout)
+    for field in within:
+        answer = answer[field]
+    assert (allowed.returncode, json.loads(allowed.stdout)) == (0, ALLOWED), allowed.stderr
+    assert blocked.returncode == 0, blocked.stderr
+    assert says.items() <= answer.items()
+    assert "Dana Dev" in refused(cole), "the file is locked by its path from the repository's root"
+
+
+@needs_a_shell
+@pytest.mark.parametrize("agent", list(KIT_COMMANDS))
+def test_a_kits_before_edit_command_lets_the_edit_through_when_the_server_is_down(dana: Session, agent: str) -> None:
+    command = KIT_COMMANDS[agent](kit(dana, "http://127.0.0.1:9"))
+
+    ran = run_kit(["sh", "-c", command], dana, agent)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.strip() in ("", "{}"), "nothing that blocks the edit"
+    assert "--max-time 3 " in command
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_geminis_hook_script_takes_the_lock_and_hands_gemini_the_block(
+    dana: Session, cole: Session, tmp_path: Path
+) -> None:
+    script = tmp_path / "shared-memory.mjs"
+    script.write_text(kit(dana)[".gemini/hooks/shared-memory.mjs"], encoding="utf-8")
+
+    allowed = run_kit(["node", str(script), "before-edit"], dana, "Gemini CLI")
+    blocked = run_kit(["node", str(script), "before-edit"], cole, "Gemini CLI")
+
+    assert (allowed.returncode, json.loads(allowed.stdout)) == (0, ALLOWED), allowed.stderr
+    assert json.loads(blocked.stdout)["decision"] == "deny"
+    assert "Dana Dev (emp-2)" in json.loads(blocked.stdout)["reason"]
+    assert "Dana Dev" in refused(cole)
 
 
 # Everything else lets the edit through
@@ -361,12 +634,6 @@ def run_plugin(server_url: str, session: Session, token: str | None) -> subproce
             "SHARED_MEMORY_REPOSITORY": session.repository,
         },
     )
-
-
-needs_a_shell = pytest.mark.skipif(
-    shutil.which("sh") is None or shutil.which("curl") is None,
-    reason="Claude Code runs the plugin's hooks with curl in a POSIX shell, which aren't both here",
-)
 
 
 @needs_a_shell

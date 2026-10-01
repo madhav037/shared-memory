@@ -113,13 +113,16 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
 - **Headers**: `Authorization`, `X-Shared-Memory-Project` and `X-Shared-Memory-Repository`, as every hook sends, and
   `X-Shared-Memory-Root`, the absolute path of the repository's root where the agent gives its hook one (Claude
   Code's `$CLAUDE_PROJECT_DIR`). `?format=` names the agent family, as on the other hooks.
-- **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the file, in
-  `tool_input.file_path` or `tool_input.notebook_path`, and the working folder, `cwd`, which stands in for the root
-  when the header is missing. An agent that names its file or its root in another field is added in
-  `hooks.edited_file`.
-- **The file's path from the root** is the file's absolute path with the root cut off the front
-  (`hooks.edited_file`); a file not under the root is outside the repository. A relative path is taken as written
-  from the root.
+- **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the files
+  (`hooks.edited_files`), and the working folder, `cwd`, or the open folders (`workspace_roots`, `workspaceRoots`),
+  which stand in for the root when the header is missing. The file is in `tool_input.file_path`,
+  `tool_input.notebook_path` or `tool_input.path`; in the patch of Codex's `apply_patch` (`tool_input.command`, which
+  may name several files: the first one held blocks the edit); in Copilot CLI's `toolArgs.path`; or in Cline's
+  `preToolUse.parameters.path`. Copilot CLI and Cline give tools that only read a file a `path` too, so for those two
+  the tool's name must be one that changes a file. An agent that names its file or its root in another field is
+  added in `hooks.edited_files`.
+- **The file's path from the root** is the file's absolute path with the root cut off the front; a file not under
+  the root is outside the repository. A relative path is taken as written from the root.
 - **Allowed** is answered `{}` in every family: a free file (now locked for the session), the session's own lock, a
   never-lock file, a path outside the repository, an unreadable payload, a payload naming no session or no file, an
   unknown personal token, a server error. Never an explicit "allow", which would skip the agent's own permission
@@ -127,16 +130,24 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
 - **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is `Held`'s message
   followed by `TAKEOVER_IS_POSSIBLE` (`app.py`):
   - `claude`: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-    "permissionDecisionReason": reason}}`
+    "permissionDecisionReason": reason}}`, which Codex reads too
+  - `gemini`: `{"decision": "deny", "reason": reason}`
+  - `devin`: `{"decision": "block", "reason": reason}`
   - `copilot-cli`: `{"permissionDecision": "deny", "permissionDecisionReason": reason}`
   - `cursor`: `{"permission": "deny", "user_message": reason, "agent_message": reason}`
   - `cline`: `{"cancel": true, "errorMessage": reason}`
 
-  Only Claude Code's shape has been run in the real agent; the other three are written from each agent's hook
-  reference and are checked by hand when that agent's kit is wired.
+  Only Claude Code's shape has been run in the real agent; the others are written from each agent's hook
+  reference and wait for a hand-check in that agent (#229's pull request lists them).
 - **The hook's own command** limits curl to 3 seconds and, when curl fails, prints a `systemMessage` warning instead,
   so the edit goes ahead. The server always answers 200.
-- **In tests**, the driver's `Session.edit(path)` fires the hook as Claude Code's Edit tool does.
+- **Every other agent's kit** (`connection.py`) wires the same endpoint where the agent can refuse an edit: Codex,
+  Copilot CLI, Gemini CLI, Cursor (not on Windows), Devin Desktop and Cline, each giving up at 3 seconds and letting
+  the edit through, and each with a session-end hook beside it. `BEFORE_EDIT_HOOK` and `GUIDANCE_ONLY` name who has
+  the hook and who is asked by the guidance to call `take_lock` instead; `SESSION_HABITS` is the guidance, and the
+  skill and the server's instructions say the same.
+- **In tests**, the driver's `Session.edit(path)` fires the hook as Claude Code's Edit tool does, and
+  `tests/test_before_edit.py` has each other agent's own payload (`AGENTS_OWN`) and runs each kit's command.
 
 ## Editing
 

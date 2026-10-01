@@ -1,6 +1,6 @@
 ---
 name: shared-memory
-description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team memory, when working with cards on the board, or when a briefing or recall mentions memory.
+description: How to use the team's Shared Memory tools. Use whenever you learn something about this project or how the team works, when saving or looking up team memory, when working with cards on the board, when an edit is blocked by another session's lock, or when a briefing or recall mentions memory.
 ---
 
 # Shared Memory
@@ -100,6 +100,18 @@ When you find something broken that teammates will trip over, `save_known_issue`
 - The title and summary name the symptom; the body carries a line `Workaround: ...`, or `Workaround: none known`.
 - If it returns similar memories, show them to the member and resolve each with them, as with promote: `link` (it already is this known issue), `keep_both` or `cancel`.
 - Pass `card` when a card already covers the fix; otherwise a To do card is added for it. Tell the member which.
+
+## Sessions and locks
+
+The server knows each running session. The briefing ends by naming this session's identifier: pass it as `session` to every tool that takes one. It also lists the project's other active sessions with their activity.
+
+- **Activity**: `set_activity` when you start a piece of work, and again when the task changes: one line on what is being changed and where. Teammates' sessions see it in their briefing.
+- **Locks**: a session holds a lock on each file its agent edits, so another session doesn't change the file underneath it. A before-edit hook takes each file's lock for you in Claude Code, Codex, Copilot CLI, Gemini CLI, Cursor on macOS and Linux, Devin Desktop and Cline. In any other coding agent (Copilot in VS Code, Cursor on Windows), call `take_lock` with the file's path from the repository's root before you edit the file. A lockfile or a generated file never locks; `never_lock` lists the never-lock patterns.
+- **A held file**: when an edit is blocked or `take_lock` is refused, another session is the file's holder: tell the member who holds it, their activity and since when, and work on something else or wait.
+- **Takeover**: it moves the holder's lock to this session at once, and is the member's decision. Call `take_lock` with `takeover: true` only once the member says so.
+- **A lock of yours taken over**: you are told once, on your next prompt or in the `notices` of `take_lock` or `set_activity`: stop editing that file and tell the member.
+- **Finished with a file**: `release_lock` it, so nobody waits for it. Your other locks end with the session, or after it sits idle.
+- **Collisions**: when a prompt warns of a possible collision, another session's activity being nearly the same as yours, tell the member before going on. Mention the briefing's active sessions when they bear on the task.
 
 ## Challenges
 
