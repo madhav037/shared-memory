@@ -176,7 +176,7 @@ flowchart TD
   - Taken when a session's Claude edits a file with its edit tools.
   - Identified by repository + path.
   - Held by the **session**, not the member, so a member's own parallel sessions can't overwrite each other.
-  - Released after ~20 minutes idle, or when the session ends.
+  - Released when the session ends, or when it has made no call for 30 minutes ([ADR-0018](./adr/0018-a-session-is-known-by-the-identifier-its-hooks-send.md)).
   - Some files never lock: lockfiles, generated code.
 - **When Claude hits a lock:**
   - Claude is blocked and told who the **holder** is, which branch they're on, and when they last edited.
@@ -293,7 +293,7 @@ flowchart LR
 | Recall matches per prompt | up to 3 |
 | Recall time budget | ~2 s, then skip |
 | Lock-check hook timeout | ~3 s, then allow |
-| Lock released after idle | ~20 min |
+| Lock released after idle | 30 min |
 | Challenge fallback to any member | 3 days |
 | Memory size limit | 600 words, 12,000 characters |
 | Hook request body limit | 1 MB, checked after the personal token |

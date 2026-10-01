@@ -36,6 +36,24 @@ Writing to a temporary file first keeps a failed command from emptying `console/
   module already used, `FakeGitHub` fails the test at once with "GitHub account number N is already 'one-login' in
   this fake GitHub, so 'other-login' cannot sign in with it." Give one of the two tests an unused number.
 
+## Building on sessions
+
+A ticket of #220 that keeps something per session (its activity, its locks) stands on `Sessions` in
+`src/shared_memory/sessions.py`, built once in `build_app` as `sessions`. Its docstring lists the whole interface.
+Only that module reads the `sessions` table; another module's rows refer to `Session.id`.
+
+- **The calling session.** In a hook, `session_of(current, payload)` in `app.py`; in a tool that takes `session`,
+  `sessions.touch(caller(ctx), session)`. Both move its last-seen time, which is what keeps it active.
+- **A project's active sessions**: `sessions.active(project_id)`, a list of `Session`. A session's coding agent is
+  `None` until one of its tool calls has reported it, because a hook does not say.
+- **A session that ended or went idle.** Nothing sweeps, so count its rows as gone wherever you read them:
+  `sessions.still_active(ids)` says which holders are active. `sessions.on_gone(listener)` calls you inside the
+  transaction when a session ends or is found back from idle, to clear its rows.
+- **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
+- **Words for the session's next prompt** go in the prompt hook's `notices` in `app.py`, beside
+  `sessions.waiting_notices(session)`.
+- **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
+
 ## Editing
 
 Read a file with Read, in ranges for a large one such as `board.py`, and change it with Edit. Edit refuses a file

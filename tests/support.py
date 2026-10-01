@@ -32,12 +32,14 @@ from starlette.routing import Route
 
 from shared_memory import cli
 from shared_memory.config import Settings
+from shared_memory.sessions import Session as KnownSession
+from shared_memory.sessions import Sessions
 
 ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # What Claude Code calls each event it hooks, which is what its payloads name.
-CLAUDE_EVENTS = {"session-start": "SessionStart", "prompt-submitted": "UserPromptSubmit"}
+CLAUDE_EVENTS = {"session-start": "SessionStart", "prompt-submitted": "UserPromptSubmit", "session-end": "SessionEnd"}
 
 
 # Each checkout names its own test databases, so two worktrees can run their tests against one Postgres at once.
@@ -79,6 +81,7 @@ class RunningServer:
     def __init__(
         self, app: Any, settings: Settings, clock: TestClock, portal: BlockingPortal, port: int = 0
     ) -> None:
+        self.app = app
         self.settings = settings
         self.clock = clock
         self.portal = portal
@@ -120,6 +123,8 @@ class Session:
     repository: str | None = None
     # The name the session's coding agent reports for itself when it connects, e.g. "codex-mcp-client".
     agent: str | None = None
+    # What the session's coding agent sends in every hook payload to tell this session from its others.
+    identifier: str = "test-session"
 
     def headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -132,11 +137,15 @@ class Session:
         return headers
 
     def in_project(self, project: str, repository: str = "app") -> Session:
-        return Session(self.server, self.token, project, repository, self.agent)
+        return Session(self.server, self.token, project, repository, self.agent, self.identifier)
 
     def as_agent(self, name: str) -> Session:
         """The same member and project, from a coding agent that reports itself by this name."""
-        return Session(self.server, self.token, self.project, self.repository, name)
+        return Session(self.server, self.token, self.project, self.repository, name, self.identifier)
+
+    def as_session(self, identifier: str) -> Session:
+        """Another session of the same member in the same project, known by its own identifier."""
+        return Session(self.server, self.token, self.project, self.repository, self.agent, identifier)
 
     def _client(self, transport: Any) -> Client:
         info = types.Implementation(name=self.agent, version="1.0") if self.agent else None
@@ -199,7 +208,7 @@ class Session:
         raise AssertionError(f"{tool} was not refused")
 
     def _hook(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
-        body = {"session_id": "test-session", "cwd": "/work/app", "hook_event_name": CLAUDE_EVENTS[event], **payload}
+        body = {"session_id": self.identifier, "cwd": "/work/app", "hook_event_name": CLAUDE_EVENTS[event], **payload}
         return self.hook_payload(event, body, format)
 
     def hook_payload(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
@@ -222,6 +231,17 @@ class Session:
     def prompt(self, text: str, format: str | None = None) -> dict[str, Any]:
         """Fire the prompt-submitted hook and return its hook output."""
         return self._hook("prompt-submitted", {"prompt": text}, format)
+
+    def end(self, format: str | None = None) -> dict[str, Any]:
+        """Fire the session-end hook and return its hook output."""
+        return self._hook("session-end", {"reason": "other"}, format)
+
+    def active_sessions(self) -> list[KnownSession]:
+        """The sessions active in this session's project, as the worker it talks to reads them. No tool lists them
+        yet, so this asks that worker's sessions module, which is what the tools built on it ask."""
+        assert self.project is not None
+        sessions: Sessions = self.server.app.state.sessions
+        return sessions.active(self.project)
 
 
 def added_context(hook_output: dict[str, Any]) -> str:

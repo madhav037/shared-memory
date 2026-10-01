@@ -75,7 +75,7 @@ def test_unpinning_removes_a_memory_from_the_briefing(owner: Session) -> None:
 
     owner.call("unpin", path=path)
 
-    assert owner.start() == {}
+    assert "Use pnpm, not npm" not in added_context(owner.start())
 
 
 def test_session_start_never_breaks_the_session(team: Team, owner: Session) -> None:
@@ -119,7 +119,7 @@ def test_any_agent_can_fetch_the_briefing_its_session_would_start_with(owner: Se
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
 
-    briefing = owner.call("briefing")
+    briefing = owner.call("briefing", session=owner.identifier)
 
     assert briefing == added_context(owner.start())
     assert f"[project memory] Use pnpm, not npm ({path})" in briefing
@@ -140,4 +140,8 @@ def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Sessi
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
 
-    assert owner.run_prompt("briefing") == owner.call("briefing")
+    # Each starts a session of its own, so they differ only in the identifier their last line names.
+    prompted, fetched = owner.run_prompt("briefing"), owner.call("briefing")
+
+    assert f"[project memory] Use pnpm, not npm ({path})" in prompted
+    assert prompted.rsplit("\n\n", 1)[0] == fetched.rsplit("\n\n", 1)[0]

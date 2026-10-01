@@ -239,9 +239,12 @@ class Briefing:
                     conn.execute("DELETE FROM pins WHERE team = %s AND path = %s", (team, str(path)))
             yield
 
-    def for_session(self, caller: Caller, extra: list[str] | None = None, work: Work | None = None) -> str | None:
+    def for_session(
+        self, caller: Caller, extra: list[str] | None = None, work: Work | None = None, followed_by: str | None = None
+    ) -> str | None:
         """The briefing: pinned memories for the session's project within the cap, any extra notices, then the member's
-        work from the board in what is left of the cap, with counts of what didn't fit."""
+        work from the board in what is left of the cap, with counts of what didn't fit. What the session is told right
+        after its briefing (followed_by) is not in it, but takes its room out of what is left for the work."""
         if caller.project is None:
             return None
         budget = self._settings.briefing_cap_tokens - _tokens(FRAMING)
@@ -262,6 +265,8 @@ class Briefing:
             )
         sections.extend(notes)
         budget -= sum(_tokens(note) for note in notes)
+        if followed_by:
+            budget -= _tokens(followed_by) + 1
         sections.extend(_work_sections(work or Work(), budget))
         if not sections:
             return None

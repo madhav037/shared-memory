@@ -47,7 +47,7 @@ def test_the_console_api_leaves_the_memory_tools_and_the_hooks_alone(team: Team)
     get(team.server, "/api/status")
 
     assert session.call("tree")["folders"] == []
-    assert session.start() == {}
+    assert session.end() == {}
 
 
 def test_the_server_prints_its_api_description_for_the_consoles_build(server: RunningServer) -> None:
