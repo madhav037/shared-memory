@@ -57,9 +57,10 @@ INSTRUCTIONS = (
     "contradicts them, then supersede, keep both, or cancel. Superseding another author's memory raises a challenge "
     "that its author decides.\n\n"
     "The board holds this project's cards. When you notice follow-up work you won't do now, add_card and tell the "
-    "member. claim_card only when the member asks; on \"take the next card\", claim the top card of the highest "
-    "priority in To do. Move a card to Done only once the member confirms it is finished. When you find something "
-    "broken that teammates will trip over, save_known_issue with its symptom and a workaround.\n\n"
+    "member. claim_card only when the member asks; on \"take the next card\", call it with no number to claim the "
+    "top card of the highest priority in To do. Move a card to Done only once the member confirms it is finished. "
+    "When you find something broken that teammates will trip over, save_known_issue with its symptom and a "
+    "workaround.\n\n"
     "If a tool says this repository isn't connected, offer to connect it with create_project."
 )
 
@@ -660,10 +661,11 @@ def build_app(
         out of Blocked clears both. Move a card to Done only once your member confirms the work is finished; only its
         assignee, the project's leads and the team's admins can reopen a Done card. Moving a card to Done retires the
         known issues it was to fix, or raises a challenge to the author of one you didn't write; known_issues_fixed
-        says which.
+        says which. One it gives as not_retired is still active: tell your member, and retire it with retire or move the
+        card to Done again, which tries once more.
 
         Any member may change a card with no assignee. A card with one is changed only by its assignee, the project's
-        leads and the team's admins, and only they set an assignee: to take a card yourself, use claim_card. To say
+        leads and the team's admins, and only they set an assignee: to work on a card yourself, use claim_card. To say
         something about a card you can't change, use comment_card.
         """
         return board.update(
@@ -685,11 +687,12 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
-    def claim_card(number: int, ctx: Context) -> dict[str, Any]:
+    def claim_card(ctx: Context, number: int | None = None) -> dict[str, Any]:
         """Claim a card on this project's board: you become its assignee and it moves to Doing. Claim only when
-        your member asks you to work on a card; on "take the next card", read To do with board and claim the top card
-        of the highest priority there. Only a card in To do with no assignee can be claimed; if someone
-        claimed it first, you are told who has it.
+        your member asks you to work on a card. On "take the next card", call this with no number: it claims the top
+        card of the highest priority in To do (high before normal before low) that has no assignee, and is refused
+        when there is none. Only a card in To do with no assignee can be claimed; if someone claimed it first, you
+        are told who has it.
         """
         return board.claim(caller(ctx), number)
 

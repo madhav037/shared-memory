@@ -7,6 +7,7 @@ project's board stays inside its access list.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
@@ -28,7 +29,9 @@ from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, restricted_project
 from shared_memory.memory import locate
-from shared_memory.validation import CHARACTER_LIMIT
+from shared_memory.validation import CHARACTER_LIMIT, refuse_secret
+
+log = logging.getLogger("shared_memory")
 
 # Each column and priority as the tools take and give it, and as the board shows it to a member.
 COLUMNS = {"to_do": "To do", "doing": "Doing", "blocked": "Blocked", "done": "Done"}
@@ -83,6 +86,11 @@ def priority_named(value: str) -> str:
     return _named(value, PRIORITIES, "Priority")
 
 
+def _no_secret(text: str, what: str) -> None:
+    """Refuse a secret in what a card says, as memory refuses one: a board is read by every member's agent too."""
+    refuse_secret(text, f"This card's {what}", "on the board")
+
+
 def _title(value: str) -> str:
     title = value.strip()
     if not title:
@@ -91,6 +99,7 @@ def _title(value: str) -> str:
         raise Refused("A card's title must be one line.")
     if len(title) > TITLE_LIMIT:
         raise Refused(f"A card's title must be at most {TITLE_LIMIT} characters.")
+    _no_secret(title, "title")
     return title
 
 
@@ -104,6 +113,7 @@ def _description(value: str, word_limit: int) -> str:
         )
     if len(value) > CHARACTER_LIMIT:
         raise Refused(f"This description is {len(value)} characters; the limit is {CHARACTER_LIMIT} characters.")
+    _no_secret(value, "description")
     return value.strip()
 
 
@@ -164,6 +174,7 @@ def _comment(value: str) -> str:
         )
     if len(text) > COMMENT_CHARACTER_LIMIT:
         raise Refused(f"This comment is {len(text)} characters; the limit is {COMMENT_CHARACTER_LIMIT} characters.")
+    _no_secret(text, "comment")
     return text
 
 
@@ -176,10 +187,11 @@ def _reason(value: str) -> str:
         raise Refused(
             f"A blocked_reason must be at most {COMMENT_WORD_LIMIT} words and {COMMENT_CHARACTER_LIMIT} characters."
         )
+    _no_secret(reason, "blocked reason")
     return reason
 
 
-def _held_by(row: dict[str, Any]) -> str:
+def _assignee_named(row: dict[str, Any]) -> str:
     """A card's assignee as a refusal names them."""
     return f"{row['assignee_name']} ({row['assignee']})"
 
@@ -392,13 +404,15 @@ class Board:
         it); both go when it leaves Blocked. When the card waited on is done, the blocked card's assignee is told.
 
         A card with an assignee is changed only by them, the project's leads and the team's admins; any member may
-        change an unassigned one, but only those three set its assignee: a member takes a card by claiming it. Only
-        those three reopen a Done card, assigned or not.
+        change an unassigned one, but only those three set its assignee: a member makes a card theirs by claiming
+        it. Only those three reopen a Done card, assigned or not.
 
         A card that lands in Done retires the known issues linked to it, through retire's rules: each one the caller
         wrote is retired, and each one another member wrote is challenged. The card moves first, in its own
         transaction, and each known issue is retired after it in a commit of its own: a move that is refused retires
-        nothing, and a known issue that fails to retire leaves the card in Done, to be retired by hand."""
+        nothing, and a known issue that fails to retire leaves the card in Done and the others retired, and is given
+        back as not_retired with the reason. Moving a card already in Done to Done again retires the known issues
+        still active, which is how a failed one is tried again."""
         project_id = self._project(caller)
         edits: dict[str, Any] = {}
         if title is not None:
@@ -434,8 +448,8 @@ class Board:
             lands = to_column or from_column
             if from_column == "done" and lands != "done" and not runs_it:
                 raise Refused(
-                    f"Card {number} is done: only the project's leads and the team's admins can reopen it. Say why "
-                    "it should be reopened with comment_card instead."
+                    f"Card {number} is done: only its assignee, the project's leads and the team's admins can reopen "
+                    "it. Say why it should be reopened with comment_card instead."
                 )
             blocking = self._blocking(conn, project_id, number, from_column, lands, blocked_reason, waits_on)
             if edits:
@@ -463,15 +477,34 @@ class Board:
             self._audit.card(caller, CARD_MOVED, project_id, number, **moved)
         for member_id, text in notices:
             self._tell(caller.team, member_id, text)
-        if from_column != "done" and card["column"] == "done":
+        if card["column"] == "done" and (from_column != "done" or to_column == "done"):
             card["known_issues_fixed"] = self._fixed(caller, card)
         return card
 
     def _fixed(self, caller: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
-        """Retire, or challenge, each still-active known issue a card that is done was to fix."""
-        reasoning = f'Card {card["number"]} "{card["title"]}", which was to fix this known issue, is done.'
-        outcomes = (self._retire_fixed(caller, path, reasoning) for path in card["known_issues"])
-        return [outcome for outcome in outcomes if outcome is not None]
+        """Retire, or challenge, each still-active known issue a card that is done was to fix. Every one is tried:
+        one that fails to retire is given back as not_retired with the reason, and stops neither the others nor the
+        move, which has already happened."""
+        number = card["number"]
+        reasoning = f'Card {number} "{card["title"]}", which was to fix this known issue, is done.'
+        outcomes: list[dict[str, Any]] = []
+        for path in card["known_issues"]:
+            try:
+                outcome = self._retire_fixed(caller, path, reasoning)
+            except Exception as failed:
+                if not isinstance(failed, Refused):
+                    log.exception("Known issue %s was not retired when card %s was done", path, number)
+                outcome = {
+                    "status": "not_retired",
+                    "path": path,
+                    "reason": str(failed) or type(failed).__name__,
+                    "next": f"Card {number} is in Done, but this known issue is still active and still warns every "
+                    f"member's agent. Tell your member, then retire it by hand with retire, or move card {number} to "
+                    "Done again to try once more.",
+                }
+            if outcome is not None:
+                outcomes.append(outcome)
+        return outcomes
 
     def for_briefing(self, caller: Caller) -> tuple[list[str], list[str]]:
         """The member's own open cards as their briefing lists them, one short line each: first those overdue or due
@@ -600,13 +633,28 @@ class Board:
                 told.append((row["member_id"], text))
         return told
 
-    def claim(self, caller: Caller, number: int) -> dict[str, Any]:
+    def claim(self, caller: Caller, number: int | None = None) -> dict[str, Any]:
         """Make the caller a card's assignee and move it to the bottom of Doing. Only a card in To do with no
-        assignee can be claimed, and the first claim wins: the card is taken by one conditional update."""
+        assignee can be claimed, and the first claim wins: the card is claimed by one conditional update.
+
+        With no number, the next card is claimed: the top unassigned card of the highest priority in To do, chosen
+        with the board locked, so two members claiming the next card each get one of their own."""
         project_id = self._project(caller)
         now = self._clock()
         with self._db.transaction() as conn:
             conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
+            if number is None:
+                following = conn.execute(
+                    "SELECT number FROM cards WHERE project_id = %s AND board_column = 'to_do' AND assignee_id IS NULL"
+                    " ORDER BY array_position(%s::text[], priority), position LIMIT 1",
+                    (project_id, list(PRIORITIES)),
+                ).fetchone()
+                if following is None:
+                    raise Refused(
+                        "To do has no unassigned card to claim. Read the board to see what is there: add a card for "
+                        "the work, or ask a project lead to assign you one."
+                    )
+                number = following["number"]
             claimed = conn.execute(
                 "UPDATE cards SET assignee_id = %s, updated_at = %s WHERE project_id = %s AND number = %s"
                 " AND assignee_id IS NULL AND board_column = 'to_do' RETURNING id",
@@ -617,7 +665,7 @@ class Board:
                 if found["assignee_id"] == caller.member.pk:
                     raise Refused(f"Card {number} is already yours.")
                 if found["assignee_id"] is not None:
-                    raise Refused(f"Card {number} is already claimed by {_held_by(found)}. Pick another card.")
+                    raise Refused(f"Card {number} is already claimed by {_assignee_named(found)}. Pick another card.")
                 raise Refused(
                     f"Card {number} is in {COLUMNS[found['board_column']]}, and only cards in To do can be claimed. "
                     "A project lead can assign it to you, or move it back to To do first."
@@ -657,8 +705,8 @@ class Board:
             if not self._runs(conn, caller, project_id, found):
                 if found["assignee_id"] is not None:
                     raise Refused(
-                        f"Card {number} is assigned to {_held_by(found)}: only they, the project's leads and the "
-                        "team's admins can delete it. Say what you want with comment_card instead."
+                        f"Card {number} is assigned to {_assignee_named(found)}: only they, the project's leads and "
+                        "the team's admins can delete it. Say what you want with comment_card instead."
                     )
                 if found["creator_id"] != caller.member.pk:
                     raise Refused(
@@ -766,7 +814,7 @@ class Board:
         found = self._found(conn, project_id, number)
         if found["assignee_id"] is not None and not self._runs(conn, caller, project_id, found):
             raise Refused(
-                f"Card {number} is assigned to {_held_by(found)}: only they, the project's leads and the team's "
+                f"Card {number} is assigned to {_assignee_named(found)}: only they, the project's leads and the team's "
                 "admins can change it. Say what you want with comment_card instead."
             )
         return found

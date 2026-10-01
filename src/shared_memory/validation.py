@@ -57,6 +57,17 @@ def _find_secret(text: str) -> str | None:
     return None
 
 
+def refuse_secret(text: str, what: str = "This memory", where: str = "into memory") -> None:
+    """Refuse text that looks like it holds a secret: memory by default, or whatever else is named, such as a card's
+    title on the board."""
+    found = _find_secret(text)
+    if found:
+        raise Refused(
+            f"{what} looks like it contains a secret ({found}). Secrets never go {where}: "
+            "remove it and describe where the secret is kept instead."
+        )
+
+
 def _single_line(field: str, value: str, limit: int) -> None:
     if not value.strip():
         raise Refused(f"A memory needs a {field}.")
@@ -101,9 +112,4 @@ def validate(memory: Memory, word_limit: int) -> None:
             f"This memory is {len(memory.body)} characters; the limit is {CHARACTER_LIMIT} characters. {_SPLIT_IT}"
         )
     for text in (memory.title, memory.summary, memory.body, *memory.related_files):
-        found = _find_secret(text)
-        if found:
-            raise Refused(
-                f"This memory looks like it contains a secret ({found}). Secrets never go into memory: "
-                "remove it and describe where the secret is kept instead."
-            )
+        refuse_secret(text)
