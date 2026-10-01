@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
 
@@ -496,6 +496,51 @@ class BoardArchive(BaseModel):
     cards: list[Card]
 
 
+class NewCard(BaseModel):
+    """A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written
+    YYYY-MM-DD."""
+
+    title: str
+    description: str = ""
+    priority: Priority | None = None
+    labels: list[str] = Field(default_factory=list)
+    due_date: str | None = None
+
+
+class CardFields(BaseModel):
+    """What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
+    card's assignee, the project's leads and the team's admins give it an assignee."""
+
+    title: str | None = None
+    description: str | None = None
+    priority: Priority | None = None
+    labels: list[str] | None = None
+    due_date: str | None = None
+    assignee: str | None = None
+
+
+class CardMove(BaseModel):
+    """Where a card goes: a column, and a position in it (1 is the top; without one it goes to the bottom). A card
+    goes to Blocked only with a blocked_reason, and may name the card it waits on."""
+
+    column: Column
+    position: int | None = Field(default=None, ge=1)
+    blocked_reason: str | None = None
+    waits_on: int | None = Field(default=None, ge=1)
+
+
+class CardCommentText(BaseModel):
+    """A comment to add to a card."""
+
+    text: str
+
+
+class DeletedCard(BaseModel):
+    """The number of the card that was deleted, which is not used again."""
+
+    number: int
+
+
 @dataclass(frozen=True)
 class Declaration:
     """One call the console can make, and what it answers with. A call that answers `None` redirects instead."""
@@ -646,6 +691,58 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="card",
         summary="One card on a project's board or in its archive, with its links and comments.",
         answers=CardDetail,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards",
+        method="POST",
+        operation_id="add_card",
+        summary="Add a card to the bottom of To do on a project's board, numbered next in the project.",
+        answers=CardDetail,
+        changes=True,
+        accepts=NewCard,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}",
+        method="POST",
+        operation_id="edit_card",
+        summary="Change a card's title, description, priority, labels, due date or assignee.",
+        answers=CardDetail,
+        changes=True,
+        accepts=CardFields,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}/move",
+        method="POST",
+        operation_id="move_card",
+        summary="Move a card to a column, or to another place in its own; Blocked takes a reason.",
+        answers=CardDetail,
+        changes=True,
+        accepts=CardMove,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}/claim",
+        method="POST",
+        operation_id="claim_card",
+        summary="Claim an unassigned card in To do: the member becomes its assignee and it moves to Doing.",
+        answers=CardDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}/comment",
+        method="POST",
+        operation_id="comment_card",
+        summary="Comment on a card; its assignee is told.",
+        answers=CardDetail,
+        changes=True,
+        accepts=CardCommentText,
+    ),
+    Declaration(
+        path="/projects/{project_id}/cards/{number}/delete",
+        method="POST",
+        operation_id="delete_card",
+        summary="Delete a card, with its links and comments.",
+        answers=DeletedCard,
+        changes=True,
     ),
     Declaration(
         path="/audit",

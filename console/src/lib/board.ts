@@ -74,3 +74,17 @@ export function cardChange(detail: Record<string, unknown>, nameOf: (memberId: s
   if (typeof detail.waits_on === "number") said.push(`Waits on card ${detail.waits_on}`);
   return said;
 }
+
+type Placed = { column: Column; position: number };
+
+/**
+ * Where a card dropped on the board goes, as the position to ask for: in `column`, just above the card `before`, or
+ * at the bottom when there is none (`undefined`). `null` when the drop leaves it where it was. Positions are the
+ * server's, so they hold while the board is narrowed by filters: the card goes above `before` whatever is hidden.
+ */
+export function dropPlace(dragged: Placed, column: Column, before: Placed | null, lastInColumn = false): number | undefined | null {
+  const staying = dragged.column === column;
+  if (before === null) return staying && lastInColumn ? null : undefined;
+  const position = staying && dragged.position < before.position ? before.position - 1 : before.position;
+  return staying && position === dragged.position ? null : position;
+}

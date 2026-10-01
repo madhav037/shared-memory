@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { boardUrl, cardChange, dueness, fileLink } from "./board";
+import { boardUrl, cardChange, dropPlace, dueness, fileLink } from "./board";
 
 describe("when a card is due, against today", () => {
   it("says a card due before today is overdue, and one due today is due today", () => {
@@ -52,5 +52,26 @@ describe("what the audit log says a change to a card did", () => {
     expect(cardChange({ from: "doing", assignee: "emp-2" }, (id) => (id === "emp-2" ? "Dana Dev" : id))).toEqual([
       "From Doing, taken from Dana Dev",
     ]);
+  });
+});
+
+describe("where a dropped card goes", () => {
+  it("goes above the card it is dropped on, in another column", () => {
+    expect(dropPlace({ column: "to_do", position: 3 }, "doing", { column: "doing", position: 2 })).toBe(2);
+  });
+
+  it("goes to the bottom of a column when dropped below its cards", () => {
+    expect(dropPlace({ column: "to_do", position: 1 }, "doing", null)).toBeUndefined();
+  });
+
+  it("moves up or down within its own column, counting without itself", () => {
+    expect(dropPlace({ column: "to_do", position: 3 }, "to_do", { column: "to_do", position: 1 })).toBe(1);
+    expect(dropPlace({ column: "to_do", position: 1 }, "to_do", { column: "to_do", position: 3 })).toBe(2);
+  });
+
+  it("stays put when dropped where it already is", () => {
+    expect(dropPlace({ column: "to_do", position: 1 }, "to_do", { column: "to_do", position: 2 })).toBeNull();
+    expect(dropPlace({ column: "to_do", position: 2 }, "to_do", { column: "to_do", position: 2 })).toBeNull();
+    expect(dropPlace({ column: "to_do", position: 4 }, "to_do", null, true)).toBeNull();
   });
 });

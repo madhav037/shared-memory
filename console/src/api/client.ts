@@ -31,6 +31,10 @@ export type BoardArchive = components["schemas"]["BoardArchive"];
 export type BoardColumn = components["schemas"]["BoardColumn"];
 export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
+export type NewCard = components["schemas"]["NewCard"];
+export type CardFields = components["schemas"]["CardFields"];
+export type CardMove = components["schemas"]["CardMove"];
+export type DeletedCard = components["schemas"]["DeletedCard"];
 
 /** The header that tells the server a request came from the console, not from another site. */
 const fromConsole = { "X-Shared-Memory-Console": "1" };
@@ -253,4 +257,37 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
 /** One card whole, with its links and comments. */
 export function fetchCard(projectId: string, number: number, signal?: AbortSignal): Promise<CardDetail> {
   return ask<CardDetail>(`/api/projects/${encodeURIComponent(projectId)}/cards/${number}`, { signal });
+}
+
+function cardPath(projectId: string, number?: number, what = ""): string {
+  const card = number === undefined ? "" : `/${number}${what ? `/${what}` : ""}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/cards${card}`;
+}
+
+/** Add a card to the bottom of To do. */
+export function addCard(projectId: string, card: NewCard): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId), card);
+}
+
+/** Change a card's fields: only those given change. */
+export function editCard(projectId: string, number: number, fields: CardFields): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number), fields);
+}
+
+/** Move a card to a column, at a position in it (1 is the top); Blocked takes a reason. */
+export function moveCard(projectId: string, number: number, move: CardMove): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number, "move"), move);
+}
+
+/** Claim a card in To do: the member becomes its assignee and it moves to Doing. */
+export function claimCard(projectId: string, number: number): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number, "claim"));
+}
+
+export function commentCard(projectId: string, number: number, text: string): Promise<CardDetail> {
+  return change<CardDetail>(cardPath(projectId, number, "comment"), { text });
+}
+
+export function deleteCard(projectId: string, number: number): Promise<DeletedCard> {
+  return change<DeletedCard>(cardPath(projectId, number, "delete"));
 }

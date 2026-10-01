@@ -270,7 +270,93 @@ export interface paths {
         /** One card on a project's board or in its archive, with its links and comments. */
         get: operations["card"];
         put?: never;
-        post?: never;
+        /** Change a card's title, description, priority, labels, due date or assignee. */
+        post: operations["edit_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a card to the bottom of To do on a project's board, numbered next in the project. */
+        post: operations["add_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards/{number}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a card to a column, or to another place in its own; Blocked takes a reason. */
+        post: operations["move_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards/{number}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim an unassigned card in To do: the member becomes its assignee and it moves to Doing. */
+        post: operations["claim_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards/{number}/comment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Comment on a card; its assignee is told. */
+        post: operations["comment_card"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/cards/{number}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete a card, with its links and comments. */
+        post: operations["delete_card"];
         delete?: never;
         options?: never;
         head?: never;
@@ -967,6 +1053,112 @@ export interface components {
             titles: {
                 [key: string]: string;
             };
+        };
+        /**
+         * NewCard
+         * @description A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written
+         *     YYYY-MM-DD.
+         */
+        NewCard: {
+            /** Title */
+            title: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Priority
+             * @default null
+             */
+            priority: ("high" | "normal" | "low") | null;
+            /** Labels */
+            labels?: string[];
+            /**
+             * Due Date
+             * @default null
+             */
+            due_date: string | null;
+        };
+        /**
+         * CardFields
+         * @description What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
+         *     card's assignee, the project's leads and the team's admins give it an assignee.
+         */
+        CardFields: {
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Priority
+             * @default null
+             */
+            priority: ("high" | "normal" | "low") | null;
+            /**
+             * Labels
+             * @default null
+             */
+            labels: string[] | null;
+            /**
+             * Due Date
+             * @default null
+             */
+            due_date: string | null;
+            /**
+             * Assignee
+             * @default null
+             */
+            assignee: string | null;
+        };
+        /**
+         * CardMove
+         * @description Where a card goes: a column, and a position in it (1 is the top; without one it goes to the bottom). A card
+         *     goes to Blocked only with a blocked_reason, and may name the card it waits on.
+         */
+        CardMove: {
+            /**
+             * Column
+             * @enum {string}
+             */
+            column: "to_do" | "doing" | "blocked" | "done";
+            /**
+             * Position
+             * @default null
+             */
+            position: number | null;
+            /**
+             * Blocked Reason
+             * @default null
+             */
+            blocked_reason: string | null;
+            /**
+             * Waits On
+             * @default null
+             */
+            waits_on: number | null;
+        };
+        /**
+         * CardCommentText
+         * @description A comment to add to a card.
+         */
+        CardCommentText: {
+            /** Text */
+            text: string;
+        };
+        /**
+         * DeletedCard
+         * @description The number of the card that was deleted, which is not used again.
+         */
+        DeletedCard: {
+            /** Number */
+            number: number;
         };
         /**
          * AuditEvent
@@ -1886,6 +2078,159 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    edit_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardFields"];
+            };
+        };
+        responses: {
+            /** @description Change a card's title, description, priority, labels, due date or assignee. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    add_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewCard"];
+            };
+        };
+        responses: {
+            /** @description Add a card to the bottom of To do on a project's board, numbered next in the project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    move_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardMove"];
+            };
+        };
+        responses: {
+            /** @description Move a card to a column, or to another place in its own; Blocked takes a reason. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    claim_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Claim an unassigned card in To do: the member becomes its assignee and it moves to Doing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    comment_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardCommentText"];
+            };
+        };
+        responses: {
+            /** @description Comment on a card; its assignee is told. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetail"];
+                };
+            };
+        };
+    };
+    delete_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delete a card, with its links and comments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedCard"];
                 };
             };
         };
