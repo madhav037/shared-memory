@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from shared_memory.errors import Refused
-from shared_memory.store import confine
+from shared_memory.store import confine, memory_folder, ordinary
 
 
 @dataclass(frozen=True)
@@ -39,11 +39,11 @@ class MemoryHistory:
     """Every version of a memory, read out of the memory folder's git repository."""
 
     def __init__(self, root: Path) -> None:
-        self._root = root.resolve()
+        self._root = memory_folder(root)
 
     def _git(self, *args: str) -> str:
         result = subprocess.run(
-            ["git", "-C", str(self._root), *args], env=dict(os.environ), capture_output=True, text=True, check=False
+            ["git", "-C", ordinary(self._root), *args], env=dict(os.environ), capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
             raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")

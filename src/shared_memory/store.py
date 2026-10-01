@@ -260,6 +260,35 @@ def _revert(repository: pygit2.Repository, paths: list[str], landed: _Landed, mo
     _land(repository, files, message, pygit2.Signature(*SERVER), moving_main)
 
 
+def memory_folder(root: Path) -> Path:
+    """The memory folder as the server reaches every file in it, the one place its path on disk is decided.
+
+    On Windows an ordinary path stops working past 260 characters, which a memory under a topic in a deep memory
+    folder passes (#140), so there it is the extended-length form (`\\\\?\\C:\\...`), which has no such limit.
+    Everywhere else it is the resolved path. Memory paths, relative to a team's folder, are the same either way.
+    """
+    resolved = root.resolve()
+    if sys.platform != "win32":
+        return resolved
+    text = str(resolved)
+    if text.startswith("\\\\?\\"):
+        return resolved
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
+
+
+def ordinary(folder: Path) -> str:
+    """A folder's path as programs other than this server take it, such as the git CLI: without the
+    extended-length form `memory_folder` gives it on Windows."""
+    text = str(folder)
+    if sys.platform != "win32" or not text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + text[8:]
+    return text[4:]
+
+
 @functools.cache
 def _team_folder(root: Path, team: str) -> Path:
     return (root / team).resolve()
@@ -575,7 +604,7 @@ class MemoryStore:
         actions' work. Without one, turns are taken in this process only and there is no database work to hold.
 
         sets_up says whether this makes the folder and its git repository when they are missing, or finds them made."""
-        self._root = root.resolve()
+        self._root = memory_folder(root)
         self._transaction = transaction or OneProcess()
         self._parsed = ParsedMemories(parsed_characters)
         if sets_up:
@@ -583,10 +612,12 @@ class MemoryStore:
         self._turns = Turns()
         self._listeners = list(listeners)
         if sets_up and not (self._root / ".git").exists():
-            repository = pygit2.init_repository(str(self._root), initial_head="main")
+            repository = pygit2.init_repository(ordinary(self._root), initial_head="main")
             # For the git CLI that reads history and takes the backup.
             repository.config["core.autocrlf"] = "false"
             repository.config["core.quotepath"] = "false"
+            # On Windows git refuses a path past 260 characters without it; elsewhere it changes nothing.
+            repository.config["core.longpaths"] = "true"
 
     def _file(self, team: str, path: PurePosixPath) -> Path:
         return confine(self._root, team, path)
@@ -981,7 +1012,7 @@ class MemoryStore:
 
     def _repository(self) -> pygit2.Repository:
         """The memory folder's repository, opened for one save: libgit2's objects aren't shared between threads."""
-        return pygit2.Repository(str(self._root))
+        return pygit2.Repository(ordinary(self._root))
 
     def _commit(
         self,

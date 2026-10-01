@@ -184,7 +184,7 @@ def test_a_save_ending_mid_read_only_stops_its_own_files_being_kept(
 
     def a_save_ends_meanwhile(changed: str) -> None:
         def parse(cls: type[Memory], text: str) -> Memory:
-            store._parsed.forget([folder / f"{changed}.md"])
+            store._parsed.forget([store._file("t", paths[changed])])  # the file as the store names it (#140)
             result: Memory = counting(cls, text)
             return result
 
