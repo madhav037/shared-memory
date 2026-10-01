@@ -38,6 +38,8 @@ class Settings:
     # How many server processes `serve` runs, and how many connections to Postgres all of them may hold together.
     workers: int = 2
     database_connections: int = 40
+    # How long a worker counts the query cache's hits and misses before it writes them to the log.
+    query_cache_log_minutes: float = 15
 
     @property
     def github_sign_in(self) -> bool:
@@ -72,4 +74,5 @@ class Settings:
             console_url=env.get("SHARED_MEMORY_CONSOLE_URL", ""),
             workers=int(env.get("SHARED_MEMORY_WORKERS", "2")),
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
+            query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
         )

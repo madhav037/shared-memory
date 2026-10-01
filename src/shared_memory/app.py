@@ -5,6 +5,7 @@ import functools
 import json
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any, TypeVar
 
 import anyio
@@ -32,7 +33,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
-from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder
+from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity
@@ -179,7 +180,8 @@ def build_app(
     identity = Identity(db, clock)
     audit = Audit(db, clock, identity)
     # The model loads here, before the server takes its first request.
-    index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache)))
+    counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
+    index = SearchIndex(db, CachedQueries(embedder or FastEmbedEmbedder(settings.model_cache), counts=counts))
     store = MemoryStore(settings.memory_root, listeners=[index], transaction=db.save_transaction, sets_up=setup)
     index.catch_up(store)
     history = MemoryHistory(settings.memory_root)
@@ -750,4 +752,15 @@ def setup(settings: Settings) -> None:
 def worker_app() -> Starlette:
     """The app a worker process serves (`uvicorn ... factory=True`). Its settings come from the environment, which
     every worker inherits from `serve`; setup is not repeated."""
+    show_log()
     return build_app(Settings.from_env(), setup=False)
+
+
+def show_log() -> None:
+    """Send the server's own log lines to standard error, the informative ones included. Until something sets the
+    logger up, Python writes only warnings and worse, so the query cache's counts would never be seen."""
+    if not log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+        log.addHandler(handler)
+    log.setLevel(logging.INFO)

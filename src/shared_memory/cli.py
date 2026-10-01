@@ -63,13 +63,14 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         return 0
 
     if args.command == "reindex":
-        from shared_memory.embeddings import FastEmbedEmbedder
+        from shared_memory.embeddings import CachedQueries, FastEmbedEmbedder
         from shared_memory.index import SearchIndex
         from shared_memory.store import MemoryStore
 
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
-            count = SearchIndex(db, FastEmbedEmbedder(settings.model_cache)).rebuild(MemoryStore(settings.memory_root))
+            embedder = CachedQueries(FastEmbedEmbedder(settings.model_cache))
+            count = SearchIndex(db, embedder).rebuild(MemoryStore(settings.memory_root))
         finally:
             db.close()
         print(f"Reindexed {count} memories.", file=out)
@@ -109,6 +110,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         app.setup(settings)
         served = {"host": args.host, "port": args.port, "timeout_keep_alive": KEEP_ALIVE_SECONDS}
         if workers == 1:
+            app.show_log()
             uvicorn.run(app.build_app(dataclasses.replace(settings, workers=1), setup=False), **served)
         else:
             uvicorn.run("shared_memory.app:worker_app", factory=True, workers=workers, **served)
