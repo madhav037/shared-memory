@@ -19,7 +19,7 @@ STALE_CACHE = {
 def briefed(session: Session) -> str:
     """The briefing the session-start hook injects, checked to be the one the briefing tool fetches."""
     briefing = added_context(session.start())
-    assert session.call("briefing") == briefing
+    assert session.call("briefing", session=session.identifier) == briefing
     return briefing
 
 

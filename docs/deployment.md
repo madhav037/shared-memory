@@ -106,6 +106,12 @@ INFO:     Query cache worker=17 minutes=15 | period: recall hits=3 misses=41, se
   optional in `.env`) have passed since its last one. A worker nobody queries writes nothing, so after a quiet
   stretch `minutes` is longer than the setting.
 
+## How long a session may sit idle
+
+A session stops counting as active once it has made no call for `SHARED_MEMORY_SESSION_IDLE_MINUTES` (default 30,
+optional in `.env`): its activity and its locks end with it. Any hook from the session, and any tool call that names
+it, counts as a call. Raise it if your members' sessions run long tasks with no prompt in between.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

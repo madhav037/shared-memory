@@ -40,6 +40,8 @@ class Settings:
     database_connections: int = 40
     # How long a worker counts the query cache's hits and misses before it writes them to the log.
     query_cache_log_minutes: float = 15
+    # How long a session may go without a call before it stops counting as active.
+    session_idle_minutes: float = 30
 
     @property
     def github_sign_in(self) -> bool:
@@ -75,4 +77,5 @@ class Settings:
             workers=int(env.get("SHARED_MEMORY_WORKERS", "2")),
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
+            session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
         )

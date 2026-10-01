@@ -22,6 +22,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-end\" || true",
+            "timeout": 4
+          }
+        ]
+      }
     ]
   }
 }

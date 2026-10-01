@@ -1,6 +1,6 @@
-"""The adapter between the two hook endpoints and each coding agent family's own hook format (ADR-0011).
+"""The adapter between the hook endpoints and each coding agent family's own hook format (ADR-0011).
 
-Every agent's hooks post to the same two endpoints and name, as ?format=, the family whose shape they can read:
+Every agent's hooks post to the same endpoints and name, as ?format=, the family whose shape they can read:
 
 - `claude`: `hookSpecificOutput`, for Claude Code, Codex, Gemini CLI, Devin Desktop and Copilot in VS Code;
 - `copilot-cli`: `additionalContext` at the top level;
@@ -17,6 +17,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from shared_memory.sessions import usable
+
 CLAUDE = "claude"
 
 # The fields agents put the member's prompt in. Claude Code, Cursor and Copilot send "prompt"; Copilot's session start
@@ -25,6 +27,10 @@ _PROMPT_FIELDS = ("prompt", "user_prompt", "userPrompt", "initial_prompt", "init
 
 # The fields agents name the event in: Claude Code and VS Code send "hook_event_name", Cline sends "hookName".
 _EVENT_FIELDS = ("hook_event_name", "hookEventName", "hookName")
+
+# The fields agents tell one session from another in (ADR-0018): Claude Code, Codex and Gemini CLI send "session_id",
+# Copilot CLI "sessionId", Cursor "conversation_id", and Cline the task's "taskId".
+_SESSION_FIELDS = ("session_id", "sessionId", "conversation_id", "conversationId", "taskId")
 
 
 def _claude(event: str, context: str) -> dict[str, Any]:
@@ -101,6 +107,15 @@ def event_in(payload: Mapping[str, Any], default: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return default
+
+
+def session_in(payload: Mapping[str, Any]) -> str | None:
+    """The identifier of the session whose hook sent this payload, or None when it names none the server can keep."""
+    for field in _SESSION_FIELDS:
+        identifier = usable(payload.get(field))
+        if identifier is not None:
+            return identifier
+    return None
 
 
 def notice(format: str | None, text: str) -> dict[str, Any]:
