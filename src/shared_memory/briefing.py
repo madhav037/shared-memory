@@ -75,7 +75,7 @@ def _work_sections(work: Work, budget: int) -> list[str]:
     ]
     budget -= COUNTS_TOKENS
     sections: list[str] = []
-    cards_left = issues_left = 0
+    cards_left = known_issues_left = 0
     full = False
     for heading, lines, cards in parts:
         shown: list[str] = []
@@ -89,14 +89,14 @@ def _work_sections(work: Work, budget: int) -> list[str]:
             if cards:
                 cards_left += 1
             else:
-                issues_left += 1
+                known_issues_left += 1
         if shown:
             sections.append("\n".join([heading, *shown]))
     counted = []
     if cards_left:
         counted.append(f"{cards_left} more of your cards")
-    if issues_left:
-        counted.append(f"{issues_left} more known issue{'' if issues_left == 1 else 's'}")
+    if known_issues_left:
+        counted.append(f"{known_issues_left} more known issue{'' if known_issues_left == 1 else 's'}")
     if counted:
         sections.append(
             f"[briefing cap] {' and '.join(counted)} did not fit within the briefing cap: the board tool lists your "
