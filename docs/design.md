@@ -126,7 +126,7 @@ flowchart TD
 - **While a challenge is open:**
   - the challenger's memory stays personal memory, labeled *pending: replaces …*
   - the old memory stays active
-- **Who decides** ([ADR-0016](./adr/0016-project-leads-and-admins-may-decide-a-challenge.md)):
+- **Who decides** ([ADR-0017](./adr/0017-project-leads-and-admins-may-decide-a-challenge.md)):
   - the challenged memory's author, at any time;
   - on project memory, that project's leads and the team's admins, at any time. The challenged memory's project is the one that counts, not the challenger's;
   - on team memory, the team's admins; a project lead has no standing there;

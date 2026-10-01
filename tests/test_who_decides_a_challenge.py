@@ -1,5 +1,5 @@
 """Who may decide a challenge: its author, a lead of the challenged memory's project, or one of the team's admins
-(ADR-0016)."""
+(ADR-0017)."""
 
 from __future__ import annotations
 

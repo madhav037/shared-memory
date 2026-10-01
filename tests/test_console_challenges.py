@@ -368,7 +368,7 @@ def test_a_decision_from_the_console_is_in_the_audit_log(console: Console, signe
     assert log[0]["detail"]["decided_as"] == "author"
 
 
-# Who else may decide: a lead of the challenged memory's project and the team's admins (ADR-0016)
+# Who else may decide: a lead of the challenged memory's project and the team's admins (ADR-0017)
 
 
 def a_dispute_between_members(
