@@ -30,9 +30,10 @@ def embedder() -> FastEmbedEmbedder:
 @pytest.fixture(scope="module")
 def grown(tmp_path_factory: pytest.TempPathFactory, embedder: FastEmbedEmbedder) -> Iterator[RunningServer]:
     url = fresh_database("shared_memory_grown")
+    name = url.rsplit("/", 1)[1]
     with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute("ALTER DATABASE shared_memory_grown SET enable_seqscan = off")
-        conn.execute("ALTER DATABASE shared_memory_grown SET enable_sort = off")
+        conn.execute(f"ALTER DATABASE {name} SET enable_seqscan = off")
+        conn.execute(f"ALTER DATABASE {name} SET enable_sort = off")
     settings = Settings(url, tmp_path_factory.mktemp("grown-memory"), REPO_ROOT / ".cache" / "fastembed")
     clock = TestClock()
     with start_blocking_portal() as portal:
