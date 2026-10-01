@@ -69,7 +69,13 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "owner",
         "the team's Owner; avoided only for an author, an assignee or a lock's holder",
-        (SERVER + "identity.py", "console/src/App.tsx", PAGES + "AuditLog.tsx", PAGES + "ProjectSettings.tsx", PAGES + "Team.tsx"),
+        (
+            SERVER + "identity.py",
+            "console/src/App.tsx",
+            PAGES + "AuditLog.tsx",
+            PAGES + "ProjectSettings.tsx",
+            PAGES + "Team.tsx",
+        ),
     ),
     Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
     Allow("share", "the product's name; avoided only for promoting", text="shared memory"),
@@ -77,11 +83,19 @@ ALLOWED: tuple[Allow, ...] = (
     # Words with another technical meaning.
     Allow("status", "an HTTP status, the server's status or a memory's status; avoided only for a session's activity"),
     Allow("root", "the root of a folder tree or of the page; avoided only for the team's owner"),
-    Allow("lock", "a lock between threads; avoided only for claiming a card", (SERVER + "index.py", SERVER + "store.py")),
+    Allow(
+        "lock", "a lock between threads; avoided only for claiming a card", (SERVER + "index.py", SERVER + "store.py")
+    ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py",)),
-    Allow("context", "MCP's request context and the context a hook adds to a prompt", (SERVER + "app.py", SERVER + "hooks.py")),
+    Allow(
+        "context",
+        "MCP's request context and the context a hook adds to a prompt",
+        (SERVER + "app.py", SERVER + "hooks.py"),
+    ),
     Allow("callback", "GitHub's OAuth callback address, not a hook", text="callback"),
-    Allow("client", "GitHub's OAuth client ID and secret, not a coding agent", (SERVER + "config.py",), "github client"),
+    Allow(
+        "client", "GitHub's OAuth client ID and secret, not a coding agent", (SERVER + "config.py",), "github client"
+    ),
     Allow("user", "GitHub's /user address, which is theirs to name", (SERVER + "console_sessions.py",), "/user"),
     Allow("trail", "the folders leading to a memory, or its versions in order; not the audit log"),
     Allow("item", "one element of a list being sorted; not a card", (SERVER + "index.py", SERVER + "store.py")),
@@ -89,17 +103,34 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("delete", "cards, pins and files are deleted; avoided only for retiring a memory"),
     Allow("update", "cards and indexes are updated; avoided only for superseding a memory"),
     Allow("issue", "to issue a personal token, the verb", text="issued"),
-    Allow("issue", "to issue a personal token, the verb", (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Team.tsx")),
+    Allow(
+        "issue",
+        "to issue a personal token, the verb",
+        (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Team.tsx"),
+    ),
     Allow("take", "saves take turns", (SERVER + "store.py",), "take turns"),
-    Allow("take", "taking access or a role away from a member, not claiming a card", (PAGES + "ProjectSettings.tsx", PAGES + "Team.tsx")),
+    Allow(
+        "take",
+        "taking access or a role away from a member, not claiming a card",
+        (PAGES + "ProjectSettings.tsx", PAGES + "Team.tsx"),
+    ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),
-    Allow("task", "what a session is asked to do, not a card", (PAGES + "ConnectAgent.tsx",), "every task starts with the briefing"),
+    Allow(
+        "task",
+        "what a session is asked to do, not a card",
+        (PAGES + "ConnectAgent.tsx",),
+        "every task starts with the briefing",
+    ),
     Allow("manager", "an example search about a package manager", (PAGES + "SearchPage.tsx",), "package manager"),
     Allow("dev", "a made-up member's name in a placeholder", (PAGES + "Team.tsx",), "dana dev"),
     Allow("note", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
     Allow("notes", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
-    Allow("proposal", "what promote offers when it finds a similar memory; no challenge is raised", (SERVER + "app.py", SERVER + "known_issues.py", SERVER + "lifecycle.py")),
+    Allow(
+        "proposal",
+        "what promote offers when it finds a similar memory; no challenge is raised",
+        (SERVER + "app.py", SERVER + "known_issues.py", SERVER + "lifecycle.py"),
+    ),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
