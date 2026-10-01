@@ -192,6 +192,10 @@ _Avoid_: Grab, take, lock
 The column for a card that cannot go on, with the reason it is waiting and, if it is another card, which one.
 _Avoid_: Stuck, on hold
 
+**Archive**:
+The Done cards that have left a board, 14 days after they were done; they stay readable and can be reopened. It holds cards only: memory that is no longer true is retired, never archived.
+_Avoid_: Trash, history, closed cards
+
 ### Sessions and collisions
 
 **Coding agent**:

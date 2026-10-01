@@ -290,3 +290,27 @@ def test_a_member_of_the_project_changes_a_card_another_member_added(team: Team,
 
     assert moved["column"] == "doing"
     assert moved["creator"] == "owner-1"
+
+
+# Secrets
+
+
+def test_a_secret_is_refused_in_a_cards_title_description_comment_and_blocked_reason(owner: Session) -> None:
+    secret = "AKIAIOSFODNN7EXAMPLE"
+    card(owner, "Retry failed webhooks")
+
+    refusals = [
+        ("title", owner.refusal("add_card", title=f"Rotate {secret}")),
+        ("description", owner.refusal("add_card", title="Rotate the upload key", description=f"The key is {secret}.")),
+        ("title", owner.refusal("update_card", number=1, title=f"Rotate {secret}")),
+        ("description", owner.refusal("update_card", number=1, description=f"The key is {secret}.")),
+        ("blocked reason", owner.refusal("update_card", number=1, column="blocked", blocked_reason=f"Needs {secret}.")),
+        ("comment", owner.refusal("comment_card", number=1, text=f"Use {secret} for now.")),
+    ]
+
+    for what, refusal in refusals:
+        assert f"This card's {what} looks like it contains a secret (an AWS access key)" in refusal
+        assert "Secrets never go on the board: remove it and describe where the secret is kept instead." in refusal
+    assert column(owner, "to_do") == [1]
+    shown = owner.call("board")["columns"]["to_do"][0]
+    assert (shown["title"], shown["description"], shown["comments"]) == ("Retry failed webhooks", "", [])

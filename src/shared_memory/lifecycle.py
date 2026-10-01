@@ -307,12 +307,17 @@ class Lifecycle:
 
     def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
         """Retire a known issue whose card is done, as retire does: at once when the caller wrote it, as a challenge
-        to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do."""
+        to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do.
+        A challenge the caller already raised to retire it, still open, is given back rather than raised again."""
         location = locate(path)
         if not self._store.exists(caller.team, location.path):
             return None
-        if self._store.read(caller.team, location.path).status != "active":
+        memory = self._store.read(caller.team, location.path)
+        if memory.status != "active":
             return None
+        for challenge in self._challenges.open_challenges(caller.team, target_path=str(location.path)):
+            if challenge.kind == "retire" and challenge.raised_by == caller.member_id:
+                return self._challenge_raised(challenge.id, str(location.path), memory.author)
         try:
             return self.retire(caller, path, reasoning)
         except Refused:
