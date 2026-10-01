@@ -40,6 +40,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
+from shared_memory.locks import Lock, Locks
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -200,8 +201,9 @@ def build_app(
     saves = Saves()
     sessions = Sessions(settings, db, clock)
     identity.on_access_lost(sessions.end_unreachable)
+    locks = Locks(db, sessions, clock)
 
-    server = MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
+    server =MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
 
     def saving(tool: F) -> F:
         """A tool that saves memory: it waits for its turn without holding a worker thread (see `saves.py`)."""
@@ -665,6 +667,48 @@ def build_app(
         """Delete your own personal memory."""
         return service.delete_memory(caller(ctx), path)
 
+    @server.tool()
+    @_refusals_as_tool_errors
+    def take_lock(path: str, session: str, ctx: Context, repository: str | None = None) -> dict[str, Any]:
+        """Take the lock on a file before you edit it, so no other session changes it underneath you. Taking a lock
+        this session already holds keeps it.
+
+        path is the file's path from its repository's root, for example src/webhooks/retry.py. session is this
+        session's identifier, as its briefing named it. repository is the repository's short name: pass it for a file
+        in another repository of this project, or when you are told this session's connection names none.
+
+        When another session holds the file you are refused and told who holds it: don't edit the file, and tell your
+        member. A lockfile or a generated file never locks: the answer says so, and you edit it without one. Your
+        locks end when the session ends or sits idle. When your work on a file is finished, release it with
+        release_lock, so nobody waits for a file you are done with.
+        """
+        taken = locks.take(sessions.touch(caller(ctx), session), path, repository)
+        if isinstance(taken, Lock):
+            return {
+                "locked": True,
+                "repository": taken.repository,
+                "path": taken.path,
+                "since": taken.taken_at.isoformat(),
+                "last_used": taken.last_used_at.isoformat(),
+            }
+        return {
+            "locked": False,
+            "repository": taken.repository,
+            "path": taken.path,
+            "never_locks": taken.pattern,
+            "message": taken.message,
+        }
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def release_lock(path: str, session: str, ctx: Context, repository: str | None = None) -> dict[str, Any]:
+        """Release a file this session holds the lock on, once your work on it is finished, so another session can
+        take it at once. path, session and repository are as for take_lock. Only the lock's holder releases it: for a
+        file another session holds you are refused and told who holds it.
+        """
+        ended = locks.release(sessions.touch(caller(ctx), session), path, repository)
+        return {"released": True, "repository": ended.repository, "path": ended.path}
+
     @server.tool(name="board")
     @_refusals_as_tool_errors
     def the_board(
@@ -815,6 +859,7 @@ def build_app(
     app.add_middleware(NeverCached)
     app.state.database = db
     app.state.sessions = sessions
+    app.state.locks = locks
     return app
 
 

@@ -176,7 +176,7 @@ flowchart TD
   - Taken when a session's Claude edits a file with its edit tools.
   - Identified by repository + path.
   - Held by the **session**, not the member, so a member's own parallel sessions can't overwrite each other.
-  - Released when the session ends, or when it has made no call for 30 minutes ([ADR-0018](./adr/0018-a-session-is-known-by-the-identifier-its-hooks-send.md)).
+  - Released by its holder with `release_lock` once the work on the file is finished, when the session ends, or when it has made no call for 30 minutes ([ADR-0018](./adr/0018-a-session-is-known-by-the-identifier-its-hooks-send.md)).
   - Some files never lock: lockfiles, generated code.
 - **When Claude hits a lock:**
   - Claude is blocked and told who the **holder** is, which branch they're on, and when they last edited.
@@ -264,7 +264,7 @@ flowchart LR
 |---|---|
 | 1 | `remember`, `edit_memory`, `delete_memory` (own personal memory only), `search`, `read`, `list`, `tree`, `pin`, `unpin`, `create_project`; owner only: `add_member`, `remove_member`, `reissue_token` |
 | 2 | `promote`, `decide_challenge`, `retire` |
-| v1.1 | `set_activity`, `take_lock` |
+| v1.1 | `set_activity`, `take_lock`, `release_lock` |
 
 ## 10. Delivery
 

@@ -54,6 +54,32 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   `sessions.waiting_notices(session)`.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
 
+### Locks
+
+Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as `locks` and kept on
+`app.state.locks`. Only that module reads the `locks` table. Its docstring lists the whole interface.
+
+- **Take and release**: `locks.take(session, path, repository=None)` gives a `Lock`, or a `NeverLocks` for a file
+  that never locks; `locks.release(session, path, repository=None)` gives the `Lock` that ended. `session` is the
+  `Session` that `sessions.touch` or `session_of` gave.
+- **The refusals are typed**: `Held` carries `.lock`, the holder's details, and its message is what the tool shows;
+  `NotHeld` (a release by a session that isn't the holder), `OutsideRepository` and `NoRepository`. A hook that must
+  let an edit through catches the last two, and treats `NeverLocks` as allowed.
+- **Who holds a file**: `locks.of(project_id, repository, path)`, a `Lock` or None. `Lock.holder` is the holder's
+  `Session` (member, coding agent, identifier), with `taken_at`, `last_used_at` and `activity`.
+- **A project's locks**: `locks.held(project_id)`, oldest first. Both reads leave out a lock whose holder is no
+  longer active, and neither checks reach: that is the asker's.
+- **A holder's activity** is None until `Locks` is built with `activity_of`, a function from a `Session` to its
+  activity.
+- **Never-lock patterns** are consulted in one place, `locks.never_locks(project_id, path)`, which gives the pattern
+  matched or None. Today it reads the built-in `NEVER_LOCK`; a project's own patterns join it there, matched with
+  `matching(patterns, path)`. A pattern without a slash is matched against the file's name at any depth, one with a
+  slash against the whole path from the repository's root.
+- **A path** reaches `take` as the agent wrote it and is kept by `from_root(path)`: relative to the repository's
+  root, with forward slashes. An absolute path is refused as outside the repository, so a hook that is handed one
+  makes it relative first.
+- **Moving a lock** (a takeover) has no method yet: `take` moves only a lock whose holder is no longer active.
+
 ## Editing
 
 Read a file with Read, in ranges for a large one such as `board.py`, and change it with Edit. Edit refuses a file
