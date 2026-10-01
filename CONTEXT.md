@@ -163,7 +163,7 @@ _Avoid_: Migrator, uploader, submitter
 ### Reading memory
 
 **Briefing**:
-What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, the project's known issues, the member's own cards, and any notice waiting for the member, such as a challenge they must decide.
+What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, the project's known issues, the member's own cards, any notice waiting for the member, such as a challenge they must decide, and the project's other active sessions with their activity.
 _Avoid_: Pinned set
 
 **Pin**:

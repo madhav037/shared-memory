@@ -61,23 +61,24 @@ def _tokens(text: str) -> int:
     return (len(text) + 3) // 4
 
 
-def _work_sections(work: Work, budget: int) -> list[str]:
-    """The member's work, part by part in order, each line only while it fits in the budget. Once a line doesn't fit,
-    it and every line after it are counted instead."""
+def _work_sections(work: Work, sessions: list[str], budget: int) -> list[str]:
+    """The member's work and then the project's other active sessions, part by part in order, each line only while it
+    fits in the budget. Once a line doesn't fit, it and every line after it are counted instead."""
     parts = [
-        ("[your cards] Overdue or due today:", work.due, True),
-        ("[your cards] In Doing and Blocked:", work.working, True),
+        ("[your cards] Overdue or due today:", work.due, "cards"),
+        ("[your cards] In Doing and Blocked:", work.working, "cards"),
         (
             "[known issues] Broken in this project now; search memory for a workaround:",
             [f"- {title}" for title in work.known_issues],
-            False,
+            "known issues",
         ),
+        ("[active sessions] Other sessions in this project now, each with its activity:", sessions, "sessions"),
     ]
     budget -= COUNTS_TOKENS
     sections: list[str] = []
-    cards_left = known_issues_left = 0
+    left = {"cards": 0, "known issues": 0, "sessions": 0}
     full = False
-    for heading, lines, cards in parts:
+    for heading, lines, kind in parts:
         shown: list[str] = []
         for line in lines:
             cost = _tokens(line) + 1 + (0 if shown else _tokens(heading) + 1)
@@ -86,22 +87,24 @@ def _work_sections(work: Work, budget: int) -> list[str]:
                 budget -= cost
                 continue
             full = True
-            if cards:
-                cards_left += 1
-            else:
-                known_issues_left += 1
+            left[kind] += 1
         if shown:
             sections.append("\n".join([heading, *shown]))
     counted = []
-    if cards_left:
-        counted.append(f"{cards_left} more of your cards")
-    if known_issues_left:
-        counted.append(f"{known_issues_left} more known issue{'' if known_issues_left == 1 else 's'}")
+    if left["cards"]:
+        counted.append(f"{left['cards']} more of your cards")
+    if left["known issues"]:
+        counted.append(f"{left['known issues']} more known issue{'' if left['known issues'] == 1 else 's'}")
+    if left["sessions"]:
+        counted.append(f"{left['sessions']} more active session{'' if left['sessions'] == 1 else 's'}")
     if counted:
-        sections.append(
-            f"[briefing cap] {' and '.join(counted)} did not fit within the briefing cap: the board tool lists your "
-            "cards, and search finds the known issues."
+        listed = ", ".join(counted[:-1]) + " and " + counted[-1] if len(counted) > 1 else counted[0]
+        pointer = (
+            ": the board tool lists your cards, and search finds the known issues."
+            if left["cards"] or left["known issues"]
+            else "."
         )
+        sections.append(f"[briefing cap] {listed} did not fit within the briefing cap{pointer}")
     return sections
 
 
@@ -240,11 +243,17 @@ class Briefing:
             yield
 
     def for_session(
-        self, caller: Caller, extra: list[str] | None = None, work: Work | None = None, followed_by: str | None = None
+        self,
+        caller: Caller,
+        extra: list[str] | None = None,
+        work: Work | None = None,
+        followed_by: str | None = None,
+        sessions: list[str] | None = None,
     ) -> str | None:
         """The briefing: pinned memories for the session's project within the cap, any extra notices, then the member's
-        work from the board in what is left of the cap, with counts of what didn't fit. What the session is told right
-        after its briefing (followed_by) is not in it, but takes its room out of what is left for the work."""
+        work from the board and, last, the project's other active sessions (one line each) in what is left of the cap,
+        with counts of what didn't fit. What the session is told right after its briefing (followed_by) is not in it,
+        but takes its room out of what is left for the work."""
         if caller.project is None:
             return None
         budget = self._settings.briefing_cap_tokens - _tokens(FRAMING)
@@ -267,7 +276,7 @@ class Briefing:
         budget -= sum(_tokens(note) for note in notes)
         if followed_by:
             budget -= _tokens(followed_by) + 1
-        sections.extend(_work_sections(work or Work(), budget))
+        sections.extend(_work_sections(work or Work(), sessions or [], budget))
         if not sections:
             return None
         return "<shared-memory-briefing>\n" + FRAMING + "\n\n" + "\n\n".join(sections) + "\n</shared-memory-briefing>"

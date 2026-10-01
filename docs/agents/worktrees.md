@@ -49,6 +49,12 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **A session that ended or went idle.** Nothing sweeps, so count its rows as gone wherever you read them:
   `sessions.still_active(ids)` says which holders are active. `sessions.on_gone(listener)` calls you inside the
   transaction when a session ends or is found back from idle, to clear its rows.
+- **A project's active sessions with their activity**: `activities.in_project(project_id)` in
+  `src/shared_memory/activity.py`, built in `build_app` as `activities`. It gives a list of `SessionActivity`, oldest
+  session first: `session` (the `Session`), `activity` (what it stated, else the title of its member's most recently
+  claimed card in Doing, else `None`) and `from_card`. Reach is the asker's to check. `briefing_line(each)` is the
+  line the briefing shows, and `ACTIVITY_LIMIT` the one place the length cap is named. That module owns the
+  `session_activities` table and asks the board for the card through `Board.doing_titles`.
 - **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
 - **Words for the session's next prompt** go in the prompt hook's `notices` in `app.py`, beside
   `sessions.waiting_notices(session)`.
