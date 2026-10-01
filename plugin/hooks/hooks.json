@@ -23,6 +23,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H \"X-Shared-Memory-Root: $CLAUDE_PROJECT_DIR\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/before-edit\" || echo '{\"systemMessage\":\"Shared Memory did not answer within 3 seconds, so this edit went ahead without checking whether another session holds a lock on the file.\"}'",
+            "timeout": 4
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [

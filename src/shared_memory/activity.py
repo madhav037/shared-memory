@@ -132,6 +132,11 @@ class Activities:
             for session in active
         ]
 
+    def of(self, session: Session) -> str | None:
+        """One session's activity, as `in_project` gives it: None when it has none, or is no longer active."""
+        mine = (each.activity for each in self.in_project(session.project_id) if each.session.id == session.id)
+        return next(mine, None)
+
     def for_briefing(self, caller: Caller, session: Session | None) -> list[str]:
         """The other active sessions in the caller's project as its briefing lists them, one line each, oldest first.
         The asking session's own line is left out. Nothing for a session outside a project, or in a project the member

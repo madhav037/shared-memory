@@ -39,7 +39,15 @@ ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgre
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # What Claude Code calls each event it hooks, which is what its payloads name.
-CLAUDE_EVENTS = {"session-start": "SessionStart", "prompt-submitted": "UserPromptSubmit", "session-end": "SessionEnd"}
+CLAUDE_EVENTS = {
+    "session-start": "SessionStart",
+    "prompt-submitted": "UserPromptSubmit",
+    "session-end": "SessionEnd",
+    "before-edit": "PreToolUse",
+}
+
+# Where the tests' sessions run: the folder their coding agent was started in, which is their repository's root.
+WORKING_FOLDER = "/work/app"
 
 
 # Each checkout names its own test databases, so two worktrees can run their tests against one Postgres at once.
@@ -208,7 +216,7 @@ class Session:
         raise AssertionError(f"{tool} was not refused")
 
     def _hook(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
-        body = {"session_id": self.identifier, "cwd": "/work/app", "hook_event_name": CLAUDE_EVENTS[event], **payload}
+        body = {"session_id": self.identifier, "cwd": WORKING_FOLDER, "hook_event_name": CLAUDE_EVENTS[event], **payload}
         return self.hook_payload(event, body, format)
 
     def hook_payload(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
@@ -236,12 +244,27 @@ class Session:
         """Fire the session-end hook and return its hook output."""
         return self._hook("session-end", {"reason": "other"}, format)
 
+    def edit(self, path: str, format: str | None = None) -> dict[str, Any]:
+        """Fire the before-edit hook as Claude Code does before its Edit tool changes this file, named from the
+        repository's root, and return its hook output. Claude Code names the file by its absolute path."""
+        return self._hook("before-edit", edit_tool(f"{WORKING_FOLDER}/{path}"), format)
+
     def active_sessions(self) -> list[KnownSession]:
         """The sessions active in this session's project, as the worker it talks to reads them. No tool lists them
         yet, so this asks that worker's sessions module, which is what the tools built on it ask."""
         assert self.project is not None
         sessions: Sessions = self.server.app.state.sessions
         return sessions.active(self.project)
+
+
+def edit_tool(file_path: str) -> dict[str, Any]:
+    """What Claude Code's PreToolUse payload says of an Edit tool call about to change this file."""
+    return {
+        "permission_mode": "default",
+        "tool_name": "Edit",
+        "tool_input": {"file_path": file_path, "old_string": "retries = 3", "new_string": "retries = 5"},
+        "tool_use_id": "toolu_01ABC123",
+    }
 
 
 def added_context(hook_output: dict[str, Any]) -> str:
