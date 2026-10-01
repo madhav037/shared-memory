@@ -3,8 +3,11 @@ import type { Card, CardFields, MovedCard } from "../api/client";
 export type Column = Card["column"];
 export type Priority = Card["priority"];
 
-/** The board's four columns, left to right, as the server names them. */
-export const COLUMN_NAMES: Record<Column, string> = {
+/**
+ * The board's four columns as the server names them, for the audit log, whose records carry only a column's key. A
+ * board read from the server names its own columns, and the board page uses those.
+ */
+const COLUMN_NAMES: Record<Column, string> = {
   to_do: "To do",
   doing: "Doing",
   blocked: "Blocked",
@@ -67,7 +70,7 @@ export function cardChange(detail: Record<string, unknown>, nameOf: (memberId: s
     else said.push(`From ${columnName(detail.from)} to ${columnName(detail.to)}`);
   } else if (detail.from !== undefined) {
     said.push(
-      `From ${columnName(detail.from)}${typeof detail.assignee === "string" ? `, taken from ${nameOf(detail.assignee)}` : ""}`,
+      `From ${columnName(detail.from)}${typeof detail.assignee === "string" ? `, ${nameOf(detail.assignee)} no longer its assignee` : ""}`,
     );
   }
   if (typeof detail.blocked_reason === "string") said.push(detail.blocked_reason);
@@ -97,6 +100,10 @@ export type CardDraft = {
   labels: string[];
   due_date: string;
   assignee: string | null;
+  /** The memories it links to, each by its path. */
+  memories: string[];
+  /** The files it links to, each written repository:path. */
+  files: string[];
 };
 
 export function draftOf(card?: Card): CardDraft {
@@ -107,6 +114,8 @@ export function draftOf(card?: Card): CardDraft {
     labels: card?.labels ?? [],
     due_date: card?.due_date ?? "",
     assignee: card?.assignee ?? null,
+    memories: card?.memories ?? [],
+    files: card?.files ?? [],
   };
 }
 
@@ -119,6 +128,8 @@ export function cardEdits(card: Card, draft: CardDraft): CardFields {
   if (draft.labels.join("|") !== card.labels.join("|")) fields.labels = draft.labels;
   if (draft.due_date !== (card.due_date ?? "")) fields.due_date = draft.due_date;
   if (draft.assignee !== card.assignee) fields.assignee = draft.assignee ?? "";
+  if (draft.memories.join("|") !== card.memories.join("|")) fields.memories = draft.memories;
+  if (draft.files.join("|") !== card.files.join("|")) fields.files = draft.files;
   return fields;
 }
 
@@ -126,8 +137,12 @@ export function cardEdits(card: Card, draft: CardDraft): CardFields {
 export function fixedWords(moved: Pick<MovedCard, "known_issues_fixed" | "titles">): string[] {
   return moved.known_issues_fixed.map((one) => {
     const named = `the known issue “${moved.titles[one.path] ?? one.path.split("/").pop()}”`;
-    return one.status === "retired"
-      ? `Retired ${named}: the card that fixes it is done.`
-      : `Asked the author of ${named} to retire it. Until they decide, it stands.`;
+    if (one.status === "retired") return `Retired ${named}: the card that fixes it is done.`;
+    if (one.status === "not_retired")
+      return (
+        `Couldn’t retire ${named}${one.reason ? `: ${one.reason}` : "."} It is still active. ` +
+        "Move the card to Done again to retry, or retire the known issue from its own page."
+      );
+    return `Asked the author of ${named} to retire it. Until they decide, it stands.`;
   });
 }

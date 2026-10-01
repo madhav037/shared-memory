@@ -321,3 +321,15 @@ class Challenges:
             ).fetchall()
         texts = [row["text"] for row in sorted(rows, key=lambda row: row["id"])]
         return "[shared memory news]\n" + "\n".join(f"- {text}" for text in texts) if texts else None
+
+    def told(self, caller: Caller, *, days: int, limit: int) -> list[dict[str, Any]]:
+        """What this member has been told, newest first, for the console: every notice still waiting for their next
+        session, and those of the last `days` days that a session has already had. Only a read: a notice shown here
+        still waits to be delivered, so the member's coding agent is told too."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT id, text, created_at FROM notices WHERE team = %s AND member_id = %s"
+                " AND (delivered_at IS NULL OR created_at >= %s) ORDER BY id DESC LIMIT %s",
+                (caller.team, caller.member_id, self._clock() - timedelta(days=days), limit),
+            ).fetchall()
+        return [{"notice_id": row["id"], "text": row["text"], "created_at": row["created_at"]} for row in rows]

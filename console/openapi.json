@@ -556,7 +556,7 @@
       },
       "post": {
         "operationId": "edit_card",
-        "summary": "Change a card's title, description, priority, labels, due date or assignee.",
+        "summary": "Change a card's title, description, priority, labels, due date, assignee or links.",
         "parameters": [
           {
             "name": "project_id",
@@ -587,7 +587,7 @@
         },
         "responses": {
           "200": {
-            "description": "Change a card's title, description, priority, labels, due date or assignee.",
+            "description": "Change a card's title, description, priority, labels, due date, assignee or links.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1180,6 +1180,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChallengeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notices": {
+      "get": {
+        "operationId": "notices",
+        "summary": "What this member has been told about their cards and challenges. Reading it here leaves each notice waiting for their next briefing.",
+        "responses": {
+          "200": {
+            "description": "What this member has been told about their cards and challenges. Reading it here leaves each notice waiting for their next briefing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notices"
                 }
               }
             }
@@ -2296,7 +2314,7 @@
         "type": "object"
       },
       "NewCard": {
-        "description": "A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written\nYYYY-MM-DD.",
+        "description": "A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written\nYYYY-MM-DD. It may link to memories, by path, and to files, each written repository:path.",
         "properties": {
           "title": {
             "title": "Title",
@@ -2342,6 +2360,20 @@
             ],
             "default": null,
             "title": "Due Date"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
           }
         },
         "required": [
@@ -2351,7 +2383,7 @@
         "type": "object"
       },
       "CardFields": {
-        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the team's admins give it an assignee.",
+        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,\nreplace the card's links of that kind: memories by path, files as repository:path.",
         "properties": {
           "title": {
             "anyOf": [
@@ -2432,13 +2464,43 @@
             ],
             "default": null,
             "title": "Assignee"
+          },
+          "memories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memories"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Files"
           }
         },
         "title": "CardFields",
         "type": "object"
       },
       "Retired": {
-        "description": "What retiring did: the memory is retired, or its author has been asked to retire it.",
+        "description": "What retiring did: the memory is retired, or its author has been asked to retire it. A known issue that a\ncard moved to Done could not retire is not_retired, with the reason.",
         "properties": {
           "status": {
             "title": "Status",
@@ -2458,6 +2520,18 @@
               }
             ],
             "title": "Challenge Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           }
         },
         "required": [
@@ -3882,6 +3956,72 @@
           "raised"
         ],
         "title": "ChallengeList",
+        "type": "object"
+      },
+      "Notice": {
+        "description": "Something the member was told, as their briefing words it. One about a card names its project, and the card's\nnumber while the card is still there to open.",
+        "properties": {
+          "notice_id": {
+            "title": "Notice Id",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "card": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card"
+          }
+        },
+        "required": [
+          "notice_id",
+          "text",
+          "created_at",
+          "project_id",
+          "card"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "Notices": {
+        "description": "What the member has been told, newest first: every notice still waiting for their next session, and the last\nweek's that a session has already had.",
+        "properties": {
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Notices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notices"
+        ],
+        "title": "Notices",
         "type": "object"
       },
       "Decision": {

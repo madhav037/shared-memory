@@ -8,6 +8,7 @@ description and can't drift away from it. This module turns each declaration int
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, time
 from typing import Any
@@ -49,7 +50,8 @@ from shared_memory.console_contract import (
     AccessChange, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card, CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, IssuedToken, MemberSummary, Members,
-    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, MovedCard, NewMember, PREFIX, Pin, PinState,
+    MemoryAtVersion, MemoryDetail, MemoryHistory, MemoryPath, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
+    PinState,
     Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSummary, Projects, RaisedChallenge,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
@@ -84,6 +86,29 @@ def _on_the_board(refusal: str) -> str:
     for tool_word, console_word in _BOARD_WORDS:
         refusal = refusal.replace(tool_word, console_word)
     return refusal
+
+
+# How long the console keeps showing a notice the member's session has already had, and how many it shows at most.
+NOTICE_DAYS = 7
+NOTICE_LIMIT = 20
+
+# A notice is only its words, so the card it is about is read back out of them: the board names a card as
+# `card 4 "Its title" in project-id`, the member's own as `your card 4 "…"`, and cards returned to To do after
+# `can no longer reach project-id, so`. Whatever is found is then looked up, so a notice never links to a card or a
+# board that isn't there for this member.
+_CARD_NAMED = re.compile(r'[Cc]ard (\d+) ".*?" in ([a-z0-9][a-z0-9-]*)')
+_YOUR_CARD = re.compile(r'your card (\d+) "')
+_CARDS_RETURNED = re.compile(r"can no longer reach ([a-z0-9][a-z0-9-]*), so (?:card (\d+) |cards )")
+
+
+def _card_named(text: str) -> tuple[str | None, int | None]:
+    """The project and the card a notice's words name, as far as they name them."""
+    if named := _CARD_NAMED.search(text):
+        yours = _YOUR_CARD.search(text)
+        return named[2], int((yours or named)[1])
+    if returned := _CARDS_RETURNED.search(text):
+        return returned[1], None if returned[2] is None else int(returned[2])
+    return None, None
 
 
 def _plainly(wrong: Exception) -> str:
@@ -190,6 +215,7 @@ class ConsoleApi:
             "retire_at": self._retire_at,
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
+            "notices": self._notices,
             "decide_challenge": self._decide_challenge,
             "members": self._members,
             "add_member": self._add_member,
@@ -449,8 +475,9 @@ class ConsoleApi:
         def add(caller: Caller) -> CardDetail:
             asked: NewCard = request.state.asked
             found = self._board.add(
-                caller, asked.title, asked.description, asked.priority, asked.labels, asked.due_date
-            )
+                caller, asked.title, asked.description, asked.priority, asked.labels, asked.due_date,
+                asked.memories, asked.files,
+            )  # fmt: skip
             return self._card_detail(caller, found)
 
         return self._browse(request, add, _on_the_board)
@@ -470,7 +497,10 @@ class ConsoleApi:
             # The board retires what the card fixed as the tools do (ADR-0014); each outcome is retire's own.
             fixed = [
                 Retired(
-                    status=one["status"], path=one.get("path") or one["challenges"], challenge_id=one.get("challenge_id")
+                    status=one["status"],
+                    path=one.get("path") or one["challenges"],
+                    challenge_id=one.get("challenge_id"),
+                    reason=one.get("reason"),
                 )
                 for one in found.get("known_issues_fixed", [])
             ]
@@ -620,6 +650,30 @@ class ConsoleApi:
         if member is None:
             return _sign_in_first()
         return self._disputes(self._identity.caller_in(member, None))
+
+    def _notices(self, request: Request) -> Response:
+        """What the member has been told. Only a read: each notice still waits for their next briefing."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        told = self._challenging.told(self._identity.caller_in(member, None), days=NOTICE_DAYS, limit=NOTICE_LIMIT)
+        answer = Notices(notices=[Notice(**one, **self._about(member, one["text"])) for one in told])
+        return JSONResponse(answer.model_dump(mode="json"))
+
+    def _about(self, member: Member, text: str) -> dict[str, Any]:
+        """The board and the card a notice names, where this member can open them."""
+        project_id, number = _card_named(text)
+        if project_id is None:
+            return {"project_id": None, "card": None}
+        try:
+            caller = self._identity.caller_in(member, project_id)
+        except Refused:
+            return {"project_id": None, "card": None}
+        try:
+            card = None if number is None else self._board.card(caller, number)["number"]
+        except Refused:
+            card = None
+        return {"project_id": project_id, "card": card}
 
     def _decide_challenge(self, request: Request) -> Response:
         member = self._member(request)

@@ -675,6 +675,31 @@ li[aria-expanded="true"] > .tree-row .twist {
   font-weight: 700;
   color: var(--ink);
 }
+/* What the member has been told: news rather than something to decide, so its rule and mark are quiet. */
+.notice.told {
+  border-top-color: var(--rule);
+}
+.notice.told .notice-title svg {
+  color: var(--ink-2);
+}
+.notice.told li {
+  display: block;
+}
+.notice-text {
+  display: block;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.notice-when {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+}
+.notice.told li a {
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+}
 
 /* ---------- A table of contents: each part, then its folders, with what each holds ---------- */
 

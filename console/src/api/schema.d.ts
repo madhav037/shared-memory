@@ -270,7 +270,7 @@ export interface paths {
         /** One card on a project's board or in its archive, with its links and comments. */
         get: operations["card"];
         put?: never;
-        /** Change a card's title, description, priority, labels, due date or assignee. */
+        /** Change a card's title, description, priority, labels, due date, assignee or links. */
         post: operations["edit_card"];
         delete?: never;
         options?: never;
@@ -542,6 +542,23 @@ export interface paths {
         };
         /** Challenges waiting for this member's decision, and the ones they raised. */
         get: operations["challenges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What this member has been told about their cards and challenges. Reading it here leaves each notice waiting for their next briefing. */
+        get: operations["notices"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1057,7 +1074,7 @@ export interface components {
         /**
          * NewCard
          * @description A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written
-         *     YYYY-MM-DD.
+         *     YYYY-MM-DD. It may link to memories, by path, and to files, each written repository:path.
          */
         NewCard: {
             /** Title */
@@ -1079,11 +1096,16 @@ export interface components {
              * @default null
              */
             due_date: string | null;
+            /** Memories */
+            memories?: string[];
+            /** Files */
+            files?: string[];
         };
         /**
          * CardFields
          * @description What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-         *     card's assignee, the project's leads and the team's admins give it an assignee.
+         *     card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+         *     replace the card's links of that kind: memories by path, files as repository:path.
          */
         CardFields: {
             /**
@@ -1116,10 +1138,21 @@ export interface components {
              * @default null
              */
             assignee: string | null;
+            /**
+             * Memories
+             * @default null
+             */
+            memories: string[] | null;
+            /**
+             * Files
+             * @default null
+             */
+            files: string[] | null;
         };
         /**
          * Retired
-         * @description What retiring did: the memory is retired, or its author has been asked to retire it.
+         * @description What retiring did: the memory is retired, or its author has been asked to retire it. A known issue that a
+         *     card moved to Done could not retire is not_retired, with the reason.
          */
         Retired: {
             /** Status */
@@ -1128,6 +1161,11 @@ export interface components {
             path: string;
             /** Challenge Id */
             challenge_id: number | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /**
          * MovedCard
@@ -1662,6 +1700,35 @@ export interface components {
             raised: components["schemas"]["RaisedChallenge"][];
         };
         /**
+         * Notice
+         * @description Something the member was told, as their briefing words it. One about a card names its project, and the card's
+         *     number while the card is still there to open.
+         */
+        Notice: {
+            /** Notice Id */
+            notice_id: number;
+            /** Text */
+            text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Card */
+            card: number | null;
+        };
+        /**
+         * Notices
+         * @description What the member has been told, newest first: every notice still waiting for their next session, and the last
+         *     week's that a session has already had.
+         */
+        Notices: {
+            /** Notices */
+            notices: components["schemas"]["Notice"][];
+        };
+        /**
          * Decision
          * @description Accept a challenge or reject it.
          */
@@ -2168,7 +2235,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Change a card's title, description, priority, labels, due date or assignee. */
+            /** @description Change a card's title, description, priority, labels, due date, assignee or links. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2558,6 +2625,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChallengeList"];
+                };
+            };
+        };
+    };
+    notices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What this member has been told about their cards and challenges. Reading it here leaves each notice waiting for their next briefing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notices"];
                 };
             };
         };

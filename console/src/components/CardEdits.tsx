@@ -91,6 +91,24 @@ export function CardForm({
         onChange={(value) => set({ labels: value })}
         data-testid="card-labels"
       />
+      <TagsInput
+        label="Memories"
+        description="The path of each memory the card is about, as its page in the console shows it."
+        placeholder={draft.memories.length ? undefined : "projects/…/shared/decisions/….md"}
+        value={draft.memories}
+        splitChars={[",", " "]}
+        onChange={(value) => set({ memories: value })}
+        data-testid="card-memory-links"
+      />
+      <TagsInput
+        label="Files"
+        description="Each file written repository:path."
+        placeholder={draft.files.length ? undefined : "billing-api:package.json"}
+        value={draft.files}
+        splitChars={[","]}
+        onChange={(value) => set({ files: value })}
+        data-testid="card-file-links"
+      />
       {assignees && (
         <Select
           label="Assignee"

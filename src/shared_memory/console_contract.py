@@ -250,11 +250,13 @@ class Decision(BaseModel):
 
 
 class Retired(BaseModel):
-    """What retiring did: the memory is retired, or its author has been asked to retire it."""
+    """What retiring did: the memory is retired, or its author has been asked to retire it. A known issue that a
+    card moved to Done could not retire is not_retired, with the reason."""
 
     status: str
     path: str
     challenge_id: int | None
+    reason: str | None = None
 
 
 class MemoryDetail(BaseModel):
@@ -505,18 +507,21 @@ class MovedCard(CardDetail):
 
 class NewCard(BaseModel):
     """A card to add at the bottom of To do. Labels already on the board are the ones to reuse; a due date is written
-    YYYY-MM-DD."""
+    YYYY-MM-DD. It may link to memories, by path, and to files, each written repository:path."""
 
     title: str
     description: str = ""
     priority: Priority | None = None
     labels: list[str] = Field(default_factory=list)
     due_date: str | None = None
+    memories: list[str] = Field(default_factory=list)
+    files: list[str] = Field(default_factory=list)
 
 
 class CardFields(BaseModel):
     """What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-    card's assignee, the project's leads and the team's admins give it an assignee."""
+    card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+    replace the card's links of that kind: memories by path, files as repository:path."""
 
     title: str | None = None
     description: str | None = None
@@ -524,6 +529,8 @@ class CardFields(BaseModel):
     labels: list[str] | None = None
     due_date: str | None = None
     assignee: str | None = None
+    memories: list[str] | None = None
+    files: list[str] | None = None
 
 
 class CardMove(BaseModel):
@@ -546,6 +553,24 @@ class DeletedCard(BaseModel):
     """The number of the card that was deleted, which is not used again."""
 
     number: int
+
+
+class Notice(BaseModel):
+    """Something the member was told, as their briefing words it. One about a card names its project, and the card's
+    number while the card is still there to open."""
+
+    notice_id: int
+    text: str
+    created_at: datetime
+    project_id: str | None
+    card: int | None
+
+
+class Notices(BaseModel):
+    """What the member has been told, newest first: every notice still waiting for their next session, and the last
+    week's that a session has already had."""
+
+    notices: list[Notice]
 
 
 @dataclass(frozen=True)
@@ -712,7 +737,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/projects/{project_id}/cards/{number}",
         method="POST",
         operation_id="edit_card",
-        summary="Change a card's title, description, priority, labels, due date or assignee.",
+        summary="Change a card's title, description, priority, labels, due date, assignee or links.",
         answers=CardDetail,
         changes=True,
         accepts=CardFields,
@@ -840,6 +865,14 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="challenges",
         summary="Challenges waiting for this member's decision, and the ones they raised.",
         answers=ChallengeList,
+    ),
+    Declaration(
+        path="/notices",
+        method="GET",
+        operation_id="notices",
+        summary="What this member has been told about their cards and challenges. Reading it here leaves each notice "
+        "waiting for their next briefing.",
+        answers=Notices,
     ),
     Declaration(
         path="/challenges/{challenge_id}/decide",
