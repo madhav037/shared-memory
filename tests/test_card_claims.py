@@ -5,6 +5,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+from shared_memory.board import Board
 from tests.support import (
     Console,
     ConsoleClient,
@@ -304,6 +307,30 @@ def test_a_removed_members_doing_and_blocked_cards_go_back_to_to_do_unassigned(
     assert [(one["number"], one["assignee"]) for one in board["doing"]] == [(4, "emp-3")]
     assert board["blocked"] == []
     assert [(one["number"], one["assignee"]) for one in board["done"]] == [(3, "emp-2")]
+
+
+def test_a_removal_whose_cards_cannot_be_returned_does_not_happen(
+    owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card(owner, "Retry failed webhooks")
+    dana.call("claim_card", number=1)
+
+    def unplaceable(*args: Any, **kwargs: Any) -> None:
+        raise OSError("The board could not be written.")
+
+    with monkeypatch.context() as broken:
+        broken.setattr(Board, "_place", unplaceable)
+        with pytest.raises(ToolRefused):
+            owner.call("remove_member", member_id="emp-2")
+
+    # Dana is still a member, so the card she kept is one she can reach.
+    kept = the_card(dana, 1)
+    assert (kept["column"], kept["assignee"]) == ("doing", "emp-2")
+
+    owner.call("remove_member", member_id="emp-2")
+
+    returned = the_card(owner, 1)
+    assert (returned["column"], returned["assignee"]) == ("to_do", None)
 
 
 def test_taking_a_member_off_a_restricted_projects_access_list_returns_their_cards(
