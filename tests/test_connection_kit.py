@@ -122,8 +122,17 @@ def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_
 
     briefing = hooks["SessionStart"][0]["hooks"][0]
     recall = hooks["UserPromptSubmit"][0]["hooks"][0]
+    before_edit = hooks["PreToolUse"][0]["hooks"][0]
+    end = hooks["SessionEnd"][0]["hooks"][0]
 
-    for hook, event in ((briefing, "session-start"), (recall, "prompt-submitted")):
+    assert hooks["PreToolUse"][0]["matcher"] == "^(apply_patch|Edit|Write)$"
+    assert end["timeout"] <= 3, "Codex gives a SessionEnd hook 3 seconds at most"
+    for hook, event in (
+        (briefing, "session-start"),
+        (recall, "prompt-submitted"),
+        (before_edit, "before-edit"),
+        (end, "session-end"),
+    ):
         assert hook["type"] == "command"
         assert f"{team.server.url}/hooks/{event}" in hook["command"], event
         assert "$SHARED_MEMORY_TOKEN" in hook["command"], event
@@ -139,6 +148,10 @@ def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(
 
     assert hooks["SessionStart"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs session-start"
     assert hooks["BeforeAgent"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs prompt-submitted"
+    assert hooks["BeforeTool"][0]["matcher"] == "write_file|replace"
+    assert hooks["BeforeTool"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs before-edit"
+    assert hooks["SessionEnd"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs session-end"
+    assert "GEMINI_PROJECT_DIR" in script["contents"]
     assert (script["agent"], script["action"]) == ("Gemini CLI", "create")
     assert "process.env.SHARED_MEMORY_TOKEN" in script["contents"]
     assert f"{team.server.url}/hooks" in script["contents"]
@@ -159,12 +172,96 @@ def test_copilot_cli_is_briefed_by_the_server_itself_with_no_shell_command(team:
     assert "userPromptSubmitted" not in hooks
 
 
-def test_an_agent_that_reads_claude_codes_settings_is_never_briefed_twice(team: Team) -> None:
+def test_copilot_cli_asks_the_server_before_its_edit_tools_and_as_a_session_ends(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    hooks = json.loads(by_path(created["files"])[".github/hooks/shared-memory.json"]["contents"])["hooks"]
+
+    (before_edit,), (end,) = hooks["preToolUse"], hooks["sessionEnd"]
+
+    assert before_edit["matcher"] == "edit|create"
+    assert (before_edit["type"], end["type"]) == ("http", "http"), "a hook that posts lets the edit through on failure"
+    assert before_edit["url"] == f"{team.server.url}/hooks/before-edit?format=copilot-cli"
+    assert before_edit["timeoutSec"] == 3
+    assert end["url"] == f"{team.server.url}/hooks/session-end?format=copilot-cli"
+    for hook in (before_edit, end):
+        assert hook["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
+        assert hook["headers"]["X-Shared-Memory-Repository"] == "billing-api"
+
+
+def test_an_agent_that_reads_claude_codes_settings_runs_each_hook_once(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
+    devin = json.loads(files[".devin/hooks.v1.json"]["contents"])
+    cursor = json.loads(files[".cursor/hooks.json"]["contents"])["hooks"]
 
     assert "hooks" not in json.loads(files[".claude/settings.json"]["contents"])
     assert "hooks" not in json.loads(files[".vscode/mcp.json"]["contents"])
+    for event, entries in (*devin.items(), *cursor.items()):
+        assert len(entries) == 1 and len(entries[0].get("hooks", [1])) == 1, event
+    for endpoint in ("session-start", "prompt-submitted", "before-edit", "session-end"):
+        posting = [path for path, file in files.items() if f"/hooks/{endpoint}" in file["contents"]]
+        assert len([path for path in posting if path.startswith(".devin/")]) == 1, endpoint
+        assert len([path for path in posting if path.startswith(".cursor/")]) <= 1, endpoint
+
+
+#: Where each agent's kit keeps its before-edit hook, and what in that file shows the hook is there and gives up at
+#: about 3 seconds. Cline's is a script per shell.
+BEFORE_EDIT_HOOKS = {
+    "Codex": (".codex/config.toml", "--max-time 3 "),
+    "GitHub Copilot": (".github/hooks/shared-memory.json", '"timeoutSec": 3'),
+    "Gemini CLI": (".gemini/hooks/shared-memory.mjs", "? 5 : 3"),
+    "Cursor": (".cursor/hooks.json", "--max-time 3 "),
+    "Devin Desktop": (".devin/hooks.v1.json", "--max-time 3 "),
+    "Cline": (".clinerules/hooks/PreToolUse", "--max-time 3 "),
+}
+
+
+def test_every_agent_that_can_refuse_an_edit_has_the_before_edit_hook_in_its_own_file(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for agent, (path, gives_up) in BEFORE_EDIT_HOOKS.items():
+        assert files[path]["agent"] == agent
+        hooked = files[path]["contents"] + files[".gemini/settings.json"]["contents"] * (agent == "Gemini CLI")
+        assert "before-edit" in hooked, agent
+        assert gives_up in files[path]["contents"], agent
+        assert team.owner_token not in files[path]["contents"], agent
+    assert "-TimeoutSec 3 " in files[".clinerules/hooks/PreToolUse.ps1"]["contents"]
+
+
+def test_an_agent_with_no_before_edit_hook_is_told_its_locks_are_guidance_only(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    assert "before-edit" not in files[".vscode/mcp.json"]["contents"]
+    assert "locks are guidance only" in files[".vscode/mcp.json"]["how"]
+    assert "locks are guidance only" in files[".cursor/hooks.json"]["how"], "on Windows, where Cursor's hooks don't run"
+
+
+def test_only_an_agent_with_no_before_edit_hook_is_told_to_take_a_lock_before_every_edit(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+    hooked = "Claude Code, Codex, Copilot CLI, Gemini CLI, Cursor on macOS and Linux, Devin Desktop and Cline"
+    unhooked = "In any other coding agent (Copilot in VS Code, Cursor on Windows), call `take_lock`"
+
+    for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
+        said = " ".join(files[path]["contents"].split())
+        assert f"A before-edit hook takes each file's lock for you in {hooked}." in said, path
+        assert unhooked in said, path
+        assert said.count("before you edit") == 1, path
+
+
+def test_cursor_asks_the_server_before_its_write_tool_and_as_a_session_ends(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    hooks = json.loads(by_path(created["files"])[".cursor/hooks.json"]["contents"])["hooks"]
+
+    (before_edit,), (end,) = hooks["preToolUse"], hooks["sessionEnd"]
+
+    assert before_edit["matcher"] == "Write"
+    assert f"{team.server.url}/hooks/before-edit?format=cursor" in before_edit["command"]
+    assert before_edit["command"].endswith("|| echo '{}'"), "Cursor blocks a tool whose hook answers nothing readable"
+    assert before_edit["timeout"] == 4
+    assert f"{team.server.url}/hooks/session-end?format=cursor" in end["command"]
 
 
 def pinned(session: Session, title: str, body: str) -> str:
@@ -245,6 +342,37 @@ def test_every_agent_is_given_the_same_board_habits(team: Team) -> None:
             assert habit in files[path]["contents"], (path, habit)
 
 
+#: The session habits every agent is given, one marker each: pass the session's identifier, state the activity and
+#: again when the task changes, tell the member who holds a file, a takeover only on the member's word, stop on a lock
+#: taken over (told on a prompt or in a tool's notices), release a finished file, and the active sessions and collision
+#: warnings that bear on the task.
+SESSION_HABITS = (
+    "`session`",
+    "set_activity",
+    "when the task changes",
+    "holder",
+    "tell the member who holds",
+    "`takeover: true` only once the member says so",
+    "taken over",
+    "`notices`",
+    "stop editing that file",
+    "release_lock",
+    "active sessions",
+    "collision",
+    "from the repository's root",
+)
+
+
+def test_every_agent_is_given_the_same_session_habits(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
+        said = " ".join(files[path]["contents"].split())
+        for habit in SESSION_HABITS:
+            assert habit in said, (path, habit)
+
+
 def test_cursor_is_briefed_by_a_hook_and_told_by_a_rule_to_search(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
@@ -270,11 +398,31 @@ def test_devin_desktop_is_briefed_once_from_its_own_hooks(team: Team) -> None:
     assert "hooks" not in json.loads(files[".claude/settings.json"]["contents"])
 
 
+def test_devin_desktop_asks_the_server_before_its_edit_tools_and_as_a_session_ends(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    devin = json.loads(by_path(created["files"])[".devin/hooks.v1.json"]["contents"])
+
+    (before_edit,), (end,) = devin["PreToolUse"], devin["SessionEnd"]
+    command = before_edit["hooks"][0]["command"]
+
+    assert before_edit["matcher"] == "^(write|edit|notebook_edit)$"
+    assert f"'{team.server.url}/hooks/before-edit?format=devin'" in command
+    assert '-H "X-Shared-Memory-Root: $DEVIN_PROJECT_DIR"' in command, "Devin's payload names no working folder"
+    assert before_edit["hooks"][0]["timeout"] == 4
+    assert f"{team.server.url}/hooks/session-end" in end["hooks"][0]["command"]
+
+
 def test_cline_gets_a_hook_script_for_each_shell_it_runs_them_in(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
-    for event, endpoint in (("TaskStart", "session-start"), ("UserPromptSubmit", "prompt-submitted")):
+    for event, endpoint in (
+        ("TaskStart", "session-start"),
+        ("UserPromptSubmit", "prompt-submitted"),
+        ("PreToolUse", "before-edit"),
+        ("TaskComplete", "session-end"),
+        ("TaskCancel", "session-end"),
+    ):
         posix = files[f".clinerules/hooks/{event}"]
         windows = files[f".clinerules/hooks/{event}.ps1"]
 

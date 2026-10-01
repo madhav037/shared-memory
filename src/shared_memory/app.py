@@ -37,6 +37,7 @@ from shared_memory.db import Database
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
+from shared_memory.connection import GUIDANCE_ONLY
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
@@ -65,6 +66,11 @@ INSTRUCTIONS = (
     "top card of the highest priority in To do. Move a card to Done only once the member confirms it is finished. "
     "When you find something broken that teammates will trip over, save_known_issue with its symptom and a "
     "workaround.\n\n"
+    "Pass session, the identifier your briefing named, to the tools that take it. set_activity when you start a piece "
+    "of work and when the task changes. When an edit is blocked or take_lock is refused, tell the member who holds "
+    "the file; pass takeover: true only once the member says so. Told a lock of yours was taken over, stop editing "
+    f"that file and tell the member. With no before-edit hook ({', '.join(GUIDANCE_ONLY)}), take_lock with the "
+    "file's path from the repository's root before editing it.\n\n"
     "When the member asks to onboard, to import what they already have written down, call onboard and follow its "
     "steps.\n\n"
     "If a tool says this repository isn't connected, offer to connect it with create_project."
@@ -362,15 +368,16 @@ def build_app(
             """Why the edit is blocked: another active session holds the file. None lets it through, with the file's
             lock taken or kept for this session where the file locks."""
             session = session_of(current, payload)
-            path = hooks.edited_file(payload, root)
-            if session is None or path is None:
+            if session is None:
                 return None
-            try:
-                locks.take(session, path)
-            except Held as refused:
-                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
-            except (OutsideRepository, NoRepository):
-                return None
+            # One file, but for a patch that changes several: the first one held blocks the whole edit.
+            for path in hooks.edited_files(payload, root):
+                try:
+                    locks.take(session, path)
+                except Held as refused:
+                    return f"{refused} {TAKEOVER_IS_POSSIBLE}"
+                except (OutsideRepository, NoRepository):
+                    continue
             return None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)

@@ -21,6 +21,22 @@ def test_an_agent_is_told_on_connecting_how_to_keep_the_board(team: Team) -> Non
         assert habit in instructions, habit
 
 
+def test_an_agent_is_told_on_connecting_its_session_habits(team: Team) -> None:
+    instructions, _ = team.owner().on_connecting()
+
+    for habit in (
+        "Pass session",
+        "set_activity",
+        "when the task changes",
+        "tell the member who holds the file",
+        "takeover: true only once the member says so",
+        "taken over, stop editing that file",
+        "With no before-edit hook (Copilot in VS Code, Cursor on Windows), take_lock",
+        "from the repository's root",
+    ):
+        assert habit in instructions, habit
+
+
 def test_guidance_an_agent_must_not_miss_is_in_the_tools_themselves(team: Team) -> None:
     _, tools = team.owner().on_connecting()
 

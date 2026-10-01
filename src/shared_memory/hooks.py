@@ -3,6 +3,7 @@
 Every agent's hooks post to the same endpoints and name, as ?format=, the family whose shape they can read:
 
 - `claude`: `hookSpecificOutput`, for Claude Code, Codex, Gemini CLI, Devin Desktop and Copilot in VS Code;
+- `gemini` and `devin`: the same shape for context, and their own when an edit is blocked;
 - `copilot-cli`: `additionalContext` at the top level;
 - `cursor`: `additional_context`, which only Cursor's session start can take in;
 - `cline`: `contextModification`, beside the `cancel` that keeps the task going.
@@ -14,17 +15,20 @@ session is ever held up by the state of the team's memory.
 The before-edit hook is the one that can stop its agent, and for one reason only: another active session holds the
 file's lock. `blocked` shapes that answer for each family:
 
-- `claude`: `permissionDecision: "deny"` and its reason inside `hookSpecificOutput`;
-- `copilot-cli`: the same two fields at the top level;
+- `claude`: `permissionDecision: "deny"` and its reason inside `hookSpecificOutput`, which Codex reads too;
+- `gemini`: `decision: "deny"` with a `reason`;
+- `devin`: `decision: "block"` with a `reason`;
+- `copilot-cli`: `permissionDecision` and its reason at the top level;
 - `cursor`: `permission: "deny"`, with the reason once for its agent and once for its member;
 - `cline`: `cancel: true` with an `errorMessage`.
 
 An allowed edit is answered emptily in every family, which leaves the agent's own permission rules to decide as if
-the hook weren't there. `edited_file` reads which file the edit is of, from its repository's root.
+the hook weren't there. `edited_files` reads which files the edit is of, from their repository's root.
 """
 
 from __future__ import annotations
 
+import json
 import posixpath
 import re
 from collections.abc import Callable, Mapping
@@ -34,9 +38,22 @@ from shared_memory.sessions import usable
 
 CLAUDE = "claude"
 
-# The fields of a tool's input that agents name the file being edited in: Claude Code's Edit and Write send
-# "file_path", and its NotebookEdit "notebook_path".
-_FILE_FIELDS = ("file_path", "notebook_path")
+# The fields of a tool's arguments that agents name the file being edited in: Claude Code's Edit and Write, Gemini
+# CLI's write_file and replace and Cursor's Write send "file_path", Claude Code's NotebookEdit "notebook_path", and
+# Copilot CLI's and Cline's edit tools "path".
+_FILE_FIELDS = ("file_path", "notebook_path", "path")
+
+# Copilot CLI and Cline name the tool beside its arguments and give every tool a "path", the ones that only read a
+# file included, so for those two shapes the tool must be one that changes a file.
+_COPILOT_CLI_EDIT_TOOLS = frozenset({"edit", "create"})
+_CLINE_EDIT_TOOLS = frozenset({"write_to_file", "replace_in_file"})
+
+# Codex edits files with apply_patch, whose one argument is the patch: each file it changes is named on a line of its
+# own.
+_PATCHED_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$", re.MULTILINE)
+
+# Where agents with no working folder in their payload name the folders that are open: Cursor and Cline.
+_ROOTS_FIELDS = ("workspace_roots", "workspaceRoots")
 
 _DRIVE = re.compile(r"^[A-Za-z]:")
 
@@ -48,8 +65,9 @@ _PROMPT_FIELDS = ("prompt", "user_prompt", "userPrompt", "initial_prompt", "init
 _EVENT_FIELDS = ("hook_event_name", "hookEventName", "hookName")
 
 # The fields agents tell one session from another in (ADR-0018): Claude Code, Codex and Gemini CLI send "session_id",
-# Copilot CLI "sessionId", Cursor "conversation_id", and Cline the task's "taskId".
-_SESSION_FIELDS = ("session_id", "sessionId", "conversation_id", "conversationId", "taskId")
+# Copilot CLI "sessionId", Cursor "conversation_id", and Cline the task's "taskId". Cursor's comes first because it is
+# in every one of Cursor's payloads, where "session_id" is only in those for a session's start and end.
+_SESSION_FIELDS = ("conversation_id", "conversationId", "session_id", "sessionId", "taskId")
 
 
 def _claude(event: str, context: str) -> dict[str, Any]:
@@ -71,6 +89,8 @@ def _cline(event: str, context: str) -> dict[str, Any]:
 
 _FORMATS: dict[str, Callable[[str, str], dict[str, Any]]] = {
     CLAUDE: _claude,
+    "gemini": _claude,
+    "devin": _claude,
     "copilot-cli": _copilot_cli,
     "cursor": _cursor,
     "cline": _cline,
@@ -94,6 +114,14 @@ def _claude_blocked(event: str, reason: str) -> dict[str, Any]:
     }
 
 
+def _gemini_blocked(event: str, reason: str) -> dict[str, Any]:
+    return {"decision": "deny", "reason": reason}
+
+
+def _devin_blocked(event: str, reason: str) -> dict[str, Any]:
+    return {"decision": "block", "reason": reason}
+
+
 def _copilot_cli_blocked(event: str, reason: str) -> dict[str, Any]:
     return {"permissionDecision": "deny", "permissionDecisionReason": reason}
 
@@ -109,6 +137,8 @@ def _cline_blocked(event: str, reason: str) -> dict[str, Any]:
 
 _BLOCKED: dict[str, Callable[[str, str], dict[str, Any]]] = {
     CLAUDE: _claude_blocked,
+    "gemini": _gemini_blocked,
+    "devin": _devin_blocked,
     "copilot-cli": _copilot_cli_blocked,
     "cursor": _cursor_blocked,
     "cline": _cline_blocked,
@@ -120,32 +150,76 @@ def blocked(format: str | None, event: str, reason: str) -> dict[str, Any]:
     return _BLOCKED[_named(format)](event, reason)
 
 
-def edited_file(payload: Mapping[str, Any], root: str | None = None) -> str | None:
-    """The file an edit tool is about to change, as a path from its repository's root, or None when the payload names
-    no file or names one outside that root.
+def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[str]:
+    """The files an edit tool is about to change, each as a path from its repository's root: none when the payload
+    names no file, and without any it names outside that root.
 
-    Agents name the file by its absolute path. The root is the one the hook itself names, where it does, or else the
-    payload's working folder ("cwd"); the path from the root is what is left of the file's path after it. A path that
-    is already relative is taken as written from the root. On a Windows drive the two are compared without regard to
-    case, as Windows does.
+    One file, but for Codex's apply_patch, which may change several. Agents name a file by its absolute path or from
+    the root. The root is the one the hook itself names, where it does, or else the payload's working folder ("cwd")
+    or one of the folders it says are open; the path from the root is what is left of the file's path after it. A path
+    that is already relative is taken as written from the root. On a Windows drive the two are compared without regard
+    to case, as Windows does.
     """
+    given = _given_to_edit_tool(payload)
+    if given is None:
+        return []
+    named = [given[field] for field in _FILE_FIELDS if isinstance(given.get(field), str)][:1]
+    patch = given.get("command")
+    if not named and isinstance(patch, str):
+        named = _PATCHED_FILE.findall(patch)
+    folders = _roots(payload, root)
+    files = (_from_root(file, folders) for file in named)
+    return list(dict.fromkeys(file for file in files if file))
+
+
+def _given_to_edit_tool(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """What the tool a before-edit payload is about was given, in whichever shape its agent sends it, or None when
+    the payload shows no tool that changes a file."""
     given = payload.get("tool_input")
-    if not isinstance(given, Mapping):
-        return None
-    named = next((given[field] for field in _FILE_FIELDS if isinstance(given.get(field), str)), "")
+    if isinstance(given, Mapping):
+        return given
+    if "toolArgs" in payload:
+        # Copilot CLI, which sends the arguments as an object or as the JSON text of one.
+        given = payload["toolArgs"]
+        if isinstance(given, str):
+            try:
+                given = json.loads(given)
+            except ValueError:
+                return None
+        edits = payload.get("toolName") in _COPILOT_CLI_EDIT_TOOLS
+        return given if edits and isinstance(given, Mapping) else None
+    about = payload.get("preToolUse")
+    if isinstance(about, Mapping):
+        # Cline, which nests the tool and its parameters under the event's own name.
+        given = about.get("parameters")
+        edits = (about.get("tool") or about.get("toolName")) in _CLINE_EDIT_TOOLS
+        return given if edits and isinstance(given, Mapping) else None
+    return None
+
+
+def _roots(payload: Mapping[str, Any], root: str | None) -> list[str]:
+    """The folders a file's absolute path may be under: the root the hook names, or else what the payload names."""
+    if root and root.strip():
+        return [root]
+    named = [payload.get("cwd")]
+    for field in _ROOTS_FIELDS:
+        listed = payload.get(field)
+        named += listed if isinstance(listed, list) else []
+    return [folder for folder in named if isinstance(folder, str) and folder.strip()]
+
+
+def _from_root(named: str, folders: list[str]) -> str | None:
     file = named.strip().replace("\\", "/")
     if not file:
         return None
     if not file.startswith("/") and not _DRIVE.match(file):
         return file
-    cwd = payload.get("cwd")
-    folder = root if root and root.strip() else cwd if isinstance(cwd, str) else ""
-    folder = folder.strip().replace("\\", "/")
-    if not folder:
-        return None
-    file, folder = posixpath.normpath(file), posixpath.normpath(folder).rstrip("/")
-    within = file.lower().startswith(folder.lower() + "/") if _DRIVE.match(folder) else file.startswith(folder + "/")
-    return file[len(folder) + 1 :] if within else None
+    file = posixpath.normpath(file)
+    for each in folders:
+        folder = posixpath.normpath(each.strip().replace("\\", "/")).rstrip("/")
+        if file.lower().startswith(folder.lower() + "/") if _DRIVE.match(folder) else file.startswith(folder + "/"):
+            return file[len(folder) + 1 :]
+    return None
 
 
 def prompt_in(payload: Mapping[str, Any], depth: int = 3) -> str | None:
