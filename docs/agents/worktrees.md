@@ -45,7 +45,8 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **The calling session.** In a hook, `session_of(current, payload)` in `app.py`; in a tool that takes `session`,
   `sessions.touch(caller(ctx), session)`. Both move its last-seen time, which is what keeps it active.
 - **A project's active sessions**: `sessions.active(project_id)`, a list of `Session`. A session's coding agent is
-  `None` until one of its tool calls has reported it, because a hook does not say.
+  what a tool call of its reported, or else what its hooks say (`hooks.agent_of`: the `X-Shared-Memory-Agent` header
+  the plugin and every kit send, or the answer format where only one agent asks for it); `None` when neither has.
 - **A session that ended or went idle.** Nothing sweeps, so count its rows as gone wherever you read them:
   `sessions.still_active(ids)` says which holders are active. `sessions.on_gone(listener)` calls you inside the
   transaction when a session ends or is found back from idle, to clear its rows.
@@ -56,11 +57,15 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   line the briefing shows, and `ACTIVITY_LIMIT` the one place the length cap is named. That module owns the
   `session_activities` table and asks the board for the card through `Board.doing_titles`.
 - **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
-- **Words for the session's next prompt** go in the prompt hook's `notices` in `app.py`, beside
-  `sessions.waiting_notices(session)`.
+- **Words waiting for a session** are gathered in one place, `waiting_for(current, session)` in `app.py`: the prompt
+  hook asks it, and so do `take_lock`, `release_lock` and `set_activity`, whose answers carry them as `notices` for
+  an agent with no prompt hook. Each is told once, wherever it is told. A module with something for a session adds it
+  there, beside `sessions.waiting_notices(session)` (back from idle, or back after it had ended).
+- **The briefing prompt starts no session.** Only the `briefing` tool called without `session` does; the prompt
+  cannot be told the session, so it shows the briefing without the active sessions and without an identifier.
 - **Collision warnings** are `Collisions` in `src/shared_memory/collisions.py`, built in `build_app` as `collisions`.
   It owns `activity_embeddings` (each session's activity as an embedding) and `collision_warnings` (what each session
-  was warned about), and `collisions.warnings(caller, session)` is what the prompt hook adds. `tests/test_collisions.py`
+  was warned about), and `collisions.warnings(caller, session)` is what `waiting_for` adds. `tests/test_collisions.py`
   runs its own server, whose embedder gives chosen activities chosen embeddings.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
 
@@ -92,7 +97,8 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
 - **The `never_lock` tool**: with nothing, any member of the project gets `built_in` and `project`; `add` or
   `remove` (one pattern, one at a time) is for the project's leads and the team's admins, and each writes a
   `never_lock_pattern_added` or `never_lock_pattern_removed` audit log entry whose target is the pattern. It takes
-  no `session`, so it doesn't keep one active. Adding a pattern ends the locks held on files it matches.
+  no `session`, so it doesn't keep one active. Adding a pattern ends the locks held on files it matches, and each
+  holder is told once, through `locks.waiting_notices`.
 - **A path** reaches `take` as the agent wrote it and is kept by `from_root(path)`: relative to the repository's
   root, with forward slashes. An absolute path is refused as outside the repository, so a hook that is handed one
   makes it relative first.
@@ -104,9 +110,8 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
   said so, never on its own. `Held`'s message and `take_lock`'s description both say this, and every agent's
   guidance says the same.
 - **The old holder is told once**: `locks.waiting_notices(session)` gives the takeovers of locks that session held
-  and marks them told. The prompt hook's `notices` asks it, and so do `take_lock` and `set_activity`, whose answers
-  carry them as `notices`, for an agent with no prompt hook. They ask after their own work succeeded: a refusal
-  carries none, so they stay waiting. An agent told of a takeover stops editing that file and tells its
+  and marks them told. `waiting_for` asks it, for the prompt hook and for the tools that answer with `notices`. The
+  tools ask after their own work succeeded: a refusal carries none, so they stay waiting. An agent told of a takeover stops editing that file and tells its
   member.
 
 ### The before-edit hook
@@ -115,13 +120,17 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
 runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's kit posts to the same endpoint.
 
 - **Headers**: `Authorization`, `X-Shared-Memory-Project` and `X-Shared-Memory-Repository`, as every hook sends, and
-  `X-Shared-Memory-Root`, the absolute path of the repository's root where the agent gives its hook one (Claude
-  Code's `$CLAUDE_PROJECT_DIR`). `?format=` names the agent family, as on the other hooks.
+  `X-Shared-Memory-Root`, the absolute path of the repository's root where the agent gives its hook a folder: the
+  folder the agent was started in (Claude Code's `$CLAUDE_PROJECT_DIR`, Devin's, Gemini CLI's) followed by the way up
+  to the root that `git rev-parse --show-cdup` gives, so a session started in a subfolder names its files as one
+  started at the root does (`connection.repository_root`). Without git the folder stands alone. `?format=` names the
+  agent family, as on the other hooks, and `X-Shared-Memory-Agent` the coding agent.
 - **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the files
   (`hooks.edited_files`), and the working folder, `cwd`, or the open folders (`workspace_roots`, `workspaceRoots`),
   which stand in for the root when the header is missing. The file is in `tool_input.file_path`,
   `tool_input.notebook_path` or `tool_input.path`; in the patch of Codex's `apply_patch` (`tool_input.command`, which
-  may name several files: the first one held blocks the edit); in Copilot CLI's `toolArgs.path`; or in Cline's
+  may name several files: the first one held blocks the edit, and `locks.take_all` gives back the locks it took for
+  it); in Copilot CLI's `toolArgs.path`; or in Cline's
   `preToolUse.parameters.path`. Copilot CLI and Cline give tools that only read a file a `path` too, so for those two
   the tool's name must be one that changes a file. An agent that names its file or its root in another field is
   added in `hooks.edited_files`.
