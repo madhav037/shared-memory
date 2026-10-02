@@ -20,6 +20,7 @@ from tests.support import (
     Session,
     Team,
     TestClock,
+    added_context,
     ask,
     fresh_database,
     new_team,
@@ -134,6 +135,43 @@ def test_a_promoted_memory_starts_unlabelled(team: Team, owner: Session) -> None
 
     assert promoted["status"] == "promoted", promoted
     assert not labelled(owner, promoted["path"])
+
+
+def test_recall_labels_a_possibly_outdated_memory_once(team: Team, owner: Session) -> None:
+    path = promote_keeping_both(owner, PNPM)
+    team.server.clock.advance(days=61)
+
+    first = added_context(owner.prompt("which package manager do we use?"))
+    second = added_context(owner.prompt("which package manager do we use?"))
+
+    assert f"[project memory, possibly outdated] Use pnpm, not npm ({path})" in first
+    assert "check it still holds" in first
+    assert f"[project memory] Use pnpm, not npm ({path})" in second
+    assert "possibly outdated" not in second
+
+
+def test_search_marks_a_possibly_outdated_memory_and_says_what_to_do(team: Team, owner: Session) -> None:
+    path = promote_keeping_both(owner, PNPM)
+    team.server.clock.advance(days=61)
+    fresh = promote_keeping_both(owner, {**PNPM, "title": "Lockfiles are committed", "summary": "Commit pnpm-lock.yaml."})
+
+    found = owner.call("search", query="pnpm package manager lockfile")
+    marked = {result["path"]: result["possibly_outdated"] for result in found["results"]}
+
+    assert marked[path] is True
+    assert marked[fresh] is False
+    assert "check it still holds" in found["check"]
+
+
+def test_search_finding_only_memory_in_use_says_nothing_more(team: Team, owner: Session) -> None:
+    path = promote_keeping_both(owner, PNPM)
+    owner.call("pin", path=path)
+    team.server.clock.advance(days=61)
+
+    found = owner.call("search", query="which package manager do we use?")
+
+    assert [result["possibly_outdated"] for result in found["results"] if result["path"] == path] == [False]
+    assert "check" not in found
 
 
 def test_the_number_of_days_is_a_server_setting() -> None:
