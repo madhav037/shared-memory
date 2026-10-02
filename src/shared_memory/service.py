@@ -287,7 +287,7 @@ class MemoryService:
             limit=max(1, min(limit, 50)),
             source=QuerySource.SEARCH,
         )
-        results = self._found(caller, hits)
+        results = self._found(caller, hits, for_agent=True)
         if any(result["possibly_outdated"] for result in results):
             return {"results": results, "check": self._uses.check_any()}
         return {"results": results}
@@ -311,8 +311,9 @@ class MemoryService:
         )
         return {"results": self._found(caller, hits)}
 
-    def _found(self, caller: Caller, hits: list[Hit]) -> list[dict[str, Any]]:
-        """Search hits as the memories they came from, with the heading of the section that matched."""
+    def _found(self, caller: Caller, hits: list[Hit], for_agent: bool = False) -> list[dict[str, Any]]:
+        """Search hits as the memories they came from, with the heading of the section that matched. For a coding
+        agent, each also says whether it is possibly outdated; the console's search page doesn't show that."""
         pending = self._challenges.pending(caller.team, [hit.path for hit in hits])
         found: list[tuple[Hit, Memory]] = []
         for hit in hits:
@@ -320,7 +321,11 @@ class MemoryService:
                 found.append((hit, self._store.read(caller.team, PurePosixPath(hit.path))))
             except Refused:
                 continue
-        outdated = self._uses.possibly_outdated(caller.team, {hit.path: memory.status for hit, memory in found})
+        outdated = (
+            self._uses.possibly_outdated(caller.team, {hit.path: memory.status for hit, memory in found})
+            if for_agent
+            else set()
+        )
         results = []
         for hit, memory in found:
             sections = split_sections(memory)

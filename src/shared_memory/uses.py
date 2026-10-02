@@ -99,30 +99,42 @@ class Uses:
     def check(self, team: str, path: str) -> str:
         """What a coding agent is told about a possibly outdated memory: how long it has gone unused, and what to do."""
         last = self.last_used(team, path)
-        days = (self._clock() - last).days if last is not None else self._after.days
+        unused = self._clock() - last if last is not None else self._after
         return (
-            f"Possibly outdated: no coding agent has recalled or read this memory for {days} days. Check it still "
-            "holds against the code before relying on it. If it no longer holds, tell the member, who can retire it."
+            f"Possibly outdated: no coding agent has recalled or read this memory for {_days(unused)} days. "
+            f"{_WHAT_TO_DO}"
         )
 
     def check_any(self) -> str:
         """What a coding agent is told once, beside recall or search results, when any of them is possibly outdated."""
         return (
-            f"A memory marked possibly outdated hasn't been recalled or read by a coding agent for {self._after.days} "
-            "days or more, so check it still holds against the code before relying on it. If it no longer holds, tell "
-            "the member, who can retire it."
+            "A memory marked possibly outdated hasn't been recalled or read by a coding agent for "
+            f"{_days(self._after)} days or more. {_WHAT_TO_DO}"
         )
 
     @contextmanager
     def on_change(
         self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
     ) -> Iterator[None]:
-        """Saving a memory starts its clock again; deleting one forgets it. Committed once the save has landed."""
+        """Saving a memory starts its clock again; deleting one forgets it. Committed once the save has landed.
+
+        Deletes go first, so a path a save both deletes and writes ends up with its clock started."""
         with self._db.transaction() as conn:
-            now = self._clock()
-            if writes:
-                conn.cursor().executemany(_RECORD, [(team, str(path), now) for path in writes])
             gone = [str(path) for path in deletes]
             if gone:
                 conn.execute("DELETE FROM memory_uses WHERE team = %s AND path = ANY(%s)", (team, gone))
+            now = self._clock()
+            if writes:
+                conn.cursor().executemany(_RECORD, [(team, str(path), now) for path in writes])
             yield
+
+
+_WHAT_TO_DO = (
+    "Check it still holds against the code before relying on it. If it no longer holds, tell the member, who can "
+    "retire it."
+)
+
+
+def _days(span: timedelta) -> int:
+    """A span in whole days, never 0: a setting below a day still reads as a day."""
+    return max(1, round(span.total_seconds() / 86400))
