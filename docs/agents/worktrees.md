@@ -132,7 +132,9 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
   - Copilot CLI's hook posts by itself, with no command to ask git in, so it sends no root: a Copilot CLI session
     started in a subfolder still names its files from that subfolder. A known limit.
 
-  `?format=` names the agent family, as on the other hooks, and `X-Shared-Memory-Agent` the coding agent.
+  `?format=` names the agent family, as on the other hooks, and `X-Shared-Memory-Agent` the coding agent. Each
+  agent's header value and before-edit format are one `AgentHooks` record in `hooks.AGENTS`, which the kits in
+  `connection.py` send from; each format's two answer shapes are one `Family` in `hooks.py`.
 - **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the files
   (`hooks.edited_files`), and the working folder, `cwd`, or the open folders (`workspace_roots`, `workspaceRoots`),
   which stand in for the root when the header is missing, and also when the header's root doesn't hold the edited

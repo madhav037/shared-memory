@@ -12,12 +12,19 @@ from typing import Any
 
 import pytest
 
+from shared_memory.agents import agent_named
 from shared_memory.connection import repository_root
+from shared_memory.hooks import AGENTS
 from tests.support import REPO_ROOT, Session, Team
 
 
 def by_path(files: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {file["path"]: file for file in files}
+
+
+@pytest.mark.parametrize("agent", AGENTS, ids=lambda agent: agent.name)
+def test_the_name_each_agents_hooks_send_is_known_as_that_agent(agent: Any) -> None:
+    assert agent_named(agent.header) == agent.name
 
 
 def test_connecting_a_repository_gives_each_agent_the_files_it_commits(team: Team) -> None:

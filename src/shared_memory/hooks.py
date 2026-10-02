@@ -32,6 +32,7 @@ import json
 import posixpath
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from shared_memory.agents import ANOTHER_AGENT, agent_named
@@ -43,14 +44,32 @@ CLAUDE = "claude"
 # The header a hook names its coding agent in: the plugin's hooks and every kit's send it.
 AGENT_HEADER = "X-Shared-Memory-Agent"
 
+
+@dataclass(frozen=True)
+class AgentHooks:
+    """One coding agent's hooks as this server knows them: the agent's name, what its hooks send in `AGENT_HEADER`,
+    and the answer format (`?format=`) its before-edit hook asks for. The plugin and each kit in `connection.py` send
+    these, so a new agent is added here, with its kit beside the others."""
+
+    name: str
+    header: str
+    format: str
+
+
+CLAUDE_CODE = AgentHooks("Claude Code", "claude-code", CLAUDE)
+CODEX = AgentHooks("Codex", "codex", CLAUDE)
+GEMINI_CLI = AgentHooks("Gemini CLI", "gemini", "gemini")
+COPILOT_CLI = AgentHooks("GitHub Copilot", "copilot", "copilot-cli")
+CURSOR = AgentHooks("Cursor", "cursor", "cursor")
+DEVIN = AgentHooks("Devin Desktop", "devin", "devin")
+CLINE = AgentHooks("Cline", "cline", "cline")
+AGENTS = (CLAUDE_CODE, CODEX, GEMINI_CLI, COPILOT_CLI, CURSOR, DEVIN, CLINE)
+
 # The coding agent behind each answer format only one agent asks for, for a hook that sends no such header.
-# Claude Code's format says nothing: Claude Code, Codex and Devin Desktop all ask for it.
+# Claude Code's format says nothing: Claude Code and Codex both ask for it, and Devin Desktop too on all but its
+# before-edit hook.
 _AGENT_OF_FORMAT = {
-    "gemini": "Gemini CLI",
-    "devin": "Devin Desktop",
-    "copilot-cli": "GitHub Copilot",
-    "cursor": "Cursor",
-    "cline": "Cline",
+    each.format: each.name for each in AGENTS if [other.format for other in AGENTS].count(each.format) == 1
 }
 
 
@@ -109,27 +128,6 @@ def _cline(event: str, context: str) -> dict[str, Any]:
     return {"cancel": False, "contextModification": context}
 
 
-_FORMATS: dict[str, Callable[[str, str], dict[str, Any]]] = {
-    CLAUDE: _claude,
-    "gemini": _claude,
-    "devin": _claude,
-    "copilot-cli": _copilot_cli,
-    "cursor": _cursor,
-    "cline": _cline,
-}
-
-
-def _named(format: str | None) -> str:
-    """The family whose format was asked for, or Claude Code's for a name this server doesn't know."""
-    name = (format or "").strip().lower()
-    return name if name in _FORMATS else CLAUDE
-
-
-def answered(format: str | None, event: str, context: str) -> dict[str, Any]:
-    """The body that carries this context into a session, shaped the way this family's hooks require."""
-    return _FORMATS[_named(format)](event, context)
-
-
 def _claude_blocked(event: str, reason: str) -> dict[str, Any]:
     return {
         "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "deny", "permissionDecisionReason": reason}
@@ -157,19 +155,42 @@ def _cline_blocked(event: str, reason: str) -> dict[str, Any]:
     return {"cancel": True, "errorMessage": reason}
 
 
-_BLOCKED: dict[str, Callable[[str, str], dict[str, Any]]] = {
-    CLAUDE: _claude_blocked,
-    "gemini": _gemini_blocked,
-    "devin": _devin_blocked,
-    "copilot-cli": _copilot_cli_blocked,
-    "cursor": _cursor_blocked,
-    "cline": _cline_blocked,
+Shape = Callable[[str, str], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class Family:
+    """One answer format's two shapes, each given the event and a text: the one that adds context to a session, and
+    the one that stops its agent before an edit."""
+
+    answered: Shape
+    blocked: Shape
+
+
+_FAMILIES: dict[str, Family] = {
+    CLAUDE: Family(_claude, _claude_blocked),
+    GEMINI_CLI.format: Family(_claude, _gemini_blocked),
+    DEVIN.format: Family(_claude, _devin_blocked),
+    COPILOT_CLI.format: Family(_copilot_cli, _copilot_cli_blocked),
+    CURSOR.format: Family(_cursor, _cursor_blocked),
+    CLINE.format: Family(_cline, _cline_blocked),
 }
+
+
+def _named(format: str | None) -> str:
+    """The family whose format was asked for, or Claude Code's for a name this server doesn't know."""
+    name = (format or "").strip().lower()
+    return name if name in _FAMILIES else CLAUDE
+
+
+def answered(format: str | None, event: str, context: str) -> dict[str, Any]:
+    """The body that carries this context into a session, shaped the way this family's hooks require."""
+    return _FAMILIES[_named(format)].answered(event, context)
 
 
 def blocked(format: str | None, event: str, reason: str) -> dict[str, Any]:
     """The body that stops this family's agent before its edit, and gives it the reason to tell its member."""
-    return _BLOCKED[_named(format)](event, reason)
+    return _FAMILIES[_named(format)].blocked(event, reason)
 
 
 def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[str]:

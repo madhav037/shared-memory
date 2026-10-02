@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from importlib import resources
 from typing import Any, Literal
 
-from shared_memory.hooks import AGENT_HEADER
+from shared_memory.hooks import AGENT_HEADER, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"
 GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
@@ -167,7 +167,7 @@ def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
                 seconds=seconds,
                 windows=on_windows,
                 root="" if on_windows else root,
-                agent="codex",
+                agent=CODEX.header,
             )
             for on_windows in (False, True)
         )
@@ -229,7 +229,7 @@ const headers = {{
   "Content-Type": "application/json",
   "X-Shared-Memory-Project": {json.dumps(project_id)},
   "X-Shared-Memory-Repository": {json.dumps(repository)},
-  {json.dumps(AGENT_HEADER)}: "gemini",
+  {json.dumps(AGENT_HEADER)}: {json.dumps(GEMINI_CLI.header)},
 }};
 
 const [event] = process.argv.slice(2);
@@ -260,7 +260,7 @@ if (!process.stdin.isTTY) {{
 
 try {{
   if (token) {{
-    const answer = await fetch(`${{server}}/${{event}}?format=gemini`, {{
+    const answer = await fetch(`${{server}}/${{event}}?format={GEMINI_CLI.format}`, {{
       method: "POST",
       headers: {{ ...headers, Authorization: `Bearer ${{token}}` }},
       body: payload || "{{}}",
@@ -288,12 +288,12 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
         return {
             "type": "http",
             **more,
-            "url": f"{hooks_url}/{endpoint}?format=copilot-cli",
+            "url": f"{hooks_url}/{endpoint}?format={COPILOT_CLI.format}",
             "headers": {
                 "Authorization": f"Bearer ${{{TOKEN_VARIABLE}}}",
                 "X-Shared-Memory-Project": project_id,
                 "X-Shared-Memory-Repository": repository,
-                AGENT_HEADER: "copilot",
+                AGENT_HEADER: COPILOT_CLI.header,
             },
             "allowedEnvVars": [TOKEN_VARIABLE],
             "timeoutSec": seconds,
@@ -327,10 +327,10 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             repository,
             seconds=seconds,
             windows=False,
-            format="cursor",
+            format=CURSOR.format,
             root=working_folder_root() if endpoint == "before-edit" else "",
             otherwise=otherwise,
-            agent="cursor",
+            agent=CURSOR.header,
         )
 
     return {
@@ -458,9 +458,9 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
                             repository,
                             seconds=seconds,
                             windows=False,
-                            format="devin" if endpoint == "before-edit" else "",
+                            format=DEVIN.format if endpoint == "before-edit" else "",
                             root=repository_root("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
-                            agent="devin",
+                            agent=DEVIN.header,
                         ),
                         "timeout": seconds + 1,
                     }
@@ -499,9 +499,9 @@ def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, rep
         repository,
         seconds=seconds,
         windows=False,
-        format="cline",
+        format=CLINE.format,
         root=working_folder_root() if endpoint == "before-edit" else "",
-        agent="cline",
+        agent=CLINE.header,
     )
     return f"""#!/bin/sh
 # Shared Memory: {CLINE_DOING[event]}. Cline hands this script its payload and reads what it prints.
@@ -533,7 +533,7 @@ $headers = @{
   Authorization = "Bearer $env:__TOKEN__"
   'X-Shared-Memory-Project' = '__PROJECT__'
   'X-Shared-Memory-Repository' = '__REPOSITORY__'
-  '__AGENT_HEADER__' = 'cline'
+  '__AGENT_HEADER__' = '__AGENT__'
 }
 __ROOT__try {
   $answer = Invoke-WebRequest -Method Post -Uri '__URL__' -TimeoutSec __SECONDS__ `
@@ -547,11 +547,12 @@ exit 0
     written = {
         "__DOING__": CLINE_DOING[event],
         "__TOKEN__": TOKEN_VARIABLE,
-        "__URL__": f"{hooks_url}/{endpoint}?format=cline",
+        "__URL__": f"{hooks_url}/{endpoint}?format={CLINE.format}",
         "__SECONDS__": str(seconds),
         "__PROJECT__": project_id,
         "__REPOSITORY__": repository,
         "__AGENT_HEADER__": AGENT_HEADER,
+        "__AGENT__": CLINE.header,
         "__ROOT__": CLINE_POWERSHELL_ROOT if endpoint == "before-edit" else "",
     }
     for placeholder, value in written.items():
