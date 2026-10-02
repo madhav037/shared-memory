@@ -58,6 +58,10 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
 - **Words for the session's next prompt** go in the prompt hook's `notices` in `app.py`, beside
   `sessions.waiting_notices(session)`.
+- **Collision warnings** are `Collisions` in `src/shared_memory/collisions.py`, built in `build_app` as `collisions`.
+  It owns `activity_embeddings` (each session's activity as an embedding) and `collision_warnings` (what each session
+  was warned about), and `collisions.warnings(caller, session)` is what the prompt hook adds. `tests/test_collisions.py`
+  runs its own server, whose embedder gives chosen activities chosen embeddings.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
 
 ### Locks

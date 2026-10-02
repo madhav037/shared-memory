@@ -68,6 +68,11 @@ def test_signing_in_needs_both_halves_of_the_github_app() -> None:
     assert Settings.from_env({"SHARED_MEMORY_GITHUB_CLIENT_SECRET": "a-secret"}).github_sign_in is False
 
 
+def test_the_collision_threshold_reads_its_environment_variable() -> None:
+    assert Settings.from_env({}).collision_threshold == 0.75
+    assert Settings.from_env({"SHARED_MEMORY_COLLISION_THRESHOLD": "0.9"}).collision_threshold == 0.9
+
+
 class StubEmbedder:
     """Stands in for the real model: no request in this module gets far enough to need an embedding."""
 

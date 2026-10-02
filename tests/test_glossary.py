@@ -120,6 +120,16 @@ ALLOWED: tuple[Allow, ...] = (
         "the activity of a lock's holder, the glossary's Activity; avoided only for the audit log",
         (SERVER + "locks.py",),
     ),
+    Allow(
+        "collision",
+        "two sessions on the same work, the glossary's Collision; avoided only for a contradiction between memories",
+        (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py"),
+    ),
+    Allow(
+        "activity",
+        "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
+        (SERVER + "collisions.py",),
+    ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py",)),
     Allow(
         "context",
