@@ -346,8 +346,12 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
           {memory.pinned && <PinnedMark />}
           {memory.possibly_outdated && <OutdatedMark />}
         </dd>
-        <dt>Last used</dt>
-        <dd data-testid="last-used">{memory.last_used ? day(memory.last_used) : "Not yet"}</dd>
+        {memory.status === "active" && (
+          <>
+            <dt>Last used</dt>
+            <dd data-testid="last-used">{memory.last_used ? day(memory.last_used) : "Not yet"}</dd>
+          </>
+        )}
         <dt>Type</dt>
         <dd>{typeName(memory.type)}</dd>
         <dt>Author</dt>
