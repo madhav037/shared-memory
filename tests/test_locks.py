@@ -46,8 +46,8 @@ def test_a_session_takes_a_lock_and_taking_it_again_moves_when_it_was_last_used(
     assert first["locked"] is True
     assert (first["repository"], first["path"]) == ("billing-api", FILE)
     assert again["locked"] is True
-    assert again["since"] == first["since"] == first["last_used"]
-    assert (at(again["last_used"]) - at(first["last_used"])).total_seconds() == 300
+    assert again["taken_at"] == first["taken_at"] == first["last_used_at"]
+    assert (at(again["last_used_at"]) - at(first["last_used_at"])).total_seconds() == 300
 
 
 def test_another_members_session_is_refused_and_told_who_holds_the_file(
@@ -62,7 +62,7 @@ def test_another_members_session_is_refused_and_told_who_holds_the_file(
     assert "Claude Code" in refusal
     assert f"billing-api:{FILE}" in refusal
     assert "5 minutes ago" in refusal
-    assert taken["last_used"] in refusal
+    assert taken["last_used_at"] in refusal
     assert "stated no activity" in refusal
 
 

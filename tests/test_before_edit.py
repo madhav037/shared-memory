@@ -79,7 +79,7 @@ def test_an_edit_of_a_file_another_session_holds_is_blocked_in_claude_codes_form
     assert "Claude Code" in reason
     assert f"billing-api:{FILE}" in reason
     assert "stated no activity" in reason
-    assert "5 minutes ago" in reason and taken["last_used"] in reason
+    assert "5 minutes ago" in reason and taken["last_used_at"] in reason
 
 
 def test_a_blocked_edit_names_the_holders_activity(dana: Session, cole: Session) -> None:

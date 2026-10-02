@@ -821,8 +821,8 @@ def build_app(
                 "locked": True,
                 "repository": taken.repository,
                 "path": taken.path,
-                "since": taken.taken_at.isoformat(),
-                "last_used": taken.last_used_at.isoformat(),
+                "taken_at": taken.taken_at.isoformat(),
+                "last_used_at": taken.last_used_at.isoformat(),
                 "notices": notices,
             }
         return {
