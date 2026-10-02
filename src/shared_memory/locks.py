@@ -606,6 +606,31 @@ def _patterns_of(conn: Conn, project_id: str) -> list[str]:
     return [row["pattern"] for row in rows]
 
 
+def _addable(pattern: str) -> str:
+    """The pattern as it is kept, refused when it is unusable or already one of the built-in list."""
+    written = usable(pattern)
+    if written in NEVER_LOCK:
+        raise Refused(f"{written!r} is built in: it already never locks in every project.")
+    return written
+
+
+def _end_locks_matching(conn: Conn, project_id: str, pattern: str) -> list[tuple[str, str, int]]:
+    """End each lock in the project on a file this pattern matches, and give each one's repository, path and holder's
+    session ID. The file never locks from here on, so its lock would block nobody and only be listed."""
+    held = conn.execute("SELECT repository, path FROM locks WHERE project_id = %s", (project_id,)).fetchall()
+    ended: list[tuple[str, str, int]] = []
+    for lock in held:
+        if matching([pattern], lock["path"]) is None:
+            continue
+        gone = conn.execute(
+            "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s RETURNING session_id",
+            (project_id, lock["repository"], lock["path"]),
+        ).fetchone()
+        if gone is not None:
+            ended.append((lock["repository"], lock["path"], gone["session_id"]))
+    return ended
+
+
 class ProjectPatterns:
     """A project's own never-lock patterns: one list for all of its repositories, beside the built-in list, which
     always applies. Its table is set up with `Locks`'s, so build `Locks` first."""
@@ -632,45 +657,36 @@ class ProjectPatterns:
         here on, so the lock would block nobody and only be listed. Its holder is told once, as a takeover's old
         holder is (`Locks.waiting_notices`)."""
         project_id = self._changeable_by(caller)
-        written = usable(pattern)
-        if written in NEVER_LOCK:
-            raise Refused(f"{written!r} is built in: it already never locks in every project.")
-        added = NeverLockPattern(written, caller.member_id, self._clock())
+        added = NeverLockPattern(_addable(pattern), caller.member_id, self._clock())
         with self._db.transaction() as conn:
-            kept = conn.execute(
-                "INSERT INTO never_lock_patterns (project_id, pattern, added_by, added_at) VALUES (%s, %s, %s, %s)"
-                " ON CONFLICT (project_id, pattern) DO NOTHING RETURNING pattern",
-                (project_id, written, added.added_by, added.added_at),
-            ).fetchone()
-            if kept is None:
-                raise Refused(f"{written!r} is already one of this project's never-lock patterns.")
-            held = conn.execute("SELECT repository, path FROM locks WHERE project_id = %s", (project_id,)).fetchall()
-            for lock in held:
-                if matching([written], lock["path"]) is None:
-                    continue
-                ended = conn.execute(
-                    "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s RETURNING session_id",
-                    (project_id, lock["repository"], lock["path"]),
-                ).fetchone()
-                if ended is not None:
-                    # Kept for the holder, who is told once. One whose session has ended or gone idle never reads
-                    # it: what is waiting for a session is cleared when it is found gone.
-                    conn.execute(
-                        "INSERT INTO locks_ended_by_pattern"
-                        " (session_id, repository, path, pattern, by_name, by_member_id, ended_at)"
-                        " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                        (
-                            ended["session_id"],
-                            lock["repository"],
-                            lock["path"],
-                            written,
-                            caller.member.name,
-                            caller.member_id,
-                            added.added_at,
-                        ),
-                    )
-        self._record(caller, NEVER_LOCK_PATTERN_ADDED, project_id, written)
+            self._write(conn, project_id, added)
+            for repository, path, holder in _end_locks_matching(conn, project_id, added.pattern):
+                self._tell_holder(conn, caller, added, repository, path, holder)
+        self._record(caller, NEVER_LOCK_PATTERN_ADDED, project_id, added.pattern)
         return added
+
+    def _write(self, conn: Conn, project_id: str, added: NeverLockPattern) -> None:
+        """Keep the pattern for the project, refusing one it already has."""
+        kept = conn.execute(
+            "INSERT INTO never_lock_patterns (project_id, pattern, added_by, added_at) VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (project_id, pattern) DO NOTHING RETURNING pattern",
+            (project_id, added.pattern, added.added_by, added.added_at),
+        ).fetchone()
+        if kept is None:
+            raise Refused(f"{added.pattern!r} is already one of this project's never-lock patterns.")
+
+    def _tell_holder(
+        self, conn: Conn, caller: Caller, added: NeverLockPattern, repository: str, path: str, holder: int
+    ) -> None:
+        """Keep, for the holder of a lock the added pattern ended, the word that it ended and who added the pattern.
+        The holder is told once. One whose session has ended or gone idle never reads it: what is waiting for a
+        session is cleared when it is found gone."""
+        conn.execute(
+            "INSERT INTO locks_ended_by_pattern"
+            " (session_id, repository, path, pattern, by_name, by_member_id, ended_at)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (holder, repository, path, added.pattern, caller.member.name, caller.member_id, added.added_at),
+        )
 
     def remove(self, caller: Caller, pattern: str) -> str:
         """Remove one of the caller's project's own patterns, and give it back as it was kept. Files it matched lock
