@@ -11,6 +11,8 @@ What other modules stand on, all of it on `Locks`:
 - `take(session, path, repository)`: the lock, taken or kept, as a `Lock`; a `NeverLocks` for a file that never
   locks; or the refusal `Held`, whose `lock` says who holds the file. With `takeover=True` another active session's
   lock moves to this session instead of refusing it.
+- `take_all(session, paths)`: the locks on every file of one edit, or none: refused with `Held`, it gives back what
+  it took.
 - `waiting_notices(session)`: what a session is told once of each takeover of a lock it held.
 - `release(session, path, repository)`: the holder gives the file up. Any other session is refused with `NotHeld`.
 - `of(project_id, repository, path)`: the file's lock, with its holder, or None.
@@ -153,6 +155,8 @@ class Lock:
     activity: str | None
     taken_at: datetime
     last_used_at: datetime
+    # Whether the call that gave this lock is the one that made its session the holder, rather than finding it so.
+    taken_now: bool = False
 
 
 @dataclass(frozen=True)
@@ -380,6 +384,32 @@ class Locks:
                 raise Held(self._lock(kept, holder), now)
         raise Refused(f"{named(repository, path)} kept changing hands, so its lock wasn't taken. Call take_lock again.")
 
+    def take_all(self, session: Session, paths: Sequence[str]) -> None:
+        """Take the lock on each of these files for one edit that changes them all, or on none of them. Refused with
+        `Held` for the first one another active session holds, and the locks this call took before reaching it are
+        released again: the edit is not happening, so they would block others for nothing. A lock the session held
+        before the call stays its. A file that never locks, or is outside the repository, is passed over."""
+        taken: list[Lock] = []
+        for path in paths:
+            try:
+                lock = self.take(session, path)
+            except (OutsideRepository, NoRepository):
+                continue
+            except Held:
+                for each in taken:
+                    self._give_back(session, each)
+                raise
+            if isinstance(lock, Lock) and lock.taken_now:
+                taken.append(lock)
+
+    def _give_back(self, session: Session, lock: Lock) -> None:
+        """Release a lock this session took a moment ago, unless a takeover has moved it since."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s AND session_id = %s",
+                (lock.project_id, lock.repository, lock.path, session.id),
+            )
+
     def _take(
         self, file: tuple[str, str, str], session: Session, now: datetime, takeover: bool, activity: str | None
     ) -> tuple[Any, Any]:
@@ -392,7 +422,8 @@ class Locks:
                 "INSERT INTO locks (project_id, repository, path, session_id, taken_at, last_used_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (project_id, repository, path)"
                 " DO UPDATE SET last_used_at = EXCLUDED.last_used_at WHERE locks.session_id = EXCLUDED.session_id"
-                f" RETURNING {_COLUMNS}",
+                # A row just inserted has no xmax; one that was there, and only had its last use moved, has.
+                f" RETURNING {_COLUMNS}, (xmax = 0) AS taken_now",
                 (*file, session.id, now, now),
             ).fetchone()
             if mine is not None:
@@ -414,7 +445,7 @@ class Locks:
                 self._tell(conn, kept, session, activity, now)
             moved = conn.execute(
                 "UPDATE locks SET session_id = %s, taken_at = %s, last_used_at = %s"
-                f" WHERE project_id = %s AND repository = %s AND path = %s RETURNING {_COLUMNS}",
+                f" WHERE project_id = %s AND repository = %s AND path = %s RETURNING {_COLUMNS}, TRUE AS taken_now",
                 (session.id, now, now, *file),
             ).fetchone()
             return moved, None
@@ -498,6 +529,7 @@ class Locks:
             activity=self._activity_of(holder),
             taken_at=row["taken_at"].astimezone(UTC),
             last_used_at=row["last_used_at"].astimezone(UTC),
+            taken_now=bool(row.get("taken_now", False)),
         )
 
 

@@ -310,6 +310,24 @@ def test_a_codex_patch_of_several_files_takes_each_lock_and_is_blocked_when_one_
     assert "billing-api:docs/retries.md" in reason_in(answer)
 
 
+def test_a_blocked_patch_of_several_files_leaves_its_session_holding_none_it_took_for_it(
+    team: Team, dana: Session, cole: Session, owner: Session
+) -> None:
+    """Nothing was edited, so the files named before the held one stay free; what the session held already stays its."""
+    dana.edit("docs/retries.md")
+    cole.edit("CHANGELOG.md")
+    team.server.clock.advance(minutes=1)
+
+    answer = cole.hook_payload("before-edit", codex_edit(cole, "CHANGELOG.md", "README.md", "docs/retries.md", FILE))
+
+    assert "billing-api:docs/retries.md" in reason_in(answer)
+    assert "Cole Coder" in refused(owner, "CHANGELOG.md"), "held before the blocked edit, and still"
+    assert take(owner, "README.md")["locked"] is True, "taken for the blocked edit, and given up with it"
+    assert take(owner, FILE)["locked"] is True, "never reached"
+    assert cole.hook_payload("before-edit", codex_edit(cole, "CHANGELOG.md", "src/free.py")) == ALLOWED
+    assert "Cole Coder" in refused(owner, "src/free.py"), "a patch that is allowed keeps every lock it took"
+
+
 def test_a_tool_that_only_reads_a_file_takes_no_lock(dana: Session, cole: Session) -> None:
     viewed = {
         "sessionId": dana.identifier,

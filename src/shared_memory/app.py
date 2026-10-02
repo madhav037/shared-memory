@@ -43,7 +43,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
-from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, NoRepository, OutsideRepository, ProjectPatterns
+from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, ProjectPatterns
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -392,14 +392,12 @@ def build_app(
             session = session_of(current, payload)
             if session is None:
                 return None
-            # One file, but for a patch that changes several: the first one held blocks the whole edit.
-            for path in hooks.edited_files(payload, root):
-                try:
-                    locks.take(session, path)
-                except Held as refused:
-                    return f"{refused} {TAKEOVER_IS_POSSIBLE}"
-                except (OutsideRepository, NoRepository):
-                    continue
+            # One file, but for a patch that changes several: the first one held blocks the whole edit, and the
+            # session keeps none of the locks it took for it.
+            try:
+                locks.take_all(session, hooks.edited_files(payload, root))
+            except Held as refused:
+                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
             return None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
