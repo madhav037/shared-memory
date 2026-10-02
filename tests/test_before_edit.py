@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from shared_memory.connection import connection_kit, repository_root
+from shared_memory.connection import BRIEFING_SECONDS, HOOK_SECONDS, connection_kit, repository_root
 from tests.support import CLAUDE_EVENTS, REPO_ROOT, WORKING_FOLDER, Session, Team, edit_tool
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
@@ -79,7 +79,7 @@ def test_an_edit_of_a_file_another_session_holds_is_blocked_in_claude_codes_form
     assert "Claude Code" in reason
     assert f"billing-api:{FILE}" in reason
     assert "stated no activity" in reason
-    assert "5 minutes ago" in reason and taken["last_used"] in reason
+    assert "5 minutes ago" in reason and taken["last_used_at"] in reason
 
 
 def test_a_blocked_edit_names_the_holders_activity(dana: Session, cole: Session) -> None:
@@ -99,6 +99,7 @@ def test_a_blocked_edit_says_a_takeover_is_possible_once_the_member_says_so(dana
     assert "takeover" in reason
     assert "take_lock" in reason
     assert "member" in reason
+    assert reason.count("take_lock") == 1, "the takeover advice is stated once"
 
 
 def hooked_edit(session: Session, agent: str | None = None, format: str | None = None) -> dict[str, Any]:
@@ -679,6 +680,17 @@ def test_claude_codes_plugin_runs_the_hook_before_its_file_edit_tools_and_gives_
     assert fallback.startswith("echo '") and fallback.endswith("'")
     said = json.loads(fallback[len("echo '") : -1])
     assert list(said) == ["systemMessage"], "a warning for the member, and nothing that blocks the edit"
+
+
+def test_claude_codes_plugin_waits_as_long_as_every_other_agents_hooks() -> None:
+    hooks = json.loads((REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+
+    for event, entries in hooks.items():
+        seconds = BRIEFING_SECONDS if event == "SessionStart" else HOOK_SECONDS
+        for entry in entries:
+            for hook in entry["hooks"]:
+                assert f"--max-time {seconds} " in hook["command"], event
+                assert hook["timeout"] == seconds + 1, event
 
 
 def run_plugin(

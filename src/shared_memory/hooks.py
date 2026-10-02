@@ -35,6 +35,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from shared_memory.agents import ANOTHER_AGENT, agent_named
+from shared_memory.locks import absolute, on_a_drive, slashed
 from shared_memory.sessions import usable
 
 CLAUDE = "claude"
@@ -77,8 +78,6 @@ _PATCHED_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to
 
 # Where agents with no working folder in their payload name the folders that are open: Cursor and Cline.
 _ROOTS_FIELDS = ("workspace_roots", "workspaceRoots")
-
-_DRIVE = re.compile(r"^[A-Za-z]:")
 
 # The fields agents put the member's prompt in. Claude Code, Cursor and Copilot send "prompt"; Copilot's session start
 # sends the prompt a session opened with as "initialPrompt".
@@ -232,15 +231,15 @@ def _roots(payload: Mapping[str, Any], root: str | None) -> list[str]:
 
 
 def _from_root(named: str, folders: list[str]) -> str | None:
-    file = named.strip().replace("\\", "/")
+    file = slashed(named)
     if not file:
         return None
-    if not file.startswith("/") and not _DRIVE.match(file):
+    if not absolute(file):
         return file
     file = posixpath.normpath(file)
     for each in folders:
-        folder = posixpath.normpath(each.strip().replace("\\", "/")).rstrip("/")
-        if file.lower().startswith(folder.lower() + "/") if _DRIVE.match(folder) else file.startswith(folder + "/"):
+        folder = posixpath.normpath(slashed(each)).rstrip("/")
+        if file.lower().startswith(folder.lower() + "/") if on_a_drive(folder) else file.startswith(folder + "/"):
             return file[len(folder) + 1 :]
     return None
 

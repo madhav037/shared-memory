@@ -82,6 +82,17 @@ def test_removing_the_pattern_makes_the_file_lock_again(team: Team, dana: Sessio
     assert "Cole Coder" in refused(lead, SNAPSHOT)
 
 
+def test_a_pattern_is_removed_however_it_is_spelled_when_added(team: Team, dana: Session) -> None:
+    lead, cole, _ = payments(team, dana)
+    lead.call("never_lock", add="src/generated/**")
+
+    removed = lead.call("never_lock", remove=" src\\generated\\** ")
+
+    assert removed["removed"] == "src/generated/**", "read with forward slashes and trimmed, as when added"
+    assert patterns(cole) == []
+    assert take(cole, "src/generated/api/client.py")["locked"] is True
+
+
 def test_an_admin_who_does_not_lead_the_project_adds_and_removes(team: Team, dana: Session) -> None:
     _, cole, admin = payments(team, dana)
 

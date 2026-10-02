@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -212,14 +212,17 @@ class Identity:
         if not caller.member.is_owner:
             raise Refused("Only the team's owner can grant admin, take it away, or hand over ownership.")
 
-    def _require_lead(self, caller: Caller, project_id: str) -> None:
-        """A project's leads look after it; the team's admins can too, because they have to be able to repair it."""
-        if caller.member.is_owner or caller.member.is_admin:
-            return
+    def looks_after(self, member: Member, project_id: str) -> bool:
+        """Whether this member looks after the project: its leads do, and so do the team's owner and admins, because
+        they have to be able to repair it."""
+        if member.is_owner or member.is_admin:
+            return True
         with self._db.transaction() as conn:
-            if self._leads_it(conn, caller.member.pk, project_id):
-                return
-        raise Refused("Only this project's leads and the team's admins can change it.")
+            return self._leads_it(conn, member.pk, project_id)
+
+    def _require_lead(self, caller: Caller, project_id: str) -> None:
+        if not self.looks_after(caller.member, project_id):
+            raise Refused("Only this project's leads and the team's admins can change it.")
 
     @staticmethod
     def _leads_it(conn: Conn, member_pk: int, project_id: str) -> bool:
@@ -493,6 +496,38 @@ class Identity:
                 f"{member_id!r} can't reach project {project_id!r}: it is restricted and they aren't on its access list."
             )
         return pk
+
+    def named(self, member_pks: Iterable[int]) -> dict[int, tuple[str, str]]:
+        """Members kept by their row id elsewhere, each as its member ID and name."""
+        asked = list(set(member_pks))
+        if not asked:
+            return {}
+        with self._db.transaction() as conn:
+            rows = conn.execute("SELECT id, member_id, name FROM members WHERE id = ANY(%s)", (asked,)).fetchall()
+        return {row["id"]: (row["member_id"], row["name"]) for row in rows}
+
+    @staticmethod
+    def team_projects(conn: Conn, team_pk: int) -> list[str]:
+        """The project IDs of this team's projects, asked inside a transaction already open."""
+        rows = conn.execute("SELECT project_id FROM projects WHERE team_id = %s", (team_pk,)).fetchall()
+        return [row["project_id"] for row in rows]
+
+    @staticmethod
+    def cannot_reach(conn: Conn, team_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
+        """Of these members (by row id) each in a project, those of this team who can no longer reach it: removed
+        from the team, or shut out of a restricted project. Asked inside the transaction of the change."""
+        if not pairs:
+            return []
+        rows = conn.execute(
+            "SELECT x.member_id, x.project_id FROM unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id)"
+            " JOIN members m ON m.id = x.member_id JOIN projects p ON p.project_id = x.project_id"
+            " WHERE p.team_id = %s AND (m.removed_at IS NOT NULL OR (p.restricted AND NOT m.is_owner AND NOT m.is_admin"
+            " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
+            " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
+            "))",
+            ([pk for pk, _ in pairs], [project_id for _, project_id in pairs], team_pk),
+        ).fetchall()
+        return [(row["member_id"], row["project_id"]) for row in rows]
 
     def member_with_github(self, caller: Caller, login: str) -> str | None:
         """The member ID of the member of the caller's team who signs in with this GitHub account, if there is one."""

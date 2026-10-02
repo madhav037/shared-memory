@@ -193,7 +193,7 @@ def test_a_takeover_of_a_file_the_session_already_holds_keeps_the_lock_and_tells
     kept = take_over(dana)
 
     assert kept["locked"] is True
-    assert kept["since"] == first["since"]
+    assert kept["taken_at"] == first["taken_at"]
     assert kept["notices"] == []
     assert FILE not in told(dana)
     assert "Dana Dev" in refused(cole)

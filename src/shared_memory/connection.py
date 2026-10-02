@@ -114,17 +114,19 @@ def hook_command(
     )
 
 
-# How long a before-edit hook waits for the server before the edit goes ahead unchecked, and a session-end hook before
-# it gives up; each agent's own limit on the hook is a second longer, so the command is the one that gives up.
-BEFORE_EDIT_SECONDS = 3
-SESSION_END_SECONDS = 3
+# How long a session-start hook waits for the server's briefing, and every other hook (a prompt's, a before-edit
+# hook, before the edit goes ahead unchecked, and a session-end hook) before it gives up. Each agent's own limit on
+# the hook is a second longer, so the command is the one that gives up. Claude Code's plugin (plugin/hooks/hooks.json)
+# writes the same values, and a test holds it to them.
+BRIEFING_SECONDS = 5
+HOOK_SECONDS = 3
 
 # Codex's hooks: its event, the matcher on it, the endpoint it posts to and how long it waits. Codex edits files with
-# apply_patch and also answers to Edit and Write. It gives a SessionEnd hook 3 seconds at most.
+# apply_patch and also answers to Edit and Write. It gives a SessionEnd hook 3 seconds at most, its timeout included.
 CODEX_HOOKS = (
-    ("SessionStart", "^(startup|resume|clear)$", "session-start", 5),
-    ("UserPromptSubmit", "", "prompt-submitted", 3),
-    ("PreToolUse", "^(apply_patch|Edit|Write)$", "before-edit", BEFORE_EDIT_SECONDS),
+    ("SessionStart", "^(startup|resume|clear)$", "session-start", BRIEFING_SECONDS),
+    ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),
+    ("PreToolUse", "^(apply_patch|Edit|Write)$", "before-edit", HOOK_SECONDS),
     ("SessionEnd", "", "session-end", 2),
 )
 
@@ -156,13 +158,13 @@ timeout = {seconds + 1}
     return written
 
 
-# Gemini CLI's hooks: its event, the matcher on it, a name for the hook, the endpoint and its limit in milliseconds.
-# Gemini CLI changes files with write_file and replace.
+# Gemini CLI's hooks: its event, the matcher on it, a name for the hook, the endpoint and how long its script waits.
+# Gemini CLI's own limit is in milliseconds. It changes files with write_file and replace.
 GEMINI_HOOKS = (
-    ("SessionStart", "", "shared-memory-briefing", "session-start", 6000),
-    ("BeforeAgent", "", "shared-memory-recall", "prompt-submitted", 4000),
-    ("BeforeTool", "write_file|replace", "shared-memory-before-edit", "before-edit", 4000),
-    ("SessionEnd", "", "shared-memory-session-end", "session-end", 4000),
+    ("SessionStart", "", "shared-memory-briefing", "session-start", BRIEFING_SECONDS),
+    ("BeforeAgent", "", "shared-memory-recall", "prompt-submitted", HOOK_SECONDS),
+    ("BeforeTool", "write_file|replace", "shared-memory-before-edit", "before-edit", HOOK_SECONDS),
+    ("SessionEnd", "", "shared-memory-session-end", "session-end", HOOK_SECONDS),
 )
 
 
@@ -174,11 +176,16 @@ def gemini_hooks() -> dict[str, Any]:
             {
                 **({"matcher": matcher} if matcher else {}),
                 "hooks": [
-                    {"name": name, "type": "command", "command": f"node {GEMINI_SCRIPT} {endpoint}", "timeout": limit}
+                    {
+                        "name": name,
+                        "type": "command",
+                        "command": f"node {GEMINI_SCRIPT} {endpoint}",
+                        "timeout": (seconds + 1) * 1000,
+                    }
                 ],
             }
         ]
-        for event, matcher, name, endpoint, limit in GEMINI_HOOKS
+        for event, matcher, name, endpoint, seconds in GEMINI_HOOKS
     }
 
 
@@ -202,7 +209,7 @@ const headers = {{
 
 const [event] = process.argv.slice(2);
 const token = process.env.{TOKEN_VARIABLE};
-const seconds = event === "session-start" ? 5 : 3;
+const seconds = event === "session-start" ? {BRIEFING_SECONDS} : {HOOK_SECONDS};
 
 // The repository's root, which a file's path is read from: the folder Gemini CLI was started in, and how far above it
 // git says the root is ("../", or nothing at the root). Without git, or outside a repository, that folder stands.
@@ -271,8 +278,8 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
         "version": 1,
         "hooks": {
             "sessionStart": [posting("session-start", 6)],
-            "preToolUse": [posting("before-edit", BEFORE_EDIT_SECONDS, matcher="edit|create")],
-            "sessionEnd": [posting("session-end", SESSION_END_SECONDS)],
+            "preToolUse": [posting("before-edit", HOOK_SECONDS, matcher="edit|create")],
+            "sessionEnd": [posting("session-end", HOOK_SECONDS)],
         },
     }
 
@@ -303,20 +310,26 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
     return {
         "version": 1,
         "hooks": {
-            "sessionStart": [{"type": "command", "command": command("session-start", 5), "timeout": 6}],
+            "sessionStart": [
+                {
+                    "type": "command",
+                    "command": command("session-start", BRIEFING_SECONDS),
+                    "timeout": BRIEFING_SECONDS + 1,
+                }
+            ],
             "preToolUse": [
                 {
                     "type": "command",
                     "matcher": "Write",
-                    "command": command("before-edit", BEFORE_EDIT_SECONDS, otherwise="{}"),
-                    "timeout": BEFORE_EDIT_SECONDS + 1,
+                    "command": command("before-edit", HOOK_SECONDS, otherwise="{}"),
+                    "timeout": HOOK_SECONDS + 1,
                 }
             ],
             "sessionEnd": [
                 {
                     "type": "command",
-                    "command": command("session-end", SESSION_END_SECONDS),
-                    "timeout": SESSION_END_SECONDS + 1,
+                    "command": command("session-end", HOOK_SECONDS),
+                    "timeout": HOOK_SECONDS + 1,
                 }
             ],
         },
@@ -391,10 +404,10 @@ writes through the `shared-memory` MCP server.
 # Devin Desktop's hooks: its event, the matcher on it (a regex on the tool's name), the endpoint and how long it
 # waits. Devin's file-edit tools are write, edit and notebook_edit.
 DEVIN_HOOKS = (
-    ("SessionStart", "", "session-start", 5),
-    ("UserPromptSubmit", "", "prompt-submitted", 3),
-    ("PreToolUse", "^(write|edit|notebook_edit)$", "before-edit", BEFORE_EDIT_SECONDS),
-    ("SessionEnd", "", "session-end", SESSION_END_SECONDS),
+    ("SessionStart", "", "session-start", BRIEFING_SECONDS),
+    ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),
+    ("PreToolUse", "^(write|edit|notebook_edit)$", "before-edit", HOOK_SECONDS),
+    ("SessionEnd", "", "session-end", HOOK_SECONDS),
 )
 
 
@@ -436,11 +449,11 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
 # A task is Cline's session, and it ends when it completes or is cancelled; one that goes on afterwards is active
 # again from its next hook.
 CLINE_EVENTS = (
-    ("TaskStart", "session-start", 5),
-    ("UserPromptSubmit", "prompt-submitted", 3),
-    ("PreToolUse", "before-edit", BEFORE_EDIT_SECONDS),
-    ("TaskComplete", "session-end", SESSION_END_SECONDS),
-    ("TaskCancel", "session-end", SESSION_END_SECONDS),
+    ("TaskStart", "session-start", BRIEFING_SECONDS),
+    ("UserPromptSubmit", "prompt-submitted", HOOK_SECONDS),
+    ("PreToolUse", "before-edit", HOOK_SECONDS),
+    ("TaskComplete", "session-end", HOOK_SECONDS),
+    ("TaskCancel", "session-end", HOOK_SECONDS),
 )
 CLINE_DOING = {
     "TaskStart": "the briefing when a task starts",
@@ -548,7 +561,7 @@ def connection_kit(
             "the project is trusted; earlier versions ignore a repository's own configuration. The hooks brief each "
             "session, recall memory for each prompt, check or take a file's lock before apply_patch changes it and "
             "end the session, with curl, and each has a cmd.exe command for Windows. An edit goes ahead unchecked "
-            "when the server hasn't answered in 3 seconds.",
+            f"when the server hasn't answered in {HOOK_SECONDS} seconds.",
             contents=(
                 "[mcp_servers.shared-memory]\n"
                 f"url = {json.dumps(endpoint)}\n"
@@ -612,8 +625,8 @@ def connection_kit(
             how="For Copilot CLI: add this file, which briefs each session as it starts, checks or takes a file's "
             "lock before the CLI's edit or create tool changes it, and ends the session. The CLI calls the server "
             "itself, so there is no command to run and no shell to get right; it expands your token only when the "
-            "server's URL is https, and lets an edit through when the server is down or hasn't answered in 3 "
-            "seconds. No prompt hook is here, because GitHub's reference says the CLI drops whatever one answers. "
+            "server's URL is https, and lets an edit through when the server is down or hasn't answered in "
+            f"{HOOK_SECONDS} seconds. No prompt hook is here, because GitHub's reference says the CLI drops whatever one answers. "
             "In VS Code, Copilot calls briefing and search itself, and locks are guidance only.",
             contents=_json(copilot_cli_hook(hooks_url, project_id, repository)),
         ),
@@ -645,7 +658,7 @@ def connection_kit(
             action="create",
             how="Add this file: all of Gemini CLI's hooks run it. It reads your personal token from the "
             "environment, so nothing secret is committed, and it answers with nothing at all if the server is slow "
-            "or down, which lets an edit go ahead unchecked after 3 seconds.",
+            f"or down, which lets an edit go ahead unchecked after {HOOK_SECONDS} seconds.",
             contents=gemini_script(hooks_url, project_id, repository),
         ),
         ConnectionFile(
@@ -671,8 +684,8 @@ def connection_kit(
             action="merge",
             how="Merge the hooks into the file, keeping any hooks already there. They brief each session as it "
             "starts, check or take a file's lock before Cursor's Write tool changes it, letting the edit through "
-            "when the server hasn't answered in 3 seconds, and end the session. Cursor launches hooks through "
-            "PowerShell on Windows, where these commands don't run; there the rule is what keeps memory in reach, "
+            f"when the server hasn't answered in {HOOK_SECONDS} seconds, and end the session. Cursor launches hooks "
+            "through PowerShell on Windows, where these commands don't run; there the rule is what keeps memory in reach, "
             "and locks are guidance only: the rule asks Cursor to call take_lock before it edits a file.",
             contents=_json(cursor_hooks(hooks_url, project_id, repository)),
         ),
@@ -709,7 +722,7 @@ def connection_kit(
             action="create",
             how="Add this file: it briefs each session, recalls memory for each prompt, checks or takes a file's "
             "lock before Devin's write, edit or notebook_edit tool changes it, letting the edit through when the "
-            "server hasn't answered in 3 seconds, and ends the session. Devin loads whatever hooks "
+            f"server hasn't answered in {HOOK_SECONDS} seconds, and ends the session. Devin loads whatever hooks "
             ".claude/settings.json holds as well, so Shared Memory keeps none there and each hook runs once.",
             contents=_json(devin_hooks(hooks_url, project_id, repository)),
         ),

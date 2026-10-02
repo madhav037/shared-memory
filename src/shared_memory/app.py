@@ -223,7 +223,7 @@ def build_app(
     identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
-    sessions = Sessions(settings, db, clock)
+    sessions = Sessions(settings, db, identity, clock)
     identity.on_access_lost(sessions.end_unreachable)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
@@ -404,7 +404,7 @@ def build_app(
             try:
                 locks.take_all(session, hooks.edited_files(payload, root))
             except Held as refused:
-                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
+                return refused.told(TAKEOVER_IS_POSSIBLE)
             return None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
@@ -821,8 +821,8 @@ def build_app(
                 "locked": True,
                 "repository": taken.repository,
                 "path": taken.path,
-                "since": taken.taken_at.isoformat(),
-                "last_used": taken.last_used_at.isoformat(),
+                "taken_at": taken.taken_at.isoformat(),
+                "last_used_at": taken.last_used_at.isoformat(),
                 "notices": notices,
             }
         return {
