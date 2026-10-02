@@ -99,6 +99,7 @@ def test_a_blocked_edit_says_a_takeover_is_possible_once_the_member_says_so(dana
     assert "takeover" in reason
     assert "take_lock" in reason
     assert "member" in reason
+    assert reason.count("take_lock") == 1, "the takeover advice is stated once"
 
 
 def hooked_edit(session: Session, agent: str | None = None, format: str | None = None) -> dict[str, Any]:

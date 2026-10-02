@@ -202,14 +202,26 @@ class Held(Refused):
         self.lock = lock
         holder = lock.holder
         activity = f"Their activity: {lock.activity}" if lock.activity else "Their session has stated no activity."
-        super().__init__(
+        self._held = (
             f"{named(lock.repository, lock.path)} is locked by another session: {holder.member_name} "
             f"({holder.member_id}) in {holder.agent or 'a coding agent that has not said which it is'}, who last used "
             f"the lock {_ago(now, lock.last_used_at)} ({lock.last_used_at.isoformat()}). {activity} Don't edit the "
-            "file: tell your member who holds it. Your member can ask for a takeover, which moves the lock to this "
-            "session at once and tells the holder on its next prompt. That is your member's decision, never yours: "
-            "only once they have said so, call take_lock again with `takeover` true."
+            "file: tell your member who holds it."
         )
+        super().__init__(self.told(TAKE_LOCK_AGAIN))
+
+    def told(self, takeover: str) -> str:
+        """Who holds the file, followed by how a takeover is asked for where the session is told it: the one place
+        the takeover advice goes, so it is stated once."""
+        return f"{self._held} {takeover}"
+
+
+# How a session refused by take_lock is told a takeover is possible.
+TAKE_LOCK_AGAIN = (
+    "Your member can ask for a takeover, which moves the lock to this session at once and tells the holder on its "
+    "next prompt. That is your member's decision, never yours: only once they have said so, call take_lock again with "
+    "`takeover` true."
+)
 
 
 class NotHeld(Refused):

@@ -140,8 +140,8 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
   never-lock file, a path outside the repository, an unreadable payload, a payload naming no session or no file, an
   unknown personal token, a server error. Never an explicit "allow", which would skip the agent's own permission
   prompt.
-- **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is `Held`'s message
-  followed by `TAKEOVER_IS_POSSIBLE` (`app.py`):
+- **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is who holds the file,
+  followed by `TAKEOVER_IS_POSSIBLE` (`app.py`) in place of take_lock's own advice (`Held.told`):
   - `claude`: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
     "permissionDecisionReason": reason}}`, which Codex reads too
   - `gemini`: `{"decision": "deny", "reason": reason}`

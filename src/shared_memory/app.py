@@ -404,7 +404,7 @@ def build_app(
             try:
                 locks.take_all(session, hooks.edited_files(payload, root))
             except Held as refused:
-                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
+                return refused.told(TAKEOVER_IS_POSSIBLE)
             return None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
