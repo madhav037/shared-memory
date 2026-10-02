@@ -16,7 +16,7 @@ What other modules stand on, all of it on `Sessions`:
 - `on_gone(listener)`: called, inside the transaction, with the sessions that just ended or were found back from
   idle, so a module clears what it kept for them. A session that goes idle and never calls again is never reported:
   `still_active` is what says it is gone.
-- `waiting_notices(session)`: what a session is told once, on its next prompt.
+- `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
 - `idle_after`: the idle time, from `Settings.session_idle_minutes`.
 
 A module keeping rows per session refers to `Session.id`. Only this module reads the `sessions` table.
@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     UNIQUE (member_id, project_id, identifier)
 );
 
+-- It called again after it had ended and has not yet been told that its activity and locks ended.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS back_from_end BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE INDEX IF NOT EXISTS sessions_not_ended ON sessions (project_id, last_seen_at) WHERE ended_at IS NULL;
 """
 
@@ -63,6 +66,11 @@ BACK_FROM_IDLE = (
     "[session] This session made no call to Shared Memory for longer than a session may sit idle, so its activity "
     "and locks ended. State its activity again, and take a file's lock again before editing it: another session may "
     "hold it now."
+)
+
+BACK_FROM_END = (
+    "[session] This session ended and has now started again, so its activity and locks ended. State its activity "
+    "again, and take a file's lock again before editing it: another session may hold it now."
 )
 
 # Called inside the transaction that found these sessions gone, with their ids.
@@ -132,7 +140,8 @@ class Sessions:
 
     def touch(self, caller: Caller, identifier: str) -> Session:
         """The calling session, seen now: started if the server doesn't know it, active again if it had ended or gone
-        idle. One back from idle has lost its activity and locks, and is told so on its next prompt."""
+        idle. One back from idle, or back after it had ended, has lost its activity and locks, and is told so once
+        (`waiting_notices`)."""
         project = caller.require_project()
         kept = usable(identifier)
         if kept is None:
@@ -163,10 +172,10 @@ class Sessions:
                 row = conn.execute(
                     "UPDATE sessions SET last_seen_at = %s, ended_at = NULL,"
                     " started_at = CASE WHEN %s THEN %s ELSE started_at END,"
-                    " back_from_idle = (back_from_idle OR %s) AND NOT %s,"
+                    " back_from_idle = (back_from_idle OR %s) AND NOT %s, back_from_end = back_from_end OR %s,"
                     " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent)"
                     " WHERE id = %s RETURNING id, repository, agent, started_at",
-                    (now, ended, now, idle, ended, caller.repository, caller.agent, known["id"]),
+                    (now, ended, now, idle, ended, ended, caller.repository, caller.agent, known["id"]),
                 ).fetchone()
                 assert row is not None
         return Session(
@@ -219,14 +228,19 @@ class Sessions:
             return {row["id"] for row in own.execute(query, values).fetchall()}
 
     def waiting_notices(self, session: Session) -> list[str]:
-        """What this session is told once, with its next prompt: that it is back from idle, so its activity and
-        locks ended. Asking marks it told."""
+        """What this session is told once, with its next prompt or the answer of its next tool call: that it is back
+        from idle, or back after it had ended, so its activity and locks ended. Asking marks it told."""
         with self._db.transaction() as conn:
             told = conn.execute(
-                "UPDATE sessions SET back_from_idle = FALSE WHERE id = %s AND back_from_idle RETURNING id",
+                "WITH was AS (SELECT id, back_from_end FROM sessions"
+                " WHERE id = %s AND (back_from_idle OR back_from_end) FOR UPDATE)"
+                " UPDATE sessions s SET back_from_idle = FALSE, back_from_end = FALSE FROM was WHERE s.id = was.id"
+                " RETURNING was.back_from_end",
                 (session.id,),
             ).fetchone()
-        return [BACK_FROM_IDLE] if told is not None else []
+        if told is None:
+            return []
+        return [BACK_FROM_END if told["back_from_end"] else BACK_FROM_IDLE]
 
     def end_unreachable(self, conn: Conn, caller: Caller) -> Callable[[], None]:
         """End every session whose member can no longer reach its project: removed from the team, or shut out of a
