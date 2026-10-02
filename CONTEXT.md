@@ -224,6 +224,14 @@ _Avoid_: Client, IDE, assistant, bot
 One running conversation of a member's coding agent.
 _Avoid_: Chat, conversation, agent
 
+**Active session**:
+A session from its first call to Shared Memory until its session-end hook, or until it goes idle. Only an active session's activity and locks count.
+_Avoid_: Live session, open session, connected session
+
+**Idle session**:
+A session that has made no call naming it for the idle time (`session_idle_minutes`), so it is no longer active: its activity and locks are gone. Its next call makes it active again, without them, and it is told so once.
+_Avoid_: Stale session, inactive session, timed-out session, expired session
+
 **Activity**:
 A session's one-line statement of what it is working on.
 _Avoid_: Status, working-on line
