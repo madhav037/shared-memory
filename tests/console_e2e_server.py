@@ -152,6 +152,27 @@ if __name__ == "__main__":
             stack,
             reasoning="Billing moved its queue to Kafka in March.",
         )
+        # A memory Olive imported during onboarding and promoted in Mira's name, for the journey that shows its
+        # importer and its source.
+        cents = in_project.call(
+            "remember",
+            title="Money is integer cents",
+            summary="Every money amount in billing is stored as integer cents.",
+            type="convention",
+            body="Every money amount is stored as integer cents, never as a float.",
+        )
+        imported = in_project.call(
+            "promote", path=cents["path"], level="project", author="emp-mira", imported_from="billing-api:CLAUDE.md"
+        )
+        if imported["status"] == "similar_memories":
+            imported = in_project.call(
+                "promote",
+                path=cents["path"],
+                level="project",
+                reference=imported["reference"],
+                resolutions={one["path"]: "keep_both" for one in imported["similar"]},
+            )
+        assert imported["status"] == "promoted", imported
         # A challenge for the journey where a project lead decides: in a project Lena leads, against a memory of
         # Wes's, whom no journey signs in as. Olive raises it, so it isn't hers to decide as an admin, and the
         # journeys that check she has nothing waiting still find nothing.

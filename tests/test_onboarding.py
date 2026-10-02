@@ -231,3 +231,20 @@ def test_the_console_still_reads_an_imported_memory(console: Console, signed_out
     assert response.status_code == 200, response.text
     assert (response.json()["author"], response.json()["author_name"]) == ("emp-2", "Dana Dev")
     assert "imported_by: E1001" in response.json()["source"]
+
+
+def test_the_console_names_an_imported_memorys_importer_and_source(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-onboards-names", 7804)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    in_project = owner.in_project(project, "billing-api")
+
+    path = promoted_for(in_project, "emp-2")
+    own = promote_now(in_project, PNPM)
+
+    detail = signed_out.get(f"/api/memory?path={path}").json()
+    assert (detail["author"], detail["imported_by"], detail["imported_from"]) == ("emp-2", "E1001", SOURCE)
+    plain = signed_out.get(f"/api/memory?path={own}").json()
+    assert (plain["imported_by"], plain["imported_from"]) == (None, None)

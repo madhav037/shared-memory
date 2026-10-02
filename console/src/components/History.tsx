@@ -14,6 +14,8 @@ const FIELD_NAMES: Record<string, string> = {
   replaces: "what it replaces",
   exception_to: "the team memory it is an exception to",
   promoted_by: "who promoted it",
+  imported_by: "who imported it",
+  imported_from: "its source",
   title: "its title",
   summary: "its summary",
   type: "its type",

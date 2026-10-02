@@ -3632,6 +3632,28 @@
             ],
             "title": "Promoted By"
           },
+          "imported_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported By"
+          },
+          "imported_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported From"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -3677,6 +3699,8 @@
           "exception_to",
           "related_files",
           "promoted_by",
+          "imported_by",
+          "imported_from",
           "body",
           "author_name",
           "source",

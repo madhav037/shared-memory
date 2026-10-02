@@ -280,6 +280,8 @@ class MemoryDetail(BaseModel):
     exception_to: str | None
     related_files: list[str]
     promoted_by: str | None
+    imported_by: str | None
+    imported_from: str | None
     body: str
     author_name: str
     source: str
