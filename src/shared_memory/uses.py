@@ -11,6 +11,7 @@ The interface:
 - `possibly_outdated(team, statuses)`: which of these memories (path to status) are possibly outdated.
 - `last_used(team, path)`: when one memory was last used, or None.
 - `check(team, path)`: what an agent is told to do about a possibly outdated memory.
+- `check_any()`: the same, told once beside recall or search results when any of them is possibly outdated.
 """
 
 from __future__ import annotations
@@ -102,6 +103,14 @@ class Uses:
         return (
             f"Possibly outdated: no coding agent has recalled or read this memory for {days} days. Check it still "
             "holds against the code before relying on it. If it no longer holds, tell the member, who can retire it."
+        )
+
+    def check_any(self) -> str:
+        """What a coding agent is told once, beside recall or search results, when any of them is possibly outdated."""
+        return (
+            f"A memory marked possibly outdated hasn't been recalled or read by a coding agent for {self._after.days} "
+            "days or more, so check it still holds against the code before relying on it. If it no longer holds, tell "
+            "the member, who can retire it."
         )
 
     @contextmanager
