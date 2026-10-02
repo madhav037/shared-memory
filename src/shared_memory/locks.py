@@ -13,6 +13,8 @@ What other modules stand on, all of it on `Locks`:
   lock moves to this session instead of refusing it.
 - `take_all(session, paths)`: the locks on every file of one edit, or none: refused with `Held`, it gives back what
   it took.
+- `before_edit(session, paths)`: the before-edit hook's decision: `take_all`, and the reason an edit is blocked
+  (`Held`'s, ending with `TAKEOVER_IS_POSSIBLE`) or None to let it through.
 - `waiting_notices(session)`: what a session is told once of each takeover of a lock it held, and of each lock of
   its own that an added never-lock pattern ended.
 - `release(session, path, repository)`: the holder gives the file up. Any other session is refused with `NotHeld`.
@@ -221,6 +223,14 @@ TAKE_LOCK_AGAIN = (
     "Your member can ask for a takeover, which moves the lock to this session at once and tells the holder on its "
     "next prompt. That is your member's decision, never yours: only once they have said so, call take_lock again with "
     "`takeover` true."
+)
+
+# How a session whose edit the before-edit hook blocked is told a takeover is possible: after who holds the file, the
+# way on, which is the member's to choose.
+TAKEOVER_IS_POSSIBLE = (
+    "A takeover is possible: it moves the lock to this session at once, and the holder is told on their next prompt. "
+    "Ask your member first, and only once they say so call take_lock with this file's path from the repository's "
+    "root, this session and takeover: true, then edit the file."
 )
 
 
@@ -458,6 +468,16 @@ class Locks:
                 raise
             if isinstance(lock, Lock) and lock.taken_now:
                 taken.append(lock)
+
+    def before_edit(self, session: Session, paths: Sequence[str]) -> str | None:
+        """The before-edit hook's decision on an edit of these files: why it is blocked, which is only ever that
+        another active session holds one of them, or None to let it through, with each file's lock taken or kept for
+        this session where the file locks. A file that never locks, or is outside the repository, lets it through."""
+        try:
+            self.take_all(session, paths)
+        except Held as refused:
+            return refused.told(TAKEOVER_IS_POSSIBLE)
+        return None
 
     def _give_back(self, session: Session, lock: Lock) -> None:
         """Release a lock this session took a moment ago, unless a takeover has moved it since."""

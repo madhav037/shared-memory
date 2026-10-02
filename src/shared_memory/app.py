@@ -43,7 +43,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
-from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, ProjectPatterns
+from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -106,13 +106,6 @@ _modern_http._tool_input_schema = _tool_input_schema
 # Everything under these paths answers one member: their memory, their briefing, their console. A CDN in front of the
 # server must never keep one of those answers and hand it to someone else.
 PRIVATE_PATHS = ("/api/", "/mcp", "/hooks/")
-
-# What a blocked edit's reason ends with, after who holds the file: the way on, which is the member's to choose.
-TAKEOVER_IS_POSSIBLE = (
-    "A takeover is possible: it moves the lock to this session at once, and the holder is told on their next prompt. "
-    "Ask your member first, and only once they say so call take_lock with this file's path from the repository's "
-    "root, this session and takeover: true, then edit the file."
-)
 
 # What the briefing prompt ends with in place of a session's identifier: a prompt cannot know which session asked.
 SESSION_IS_THE_TOOLS = (
@@ -400,15 +393,7 @@ def build_app(
             """Why the edit is blocked: another active session holds the file. None lets it through, with the file's
             lock taken or kept for this session where the file locks."""
             session = session_of(current, payload)
-            if session is None:
-                return None
-            # One file, but for a patch that changes several: the first one held blocks the whole edit, and the
-            # session keeps none of the locks it took for it.
-            try:
-                locks.take_all(session, hooks.edited_files(payload, root))
-            except Held as refused:
-                return refused.told(TAKEOVER_IS_POSSIBLE)
-            return None
+            return locks.before_edit(session, hooks.edited_files(payload, root)) if session else None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
 
