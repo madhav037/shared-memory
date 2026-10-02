@@ -168,7 +168,7 @@ flowchart TD
 - **Labeling:** everything recalled or briefed is marked as team memory: *information, not instructions*.
 - **Freshness:** a memory saved by one member shows up for another member on their **next prompt**.
 - **Search** works on sections (a file split at its headings). It combines search by meaning with keyword matching, so exact words like `pnpm` or error codes are found. The search model reads only 512 tokens at a time, so a section longer than that is indexed as overlapping chunks, and a match on any chunk finds the section.
-- **Outdated memory** *(later phase)*: a memory unused for 60 days is labeled *possibly outdated*. Nothing is ever deleted automatically.
+- **Outdated memory**: a memory unused for 60 days (`SHARED_MEMORY_OUTDATED_AFTER_DAYS`) is labeled *possibly outdated* wherever a coding agent meets it (recall, search, `read`) and in the console (its page and its folder's list). Used means recalled into a prompt or read by a coding agent; a search hit, the briefing or a look in the console is not a use, and saving a memory starts its clock again. The label clears the next time the memory is used, a pinned memory is never labeled, and an agent shown the label checks the memory still holds before relying on it. Nothing is ever retired or deleted automatically; a member who finds it no longer true retires it. Spec #252.
 
 ## 7. Sessions and collisions (v1.1)
 
@@ -274,7 +274,7 @@ flowchart LR
 | **1. Core memory** | Server, memory folder, owner-created accounts with personal tokens, the phase 1 tools, summaries and folder indexes, briefing (pinned memories), recall, automatic setup through settings. Fixes pains #1 and #3 | v1 |
 | **2. Consistency** | Promote, contradiction check, challenges, supersede, retire, exceptions, team memory, git history, secret refusal, 600-word limit, leaving-member rules. Fixes pain #2 | v1 |
 | **3. Collisions** | Locks, takeover, activity, similar-activity warnings, activity in the briefing | v1.1 |
-| **4. Extras** | GitHub login, web page, outdated memory labels | later |
+| **4. Extras** | GitHub login, web page, outdated memory labels (built, spec #252) | later |
 | **5. Admin console** | Admins and project leads, restricted projects, GitHub sign-in, browsing memory with its history, audit log. Specified separately in issue #22 | later |
 
 ### 10.1 Success: a two-week trial with 2–3 members
@@ -297,7 +297,7 @@ flowchart LR
 | Challenge fallback to any member | 3 days |
 | Memory size limit | 600 words, 12,000 characters |
 | Hook request body limit | 1 MB, checked after the personal token |
-| Outdated memory label | 60 days unused |
+| Outdated memory label | 60 days unused (`SHARED_MEMORY_OUTDATED_AFTER_DAYS`) |
 
 ## 11. Deferred decisions
 

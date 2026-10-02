@@ -188,6 +188,19 @@ class Briefing:
             rows = conn.execute("SELECT path FROM pins WHERE team = %s", (team,)).fetchall()
         return {row["path"] for row in rows}
 
+    def pinned_among(self, team: str, paths: Iterable[str]) -> set[str]:
+        """Which of these memories are pinned, by themselves or by the topic folder they sit in."""
+        folders = {path: str(PurePosixPath(path).parent) for path in paths}
+        if not folders:
+            return set()
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT path FROM pins WHERE team = %s AND path = ANY(%s)",
+                (team, [*folders, *set(folders.values())]),
+            ).fetchall()
+        pinned = {row["path"] for row in rows}
+        return {path for path, folder in folders.items() if path in pinned or folder in pinned}
+
     def listed(self, caller: Caller) -> list[dict[str, Any]]:
         """Everything pinned that this project's sessions are briefed with, oldest pin first."""
         project = caller.require_project()

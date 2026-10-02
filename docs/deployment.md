@@ -112,6 +112,12 @@ A session stops counting as active once it has made no call for `SHARED_MEMORY_S
 optional in `.env`): its activity and its locks end with it. Any hook from the session, and any tool call that names
 it, counts as a call. Raise it if your members' sessions run long tasks with no prompt in between.
 
+## How long before a memory is labelled possibly outdated
+
+A memory no coding agent has recalled or read for `SHARED_MEMORY_OUTDATED_AFTER_DAYS` (default 60, optional in `.env`)
+is labelled *possibly outdated* where agents and the console show it. It is only a label: nothing is retired or
+deleted. Every memory that exists when a server first keeps last use counts as used that day.
+
 ## How alike two activities must be for a collision warning
 
 A session is warned on its next prompt when another active session in its project has an activity that means nearly

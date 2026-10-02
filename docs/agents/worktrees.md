@@ -162,6 +162,13 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
 - **In tests**, the driver's `Session.edit(path)` fires the hook as Claude Code's Edit tool does, and
   `tests/test_before_edit.py` has each other agent's own payload (`AGENTS_OWN`) and runs each kit's command.
 
+## Last use and possibly outdated memory
+
+`Uses` in `src/shared_memory/uses.py`, built in `build_app` as `uses`, owns `memory_uses`: each memory's last use.
+Its docstring lists the interface. Only recall and the `read` tool call `uses.used`; the console never does. Whether a
+memory is pinned comes from `briefing.pinned_among`. In tests, move the server's `TestClock` past
+`outdated_after_days`; `tests/test_outdated_memory.py` is the prior art.
+
 ## Editing
 
 Read a file with Read, in ranges for a large one such as `board.py`, and change it with Edit. Edit refuses a file
