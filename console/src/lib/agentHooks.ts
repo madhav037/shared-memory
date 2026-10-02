@@ -49,7 +49,7 @@ export function whatHappens(hooks: AgentHooks): { topic: string; hooked: boolean
       hooked: hooks.briefing,
       said: hooks.briefing
         ? "Every session starts with the briefing."
-        : "The agent is asked to call briefing itself at the start of a task.",
+        : "The agent is asked to call briefing itself at the start of a session.",
     },
     {
       topic: "Recall",

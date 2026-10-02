@@ -108,6 +108,17 @@ ALLOWED: tuple[Allow, ...] = (
         (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx"),
     ),
     Allow(
+        "lock",
+        "which coding agents check a file's lock before an edit, on Connect your agent; the glossary's Lock",
+        ("console/src/lib/agentHooks.ts",),
+    ),
+    Allow(
+        "take",
+        "taking a lock on a file, and the take_lock tool, on Connect your agent; not claiming a card",
+        ("console/src/lib/agentHooks.ts",),
+    ),
+    Allow("task", "Cline's own name for what is a session here, on Connect your agent", (PAGES + "ConnectAgent.tsx",)),
+    Allow(
         "activity",
         "a session's Activity, shown on the console's Sessions page; avoided only for the audit log",
         (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx"),
