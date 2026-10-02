@@ -268,18 +268,32 @@ def test_a_restricted_projects_sessions_appear_only_in_briefings_of_sessions_in_
     assert HEADING not in added_context(cole.in_project(billing).start()), "a member the project is closed to"
 
 
-def test_the_briefing_tool_and_prompt_show_the_list_the_session_start_hook_shows(owner: Session, dana: Session) -> None:
+def test_the_briefing_tool_shows_the_list_the_session_start_hook_shows(owner: Session, dana: Session) -> None:
     owner.call("pin", path=promote(owner, "Use pnpm, not npm", "We use pnpm for every package."))
     state(dana, "Retrying failed webhooks")
 
-    prompted = owner.run_prompt("briefing")
-    # The prompt started a session; the hook and the tool then speak for that same one.
-    (identifier,) = re.findall(r"identifier in Shared Memory is `([^`]+)`", prompted)
-    session = owner.as_session(identifier)
+    started = added_context(owner.start())
 
-    assert others_in(prompted) == [line("Dana Dev", "Retrying failed webhooks")]
-    assert added_context(session.start()) == prompted
-    assert session.call("briefing", session=identifier) == prompted
+    assert others_in(started) == [line("Dana Dev", "Retrying failed webhooks")]
+    assert owner.call("briefing", session=owner.identifier) == started
+
+
+def test_the_briefing_prompt_starts_no_session_beside_the_one_the_hooks_started(owner: Session, dana: Session) -> None:
+    """A prompt takes no arguments, so it cannot say which session asked: an agent with hooks keeps its one session."""
+    owner.call("pin", path=promote(owner, "Use pnpm, not npm", "We use pnpm for every package."))
+    state(dana, "Retrying failed webhooks")
+    owner.start()
+
+    prompted = owner.run_prompt("briefing")
+
+    assert sorted(known.identifier for known in owner.active_sessions() if known.member_id == "owner-1") == [
+        "test-session"
+    ]
+    assert "Use pnpm, not npm" in prompted
+    assert re.findall(r"identifier in Shared Memory is `([^`]+)`", prompted) == [], "it hands out no second identifier"
+    assert HEADING not in prompted, "its own session would be listed among the others"
+    assert "Olive Owner" not in prompted
+    assert "starts no session" in prompted and "`session`" in prompted
 
 
 def test_an_activity_stated_through_one_worker_is_listed_by_another(
