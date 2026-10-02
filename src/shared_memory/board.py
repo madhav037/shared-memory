@@ -51,21 +51,21 @@ Tell = Callable[[str, str, str], None]
 # to retire.
 RetireFixed = Callable[[Caller, str, str], dict[str, Any] | None]
 
-# One card with everything it says, its creator and assignee by member ID, and its links in the order they were given.
+# One card with everything it says, its creator, assignee and commenters by row id, for Identity to name, and its links
+# in the order they were given.
 _CARD = (
     "SELECT c.id, c.number, c.title, c.description, c.board_column, c.position, c.priority, c.labels, c.due_date,"
-    " creator.member_id AS creator, assignee.member_id AS assignee, c.created_at, c.updated_at, c.moved_at,"
+    " c.creator_id, c.assignee_id, c.created_at, c.updated_at, c.moved_at,"
     " c.blocked_reason, (SELECT w.number FROM cards w WHERE w.id = c.waits_on_id) AS waits_on,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'memory' ORDER BY l.place)"
     " AS memories,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'file' ORDER BY l.place) AS files,"
     " ARRAY(SELECT l.target FROM card_links l WHERE l.card_id = c.id AND l.kind = 'known_issue' ORDER BY l.place)"
     " AS known_issues,"
-    " COALESCE((SELECT json_agg(json_build_object('author', a.member_id, 'text', k.body, 'created_at', k.created_at)"
-    " ORDER BY k.id) FROM card_comments k JOIN members a ON a.id = k.author_id WHERE k.card_id = c.id), '[]')"
+    " COALESCE((SELECT json_agg(json_build_object('author', k.author_id, 'text', k.body, 'created_at', k.created_at)"
+    " ORDER BY k.id) FROM card_comments k WHERE k.card_id = c.id), '[]')"
     " AS comments"
-    " FROM cards c JOIN members creator ON creator.id = c.creator_id"
-    " LEFT JOIN members assignee ON assignee.id = c.assignee_id"
+    " FROM cards c"
 )
 
 
@@ -202,8 +202,16 @@ def _like(text: str) -> str:
     return f"%{escaped}%"
 
 
-def _shown(row: dict[str, Any]) -> dict[str, Any]:
-    """A card as the tools give it."""
+def _shown_all(conn: Conn, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cards read with `_CARD` as the tools give them, their members named by Identity in one ask."""
+    pks = {pk for row in rows for pk in (row["creator_id"], row["assignee_id"]) if pk is not None}
+    pks |= {comment["author"] for row in rows for comment in row["comments"]}
+    named = Identity.named_in(conn, pks)
+    return [_shown(row, named) for row in rows]
+
+
+def _shown(row: dict[str, Any], named: dict[int, tuple[str, str]]) -> dict[str, Any]:
+    """A card as the tools give it, its creator, assignee and commenters by member ID."""
     return {
         "number": row["number"],
         "title": row["title"],
@@ -213,14 +221,14 @@ def _shown(row: dict[str, Any]) -> dict[str, Any]:
         "priority": row["priority"],
         "labels": list(row["labels"]),
         "due_date": row["due_date"].isoformat() if row["due_date"] else None,
-        "creator": row["creator"],
-        "assignee": row["assignee"],
+        "creator": named[row["creator_id"]][0],
+        "assignee": named[row["assignee_id"]][0] if row["assignee_id"] is not None else None,
         "blocked_reason": row["blocked_reason"],
         "waits_on": row["waits_on"],
         "memories": list(row["memories"]),
         "files": list(row["files"]),
         "known_issues": list(row["known_issues"]),
-        "comments": list(row["comments"]),
+        "comments": [{**comment, "author": named[comment["author"]][0]} for comment in row["comments"]],
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat(),
         "moved_at": row["moved_at"].isoformat(),
@@ -287,9 +295,6 @@ class Board:
         if column:
             wheres.append("c.board_column = %s")
             values.append(column_named(column))
-        if assignee:
-            wheres.append("assignee.member_id = %s")
-            values.append(assignee.strip())
         if label:
             wheres.append("%s = ANY(c.labels)")
             values.append(label.strip().lower())
@@ -308,15 +313,20 @@ class Board:
             order = "c.position"
         values.append(archived)
         with self._db.transaction() as conn:
+            if assignee:
+                found = self._identity.in_team(conn, caller.member.team_pk, [assignee.strip()]).get(assignee.strip())
+                wheres.append("c.assignee_id = %s")
+                values.append(found[0] if found else None)
             rows = conn.execute(f"{_CARD} WHERE {' AND '.join(wheres)} ORDER BY {order}", values).fetchall()
+            cards = _shown_all(conn, rows)
             if archive:
-                return {"project_id": project_id, "archive": [_shown(row) for row in rows]}
+                return {"project_id": project_id, "archive": cards}
             labels = conn.execute(
                 "SELECT DISTINCT unnest(labels) AS label FROM cards WHERE project_id = %s ORDER BY label", (project_id,)
             ).fetchall()
         columns: dict[str, list[dict[str, Any]]] = {name: [] for name in COLUMNS}
-        for row in rows:
-            columns[row["board_column"]].append(_shown(row))
+        for card in cards:
+            columns[card["column"]].append(card)
         return {"project_id": project_id, "columns": columns, "labels": [row["label"] for row in labels]}
 
     def card(self, caller: Caller, number: int) -> dict[str, Any]:
@@ -325,9 +335,10 @@ class Board:
         project_id = self._project(caller)
         with self._db.transaction() as conn:
             row = conn.execute(f"{_CARD} WHERE c.project_id = %s AND c.number = %s", (project_id, number)).fetchone()
-        if row is None:
-            raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
-        return _shown(row)
+            if row is None:
+                raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
+            (card,) = _shown_all(conn, [row])
+        return card
 
     def add(
         self,
@@ -516,10 +527,10 @@ class Board:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT c.number, c.title, c.board_column, c.position, c.due_date, c.blocked_reason FROM cards c"
-                " JOIN members m ON m.id = c.assignee_id WHERE c.project_id = %s AND m.member_id = %s"
+                " WHERE c.project_id = %s AND c.assignee_id = %s"
                 " AND c.board_column <> 'done' AND (c.board_column IN ('doing', 'blocked') OR c.due_date <= %s)"
                 " ORDER BY c.due_date, c.position",
-                (caller.project.project_id, caller.member_id, today),
+                (caller.project.project_id, caller.member.pk, today),
             ).fetchall()
         due: list[str] = []
         working: list[tuple[bool, int, str]] = []
@@ -540,15 +551,17 @@ class Board:
     def doing_titles(self, project_id: str, member_ids: Sequence[str]) -> dict[str, str]:
         """For each of these members with a card in Doing on the project's board, the title of the one that got there
         last: their most recently claimed. It is what a session that stated no activity is shown with."""
+        asked = set(member_ids)
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT DISTINCT ON (m.member_id) m.member_id, c.title FROM cards c"
-                " JOIN members m ON m.id = c.assignee_id"
-                " WHERE c.project_id = %s AND c.board_column = 'doing' AND m.member_id = ANY(%s)"
-                " ORDER BY m.member_id, c.moved_at DESC NULLS LAST, c.position DESC",
-                (project_id, list(member_ids)),
+                "SELECT DISTINCT ON (c.assignee_id) c.assignee_id, c.title FROM cards c"
+                " WHERE c.project_id = %s AND c.board_column = 'doing' AND c.assignee_id IS NOT NULL"
+                " ORDER BY c.assignee_id, c.moved_at DESC NULLS LAST, c.position DESC",
+                (project_id,),
             ).fetchall()
-        return {row["member_id"]: row["title"] for row in rows}
+            named = self._identity.named_in(conn, (row["assignee_id"] for row in rows))
+        titles = {named[row["assignee_id"]][0]: row["title"] for row in rows}
+        return {member_id: title for member_id, title in titles.items() if member_id in asked}
 
     def require_card(self, caller: Caller, number: int) -> None:
         """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
@@ -624,12 +637,8 @@ class Board:
                 if card["assignee"] is None:
                     change = f"{_who(caller)} took you off {named}; it has no assignee now."
                 else:
-                    to = conn.execute(
-                        "SELECT name FROM members WHERE team_id = %s AND member_id = %s",
-                        (caller.member.team_pk, card["assignee"]),
-                    ).fetchone()
-                    assert to is not None
-                    change = f"{_who(caller)} gave your {named} to {to['name']} ({card['assignee']})."
+                    _, name = Identity.in_team(conn, caller.member.team_pk, [card["assignee"]])[card["assignee"]]
+                    change = f"{_who(caller)} gave your {named} to {name} ({card['assignee']})."
                 told.append((before["assignee"], change))
         unblocked = before["board_column"] == "blocked" and card["column"] != "blocked"
         if unblocked and card["assignee"] is not None and card["assignee"] != me:
@@ -637,13 +646,15 @@ class Board:
             told.append((card["assignee"], text))
         if before["board_column"] != "done" and card["column"] == "done":
             waiting = conn.execute(
-                "SELECT c.number, c.title, m.member_id FROM cards c JOIN members m ON m.id = c.assignee_id"
-                " WHERE c.waits_on_id = %s AND c.board_column = 'blocked' ORDER BY c.number",
+                "SELECT c.number, c.title, c.assignee_id FROM cards c"
+                " WHERE c.waits_on_id = %s AND c.board_column = 'blocked' AND c.assignee_id IS NOT NULL"
+                " ORDER BY c.number",
                 (before["id"],),
             ).fetchall()
+            assignees = Identity.named_in(conn, (row["assignee_id"] for row in waiting))
             for row in waiting:
                 text = f'C{named[1:]} is done: your card {row["number"]} "{row["title"]}", blocked waiting on it, can go on.'
-                told.append((row["member_id"], text))
+                told.append((assignees[row["assignee_id"]][0], text))
         return told
 
     def claim(self, caller: Caller, number: int | None = None) -> dict[str, Any]:
@@ -758,21 +769,28 @@ class Board:
         committed: it notes each return in the audit log and tells the project's leads, or the team's owner and admins
         where it has none."""
         now = self._clock()
+        team_pk = caller.member.team_pk
+        projects = self._identity.team_projects(conn, team_pk)
         conn.execute(
-            "SELECT b.project_id FROM boards b JOIN projects p ON p.project_id = b.project_id"
-            " WHERE p.team_id = %s ORDER BY b.project_id FOR UPDATE OF b",
-            (caller.member.team_pk,),
+            "SELECT project_id FROM boards WHERE project_id = ANY(%s) ORDER BY project_id FOR UPDATE", (projects,)
         )
-        stranded = conn.execute(
-            "SELECT c.id, c.project_id, c.number, c.board_column, m.member_id, m.name FROM cards c"
-            " JOIN projects p ON p.project_id = c.project_id JOIN members m ON m.id = c.assignee_id"
-            " WHERE p.team_id = %s AND c.board_column <> 'done' AND (m.removed_at IS NOT NULL OR (p.restricted"
-            " AND NOT m.is_owner AND NOT m.is_admin"
-            " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
-            " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
-            ")) ORDER BY c.project_id, c.number",
-            (caller.member.team_pk,),
+        assigned = conn.execute(
+            "SELECT DISTINCT assignee_id, project_id FROM cards"
+            " WHERE project_id = ANY(%s) AND board_column <> 'done' AND assignee_id IS NOT NULL",
+            (projects,),
         ).fetchall()
+        lost = self._identity.cannot_reach(conn, team_pk, [(row["assignee_id"], row["project_id"]) for row in assigned])
+        rows = conn.execute(
+            "SELECT c.id, c.project_id, c.number, c.board_column, c.assignee_id FROM cards c"
+            " JOIN unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id)"
+            " ON x.member_id = c.assignee_id AND x.project_id = c.project_id"
+            " WHERE c.board_column <> 'done' ORDER BY c.project_id, c.number",
+            ([pk for pk, _ in lost], [project_id for _, project_id in lost]),
+        ).fetchall()
+        named = self._identity.named_in(conn, (row["assignee_id"] for row in rows))
+        stranded = [
+            {**row, "member_id": named[row["assignee_id"]][0], "name": named[row["assignee_id"]][1]} for row in rows
+        ]
         for row in stranded:
             conn.execute("UPDATE cards SET assignee_id = NULL, updated_at = %s WHERE id = %s", (now, row["id"]))
             if row["board_column"] != "to_do":
@@ -804,18 +822,7 @@ class Board:
     def _leads(conn: Conn, caller: Caller, project_id: str) -> list[str]:
         """Who is told about a project's board as a whole: its leads, or the team's owner and admins where it has
         none."""
-        leads = conn.execute(
-            "SELECT m.member_id FROM project_leads l JOIN members m ON m.id = l.member_id"
-            " WHERE l.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
-            (project_id,),
-        ).fetchall()
-        if not leads:
-            leads = conn.execute(
-                "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
-                " ORDER BY member_id",
-                (caller.member.team_pk,),
-            ).fetchall()
-        return [row["member_id"] for row in leads]
+        return Identity.told_about(conn, caller.member.team_pk, project_id)
 
     @staticmethod
     def _found(conn: Conn, project_id: str, number: int) -> dict[str, Any]:
@@ -823,14 +830,15 @@ class Board:
         board has no such card."""
         conn.execute("SELECT 1 FROM boards WHERE project_id = %s FOR UPDATE", (project_id,))
         found = conn.execute(
-            "SELECT c.id, c.title, c.board_column, c.creator_id, c.assignee_id, a.member_id AS assignee,"
-            " a.name AS assignee_name FROM cards c LEFT JOIN members a ON a.id = c.assignee_id"
+            "SELECT c.id, c.title, c.board_column, c.creator_id, c.assignee_id FROM cards c"
             " WHERE c.project_id = %s AND c.number = %s",
             (project_id, number),
         ).fetchone()
         if found is None:
             raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
-        return dict(found)
+        pk = found["assignee_id"]
+        assignee, name = Identity.named_in(conn, [pk])[pk] if pk is not None else (None, None)
+        return {**found, "assignee": assignee, "assignee_name": name}
 
     def _may_edit(self, conn: Conn, caller: Caller, project_id: str, number: int) -> dict[str, Any]:
         """A card the caller may edit or move: any card with no assignee, or one they run; refused otherwise."""
@@ -846,12 +854,7 @@ class Board:
     def _runs(conn: Conn, caller: Caller, project_id: str, card: dict[str, Any]) -> bool:
         """Whether the caller may do anything to this card: its assignee, the project's leads and the team's admins."""
         member = caller.member
-        if member.is_owner or member.is_admin or card["assignee_id"] == member.pk:
-            return True
-        leads = conn.execute(
-            "SELECT 1 FROM project_leads WHERE project_id = %s AND member_id = %s", (project_id, member.pk)
-        ).fetchone()
-        return leads is not None
+        return card["assignee_id"] == member.pk or Identity.looks_after_in(conn, member, project_id)
 
     @staticmethod
     def _link(conn: Conn, card_id: int, links: dict[str, list[str]]) -> None:
@@ -905,5 +908,6 @@ class Board:
     def _card(conn: Conn, card_id: int) -> dict[str, Any]:
         row = conn.execute(f"{_CARD} WHERE c.id = %s", (card_id,)).fetchone()
         assert row is not None
-        return _shown(row)
+        (card,) = _shown_all(conn, [row])
+        return card
 

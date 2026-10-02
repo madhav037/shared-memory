@@ -34,16 +34,8 @@ OWNERS = {
     "audit_events": "audit.py",
 }
 
-#: Reads of another module's table from before the rule was checked, to be moved behind Identity in #256.
-EXISTING = {
-    ("audit.py", "members"),
-    ("board.py", "members"),
-    ("board.py", "projects"),
-    ("board.py", "project_leads"),
-    ("board.py", "project_access"),
-    ("console_sessions.py", "members"),
-    ("console_sessions.py", "teams"),
-}
+#: Reads of another module's table from before the rule was checked. #256 moved the last of them behind Identity.
+EXISTING: set[tuple[str, str]] = set()
 
 
 def modules() -> dict[str, str]:

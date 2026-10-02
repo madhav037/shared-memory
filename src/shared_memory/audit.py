@@ -206,9 +206,6 @@ class Audit:
         if before is not None:
             wheres.append("e.id < %s")
             values.append(before)
-        if member_id:
-            wheres.append("(m.member_id = %s OR (e.actor_id IS NULL AND e.actor = %s))")
-            values += [member_id, member_id]
         if kind:
             wheres.append("e.kind = %s")
             values.append(kind)
@@ -222,17 +219,22 @@ class Audit:
             wheres.append("e.at <= %s")
             values.append(until)
         with self._db.transaction() as conn:
+            if member_id:
+                # An entry with a member is theirs by row id; one without, such as a refused sign-in, by its actor.
+                found = self._identity.in_team(conn, reader.team_pk, [member_id]).get(member_id)
+                wheres.append("(e.actor_id = %s OR (e.actor_id IS NULL AND e.actor = %s))")
+                values += [found[0] if found else None, member_id]
             rows = conn.execute(
-                "SELECT e.id, e.at, e.actor, e.kind, e.project_id, e.target, e.detail, m.member_id"
-                " FROM audit_events e LEFT JOIN members m ON m.id = e.actor_id"
+                "SELECT e.id, e.at, e.actor, e.actor_id, e.kind, e.project_id, e.target, e.detail FROM audit_events e"
                 f" WHERE {' AND '.join(wheres)} ORDER BY e.id DESC LIMIT %s",
                 (*values, limit + 1),
             ).fetchall()
+            actors = self._identity.named_in(conn, (row["actor_id"] for row in rows if row["actor_id"] is not None))
         events = [
             Event(
                 id=row["id"],
                 at=row["at"],
-                actor=row["member_id"] or row["actor"],
+                actor=actors[row["actor_id"]][0] if row["actor_id"] in actors else row["actor"],
                 kind=row["kind"],
                 project_id=row["project_id"],
                 target=row["target"],

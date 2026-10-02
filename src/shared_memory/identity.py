@@ -218,7 +218,29 @@ class Identity:
         if member.is_owner or member.is_admin:
             return True
         with self._db.transaction() as conn:
-            return self._leads_it(conn, member.pk, project_id)
+            return self.looks_after_in(conn, member, project_id)
+
+    @staticmethod
+    def looks_after_in(conn: Conn, member: Member, project_id: str) -> bool:
+        """`looks_after`, asked inside a transaction already open."""
+        return member.is_owner or member.is_admin or Identity._leads_it(conn, member.pk, project_id)
+
+    @staticmethod
+    def told_about(conn: Conn, team_pk: int, project_id: str) -> list[str]:
+        """Who hears about a project as a whole, by member ID: its leads, or the team's owner and admins where it has
+        none. Asked inside a transaction already open."""
+        leads = conn.execute(
+            "SELECT m.member_id FROM project_leads l JOIN members m ON m.id = l.member_id"
+            " WHERE l.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
+            (project_id,),
+        ).fetchall()
+        if not leads:
+            leads = conn.execute(
+                "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
+                " ORDER BY member_id",
+                (team_pk,),
+            ).fetchall()
+        return [row["member_id"] for row in leads]
 
     def _require_lead(self, caller: Caller, project_id: str) -> None:
         if not self.looks_after(caller.member, project_id):
@@ -503,8 +525,43 @@ class Identity:
         if not asked:
             return {}
         with self._db.transaction() as conn:
-            rows = conn.execute("SELECT id, member_id, name FROM members WHERE id = ANY(%s)", (asked,)).fetchall()
+            return self.named_in(conn, asked)
+
+    @staticmethod
+    def named_in(conn: Conn, member_pks: Iterable[int]) -> dict[int, tuple[str, str]]:
+        """`named`, asked inside a transaction already open."""
+        asked = list(set(member_pks))
+        if not asked:
+            return {}
+        rows = conn.execute("SELECT id, member_id, name FROM members WHERE id = ANY(%s)", (asked,)).fetchall()
         return {row["id"]: (row["member_id"], row["name"]) for row in rows}
+
+    @staticmethod
+    def in_team(conn: Conn, team_pk: int, member_ids: Iterable[str]) -> dict[str, tuple[int, str]]:
+        """These members of a team by member ID, removed ones too, each as its row id and name. Asked inside a
+        transaction already open."""
+        asked = list(set(member_ids))
+        if not asked:
+            return {}
+        rows = conn.execute(
+            "SELECT id, member_id, name FROM members WHERE team_id = %s AND member_id = ANY(%s)", (team_pk, asked)
+        ).fetchall()
+        return {row["member_id"]: (row["id"], row["name"]) for row in rows}
+
+    @staticmethod
+    def present(conn: Conn, member_pk: int) -> Member | None:
+        """The member with this row id, or None once they have been removed from the team. Asked inside a
+        transaction already open."""
+        row = conn.execute(
+            "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
+            " FROM members m JOIN teams t ON t.id = m.team_id WHERE m.id = %s",
+            (member_pk,),
+        ).fetchone()
+        if row is None or row["removed_at"] is not None:
+            return None
+        return Member(
+            row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"], row["is_admin"]
+        )
 
     @staticmethod
     def team_projects(conn: Conn, team_pk: int) -> list[str]:
