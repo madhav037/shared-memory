@@ -347,6 +347,18 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
             <dd>{memory.promoted_by}</dd>
           </>
         )}
+        {memory.imported_by && (
+          <>
+            <dt>Imported by</dt>
+            <dd data-testid="imported-by">{memory.imported_by}</dd>
+          </>
+        )}
+        {memory.imported_from && (
+          <>
+            <dt>Source</dt>
+            <dd data-testid="imported-from">{memory.imported_from}</dd>
+          </>
+        )}
         {memory.replaces && (
           <>
             <dt>Replaces</dt>

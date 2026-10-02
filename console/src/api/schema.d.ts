@@ -1597,6 +1597,10 @@ export interface components {
             related_files: string[];
             /** Promoted By */
             promoted_by: string | null;
+            /** Imported By */
+            imported_by: string | null;
+            /** Imported From */
+            imported_from: string | null;
             /** Body */
             body: string;
             /** Author Name */
