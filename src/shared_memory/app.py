@@ -249,6 +249,18 @@ def build_app(
         identifier = hooks.session_in(payload)
         return sessions.touch(current, identifier) if identifier is not None else None
 
+    def waiting_for(current: Caller, session: Session) -> list[str]:
+        """Everything waiting for a session, each told once: that it is back after going idle or ending, each
+        takeover or other end of a lock it held, and each possible collision. The one place it is gathered: the
+        prompt hook asks it, and so do the tools that take `session` and answer with `notices`, for a coding agent
+        with no prompt hook. A module with something for a session adds it here. Asking marks it all told, so a tool
+        asks only once its own work has succeeded."""
+        return [
+            *sessions.waiting_notices(session),
+            *locks.waiting_notices(session),
+            *collisions.warnings(current, session),
+        ]
+
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
 
     async def within_recall_budget(part: HookPart, current: Caller, payload: dict[str, Any]) -> str | None:
@@ -333,9 +345,7 @@ def build_app(
             # The session's part comes after the member's: what this session is told once. A module that has
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
-            told = [challenges.prompt_notices(current), *(sessions.waiting_notices(session) if session else [])]
-            told += locks.waiting_notices(session) if session else []
-            told += collisions.warnings(current, session) if session else []
+            told = [challenges.prompt_notices(current), *(waiting_for(current, session) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
@@ -446,12 +456,14 @@ def build_app(
 
         session is this session's identifier, as its briefing named it.
 
-        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
-        editing that file and tell your member."""
-        known = sessions.touch(caller(ctx), session)
+        notices in the answer is what this session is told once: a lock it held that another session took over
+        (stop editing that file), a possible collision with another session's activity, or that its own activity and
+        locks ended. Tell your member."""
+        current = caller(ctx)
+        known = sessions.touch(current, session)
         stated = activities.state(known, activity)
         collisions.embed(known, stated)
-        return {"session": known.identifier, "activity": stated, "notices": locks.waiting_notices(known)}
+        return {"session": known.identifier, "activity": stated, "notices": waiting_for(current, known)}
 
     def onboarding_steps(current: Caller) -> str:
         current.require_project()
@@ -764,12 +776,14 @@ def build_app(
         on its next prompt. A takeover is your member's decision: when you are refused, tell them who holds the file
         and offer it, and pass takeover as true only once your member has said so, never on your own.
 
-        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
-        editing that file and tell your member.
+        notices in the answer is what this session is told once: a lock it held that another session took over
+        (stop editing that file), a possible collision with another session's activity, or that its own activity and
+        locks ended. Tell your member.
         """
-        calling = sessions.touch(caller(ctx), session)
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
         taken = locks.take(calling, path, repository, takeover)
-        notices = locks.waiting_notices(calling)
+        notices = waiting_for(current, calling)
         if isinstance(taken, Lock):
             return {
                 "locked": True,
@@ -793,10 +807,17 @@ def build_app(
     def release_lock(path: str, session: str, ctx: Context, repository: str | None = None) -> dict[str, Any]:
         """Release a file this session holds the lock on, once your work on it is finished, so another session can
         take it at once. path, session and repository are as for take_lock. Only the lock's holder releases it: for a
-        file another session holds you are refused and told who holds it.
+        file another session holds you are refused and told who holds it. notices in the answer is as for take_lock.
         """
-        ended = locks.release(sessions.touch(caller(ctx), session), path, repository)
-        return {"released": True, "repository": ended.repository, "path": ended.path}
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        ended = locks.release(calling, path, repository)
+        return {
+            "released": True,
+            "repository": ended.repository,
+            "path": ended.path,
+            "notices": waiting_for(current, calling),
+        }
 
     @server.tool()
     @_refusals_as_tool_errors
