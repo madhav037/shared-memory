@@ -68,6 +68,19 @@ def repository_root(variable: str) -> str:
     return f'${{{variable}:+${variable}/$(git -C "${variable}" rev-parse --show-cdup 2>/dev/null)}}'
 
 
+def working_folder_root() -> str:
+    """What a POSIX shell works the repository's root out from for an agent that names no folder to its hooks: the
+    folder the hook's command runs in, and how far above it git says the root is (#249).
+
+    Codex, Cursor and Cline give their hooks no variable naming where the agent was started, and their references
+    don't say the command runs in the session's folder. So the root is named only when git answers: without git, or
+    outside a repository, the header is left empty and the server reads the root from the payload, as it did before.
+    A root that turns out not to hold the edited file gives way to the payload's folders on the server
+    (`hooks.edited_files`), so a command run somewhere else names no file outside the repository that wasn't.
+    """
+    return "$(up=$(git rev-parse --show-cdup 2>/dev/null) && printf '%s/%s' \"$PWD\" \"$up\")"
+
+
 def hook_command(
     hooks_url: str,
     event: str,
@@ -142,8 +155,20 @@ def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
     """
     written = ""
     for event, matcher, endpoint, seconds in CODEX_HOOKS:
+        # Only the POSIX command names the root: cmd.exe has no way to put git's answer in a header, so on Windows
+        # the server reads the root from the payload's working folder.
+        root = working_folder_root() if endpoint == "before-edit" else ""
         posix, windows = (
-            hook_command(hooks_url, endpoint, project_id, repository, seconds=seconds, windows=on_windows, agent="codex")
+            hook_command(
+                hooks_url,
+                endpoint,
+                project_id,
+                repository,
+                seconds=seconds,
+                windows=on_windows,
+                root="" if on_windows else root,
+                agent="codex",
+            )
             for on_windows in (False, True)
         )
         written += f"""
@@ -303,6 +328,7 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             seconds=seconds,
             windows=False,
             format="cursor",
+            root=working_folder_root() if endpoint == "before-edit" else "",
             otherwise=otherwise,
             agent="cursor",
         )
@@ -467,7 +493,15 @@ CLINE_DOING = {
 def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, repository: str, seconds: int) -> str:
     """What Cline runs on macOS and Linux: it hands the script its payload and reads back what the script prints."""
     posting = hook_command(
-        hooks_url, endpoint, project_id, repository, seconds=seconds, windows=False, format="cline", agent="cline"
+        hooks_url,
+        endpoint,
+        project_id,
+        repository,
+        seconds=seconds,
+        windows=False,
+        format="cline",
+        root=working_folder_root() if endpoint == "before-edit" else "",
+        agent="cline",
     )
     return f"""#!/bin/sh
 # Shared Memory: {CLINE_DOING[event]}. Cline hands this script its payload and reads what it prints.
@@ -477,20 +511,33 @@ def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, rep
 """
 
 
+# What Cline's before-edit script on Windows names the repository's root with, as `working_folder_root` does in a
+# POSIX shell: the folder it runs in and how far above it git says the root is, and nothing at all without git.
+CLINE_POWERSHELL_ROOT = """# The repository's root, which a file's path is read from: this folder and how far above it git says the root is.
+try {
+  $up = git rev-parse --show-cdup 2>$null
+  if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Root'] = "$((Get-Location).Path)/$up" }
+} catch {
+  # No git here: the server reads the root from the payload.
+}
+"""
+
+
 def cline_powershell(hooks_url: str, event: str, endpoint: str, project_id: str, repository: str, seconds: int) -> str:
     """What Cline runs on Windows, where it looks for a .ps1 and runs it with powershell -File."""
     template = """# Shared Memory: __DOING__. Cline runs this with powershell -File and reads what it prints.
 # Your personal token is read from __TOKEN__ on this machine, so nothing secret is committed here.
 $payload = [Console]::In.ReadToEnd()
 if (-not $env:__TOKEN__) { exit 0 }
-try {
+$headers = @{
+  Authorization = "Bearer $env:__TOKEN__"
+  'X-Shared-Memory-Project' = '__PROJECT__'
+  'X-Shared-Memory-Repository' = '__REPOSITORY__'
+  '__AGENT_HEADER__' = 'cline'
+}
+__ROOT__try {
   $answer = Invoke-WebRequest -Method Post -Uri '__URL__' -TimeoutSec __SECONDS__ `
-    -ContentType 'application/json' -UseBasicParsing -Body $payload -Headers @{
-      Authorization = "Bearer $env:__TOKEN__"
-      'X-Shared-Memory-Project' = '__PROJECT__'
-      'X-Shared-Memory-Repository' = '__REPOSITORY__'
-      '__AGENT_HEADER__' = 'cline'
-    }
+    -ContentType 'application/json' -UseBasicParsing -Body $payload -Headers $headers
   if ($answer.StatusCode -eq 200) { [Console]::Out.Write($answer.Content) }
 } catch {
   # A server that is down, slow or unreachable leaves the task exactly as it was.
@@ -505,6 +552,7 @@ exit 0
         "__PROJECT__": project_id,
         "__REPOSITORY__": repository,
         "__AGENT_HEADER__": AGENT_HEADER,
+        "__ROOT__": CLINE_POWERSHELL_ROOT if endpoint == "before-edit" else "",
     }
     for placeholder, value in written.items():
         template = template.replace(placeholder, value)

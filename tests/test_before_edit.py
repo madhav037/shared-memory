@@ -320,14 +320,16 @@ AGENTS_OWN: dict[str, tuple[Callable[[Session, str], dict[str, Any]], str | None
 }
 
 
-def own_edit(session: Session, agent: str, file: str = FILE) -> dict[str, Any]:
-    """Fire the before-edit hook as this coding agent's kit does: its own payload, format and headers."""
+def own_edit(session: Session, agent: str, file: str = FILE, root: str | None = None) -> dict[str, Any]:
+    """Fire the before-edit hook as this coding agent's kit does: its own payload, format and headers, or the root
+    given here in place of the one its kit names."""
     payload, format, names_root = AGENTS_OWN[agent]
+    root = root or (WORKING_FOLDER if names_root else None)
     answer = httpx.post(
         f"{session.server.url}/hooks/before-edit",
         json=payload(session, file),
         params={"format": format} if format else None,
-        headers={**session.headers(), **({"X-Shared-Memory-Root": WORKING_FOLDER} if names_root else {})},
+        headers={**session.headers(), **({"X-Shared-Memory-Root": root} if root else {})},
         timeout=60,
     )
     assert answer.status_code == 200, answer.text
@@ -825,6 +827,117 @@ def test_gemini_started_in_a_subfolder_names_its_locks_from_the_repositorys_root
     script.write_text(kit(dana)[".gemini/hooks/shared-memory.mjs"], encoding="utf-8")
 
     run_kit_started_in(["node", str(script), "before-edit"], dana, "Gemini CLI", subfolder)
+
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx")
+
+
+# Codex, Cursor and Cline name no folder to their hooks, so their kits ask git from where the command runs (#249)
+
+#: The agents whose kit names the root from the folder its hook's command runs in.
+RUN_IN_A_FOLDER = ("Codex", "Cursor", "Cline")
+
+
+@pytest.mark.parametrize("agent", (*RUN_IN_A_FOLDER, "Copilot CLI"))
+def test_a_root_that_does_not_hold_the_edited_file_gives_way_to_the_payloads_folders(
+    dana: Session, cole: Session, agent: str
+) -> None:
+    """A hook run somewhere other than the session's folder names the wrong root; the edit still takes its lock."""
+    assert own_edit(dana, agent, root="/home/dana/other-repository") == ALLOWED
+
+    assert "Dana Dev" in refused(cole), "named from the payload's folder, as before any hook named a root"
+
+
+def test_a_relative_path_is_read_from_the_payloads_working_folder_below_the_root(dana: Session, cole: Session) -> None:
+    """Codex's patch and Cline's tools name a file from the folder the session works in, which may be a subfolder."""
+    payload = codex_edit(dana, "src/App.tsx")
+    payload["cwd"] = f"{WORKING_FOLDER}/console"
+    answer = httpx.post(
+        f"{dana.server.url}/hooks/before-edit",
+        json=payload,
+        headers={**dana.headers(), "X-Shared-Memory-Root": f"{WORKING_FOLDER}/console/../"},
+    )
+
+    assert answer.json() == ALLOWED
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx")
+    assert take(cole, "src/App.tsx")["locked"] is True, "and under no second name"
+
+
+def as_the_shell_names_it(folder: Path) -> str:
+    """The folder as a POSIX shell's $PWD names it there, which is how an agent on macOS or Linux names its files.
+    Git Bash on Windows writes /c/... where Python writes C:\\..."""
+    return subprocess.run(["sh", "-c", "pwd"], cwd=folder, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def run_kit_in(argv: list[str], session: Session, agent: str, runs_in: Path, works_in: str) -> None:
+    """Run a kit's before-edit hook in one folder for an edit of src/App.tsx by a session working in another, with the
+    agent's own payload naming that folder and the file as its agent does."""
+    assert session.token is not None
+    written = json.dumps(AGENTS_OWN[agent][0](session, "src/App.tsx"))
+    payload = written.replace(json.dumps(WORKING_FOLDER)[1:-1], json.dumps(works_in)[1:-1])
+    ran = subprocess.run(
+        argv,
+        input=payload,
+        cwd=runs_in,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "SHARED_MEMORY_TOKEN": session.token},
+    )
+    assert (ran.returncode, json.loads(ran.stdout)) == (0, ALLOWED), ran.stderr
+
+
+@needs_a_shell
+@needs_git
+@pytest.mark.parametrize("agent", RUN_IN_A_FOLDER)
+def test_codex_cursor_and_cline_started_in_a_subfolder_name_their_locks_from_the_repositorys_root(
+    dana: Session, cole: Session, subfolder: Path, agent: str
+) -> None:
+    command = KIT_COMMANDS[agent](kit(dana))
+
+    run_kit_in(["sh", "-c", command], dana, agent, subfolder, as_the_shell_names_it(subfolder))
+
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx"), "as a session started at the root names it"
+    assert take(cole, "src/App.tsx")["locked"] is True, "and under no second name"
+
+
+@needs_a_shell
+@needs_git
+@pytest.mark.parametrize("agent", RUN_IN_A_FOLDER)
+def test_a_kits_command_run_in_another_repository_leaves_the_root_to_the_payload(
+    dana: Session, cole: Session, subfolder: Path, tmp_path: Path, agent: str
+) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(elsewhere)], check=True, capture_output=True)
+    command = KIT_COMMANDS[agent](kit(dana))
+
+    run_kit_in(["sh", "-c", command], dana, agent, elsewhere, as_the_shell_names_it(subfolder))
+
+    assert "Dana Dev" in refused(cole, "src/App.tsx"), "locked from the payload's folder, as before, not let through"
+
+
+@needs_a_shell
+@pytest.mark.parametrize("agent", RUN_IN_A_FOLDER)
+def test_a_kits_command_run_outside_a_repository_leaves_the_root_to_the_payload(
+    dana: Session, cole: Session, tmp_path: Path, agent: str
+) -> None:
+    (tmp_path / "src").mkdir()
+    command = KIT_COMMANDS[agent](kit(dana))
+
+    run_kit_in(["sh", "-c", command], dana, agent, tmp_path, as_the_shell_names_it(tmp_path))
+
+    assert "Dana Dev" in refused(cole, "src/App.tsx")
+
+
+@needs_git
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="Cline runs its Windows hooks in PowerShell, which isn't here")
+def test_clines_windows_script_started_in_a_subfolder_names_its_locks_from_the_repositorys_root(
+    dana: Session, cole: Session, subfolder: Path, tmp_path: Path
+) -> None:
+    script = tmp_path / "PreToolUse.ps1"
+    script.write_text(kit(dana)[".clinerules/hooks/PreToolUse.ps1"], encoding="utf-8")
+
+    run_kit_in(["pwsh", "-NoProfile", "-File", str(script)], dana, "Cline", subfolder, str(subfolder))
 
     assert "Dana Dev" in refused(cole, "console/src/App.tsx")
 

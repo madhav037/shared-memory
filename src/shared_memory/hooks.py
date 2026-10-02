@@ -176,11 +176,13 @@ def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[st
     """The files an edit tool is about to change, each as a path from its repository's root: none when the payload
     names no file, and without any it names outside that root.
 
-    One file, but for Codex's apply_patch, which may change several. Agents name a file by its absolute path or from
-    the root. The root is the one the hook itself names, where it does, or else the payload's working folder ("cwd")
-    or one of the folders it says are open; the path from the root is what is left of the file's path after it. A path
-    that is already relative is taken as written from the root. On a Windows drive the two are compared without regard
-    to case, as Windows does.
+    One file, but for Codex's apply_patch, which may change several. Agents name a file by its absolute path or by a
+    path from the folder they work in. The root is the one the hook itself names, where it does and the file is under
+    it, or else the payload's working folder ("cwd") or one of the folders it says are open; the path from the root is
+    what is left of the file's path after it. A relative path is read from the payload's working folder (its "cwd", or
+    else the first folder it says is open), which is the root unless the hook named one above it; with no such folder,
+    or none under the root, it is taken as written from the root. On a Windows drive the two are compared without
+    regard to case, as Windows does.
     """
     given = _given_to_edit_tool(payload)
     if given is None:
@@ -190,7 +192,8 @@ def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[st
     if not named and isinstance(patch, str):
         named = _PATCHED_FILE.findall(patch)
     folders = _roots(payload, root)
-    files = (_from_root(file, folders) for file in named)
+    working = _roots(payload, None)[:1]
+    files = (_from_root(file, folders, working) for file in named)
     return list(dict.fromkeys(file for file in files if file))
 
 
@@ -220,22 +223,29 @@ def _given_to_edit_tool(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _roots(payload: Mapping[str, Any], root: str | None) -> list[str]:
-    """The folders a file's absolute path may be under: the root the hook names, or else what the payload names."""
-    if root and root.strip():
-        return [root]
-    named = [payload.get("cwd")]
+    """The folders a file's absolute path may be under, first to last: the root the hook names, and then what the
+    payload names.
+
+    The payload's folders stay behind the hook's root because a hook may name it from a folder that isn't the
+    session's: Codex, Cursor and Cline ask git from wherever they run the hook's command, which their references
+    don't promise is where the session works (#249). A file outside that root but inside the payload's folder is then
+    named from the payload's, as it was before any hook named a root, rather than taken to be outside the repository.
+    """
+    named: list[Any] = [root, payload.get("cwd")]
     for field in _ROOTS_FIELDS:
         listed = payload.get(field)
         named += listed if isinstance(listed, list) else []
     return [folder for folder in named if isinstance(folder, str) and folder.strip()]
 
 
-def _from_root(named: str, folders: list[str]) -> str | None:
+def _from_root(named: str, folders: list[str], working: list[str]) -> str | None:
     file = slashed(named)
     if not file:
         return None
     if not absolute(file):
-        return file
+        within = [slashed(folder) for folder in working if absolute(slashed(folder))]
+        found = _from_root(f"{within[0].rstrip('/')}/{file}", folders, []) if within else None
+        return found or file
     file = posixpath.normpath(file)
     for each in folders:
         folder = posixpath.normpath(slashed(each)).rstrip("/")
