@@ -1546,9 +1546,45 @@ li[aria-expanded="true"] > .tree-row .twist {
   max-width: 68ch;
 }
 .agent-automatic .run-in {
+  font-size: inherit;
+  font-weight: inherit;
   font-style: italic;
   color: var(--ink-3);
-  margin-right: 6px;
+  margin: 0 0 8px;
+}
+.agent-automatic .agent-variant {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 12px 0 4px;
+}
+.agent-automatic p {
+  margin: 10px 0 0;
+}
+.agent-hooks {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.agent-hooks > div {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 12px;
+}
+.agent-hooks dt {
+  color: var(--ink-3);
+}
+.agent-hooks dd {
+  margin: 0;
+}
+.agent-hooks > div[data-hooked="false"] dd {
+  color: var(--ink-3);
+}
+@media (max-width: 480px) {
+  .agent-hooks > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
 }
 .connection-file-action {
   font-size: 0.875rem;
