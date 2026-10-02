@@ -19,7 +19,8 @@ What other modules stand on, all of it on `Sessions`:
 - `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
 - `idle_after`: the idle time, from `Settings.session_idle_minutes`.
 
-A module keeping rows per session refers to `Session.id`. Only this module reads the `sessions` table.
+A module keeping rows per session refers to `Session.id`. Only this module reads the `sessions` table, and it reads
+members and projects through `Identity`.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller
+from shared_memory.identity import Caller, Identity
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -115,8 +116,9 @@ def briefing_line(session: Session) -> str:
 
 
 class Sessions:
-    def __init__(self, settings: Settings, db: Database, clock: Clock) -> None:
+    def __init__(self, settings: Settings, db: Database, identity: Identity, clock: Clock) -> None:
         self._db = db
+        self._identity = identity
         self._clock = clock
         self.idle_after = timedelta(minutes=settings.session_idle_minutes)
         self._gone: list[Gone] = []
@@ -208,12 +210,12 @@ class Sessions:
         check."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT s.id, s.identifier, m.member_id, m.name, s.project_id, s.repository, s.agent, s.started_at,"
-                " s.last_seen_at FROM sessions s JOIN members m ON m.id = s.member_id"
-                " WHERE s.project_id = %s AND s.ended_at IS NULL AND s.last_seen_at > %s ORDER BY s.started_at, s.id",
+                "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at FROM sessions"
+                " WHERE project_id = %s AND ended_at IS NULL AND last_seen_at > %s ORDER BY started_at, id",
                 (project_id, self._clock() - self.idle_after),
             ).fetchall()
-        return [_session(row) for row in rows]
+        members = self._identity.named(row["member_id"] for row in rows)
+        return [_session(row, *members[row["member_id"]]) for row in rows]
 
     def still_active(self, ids: Iterable[int], conn: Conn | None = None) -> set[int]:
         """Which of these sessions are active now. Pass the connection of a transaction already open to ask within
@@ -247,25 +249,28 @@ class Sessions:
         """End every session whose member can no longer reach its project: removed from the team, or shut out of a
         restricted project. Identity calls this inside the transaction of any change that may have cost a member a
         project (`Identity.on_access_lost`), so the change and the sessions' end happen together or not at all."""
+        open_pairs = conn.execute("SELECT DISTINCT member_id, project_id FROM sessions WHERE ended_at IS NULL").fetchall()
+        lost = self._identity.cannot_reach(
+            conn, caller.member.team_pk, [(row["member_id"], row["project_id"]) for row in open_pairs]
+        )
+        if not lost:
+            return lambda: None
         rows = conn.execute(
-            "UPDATE sessions s SET ended_at = %s, back_from_idle = FALSE FROM members m, projects p"
-            " WHERE m.id = s.member_id AND p.project_id = s.project_id AND p.team_id = %s AND s.ended_at IS NULL"
-            " AND (m.removed_at IS NOT NULL OR (p.restricted AND NOT m.is_owner AND NOT m.is_admin"
-            " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
-            " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
-            ")) RETURNING s.id",
-            (self._clock(), caller.member.team_pk),
+            "UPDATE sessions s SET ended_at = %s, back_from_idle = FALSE"
+            " FROM unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id)"
+            " WHERE s.member_id = x.member_id AND s.project_id = x.project_id AND s.ended_at IS NULL RETURNING s.id",
+            (self._clock(), [pk for pk, _ in lost], [project_id for _, project_id in lost]),
         ).fetchall()
         self._tell_gone(conn, [row["id"] for row in rows])
         return lambda: None
 
 
-def _session(row: dict[str, Any]) -> Session:
+def _session(row: dict[str, Any], member_id: str, member_name: str) -> Session:
     return Session(
         id=row["id"],
         identifier=row["identifier"],
-        member_id=row["member_id"],
-        member_name=row["name"],
+        member_id=member_id,
+        member_name=member_name,
         project_id=row["project_id"],
         repository=row["repository"],
         agent=row["agent"],

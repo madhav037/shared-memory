@@ -223,7 +223,7 @@ def build_app(
     identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
-    sessions = Sessions(settings, db, clock)
+    sessions = Sessions(settings, db, identity, clock)
     identity.on_access_lost(sessions.end_unreachable)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
