@@ -8,7 +8,18 @@ import dataclasses
 import pytest
 
 from shared_memory.locks import NEVER_LOCK, PATTERN_LIMIT, Locks
-from tests.support import Console, ConsoleClient, RunningServer, Session, Team, add, create, member, signed_in_owner
+from tests.support import (
+    Console,
+    ConsoleClient,
+    RunningServer,
+    Session,
+    Team,
+    add,
+    added_context,
+    create,
+    member,
+    signed_in_owner,
+)
 from tests.test_locks import refused, take
 from tests.test_restricted_projects import restricted
 
@@ -238,6 +249,49 @@ def test_a_lock_already_held_on_a_file_that_now_matches_a_pattern_no_longer_bloc
     lead.call("never_lock", remove="*.snap")
 
     assert take(lead, SNAPSHOT)["locked"] is True, "the lock that ended does not come back to its old holder"
+
+
+def test_the_holder_of_a_lock_an_added_pattern_ended_is_told_once_on_its_next_prompt(team: Team, dana: Session) -> None:
+    lead, cole, _ = payments(team, dana)
+    lead.start()
+    take(cole, SNAPSHOT)
+    take(cole, "src/invoices.py")
+
+    lead.call("never_lock", add="*.snap")
+    told = added_context(cole.prompt("write a haiku about cats"))
+
+    assert f"payments-api:{SNAPSHOT}" in told
+    assert "no longer holds the lock" in told
+    assert "'*.snap'" in told and "Dana Dev (emp-2)" in told, "why, and who added the pattern"
+    assert "src/invoices.py" not in told, "a lock the pattern doesn't match is still held"
+    assert cole.prompt("write a haiku about cats") == {}
+    assert lead.prompt("write a haiku about cats") == {}, "a session that held no such lock is told nothing"
+
+
+def test_a_holder_with_no_prompt_hook_is_told_in_the_result_of_its_next_tool_call(team: Team, dana: Session) -> None:
+    lead, cole, _ = payments(team, dana)
+    take(cole, SNAPSHOT)
+    take(cole.as_session("second-session"), "tests/snapshots/refund.snap")
+
+    lead.call("never_lock", add="*.snap")
+    next_take = take(cole, "src/invoices.py")
+
+    assert len(next_take["notices"]) == 1
+    assert f"payments-api:{SNAPSHOT}" in next_take["notices"][0]
+    assert take(cole, "src/invoices.py")["notices"] == []
+    assert SNAPSHOT not in added_context(cole.prompt("write a haiku about cats")), "told once, wherever it was told"
+    assert "refund.snap" in added_context(cole.as_session("second-session").prompt("write a haiku about cats"))
+
+
+def test_a_holder_whose_session_ended_is_not_told_when_it_starts_again(team: Team, dana: Session) -> None:
+    lead, cole, _ = payments(team, dana)
+    take(cole, SNAPSHOT)
+    lead.call("never_lock", add="*.snap")
+
+    cole.end()
+    cole.start()
+
+    assert SNAPSHOT not in added_context(cole.prompt("write a haiku about cats"))
 
 
 # The audit log

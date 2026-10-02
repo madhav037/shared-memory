@@ -13,7 +13,8 @@ What other modules stand on, all of it on `Locks`:
   lock moves to this session instead of refusing it.
 - `take_all(session, paths)`: the locks on every file of one edit, or none: refused with `Held`, it gives back what
   it took.
-- `waiting_notices(session)`: what a session is told once of each takeover of a lock it held.
+- `waiting_notices(session)`: what a session is told once of each takeover of a lock it held, and of each lock of
+  its own that an added never-lock pattern ended.
 - `release(session, path, repository)`: the holder gives the file up. Any other session is refused with `NotHeld`.
 - `of(project_id, repository, path)`: the file's lock, with its holder, or None.
 - `held(project_id)`: a project's locks, oldest first.
@@ -40,6 +41,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from operator import itemgetter
 from typing import Any
 
 from shared_memory.audit import NEVER_LOCK_PATTERN_ADDED, NEVER_LOCK_PATTERN_REMOVED, Audit
@@ -90,6 +92,23 @@ CREATE TABLE IF NOT EXISTS takeovers (
 );
 
 CREATE INDEX IF NOT EXISTS takeovers_by_session ON takeovers (session_id);
+
+-- A lock that ended because a never-lock pattern added to its project matches its file, which its holder has not been
+-- told yet.
+CREATE TABLE IF NOT EXISTS locks_ended_by_pattern (
+    id BIGSERIAL PRIMARY KEY,
+    -- The holder the lock ended for.
+    session_id BIGINT NOT NULL REFERENCES sessions(id),
+    repository TEXT NOT NULL,
+    path TEXT NOT NULL,
+    pattern TEXT NOT NULL,
+    -- Who added the pattern, as the holder is told it.
+    by_name TEXT NOT NULL,
+    by_member_id TEXT NOT NULL,
+    ended_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS locks_ended_by_pattern_by_session ON locks_ended_by_pattern (session_id);
 """
 
 # The files that never lock in any project: every session touches them, and none is edited by hand. Each is a glob.
@@ -331,6 +350,16 @@ def _taken_over(row: Any) -> str:
     )
 
 
+def _ended_by_pattern(row: Any) -> str:
+    """What a holder is told of one lock that ended because its file now matches a never-lock pattern."""
+    return (
+        f"[session] This session no longer holds the lock on {named(row['repository'], row['path'])}: "
+        f"{row['by_name']} ({row['by_member_id']}) added the never-lock pattern {row['pattern']!r} to this project, "
+        "which the file matches, so the file never locks from here on and its lock ended. No lock is needed to edit "
+        "it, and none stops another session editing it at the same time: tell your member."
+    )
+
+
 class Locks:
     def __init__(self, db: Database, sessions: Sessions, clock: Clock, activity_of: ActivityOf | None = None) -> None:
         """activity_of supplies each holder's activity; without it no lock carries one."""
@@ -347,6 +376,7 @@ class Locks:
         """A session that ended or is back from idle holds nothing."""
         conn.execute("DELETE FROM locks WHERE session_id = ANY(%s)", (list(session_ids),))
         conn.execute("DELETE FROM takeovers WHERE session_id = ANY(%s)", (list(session_ids),))
+        conn.execute("DELETE FROM locks_ended_by_pattern WHERE session_id = ANY(%s)", (list(session_ids),))
 
     def never_locks(self, project_id: str, path: str) -> str | None:
         """The never-lock pattern this path, written from its repository's root, matches in this project, or None
@@ -470,14 +500,23 @@ class Locks:
 
     def waiting_notices(self, session: Session) -> list[str]:
         """What this session is told once, with its next prompt or the result of its next tool call: each takeover
-        of a lock it held, oldest first. Asking marks them told."""
+        of a lock it held, then each lock of its own that an added never-lock pattern ended, oldest first. Asking
+        marks them told."""
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "DELETE FROM takeovers WHERE session_id = %s"
                 " RETURNING id, repository, path, by_name, by_member_id, by_agent, by_activity",
                 (session.id,),
             ).fetchall()
-        return [_taken_over(row) for row in sorted(rows, key=lambda row: row["id"])]
+            ended = conn.execute(
+                "DELETE FROM locks_ended_by_pattern WHERE session_id = %s"
+                " RETURNING id, repository, path, pattern, by_name, by_member_id",
+                (session.id,),
+            ).fetchall()
+        return [
+            *(_taken_over(row) for row in sorted(rows, key=itemgetter("id"))),
+            *(_ended_by_pattern(row) for row in sorted(ended, key=itemgetter("id"))),
+        ]
 
     def release(self, session: Session, path: str, repository: str | None = None) -> Lock:
         """Release a file this session holds, and give back the lock that ended. Refused with `NotHeld` for a session
@@ -563,7 +602,8 @@ class ProjectPatterns:
 
     def add(self, caller: Caller, pattern: str) -> NeverLockPattern:
         """Add a pattern to the caller's project. A lock held on a file it matches ends: the file never locks from
-        here on, so the lock would block nobody and only be listed."""
+        here on, so the lock would block nobody and only be listed. Its holder is told once, as a takeover's old
+        holder is (`Locks.waiting_notices`)."""
         project_id = self._changeable_by(caller)
         written = usable(pattern)
         if written in NEVER_LOCK:
@@ -579,10 +619,28 @@ class ProjectPatterns:
                 raise Refused(f"{written!r} is already one of this project's never-lock patterns.")
             held = conn.execute("SELECT repository, path FROM locks WHERE project_id = %s", (project_id,)).fetchall()
             for lock in held:
-                if matching([written], lock["path"]) is not None:
+                if matching([written], lock["path"]) is None:
+                    continue
+                ended = conn.execute(
+                    "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s RETURNING session_id",
+                    (project_id, lock["repository"], lock["path"]),
+                ).fetchone()
+                if ended is not None:
+                    # Kept for the holder, who is told once. One whose session has ended or gone idle never reads
+                    # it: what is waiting for a session is cleared when it is found gone.
                     conn.execute(
-                        "DELETE FROM locks WHERE project_id = %s AND repository = %s AND path = %s",
-                        (project_id, lock["repository"], lock["path"]),
+                        "INSERT INTO locks_ended_by_pattern"
+                        " (session_id, repository, path, pattern, by_name, by_member_id, ended_at)"
+                        " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        (
+                            ended["session_id"],
+                            lock["repository"],
+                            lock["path"],
+                            written,
+                            caller.member.name,
+                            caller.member_id,
+                            added.added_at,
+                        ),
                     )
         self._record(caller, NEVER_LOCK_PATTERN_ADDED, project_id, written)
         return added
