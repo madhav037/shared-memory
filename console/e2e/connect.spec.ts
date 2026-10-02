@@ -27,3 +27,27 @@ test("a member picks their coding agent and gets its steps and the repository's 
 
   await expect(page.getByTestId("agent-files")).toContainText("Once, on each member's machine");
 });
+
+test("a member sees which of their agent's locks a hook takes, and where the agent is asked to take them", async ({
+  page,
+}) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("member-menu").click();
+  await page.getByTestId("to-connect").click();
+
+  await page.getByTestId("connect-Codex").click();
+
+  const codex = page.getByTestId("automatic-Codex");
+  await expect(codex).toContainText("Every session starts with the briefing");
+  await expect(codex).toContainText("A before-edit hook takes each file’s lock");
+  await expect(codex).toContainText("A session-end hook ends the session");
+
+  await page.getByTestId("connect-GitHub Copilot").click();
+
+  await expect(page.getByTestId("automatic-Copilot CLI")).toContainText("A before-edit hook takes each file’s lock");
+  const vsCode = page.getByTestId("automatic-Copilot in VS Code");
+  await expect(vsCode).toContainText("Guidance only: the agent is asked to call take_lock itself");
+  await expect(vsCode).toContainText("the session’s locks go when it goes idle");
+  await expect(page.getByTestId("agent-automatic")).toContainText("may also run the Copilot CLI hook file");
+  await expect(page.getByTestId("agent-automatic")).not.toContainText("no hooks at all");
+});

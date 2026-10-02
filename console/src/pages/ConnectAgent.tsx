@@ -5,10 +5,12 @@ import { useState, type ReactNode } from "react";
 import { fetchProject, reissueMyToken, type IssuedToken, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { ConnectionFiles, EVERY_AGENT } from "../components/ConnectionFiles";
+import { hooksOf, whatHappens } from "../lib/agentHooks";
 import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
 
-/** What a member does in each coding agent, and what that agent then does with the team's memory by itself. */
+/** What a member does in each coding agent, and what else to know about its hooks; which hooks it has, and what it
+ * does with the team's memory by itself, is in lib/agentHooks. */
 const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
   {
     name: "Claude Code",
@@ -19,7 +21,7 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
       </>,
       <>When the plugin asks, give it this server’s URL and your personal token. It keeps both in its settings.</>,
     ],
-    automatic: <>Every session starts with the briefing, and memory that matches each prompt is recalled into it.</>,
+    automatic: <>The plugin brings every hook with it.</>,
   },
   {
     name: "Codex",
@@ -36,8 +38,7 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Every session starts with the briefing, and memory that matches each prompt is recalled into it. Codex reads
-        the hooks from <code>.codex/config.toml</code> once you trust the project.
+        Codex reads the hooks from <code>.codex/config.toml</code> once you trust the project.
       </>
     ),
   },
@@ -54,9 +55,10 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        In Copilot CLI, every session starts with the briefing, which the server sends it directly. Recall on each
-        prompt is not set up: the CLI drops whatever a prompt hook answers. VS Code has no hooks at all, so there
-        Copilot calls <code>briefing</code> and <code>search</code> itself, as <code>AGENTS.md</code> asks.
+        Copilot CLI’s hooks in <code>.github/hooks/shared-memory.json</code> post to the server directly. Recall on
+        each prompt is not set up: the CLI drops whatever a prompt hook answers. In VS Code, Copilot does what{" "}
+        <code>AGENTS.md</code> asks. VS Code’s hooks, in preview, may also run the Copilot CLI hook file in{" "}
+        <code>.github/hooks/</code>; that isn’t confirmed yet.
       </>
     ),
   },
@@ -72,8 +74,7 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Every session starts with the briefing, and memory that matches each prompt is recalled into it, through the
-        small script in <code>.gemini/hooks</code> that both hooks run.
+        Every hook runs the small script in <code>.gemini/hooks</code>.
       </>
     ),
   },
@@ -89,9 +90,9 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Every session starts with the briefing. Cursor’s prompt hook cannot add memory to a prompt, so the
-        always-applied rule asks it to search memory before answering. On Windows, Cursor launches hooks through
-        PowerShell, where the command doesn’t run, and the rule is what keeps memory in reach.
+        Cursor’s prompt hook cannot add memory to a prompt, so the always-applied rule asks it to search memory before
+        answering. On Windows, Cursor launches hooks through PowerShell, where the commands don’t run, and the rule is
+        what keeps memory in reach.
       </>
     ),
   },
@@ -111,9 +112,8 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Every session starts with the briefing, and memory that matches each prompt is recalled into it, from Devin’s
-        own hooks. Devin loads hooks from <code>.claude/settings.json</code> as well, where Shared Memory keeps none,
-        so a session is never briefed twice.
+        Devin loads hooks from <code>.claude/settings.json</code> as well, where Shared Memory keeps none, so no hook
+        runs twice.
       </>
     ),
   },
@@ -132,9 +132,8 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
     ],
     automatic: (
       <>
-        Every task starts with the briefing, and memory that matches each prompt is recalled into it, from the scripts
-        in <code>.clinerules/hooks</code>. On macOS and Linux Cline runs the ones without an extension; on Windows it
-        runs the <code>.ps1</code> beside them.
+        A task is Cline’s session. The hooks are the scripts in <code>.clinerules/hooks</code>: on macOS and Linux
+        Cline runs the ones without an extension; on Windows it runs the <code>.ps1</code> beside them.
       </>
     ),
   },
@@ -175,9 +174,25 @@ export function ConnectAgent({ member }: { member: SignedInMember }) {
           <li key={place}>{step}</li>
         ))}
       </ol>
-      <p className="agent-automatic">
-        <span className="run-in">What happens by itself</span> {chosen.automatic}
-      </p>
+      <section className="agent-automatic" aria-labelledby="automatic-heading" data-testid="agent-automatic">
+        <h3 className="run-in" id="automatic-heading">
+          What happens by itself
+        </h3>
+        {hooksOf(chosen.name).map((variant, _, variants) => (
+          <div key={variant.name} data-testid={`automatic-${variant.name}`}>
+            {variants.length > 1 && <h4 className="agent-variant">{variant.name}</h4>}
+            <dl className="agent-hooks">
+              {whatHappens(variant).map((one) => (
+                <div key={one.topic} data-hooked={one.hooked}>
+                  <dt>{one.topic}</dt>
+                  <dd>{one.said}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+        <p>{chosen.automatic}</p>
+      </section>
 
       <RepositoryFiles agent={chosen.name} />
     </div>
