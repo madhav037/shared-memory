@@ -34,9 +34,32 @@ import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from shared_memory.agents import ANOTHER_AGENT, agent_named
 from shared_memory.sessions import usable
 
 CLAUDE = "claude"
+
+# The header a hook names its coding agent in: the plugin's hooks and every kit's send it.
+AGENT_HEADER = "X-Shared-Memory-Agent"
+
+# The coding agent behind each answer format only one agent asks for, for a hook that sends no such header.
+# Claude Code's format says nothing: Claude Code, Codex and Devin Desktop all ask for it.
+_AGENT_OF_FORMAT = {
+    "gemini": "Gemini CLI",
+    "devin": "Devin Desktop",
+    "copilot-cli": "GitHub Copilot",
+    "cursor": "Cursor",
+    "cline": "Cline",
+}
+
+
+def agent_of(named: str | None, format: str | None) -> str | None:
+    """The coding agent a hook call came from: the one its header names, or else the one its answer format belongs
+    to. None when neither says. Like the name a tool call reports, it is only shown, never used to decide anything."""
+    known = agent_named(named) if named and named.strip() else ANOTHER_AGENT
+    if known != ANOTHER_AGENT:
+        return known
+    return _AGENT_OF_FORMAT.get((format or "").strip().lower())
 
 # The fields of a tool's arguments that agents name the file being edited in: Claude Code's Edit and Write, Gemini
 # CLI's write_file and replace and Cursor's Write send "file_path", Claude Code's NotebookEdit "notebook_path", and

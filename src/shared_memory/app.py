@@ -255,7 +255,11 @@ def build_app(
         """The session whose hook sent this payload, seen now, or None when the payload names none. Every hook that
         runs for a session calls this, which is what keeps the session active."""
         identifier = hooks.session_in(payload)
-        return sessions.touch(current, identifier) if identifier is not None else None
+        if identifier is None:
+            return None
+        # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
+        # tool call has reported one.
+        return sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
 
     def waiting_for(current: Caller, session: Session) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
@@ -330,6 +334,9 @@ def build_app(
                 return JSONResponse({})
             if current.project is None:
                 return JSONResponse({})
+            current = dataclasses.replace(
+                current, agent=hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), answer_format)
+            )
             payload = await _hook_payload(request, settings.hook_body_limit_bytes)
             if payload is None:
                 return JSONResponse({})

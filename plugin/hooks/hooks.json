@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s --fail --max-time 5 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-start\" || echo '{\"systemMessage\":\"Shared Memory is unavailable: the server did not answer.\"}'",
+            "command": "curl -s --fail --max-time 5 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-start\" || echo '{\"systemMessage\":\"Shared Memory is unavailable: the server did not answer.\"}'",
             "timeout": 6
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/prompt-submitted\" || true",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/prompt-submitted\" || true",
             "timeout": 4
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H \"X-Shared-Memory-Root: $CLAUDE_PROJECT_DIR\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/before-edit\" || echo '{\"systemMessage\":\"Shared Memory did not answer within 3 seconds, so this edit went ahead without checking whether another session holds a lock on the file.\"}'",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' -H \"X-Shared-Memory-Root: $CLAUDE_PROJECT_DIR\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/before-edit\" || echo '{\"systemMessage\":\"Shared Memory did not answer within 3 seconds, so this edit went ahead without checking whether another session holds a lock on the file.\"}'",
             "timeout": 4
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-end\" || true",
+            "command": "curl -s --fail --max-time 3 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-end\" || true",
             "timeout": 4
           }
         ]

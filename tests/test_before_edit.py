@@ -101,6 +101,59 @@ def test_a_blocked_edit_says_a_takeover_is_possible_once_the_member_says_so(dana
     assert "member" in reason
 
 
+def hooked_edit(session: Session, agent: str | None = None, format: str | None = None) -> dict[str, Any]:
+    """The before-edit hook of a session known only by its hooks, which name their coding agent or their format."""
+    answer = httpx.post(
+        f"{session.server.url}/hooks/before-edit",
+        json={"session_id": session.identifier, "cwd": WORKING_FOLDER, **edit_tool(f"{WORKING_FOLDER}/{FILE}")},
+        params={"format": format} if format else None,
+        headers={**session.headers(), **({"X-Shared-Memory-Agent": agent} if agent else {})},
+        timeout=60,
+    )
+    said: dict[str, Any] = answer.json()
+    return said
+
+
+@pytest.mark.parametrize(
+    ("agent", "format", "named"),
+    [
+        ("claude-code", None, "in Claude Code,"),
+        ("codex", None, "in Codex,"),
+        ("devin", None, "in Devin Desktop,"),
+        (None, "gemini", "in Gemini CLI,"),
+        (None, "copilot-cli", "in GitHub Copilot,"),
+        (None, "cursor", "in Cursor,"),
+        (None, "cline", "in Cline,"),
+        ("nonesuch", "cline", "in Cline,"),
+        (None, None, "in a coding agent that has not said which it is,"),
+        ("nonesuch", None, "in a coding agent that has not said which it is,"),
+    ],
+)
+def test_a_holder_known_only_by_its_hooks_is_named_with_the_coding_agent_its_hook_came_from(
+    dana: Session, cole: Session, agent: str | None, format: str | None, named: str
+) -> None:
+    assert hooked_edit(dana, agent, format) == ALLOWED
+
+    assert named in reason_in(cole.edit(FILE))
+    assert named in refused(cole)
+
+
+def test_the_coding_agent_a_tool_call_reported_is_not_replaced_by_what_a_hook_says(dana: Session, cole: Session) -> None:
+    take(dana.as_agent("codex-mcp-client"))
+
+    hooked_edit(dana, "claude-code")
+
+    assert "in Codex," in refused(cole)
+
+
+def test_the_coding_agent_a_hook_said_is_replaced_by_what_a_tool_call_reports(dana: Session, cole: Session) -> None:
+    hooked_edit(dana, "claude-code")
+
+    take(dana.as_agent("codex-mcp-client"))
+
+    assert "in Codex," in refused(cole)
+
+
 def test_the_same_members_other_session_is_blocked_too(dana: Session) -> None:
     dana.edit(FILE)
 
@@ -429,6 +482,7 @@ def test_a_kits_before_edit_command_takes_the_lock_and_hands_its_agent_the_block
     assert blocked.returncode == 0, blocked.stderr
     assert says.items() <= answer.items()
     assert "Dana Dev" in refused(cole), "the file is locked by its path from the repository's root"
+    assert f"in {agent}," in refused(cole), "the kit's hook says which coding agent it runs in"
 
 
 @needs_a_shell
@@ -665,6 +719,7 @@ def test_claude_codes_plugin_takes_the_lock_and_hands_claude_code_the_block(
     assert (allowed.returncode, json.loads(allowed.stdout)) == (0, ALLOWED), allowed.stderr
     assert blocked.returncode == 0, blocked.stderr
     assert "Dana Dev (emp-2)" in reason_in(json.loads(blocked.stdout))
+    assert "in Claude Code," in reason_in(json.loads(blocked.stdout)), "the plugin's hooks say they are Claude Code's"
     assert "Dana Dev" in refused(cole), "the file is named from the root the plugin sent, not the working folder"
 
 

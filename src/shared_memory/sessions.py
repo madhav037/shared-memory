@@ -88,7 +88,7 @@ class Session:
     member_name: str
     project_id: str
     repository: str | None
-    # The coding agent it runs in, once a tool call has reported it; a hook does not say.
+    # The coding agent it runs in, once a tool call has reported it or a hook has said which it came from.
     agent: str | None
     started_at: datetime
     last_seen_at: datetime
@@ -138,10 +138,11 @@ class Sessions:
         """Start a session under an identifier made here, for a coding agent whose hooks told it none."""
         return self.touch(caller, secrets.token_hex(8))
 
-    def touch(self, caller: Caller, identifier: str) -> Session:
+    def touch(self, caller: Caller, identifier: str, hooked_by: str | None = None) -> Session:
         """The calling session, seen now: started if the server doesn't know it, active again if it had ended or gone
         idle. One back from idle, or back after it had ended, has lost its activity and locks, and is told so once
-        (`waiting_notices`)."""
+        (`waiting_notices`). `hooked_by` is the coding agent a hook says it runs in, kept only for a session whose
+        agent no tool call has reported: the caller's own agent, which a tool call reports, replaces it."""
         project = caller.require_project()
         kept = usable(identifier)
         if kept is None:
@@ -156,7 +157,7 @@ class Sessions:
                 "INSERT INTO sessions (member_id, project_id, identifier, repository, agent, started_at, last_seen_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (member_id, project_id, identifier) DO NOTHING"
                 " RETURNING id, repository, agent, started_at",
-                (*key, caller.repository, caller.agent, now, now),
+                (*key, caller.repository, caller.agent or hooked_by, now, now),
             ).fetchone()
             if row is None:
                 known = conn.execute(
@@ -173,9 +174,9 @@ class Sessions:
                     "UPDATE sessions SET last_seen_at = %s, ended_at = NULL,"
                     " started_at = CASE WHEN %s THEN %s ELSE started_at END,"
                     " back_from_idle = (back_from_idle OR %s) AND NOT %s, back_from_end = back_from_end OR %s,"
-                    " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent)"
+                    " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent, %s)"
                     " WHERE id = %s RETURNING id, repository, agent, started_at",
-                    (now, ended, now, idle, ended, ended, caller.repository, caller.agent, known["id"]),
+                    (now, ended, now, idle, ended, ended, caller.repository, caller.agent, hooked_by, known["id"]),
                 ).fetchone()
                 assert row is not None
         return Session(
