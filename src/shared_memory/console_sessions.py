@@ -166,31 +166,30 @@ class ConsoleSessions:
         now = self._clock()
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT s.id, s.created_at, s.used_at, s.ended_at,"
-                " m.id AS member_pk, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
-                " FROM console_sessions s JOIN members m ON m.id = s.member_id JOIN teams t ON t.id = m.team_id"
-                " WHERE s.token_hash = %s",
+                "SELECT id, member_id, created_at, used_at, ended_at FROM console_sessions WHERE token_hash = %s",
                 (_hash(token),),
             ).fetchone()
-            if row is None or row["ended_at"] is not None or row["removed_at"] is not None:
+            if row is None or row["ended_at"] is not None:
                 return None
             if now - row["used_at"] > timedelta(hours=self._settings.console_session_idle_hours):
                 return None
             if now - row["created_at"] > timedelta(days=self._settings.console_session_days):
                 return None
+            member = self._identity.present(conn, row["member_id"])
+            if member is None:
+                return None
             conn.execute("UPDATE console_sessions SET used_at = %s WHERE id = %s", (now, row["id"]))
-            return Member(
-                row["member_pk"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
-                row["is_admin"],
-            )  # fmt: skip
+            return member
 
     def end_all_for(self, member_id: str, team_pk: int) -> None:
         """End every console session of one member, for when they are removed from the team."""
         with self._db.transaction() as conn:
+            found = self._identity.in_team(conn, team_pk, [member_id]).get(member_id)
+            if found is None:
+                return
             conn.execute(
-                "UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id IN"
-                " (SELECT id FROM members WHERE team_id = %s AND member_id = %s)",
-                (self._clock(), team_pk, member_id),
+                "UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id = %s",
+                (self._clock(), found[0]),
             )
 
     def end(self, token: str | None) -> None:
