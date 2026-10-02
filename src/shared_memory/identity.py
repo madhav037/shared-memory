@@ -507,6 +507,12 @@ class Identity:
         return {row["id"]: (row["member_id"], row["name"]) for row in rows}
 
     @staticmethod
+    def team_projects(conn: Conn, team_pk: int) -> list[str]:
+        """The project IDs of this team's projects, asked inside a transaction already open."""
+        rows = conn.execute("SELECT project_id FROM projects WHERE team_id = %s", (team_pk,)).fetchall()
+        return [row["project_id"] for row in rows]
+
+    @staticmethod
     def cannot_reach(conn: Conn, team_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
         """Of these members (by row id) each in a project, those of this team who can no longer reach it: removed
         from the team, or shut out of a restricted project. Asked inside the transaction of the change."""

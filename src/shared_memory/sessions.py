@@ -249,10 +249,13 @@ class Sessions:
         """End every session whose member can no longer reach its project: removed from the team, or shut out of a
         restricted project. Identity calls this inside the transaction of any change that may have cost a member a
         project (`Identity.on_access_lost`), so the change and the sessions' end happen together or not at all."""
-        open_pairs = conn.execute("SELECT DISTINCT member_id, project_id FROM sessions WHERE ended_at IS NULL").fetchall()
-        lost = self._identity.cannot_reach(
-            conn, caller.member.team_pk, [(row["member_id"], row["project_id"]) for row in open_pairs]
-        )
+        team_pk = caller.member.team_pk
+        # Only the not-ended sessions of this team's projects, which the not-ended index finds by project.
+        open_pairs = conn.execute(
+            "SELECT DISTINCT member_id, project_id FROM sessions WHERE ended_at IS NULL AND project_id = ANY(%s)",
+            (self._identity.team_projects(conn, team_pk),),
+        ).fetchall()
+        lost = self._identity.cannot_reach(conn, team_pk, [(row["member_id"], row["project_id"]) for row in open_pairs])
         if not lost:
             return lambda: None
         rows = conn.execute(
