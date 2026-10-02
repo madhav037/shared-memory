@@ -120,14 +120,24 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
 runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's kit posts to the same endpoint.
 
 - **Headers**: `Authorization`, `X-Shared-Memory-Project` and `X-Shared-Memory-Repository`, as every hook sends, and
-  `X-Shared-Memory-Root`, the absolute path of the repository's root where the agent gives its hook a folder: the
-  folder the agent was started in (Claude Code's `$CLAUDE_PROJECT_DIR`, Devin's, Gemini CLI's) followed by the way up
-  to the root that `git rev-parse --show-cdup` gives, so a session started in a subfolder names its files as one
-  started at the root does (`connection.repository_root`). Without git the folder stands alone. `?format=` names the
-  agent family, as on the other hooks, and `X-Shared-Memory-Agent` the coding agent.
+  `X-Shared-Memory-Root`, the absolute path of the repository's root, so a session started in a subfolder names its
+  files as one started at the root does:
+  - Where the agent gives its hook a folder (Claude Code's `$CLAUDE_PROJECT_DIR`, Devin's, Gemini CLI's): that
+    folder followed by the way up to the root that `git rev-parse --show-cdup` gives (`connection.repository_root`).
+    Without git the folder stands alone.
+  - Codex, Cursor and Cline give their hooks no folder, so their kits ask git from the folder the hook's command
+    runs in (`$PWD`, or the current location in Cline's `.ps1`; `connection.working_folder_root`). Without git, or
+    outside a repository, the header is empty. Codex's Windows command (cmd.exe) sends none. Their references don't
+    say the command runs in the session's folder, so whether it does still waits for a hand-check in each agent.
+  - Copilot CLI's hook posts by itself, with no command to ask git in, so it sends no root: a Copilot CLI session
+    started in a subfolder still names its files from that subfolder. A known limit.
+
+  `?format=` names the agent family, as on the other hooks, and `X-Shared-Memory-Agent` the coding agent.
 - **Payload**: the agent's own before-a-tool payload. Read from it: the session (`hooks.session_in`), the files
   (`hooks.edited_files`), and the working folder, `cwd`, or the open folders (`workspace_roots`, `workspaceRoots`),
-  which stand in for the root when the header is missing. The file is in `tool_input.file_path`,
+  which stand in for the root when the header is missing, and also when the header's root doesn't hold the edited
+  file: a root named from the wrong folder never turns a lockable edit into one outside the repository. The file is
+  in `tool_input.file_path`,
   `tool_input.notebook_path` or `tool_input.path`; in the patch of Codex's `apply_patch` (`tool_input.command`, which
   may name several files: the first one held blocks the edit, and `locks.take_all` gives back the locks it took for
   it); in Copilot CLI's `toolArgs.path`; or in Cline's
@@ -135,7 +145,9 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
   the tool's name must be one that changes a file. An agent that names its file or its root in another field is
   added in `hooks.edited_files`.
 - **The file's path from the root** is the file's absolute path with the root cut off the front; a file not under
-  the root is outside the repository. A relative path is taken as written from the root.
+  the root is outside the repository. A relative path (Codex's patch, Cline's tools) is read from the payload's
+  working folder, its `cwd` or else its first open folder, so it too is cut from a root above that folder; with no
+  such folder it is taken as written from the root.
 - **Allowed** is answered `{}` in every family: a free file (now locked for the session), the session's own lock, a
   never-lock file, a path outside the repository, an unreadable payload, a payload naming no session or no file, an
   unknown personal token, a server error. Never an explicit "allow", which would skip the agent's own permission
