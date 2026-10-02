@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from shared_memory.connection import repository_root
 from tests.support import REPO_ROOT, Session, Team
 
 
@@ -407,7 +408,10 @@ def test_devin_desktop_asks_the_server_before_its_edit_tools_and_as_a_session_en
 
     assert before_edit["matcher"] == "^(write|edit|notebook_edit)$"
     assert f"'{team.server.url}/hooks/before-edit?format=devin'" in command
-    assert '-H "X-Shared-Memory-Root: $DEVIN_PROJECT_DIR"' in command, "Devin's payload names no working folder"
+    assert f'-H "X-Shared-Memory-Root: {repository_root("DEVIN_PROJECT_DIR")}"' in command, (
+        "Devin's payload names no working folder, and the folder it was started in may be below the repository's root"
+    )
+    assert 'git -C "$DEVIN_PROJECT_DIR" rev-parse --show-cdup' in command
     assert before_edit["hooks"][0]["timeout"] == 4
     assert f"{team.server.url}/hooks/session-end" in end["hooks"][0]["command"]
 

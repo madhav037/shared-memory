@@ -140,9 +140,17 @@ def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Sessi
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
 
-    # The prompt starts a session and names its identifier last; the tool is then asked for that session's briefing.
     prompted = owner.run_prompt("briefing")
-    fetched = owner.call("briefing", session=prompted.split("identifier in Shared Memory is `")[1].split("`")[0])
+    fetched = owner.call("briefing", session=owner.identifier)
 
+    # The prompt starts no session, so it differs from the tool's only in what follows the briefing itself.
+    briefing_itself = fetched[: fetched.index("</shared-memory-briefing>")]
     assert f"[project memory] Use pnpm, not npm ({path})" in prompted
-    assert prompted == fetched
+    assert prompted.startswith(briefing_itself)
+    assert "identifier in Shared Memory is" not in prompted
+
+
+def test_the_briefing_prompt_of_a_session_outside_any_project_says_how_to_connect(team: Team) -> None:
+    told = team.owner().run_prompt("briefing")
+
+    assert "isn't connected to a project" in told

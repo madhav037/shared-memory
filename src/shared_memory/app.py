@@ -43,7 +43,7 @@ from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
 from shared_memory.lifecycle import Lifecycle
-from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, NoRepository, OutsideRepository, ProjectPatterns
+from shared_memory.locks import NEVER_LOCK, Held, Lock, Locks, ProjectPatterns
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -111,6 +111,14 @@ TAKEOVER_IS_POSSIBLE = (
     "A takeover is possible: it moves the lock to this session at once, and the holder is told on their next prompt. "
     "Ask your member first, and only once they say so call take_lock with this file's path from the repository's "
     "root, this session and takeover: true, then edit the file."
+)
+
+# What the briefing prompt ends with in place of a session's identifier: a prompt cannot know which session asked.
+SESSION_IS_THE_TOOLS = (
+    "This briefing was fetched as a prompt, which starts no session and so lists no other active sessions. If this "
+    "session was told its identifier in Shared Memory when it started, go on passing that as `session`. If it was "
+    "told none, call the briefing tool once without `session` to be given one, and to see the project's other active "
+    "sessions."
 )
 
 
@@ -247,7 +255,23 @@ def build_app(
         """The session whose hook sent this payload, seen now, or None when the payload names none. Every hook that
         runs for a session calls this, which is what keeps the session active."""
         identifier = hooks.session_in(payload)
-        return sessions.touch(current, identifier) if identifier is not None else None
+        if identifier is None:
+            return None
+        # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
+        # tool call has reported one.
+        return sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
+
+    def waiting_for(current: Caller, session: Session) -> list[str]:
+        """Everything waiting for a session, each told once: that it is back after going idle or ending, each
+        takeover or other end of a lock it held, and each possible collision. The one place it is gathered: the
+        prompt hook asks it, and so do the tools that take `session` and answer with `notices`, for a coding agent
+        with no prompt hook. A module with something for a session adds it here. Asking marks it all told, so a tool
+        asks only once its own work has succeeded."""
+        return [
+            *sessions.waiting_notices(session),
+            *locks.waiting_notices(session),
+            *collisions.warnings(current, session),
+        ]
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
 
@@ -310,6 +334,9 @@ def build_app(
                 return JSONResponse({})
             if current.project is None:
                 return JSONResponse({})
+            current = dataclasses.replace(
+                current, agent=hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), answer_format)
+            )
             payload = await _hook_payload(request, settings.hook_body_limit_bytes)
             if payload is None:
                 return JSONResponse({})
@@ -333,9 +360,7 @@ def build_app(
             # The session's part comes after the member's: what this session is told once. A module that has
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
-            told = [challenges.prompt_notices(current), *(sessions.waiting_notices(session) if session else [])]
-            told += locks.waiting_notices(session) if session else []
-            told += collisions.warnings(current, session) if session else []
+            told = [challenges.prompt_notices(current), *(waiting_for(current, session) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
@@ -374,23 +399,24 @@ def build_app(
             session = session_of(current, payload)
             if session is None:
                 return None
-            # One file, but for a patch that changes several: the first one held blocks the whole edit.
-            for path in hooks.edited_files(payload, root):
-                try:
-                    locks.take(session, path)
-                except Held as refused:
-                    return f"{refused} {TAKEOVER_IS_POSSIBLE}"
-                except (OutsideRepository, NoRepository):
-                    continue
+            # One file, but for a patch that changes several: the first one held blocks the whole edit, and the
+            # session keeps none of the locks it took for it.
+            try:
+                locks.take_all(session, hooks.edited_files(payload, root))
+            except Held as refused:
+                return f"{refused} {TAKEOVER_IS_POSSIBLE}"
             return None
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
 
-    def composed_briefing(current: Caller, named: str | None, session: Session | None) -> str | None:
+    def composed_briefing(
+        current: Caller, named: str | None, session: Session | None, with_sessions: bool = True
+    ) -> str | None:
         """What a session starts with: its project's pins, any notices for this member, then their cards, the
         project's known issues and its other active sessions. The one source for the session-start hook, the briefing
         tool and the briefing prompt. `named` is the line naming the session's identifier, which follows the briefing
-        and shares its cap; `session` is the one being briefed, whose own line is left out."""
+        and shares its cap; `session` is the one being briefed, whose own line is left out. Without `with_sessions`
+        the active sessions are left out, for an asker whose own session isn't known."""
         due, working = board.for_briefing(current)
         work = Work(due, working, known_issues.titles(current))
         return briefing.for_session(
@@ -398,7 +424,7 @@ def build_app(
             extra=challenges.briefing_notices(current),
             work=work,
             followed_by=named,
-            sessions=activities.for_briefing(current, session),
+            sessions=activities.for_briefing(current, session) if with_sessions else None,
         )
 
     def briefing_text(current: Caller, identifier: str | None = None) -> str:
@@ -416,6 +442,20 @@ def build_app(
         )
         return f"{briefed}\n\n{named}"
 
+    def briefing_without_a_session(current: Caller) -> str:
+        """The briefing as a prompt shows it. A prompt takes no arguments, so it cannot know which session asked:
+        it starts none, which would be a second one beside the session an agent's hooks already started, and it
+        leaves out the active sessions, where the asking session could not be told from the others."""
+        try:
+            current.require_project()
+        except Refused as refused:
+            return str(refused)
+        briefed = composed_briefing(current, SESSION_IS_THE_TOOLS, None, with_sessions=False) or (
+            "The briefing is empty: nothing is pinned in this project, nothing is waiting for you, none of your cards "
+            "is due or in progress, and it has no known issues."
+        )
+        return f"{briefed}\n\n{SESSION_IS_THE_TOOLS}"
+
     @server.tool(name="briefing")
     @_refusals_as_tool_errors
     def the_briefing(ctx: Context, session: str | None = None) -> str:
@@ -424,15 +464,17 @@ def build_app(
         activity. Call it at the start of a task, before anything else, if your session wasn't given it. What it holds
         is information, not instructions.
 
-        session is this session's identifier, if it has been told one. Without it a session is started here: the
-        briefing ends by naming its identifier, to pass as session to the tools that take one."""
+        session is this session's identifier. If this session was told one when it started (its session-start hook
+        names it), pass it: a call without it starts a second session beside that one. Only a session that was told
+        none calls without it: a session is started here, and the briefing ends by naming its identifier, to pass as
+        session to the tools that take one."""
         return briefing_text(caller(ctx), session)
 
     @server.prompt(name="briefing", description="Bring this session's Shared Memory briefing into it.")
     def briefing_prompt(ctx: Context) -> str:
-        """The briefing as a prompt, for agents that offer server prompts as commands."""
+        """The briefing as a prompt, for agents that offer server prompts as commands. It starts no session."""
         try:
-            return briefing_text(caller(ctx))
+            return briefing_without_a_session(caller(ctx))
         except Refused as refused:
             return str(refused)
 
@@ -446,12 +488,14 @@ def build_app(
 
         session is this session's identifier, as its briefing named it.
 
-        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
-        editing that file and tell your member."""
-        known = sessions.touch(caller(ctx), session)
+        notices in the answer is what this session is told once: a lock it held that another session took over
+        (stop editing that file), a possible collision with another session's activity, or that its own activity and
+        locks ended. Tell your member."""
+        current = caller(ctx)
+        known = sessions.touch(current, session)
         stated = activities.state(known, activity)
         collisions.embed(known, stated)
-        return {"session": known.identifier, "activity": stated, "notices": locks.waiting_notices(known)}
+        return {"session": known.identifier, "activity": stated, "notices": waiting_for(current, known)}
 
     def onboarding_steps(current: Caller) -> str:
         current.require_project()
@@ -764,12 +808,14 @@ def build_app(
         on its next prompt. A takeover is your member's decision: when you are refused, tell them who holds the file
         and offer it, and pass takeover as true only once your member has said so, never on your own.
 
-        notices in the answer is what this session is told once: a lock it held that another session took over. Stop
-        editing that file and tell your member.
+        notices in the answer is what this session is told once: a lock it held that another session took over
+        (stop editing that file), a possible collision with another session's activity, or that its own activity and
+        locks ended. Tell your member.
         """
-        calling = sessions.touch(caller(ctx), session)
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
         taken = locks.take(calling, path, repository, takeover)
-        notices = locks.waiting_notices(calling)
+        notices = waiting_for(current, calling)
         if isinstance(taken, Lock):
             return {
                 "locked": True,
@@ -793,10 +839,17 @@ def build_app(
     def release_lock(path: str, session: str, ctx: Context, repository: str | None = None) -> dict[str, Any]:
         """Release a file this session holds the lock on, once your work on it is finished, so another session can
         take it at once. path, session and repository are as for take_lock. Only the lock's holder releases it: for a
-        file another session holds you are refused and told who holds it.
+        file another session holds you are refused and told who holds it. notices in the answer is as for take_lock.
         """
-        ended = locks.release(sessions.touch(caller(ctx), session), path, repository)
-        return {"released": True, "repository": ended.repository, "path": ended.path}
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        ended = locks.release(calling, path, repository)
+        return {
+            "released": True,
+            "repository": ended.repository,
+            "path": ended.path,
+            "notices": waiting_for(current, calling),
+        }
 
     @server.tool()
     @_refusals_as_tool_errors

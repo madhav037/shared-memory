@@ -1,6 +1,6 @@
 {
   "name": "shared-memory",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Connects Claude Code sessions to your team's Shared Memory server.",
   "userConfig": {
     "server_url": {

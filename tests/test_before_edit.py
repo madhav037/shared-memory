@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from shared_memory.connection import connection_kit
+from shared_memory.connection import connection_kit, repository_root
 from tests.support import CLAUDE_EVENTS, REPO_ROOT, WORKING_FOLDER, Session, Team, edit_tool
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
@@ -99,6 +99,59 @@ def test_a_blocked_edit_says_a_takeover_is_possible_once_the_member_says_so(dana
     assert "takeover" in reason
     assert "take_lock" in reason
     assert "member" in reason
+
+
+def hooked_edit(session: Session, agent: str | None = None, format: str | None = None) -> dict[str, Any]:
+    """The before-edit hook of a session known only by its hooks, which name their coding agent or their format."""
+    answer = httpx.post(
+        f"{session.server.url}/hooks/before-edit",
+        json={"session_id": session.identifier, "cwd": WORKING_FOLDER, **edit_tool(f"{WORKING_FOLDER}/{FILE}")},
+        params={"format": format} if format else None,
+        headers={**session.headers(), **({"X-Shared-Memory-Agent": agent} if agent else {})},
+        timeout=60,
+    )
+    said: dict[str, Any] = answer.json()
+    return said
+
+
+@pytest.mark.parametrize(
+    ("agent", "format", "named"),
+    [
+        ("claude-code", None, "in Claude Code,"),
+        ("codex", None, "in Codex,"),
+        ("devin", None, "in Devin Desktop,"),
+        (None, "gemini", "in Gemini CLI,"),
+        (None, "copilot-cli", "in GitHub Copilot,"),
+        (None, "cursor", "in Cursor,"),
+        (None, "cline", "in Cline,"),
+        ("nonesuch", "cline", "in Cline,"),
+        (None, None, "in a coding agent that has not said which it is,"),
+        ("nonesuch", None, "in a coding agent that has not said which it is,"),
+    ],
+)
+def test_a_holder_known_only_by_its_hooks_is_named_with_the_coding_agent_its_hook_came_from(
+    dana: Session, cole: Session, agent: str | None, format: str | None, named: str
+) -> None:
+    assert hooked_edit(dana, agent, format) == ALLOWED
+
+    assert named in reason_in(cole.edit(FILE))
+    assert named in refused(cole)
+
+
+def test_the_coding_agent_a_tool_call_reported_is_not_replaced_by_what_a_hook_says(dana: Session, cole: Session) -> None:
+    take(dana.as_agent("codex-mcp-client"))
+
+    hooked_edit(dana, "claude-code")
+
+    assert "in Codex," in refused(cole)
+
+
+def test_the_coding_agent_a_hook_said_is_replaced_by_what_a_tool_call_reports(dana: Session, cole: Session) -> None:
+    hooked_edit(dana, "claude-code")
+
+    take(dana.as_agent("codex-mcp-client"))
+
+    assert "in Codex," in refused(cole)
 
 
 def test_the_same_members_other_session_is_blocked_too(dana: Session) -> None:
@@ -310,6 +363,24 @@ def test_a_codex_patch_of_several_files_takes_each_lock_and_is_blocked_when_one_
     assert "billing-api:docs/retries.md" in reason_in(answer)
 
 
+def test_a_blocked_patch_of_several_files_leaves_its_session_holding_none_it_took_for_it(
+    team: Team, dana: Session, cole: Session, owner: Session
+) -> None:
+    """Nothing was edited, so the files named before the held one stay free; what the session held already stays its."""
+    dana.edit("docs/retries.md")
+    cole.edit("CHANGELOG.md")
+    team.server.clock.advance(minutes=1)
+
+    answer = cole.hook_payload("before-edit", codex_edit(cole, "CHANGELOG.md", "README.md", "docs/retries.md", FILE))
+
+    assert "billing-api:docs/retries.md" in reason_in(answer)
+    assert "Cole Coder" in refused(owner, "CHANGELOG.md"), "held before the blocked edit, and still"
+    assert take(owner, "README.md")["locked"] is True, "taken for the blocked edit, and given up with it"
+    assert take(owner, FILE)["locked"] is True, "never reached"
+    assert cole.hook_payload("before-edit", codex_edit(cole, "CHANGELOG.md", "src/free.py")) == ALLOWED
+    assert "Cole Coder" in refused(owner, "src/free.py"), "a patch that is allowed keeps every lock it took"
+
+
 def test_a_tool_that_only_reads_a_file_takes_no_lock(dana: Session, cole: Session) -> None:
     viewed = {
         "sessionId": dana.identifier,
@@ -411,6 +482,7 @@ def test_a_kits_before_edit_command_takes_the_lock_and_hands_its_agent_the_block
     assert blocked.returncode == 0, blocked.stderr
     assert says.items() <= answer.items()
     assert "Dana Dev" in refused(cole), "the file is locked by its path from the repository's root"
+    assert f"in {agent}," in refused(cole), "the kit's hook says which coding agent it runs in"
 
 
 @needs_a_shell
@@ -609,31 +681,140 @@ def test_claude_codes_plugin_runs_the_hook_before_its_file_edit_tools_and_gives_
     assert list(said) == ["systemMessage"], "a warning for the member, and nothing that blocks the edit"
 
 
-def run_plugin(server_url: str, session: Session, token: str | None) -> subprocess.CompletedProcess[str]:
+def run_plugin(
+    server_url: str,
+    session: Session,
+    token: str | None,
+    started_in: str | None = WORKING_FOLDER,
+    file: str = f"{WORKING_FOLDER}/{FILE}",
+) -> subprocess.CompletedProcess[str]:
     """Run the plugin's before-edit command the way Claude Code does: the payload on stdin, the options in the
-    environment."""
+    environment, and the folder Claude Code was started in as CLAUDE_PROJECT_DIR."""
     assert session.project is not None and session.repository is not None and token is not None
     payload = {
         "session_id": session.identifier,
         "cwd": f"{WORKING_FOLDER}/src",
         "hook_event_name": "PreToolUse",
-        **edit_tool(f"{WORKING_FOLDER}/{FILE}"),
+        **edit_tool(file),
     }
+    environment = {
+        **os.environ,
+        "CLAUDE_PLUGIN_OPTION_SERVER_URL": server_url,
+        "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
+        "SHARED_MEMORY_PROJECT": session.project,
+        "SHARED_MEMORY_REPOSITORY": session.repository,
+    }
+    environment.pop("CLAUDE_PROJECT_DIR", None)
+    if started_in is not None:
+        environment["CLAUDE_PROJECT_DIR"] = started_in
     return subprocess.run(
-        ["sh", "-c", plugin_command()],
+        ["sh", "-c", plugin_command()], input=json.dumps(payload), capture_output=True, text=True, timeout=60,
+        env=environment,
+    )  # fmt: skip
+
+
+# A session started in a subfolder of its repository (#241)
+
+needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="the hooks ask git where the repository's root is")
+
+
+@pytest.fixture
+def subfolder(tmp_path: Path) -> Path:
+    """The folder a coding agent was started in: `console`, inside a real git repository."""
+    repository = tmp_path / "billing-api"
+    (repository / "console" / "src").mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", str(repository)], check=True, capture_output=True)
+    return repository / "console"
+
+
+def test_claude_codes_plugin_asks_git_for_the_repositorys_root_within_the_same_command() -> None:
+    command = plugin_command()
+
+    assert f'-H "X-Shared-Memory-Root: {repository_root("CLAUDE_PROJECT_DIR")}"' in command
+    assert 'git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-cdup 2>/dev/null' in command
+    assert command.count(" || ") == 1, "git failing is not what makes the command fall back to its warning"
+
+
+@needs_a_shell
+@needs_git
+def test_claude_code_started_in_a_subfolder_names_its_locks_from_the_repositorys_root(
+    team: Team, dana: Session, cole: Session, subfolder: Path
+) -> None:
+    inside = run_plugin(team.server.url, dana, dana.token, str(subfolder), str(subfolder / "src" / "App.tsx"))
+    above = run_plugin(team.server.url, dana, dana.token, str(subfolder), str(subfolder.parent / "README.md"))
+
+    assert json.loads(inside.stdout) == ALLOWED, inside.stderr
+    assert json.loads(above.stdout) == ALLOWED, above.stderr
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx"), "as a session started at the root names it"
+    assert "Dana Dev" in refused(cole, "README.md"), "a file above the subfolder is inside the repository"
+    assert take(cole, "src/App.tsx")["locked"] is True, "and under no second name"
+
+
+@needs_a_shell
+def test_claude_code_started_outside_a_repository_names_its_locks_from_where_it_was_started(
+    team: Team, dana: Session, cole: Session, tmp_path: Path
+) -> None:
+    ran = run_plugin(team.server.url, dana, dana.token, str(tmp_path), str(tmp_path / "src" / "App.tsx"))
+
+    assert json.loads(ran.stdout) == ALLOWED, ran.stderr
+    assert "Dana Dev" in refused(cole, "src/App.tsx")
+
+
+@needs_a_shell
+def test_a_plugin_hook_given_no_folder_leaves_the_root_to_the_payloads_working_folder(
+    team: Team, dana: Session, cole: Session
+) -> None:
+    ran = run_plugin(team.server.url, dana, dana.token, started_in=None)
+
+    assert json.loads(ran.stdout) == ALLOWED, ran.stderr
+    assert "Dana Dev" in refused(cole, "webhooks/retry.py"), "from the payload's cwd, /work/app/src"
+
+
+def run_kit_started_in(argv: list[str], session: Session, agent: str, started_in: Path) -> None:
+    """Run a kit's before-edit hook for an edit of src/App.tsx by an agent started in this folder."""
+    assert session.token is not None
+    payload = AGENTS_OWN[agent][0](session, FILE)
+    payload["tool_input"]["file_path"] = str(started_in / "src" / "App.tsx")
+    payload.update({"cwd": str(started_in)} if "cwd" in payload else {})
+    ran = subprocess.run(
+        argv,
         input=json.dumps(payload),
         capture_output=True,
         text=True,
         timeout=60,
         env={
             **os.environ,
-            "CLAUDE_PLUGIN_OPTION_SERVER_URL": server_url,
-            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
-            "CLAUDE_PROJECT_DIR": WORKING_FOLDER,
-            "SHARED_MEMORY_PROJECT": session.project,
-            "SHARED_MEMORY_REPOSITORY": session.repository,
+            "SHARED_MEMORY_TOKEN": session.token,
+            "DEVIN_PROJECT_DIR": str(started_in),
+            "GEMINI_PROJECT_DIR": str(started_in),
         },
     )
+    assert (ran.returncode, json.loads(ran.stdout)) == (0, ALLOWED), ran.stderr
+
+
+@needs_a_shell
+@needs_git
+def test_devin_started_in_a_subfolder_names_its_locks_from_the_repositorys_root(
+    dana: Session, cole: Session, subfolder: Path
+) -> None:
+    command = KIT_COMMANDS["Devin Desktop"](kit(dana))
+
+    run_kit_started_in(["sh", "-c", command], dana, "Devin Desktop", subfolder)
+
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx")
+
+
+@needs_git
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_gemini_started_in_a_subfolder_names_its_locks_from_the_repositorys_root(
+    dana: Session, cole: Session, subfolder: Path, tmp_path: Path
+) -> None:
+    script = tmp_path / "shared-memory.mjs"
+    script.write_text(kit(dana)[".gemini/hooks/shared-memory.mjs"], encoding="utf-8")
+
+    run_kit_started_in(["node", str(script), "before-edit"], dana, "Gemini CLI", subfolder)
+
+    assert "Dana Dev" in refused(cole, "console/src/App.tsx")
 
 
 @needs_a_shell
@@ -647,6 +828,7 @@ def test_claude_codes_plugin_takes_the_lock_and_hands_claude_code_the_block(
     assert (allowed.returncode, json.loads(allowed.stdout)) == (0, ALLOWED), allowed.stderr
     assert blocked.returncode == 0, blocked.stderr
     assert "Dana Dev (emp-2)" in reason_in(json.loads(blocked.stdout))
+    assert "in Claude Code," in reason_in(json.loads(blocked.stdout)), "the plugin's hooks say they are Claude Code's"
     assert "Dana Dev" in refused(cole), "the file is named from the root the plugin sent, not the working folder"
 
 

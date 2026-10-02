@@ -12,6 +12,8 @@ from dataclasses import asdict, dataclass
 from importlib import resources
 from typing import Any, Literal
 
+from shared_memory.hooks import AGENT_HEADER
+
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"
 GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
 EVERY_AGENT = "Every agent"
@@ -53,6 +55,19 @@ def skill() -> str:
     return resources.files("shared_memory").joinpath("skill.md").read_text(encoding="utf-8")
 
 
+def repository_root(variable: str) -> str:
+    """What a POSIX shell works the repository's root out from: the folder an agent names in this environment
+    variable, which is where it was started, and how far above it git says the repository's root is.
+
+    An agent started in a subfolder of its repository names that subfolder, and a file's path cut from there would
+    name one file differently from a session started at the root (#241). `git rev-parse --show-cdup` answers with the
+    way up (`../`, or nothing at the root), so the folder is kept as the agent wrote it and the server follows the way
+    up. Without git, or outside a repository, it answers nothing and the folder stands as it did before. A variable
+    that isn't set leaves the header empty, and the server reads the root from the payload instead.
+    """
+    return f'${{{variable}:+${variable}/$(git -C "${variable}" rev-parse --show-cdup 2>/dev/null)}}'
+
+
 def hook_command(
     hooks_url: str,
     event: str,
@@ -64,13 +79,15 @@ def hook_command(
     format: str = "",
     root: str = "",
     otherwise: str = "",
+    agent: str = "",
 ) -> str:
     """The command a hook runs to post its payload and print what the server answers.
 
     It never gets in a session's way: a server that is down, slow or unhappy leaves the command printing nothing at
     all, or `otherwise` for an agent that must be answered something. Windows gets its own variant because Codex runs
-    hooks there in cmd.exe, where a POSIX shell's syntax for an environment variable means nothing. `root` is the
-    environment variable an agent gives its hooks the repository's root in, where it has one.
+    hooks there in cmd.exe, where a POSIX shell's syntax for an environment variable means nothing. `root` is what
+    the shell names the repository's root with (`repository_root`), for an agent that gives its hooks a folder. `agent` names the coding
+    agent the hook runs in, so a session known only by its hooks is known with its agent.
     """
     token = "%" + TOKEN_VARIABLE + "%" if windows else "$" + TOKEN_VARIABLE
     quote = '"' if windows else "'"
@@ -80,6 +97,8 @@ def hook_command(
         "X-Shared-Memory-Project": project_id,
         "X-Shared-Memory-Repository": repository,
     }
+    if agent:
+        headers[AGENT_HEADER] = agent
     if root:
         headers["X-Shared-Memory-Root"] = root
     # A POSIX shell reads a variable only inside double quotes.
@@ -122,7 +141,7 @@ def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
     written = ""
     for event, matcher, endpoint, seconds in CODEX_HOOKS:
         posix, windows = (
-            hook_command(hooks_url, endpoint, project_id, repository, seconds=seconds, windows=on_windows)
+            hook_command(hooks_url, endpoint, project_id, repository, seconds=seconds, windows=on_windows, agent="codex")
             for on_windows in (False, True)
         )
         written += f"""
@@ -171,18 +190,36 @@ def gemini_script(hooks_url: str, project_id: str, repository: str) -> str:
 // node is the same on every machine, and Gemini CLI brings its own. Your personal token is read from the
 // {TOKEN_VARIABLE} environment variable and is never committed here.
 // Nothing in here can hold up a session: any problem at all answers with nothing, and an edit then goes ahead.
+import {{ execFileSync }} from "node:child_process";
+
 const server = {json.dumps(hooks_url)};
 const headers = {{
   "Content-Type": "application/json",
   "X-Shared-Memory-Project": {json.dumps(project_id)},
   "X-Shared-Memory-Repository": {json.dumps(repository)},
+  {json.dumps(AGENT_HEADER)}: "gemini",
 }};
-// Where Gemini CLI says the project's root is, which a file's path is read from.
-if (process.env.GEMINI_PROJECT_DIR) headers["X-Shared-Memory-Root"] = process.env.GEMINI_PROJECT_DIR;
 
 const [event] = process.argv.slice(2);
 const token = process.env.{TOKEN_VARIABLE};
 const seconds = event === "session-start" ? 5 : 3;
+
+// The repository's root, which a file's path is read from: the folder Gemini CLI was started in, and how far above it
+// git says the root is ("../", or nothing at the root). Without git, or outside a repository, that folder stands.
+const started = process.env.GEMINI_PROJECT_DIR;
+if (started && event === "before-edit") {{
+  let up = "";
+  try {{
+    up = execFileSync("git", ["-C", started, "rev-parse", "--show-cdup"], {{
+      encoding: "utf8",
+      timeout: 500,
+      stdio: ["ignore", "pipe", "ignore"],
+    }}).trim();
+  }} catch {{
+    // No git here, or no repository.
+  }}
+  headers["X-Shared-Memory-Root"] = `${{started}}/${{up}}`;
+}}
 
 let payload = "";
 if (!process.stdin.isTTY) {{
@@ -224,6 +261,7 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
                 "Authorization": f"Bearer ${{{TOKEN_VARIABLE}}}",
                 "X-Shared-Memory-Project": project_id,
                 "X-Shared-Memory-Repository": repository,
+                AGENT_HEADER: "copilot",
             },
             "allowedEnvVars": [TOKEN_VARIABLE],
             "timeoutSec": seconds,
@@ -259,6 +297,7 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             windows=False,
             format="cursor",
             otherwise=otherwise,
+            agent="cursor",
         )
 
     return {
@@ -363,8 +402,9 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
     """Devin Desktop's hooks, in its own file and nowhere else. Devin loads whatever hooks .claude/settings.json holds
     as well, so Shared Memory keeps none there: a session would otherwise run each hook twice.
 
-    Its before-edit hook asks for Devin's own blocked shape and names the repository's root, which Devin gives its
-    hooks in DEVIN_PROJECT_DIR and leaves out of their payload."""
+    Its before-edit hook asks for Devin's own blocked shape and names the repository's root: Devin gives its hooks
+    the folder it was started in as DEVIN_PROJECT_DIR and leaves it out of their payload, and git says how far above
+    that folder the root is."""
     return {
         event: [
             {
@@ -380,7 +420,8 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
                             seconds=seconds,
                             windows=False,
                             format="devin" if endpoint == "before-edit" else "",
-                            root="$DEVIN_PROJECT_DIR" if endpoint == "before-edit" else "",
+                            root=repository_root("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
+                            agent="devin",
                         ),
                         "timeout": seconds + 1,
                     }
@@ -413,7 +454,7 @@ CLINE_DOING = {
 def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, repository: str, seconds: int) -> str:
     """What Cline runs on macOS and Linux: it hands the script its payload and reads back what the script prints."""
     posting = hook_command(
-        hooks_url, endpoint, project_id, repository, seconds=seconds, windows=False, format="cline"
+        hooks_url, endpoint, project_id, repository, seconds=seconds, windows=False, format="cline", agent="cline"
     )
     return f"""#!/bin/sh
 # Shared Memory: {CLINE_DOING[event]}. Cline hands this script its payload and reads what it prints.
@@ -435,6 +476,7 @@ try {
       Authorization = "Bearer $env:__TOKEN__"
       'X-Shared-Memory-Project' = '__PROJECT__'
       'X-Shared-Memory-Repository' = '__REPOSITORY__'
+      '__AGENT_HEADER__' = 'cline'
     }
   if ($answer.StatusCode -eq 200) { [Console]::Out.Write($answer.Content) }
 } catch {
@@ -449,6 +491,7 @@ exit 0
         "__SECONDS__": str(seconds),
         "__PROJECT__": project_id,
         "__REPOSITORY__": repository,
+        "__AGENT_HEADER__": AGENT_HEADER,
     }
     for placeholder, value in written.items():
         template = template.replace(placeholder, value)

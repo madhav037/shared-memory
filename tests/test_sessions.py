@@ -196,14 +196,55 @@ def test_a_session_that_never_went_idle_is_told_nothing(team: Team, owner: Sessi
     assert owner.prompt("write a haiku about cats") == {}
 
 
-def test_a_session_that_starts_again_after_its_end_is_active_and_told_nothing(team: Team, owner: Session) -> None:
+def test_a_session_that_starts_again_after_its_end_is_active_and_told_once_that_its_activity_and_locks_ended(
+    team: Team, owner: Session
+) -> None:
+    """Claude Code resuming a session it had ended."""
     owner.start()
     owner.end()
     team.server.clock.advance(minutes=45)
 
     owner.start()
+    first = added_context(owner.prompt("write a haiku about cats"))
 
     assert active(owner) == [("owner-1", "test-session")]
+    assert ENDED in first
+    assert "This session ended" in first and "idle" not in first, "in words that fit an end"
+    assert owner.prompt("write a haiku about cats") == {}
+
+
+def test_a_session_whose_next_prompt_follows_its_end_is_told_on_that_prompt(owner: Session, cole: Session) -> None:
+    """Cline ends the session when a task completes, and the task may go on."""
+    owner.call("set_activity", activity="Retrying failed webhooks", session=owner.identifier)
+    owner.call("take_lock", path="src/webhooks/retry.py", session=owner.identifier)
+    owner.end()
+
+    back = added_context(owner.prompt("write a haiku about cats"))
+
+    assert ENDED in back and "This session ended" in back
+    assert cole.call("take_lock", path="src/webhooks/retry.py", session=cole.identifier)["locked"] is True
+    assert owner.prompt("write a haiku about cats") == {}
+
+
+def test_a_session_back_from_its_end_through_a_tool_is_told_in_that_tools_answer(owner: Session) -> None:
+    owner.start()
+    owner.end()
+
+    stated = owner.call("set_activity", activity="Retrying failed webhooks", session=owner.identifier)
+
+    assert len(stated["notices"]) == 1 and "This session ended" in stated["notices"][0]
+    assert owner.prompt("write a haiku about cats") == {}
+
+
+def test_a_session_that_ends_again_before_it_was_told_is_told_once(owner: Session) -> None:
+    owner.start()
+    owner.end()
+    owner.start()
+    owner.end()
+
+    owner.start()
+
+    assert added_context(owner.prompt("write a haiku about cats")).count("This session ended") == 1
     assert owner.prompt("write a haiku about cats") == {}
 
 

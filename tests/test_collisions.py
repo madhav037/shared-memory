@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from anyio.from_thread import start_blocking_portal
@@ -18,6 +19,7 @@ from shared_memory.config import Settings
 from shared_memory.embeddings import DIMENSIONS, FastEmbedEmbedder
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_board import card
+from tests.test_locks import refused, take
 from tests.test_recall import promote
 
 HEADING = "[possible collision]"
@@ -99,8 +101,14 @@ def second_server(server: RunningServer, embedder: ChosenSimilarity) -> Iterator
             running.stop()
 
 
-def state(session: Session, activity: str) -> None:
-    session.call("set_activity", activity=activity, session=session.identifier)
+def collisions_in(answer: dict[str, Any]) -> list[str]:
+    """The collision warnings a tool's answer carries in its `notices`."""
+    return [notice for notice in answer["notices"] if notice.startswith(HEADING)]
+
+
+def state(session: Session, activity: str) -> list[str]:
+    """State the session's activity; the collision warnings that came with the answer."""
+    return collisions_in(session.call("set_activity", activity=activity, session=session.identifier))
 
 
 def warnings(session: Session, prompt: str = "write a haiku about cats") -> list[str]:
@@ -114,14 +122,12 @@ def warning_of(session: Session) -> str:
     return warning
 
 
-def test_two_sessions_whose_activities_score_above_the_threshold_are_each_warned_on_their_next_prompt(
-    owner: Session, dana: Session
-) -> None:
+def test_two_sessions_whose_activities_score_above_the_threshold_are_each_warned(owner: Session, dana: Session) -> None:
+    """The one that was there first on its next prompt, the one that stated the overlapping activity with its answer."""
     state(owner, WEBHOOKS)
-    state(dana.as_agent("codex-mcp-client"), RETRIES)
+    (to_dana,) = state(dana.as_agent("codex-mcp-client"), RETRIES)
 
     to_owner = warning_of(owner)
-    to_dana = warning_of(dana)
 
     assert "Dana Dev's session (Codex, billing-api)" in to_owner
     assert f'"{RETRIES}"' in to_owner
@@ -132,12 +138,55 @@ def test_two_sessions_whose_activities_score_above_the_threshold_are_each_warned
 
 def test_the_prompt_after_a_warning_carries_none(owner: Session, dana: Session) -> None:
     state(owner, WEBHOOKS)
-    state(dana, RETRIES)
+    to_dana = state(dana, RETRIES)
     warning_of(owner)
-    warning_of(dana)
 
+    assert len(to_dana) == 1
     assert owner.prompt("write a haiku about cats") == {}
-    assert dana.prompt("write a haiku about cats") == {}
+    assert dana.prompt("write a haiku about cats") == {}, "told with the answer of its set_activity, so not again"
+
+
+def test_a_session_with_no_prompt_hook_is_warned_in_the_result_of_its_next_take_lock_or_release_lock(
+    owner: Session, dana: Session, cole: Session
+) -> None:
+    state(owner, WEBHOOKS)
+    state(cole, BACKOFF)
+    take(owner)
+    take(cole, "src/invoices.py")
+
+    state(dana, RETRIES)
+    taken = take(owner, "docs/retries.md")
+    released = cole.call("release_lock", path="src/invoices.py", session=cole.identifier)
+
+    (to_owner,) = collisions_in(taken)
+    assert taken["locked"] is True
+    assert "Dana Dev's session" in to_owner and f'"{RETRIES}"' in to_owner
+    assert collisions_in(released) == [], "0.64 between Cole's and Dana's is under the threshold"
+    assert collisions_in(take(owner)) == [], "told once"
+    assert warnings(owner) == [], "wherever it was told"
+
+
+def test_a_refused_take_leaves_the_warning_waiting(owner: Session, dana: Session) -> None:
+    take(dana)
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+
+    refused(owner)
+
+    assert "Dana Dev" in warning_of(owner)
+
+
+def test_a_session_back_from_idle_with_no_prompt_hook_is_told_in_the_result_of_its_next_tool_call(
+    team: Team, owner: Session
+) -> None:
+    state(owner, WEBHOOKS)
+    team.server.clock.advance(minutes=31)
+
+    back = take(owner)
+
+    assert any("its activity and locks ended" in notice for notice in back["notices"])
+    assert take(owner)["notices"] == []
+    assert owner.prompt("write a haiku about cats") == {}, "told once, wherever it was told"
 
 
 def test_the_warning_comes_once_more_when_the_other_session_states_a_different_activity_that_still_overlaps(
@@ -146,9 +195,8 @@ def test_the_warning_comes_once_more_when_the_other_session_states_a_different_a
     state(owner, WEBHOOKS)
     state(dana, RETRIES)
     warning_of(owner)
-    warning_of(dana)
 
-    state(dana, BACKOFF)
+    assert state(dana, BACKOFF) == [], "the owner's activity did not change"
     again = warning_of(owner)
 
     assert f'"{BACKOFF}"' in again
@@ -176,15 +224,15 @@ def test_activities_scoring_below_the_threshold_give_no_warning(owner: Session, 
 
 def test_activities_scoring_exactly_the_threshold_are_warned_about(owner: Session, dana: Session) -> None:
     state(owner, WEBHOOKS)
-    state(dana, AT_THRESHOLD)
+    (to_dana,) = state(dana, AT_THRESHOLD)
 
     assert f'"{AT_THRESHOLD}"' in warning_of(owner)
-    assert f'"{WEBHOOKS}"' in warning_of(dana)
+    assert f'"{WEBHOOKS}"' in to_dana
 
 
 def test_a_session_is_warned_about_each_overlapping_session(owner: Session, dana: Session, cole: Session) -> None:
     state(owner, WEBHOOKS)
-    state(dana, RETRIES)
+    to_dana = state(dana, RETRIES)
     state(cole, INVOICES)
     first = warnings(owner)
 
@@ -193,7 +241,7 @@ def test_a_session_is_warned_about_each_overlapping_session(owner: Session, dana
 
     assert len(first) == 1 and "Dana Dev" in first[0]
     assert len(second) == 1 and "Cole Coder" in second[0]
-    to_dana = warnings(dana)
+    assert warnings(dana) == []
     assert len(to_dana) == 1 and "Olive Owner" in to_dana[0], "0.64 between Dana's and Cole's is under the threshold"
 
 
@@ -245,10 +293,9 @@ def test_a_session_that_ended_and_overlaps_again_is_warned_about_again(owner: Se
 def test_two_sessions_of_one_member_warn_each_other(owner: Session) -> None:
     second = owner.as_session("second-session")
     state(owner, WEBHOOKS)
-    state(second, RETRIES)
+    (to_second,) = state(second, RETRIES)
 
     to_first = warning_of(owner)
-    to_second = warning_of(second)
 
     assert "Olive Owner's other session" in to_first
     assert f'"{RETRIES}"' in to_first
@@ -268,10 +315,9 @@ def test_an_activity_shown_from_a_card_counts_like_a_stated_one(owner: Session, 
     card(owner, CARD)
     dana.call("claim_card", number=1)
     dana.start()
-    state(owner, WEBHOOKS)
+    (to_owner,) = state(owner, WEBHOOKS)
 
     to_dana = warning_of(dana)
-    to_owner = warning_of(owner)
 
     assert f'"{WEBHOOKS}"' in to_dana
     assert "Dana Dev's session" in to_owner
@@ -284,7 +330,7 @@ def test_the_warning_arrives_beside_what_recall_finds(owner: Session, dana: Sess
     state(owner, WEBHOOKS)
     state(dana, RETRIES)
 
-    context = added_context(dana.prompt("which package manager do we use?"))
+    context = added_context(owner.prompt("which package manager do we use?"))
 
     assert HEADING in context
     assert "We use pnpm for every package." in context
@@ -296,23 +342,23 @@ def test_a_slow_recall_does_not_drop_the_warning(owner: Session, dana: Session, 
 
     embedder.slow = True
     try:
-        to_dana = warnings(dana, "which package manager do we use?")
+        to_owner = warnings(owner, "which package manager do we use?")
     finally:
         embedder.slow = False
 
-    assert len(to_dana) == 1 and "Olive Owner" in to_dana[0]
-    assert warnings(dana) == [], "told once, though recall was given up on"
+    assert len(to_owner) == 1 and "Dana Dev" in to_owner[0]
+    assert warnings(owner) == [], "told once, though recall was given up on"
 
 
 def test_an_activity_stated_through_one_worker_is_warned_about_by_another(
     owner: Session, dana: Session, second_server: RunningServer
 ) -> None:
     state(owner, WEBHOOKS)
-    state(dataclasses.replace(dana, server=second_server), RETRIES)
+    (to_dana,) = state(dataclasses.replace(dana, server=second_server), RETRIES)
 
     to_owner = warning_of(dataclasses.replace(owner, server=second_server))
-    to_dana = warning_of(dana)
 
     assert "Dana Dev" in to_owner
     assert "Olive Owner" in to_dana
+    assert warnings(dana) == [], "what one worker told with a tool's answer the other does not repeat on a prompt"
     assert warnings(owner) == [], "one worker's warning is not repeated by the other"
