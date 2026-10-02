@@ -12,10 +12,27 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import psycopg
 import pytest
+from anyio.from_thread import start_blocking_portal
 
+from shared_memory.app import build_app
+from shared_memory.config import Settings
 from shared_memory.connection import BRIEFING_SECONDS, HOOK_SECONDS, connection_kit, repository_root
-from tests.support import CLAUDE_EVENTS, REPO_ROOT, WORKING_FOLDER, Session, Team, edit_tool
+from shared_memory.embeddings import LazyEmbedder
+from tests.support import (
+    CLAUDE_EVENTS,
+    REPO_ROOT,
+    WORKING_FOLDER,
+    RunningServer,
+    Session,
+    Team,
+    TestClock,
+    edit_tool,
+    fresh_database,
+    member,
+    new_team,
+)
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
 
@@ -560,15 +577,30 @@ def test_a_session_whose_connection_names_no_repository_is_allowed(team: Team, d
     assert nowhere.edit(FILE) == ALLOWED
 
 
-def test_a_server_error_is_allowed(dana: Session, cole: Session, monkeypatch: pytest.MonkeyPatch) -> None:
-    dana.edit(FILE)
+def test_a_server_error_is_allowed(tmp_path_factory: pytest.TempPathFactory) -> None:
+    """On a server of its own, whose locks table is dropped under it, so every lock it reads or takes fails."""
+    settings = Settings(
+        database_url=fresh_database("shared_memory_broken_locks"),
+        memory_root=tmp_path_factory.mktemp("broken-locks-memory"),
+        model_cache=REPO_ROOT / ".cache" / "fastembed",
+    )
+    clock = TestClock()
+    with start_blocking_portal() as portal:
+        server = RunningServer(
+            build_app(settings, clock=clock, embedder=LazyEmbedder(settings.model_cache)), settings, clock, portal
+        )
+        try:
+            team = new_team(server)
+            project: str = team.owner().call("create_project", name="Billing")["project_id"]
+            dana = member(team, project, "emp-2", "Dana Dev")
+            cole = member(team, project, "emp-3", "Cole Coder")
+            dana.edit(FILE)
+            with psycopg.connect(settings.database_url, autocommit=True) as conn:
+                conn.execute("DROP TABLE locks CASCADE")
 
-    def broken(*args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError("the database went away")
-
-    monkeypatch.setattr(cole.server.app.state.locks, "take", broken)
-
-    assert cole.edit(FILE) == ALLOWED
+            assert cole.edit(FILE) == ALLOWED
+        finally:
+            server.stop()
 
 
 # The session

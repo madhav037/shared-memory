@@ -7,7 +7,7 @@ import dataclasses
 
 import pytest
 
-from shared_memory.locks import NEVER_LOCK, PATTERN_LIMIT, Locks
+from shared_memory.locks import NEVER_LOCK, PATTERN_LIMIT
 from tests.support import (
     Console,
     ConsoleClient,
@@ -243,8 +243,6 @@ def test_a_lock_already_held_on_a_file_that_now_matches_a_pattern_no_longer_bloc
     team: Team, dana: Session
 ) -> None:
     lead, cole, _ = payments(team, dana)
-    locks: Locks = team.server.app.state.locks
-    assert lead.project is not None
     take(cole, SNAPSHOT)
     take(cole, "src/invoices.py")
     while_held = refused(lead, SNAPSHOT)
@@ -253,9 +251,8 @@ def test_a_lock_already_held_on_a_file_that_now_matches_a_pattern_no_longer_bloc
 
     assert "Cole Coder" in while_held
     assert take(lead, SNAPSHOT)["locked"] is False
-    assert take(cole, SNAPSHOT)["locked"] is False
-    assert [lock.path for lock in locks.held(lead.project)] == ["src/invoices.py"], "the lock on the snapshot ended"
-    assert locks.never_locks(lead.project, SNAPSHOT) == "*.snap"
+    assert take(cole, SNAPSHOT)["never_locks"] == "*.snap"
+    assert "Cole Coder" in refused(lead, "src/invoices.py"), "only the lock on the snapshot ended"
 
     lead.call("never_lock", remove="*.snap")
 

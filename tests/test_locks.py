@@ -307,8 +307,8 @@ def test_the_guidance_for_taking_a_lock_says_to_release_the_file_when_the_work_o
 def test_a_projects_locks_and_who_holds_a_file_count_only_active_holders(
     team: Team, project: str, dana: Session, cole: Session
 ) -> None:
-    """No tool lists a project's locks yet, so this asks the worker's locks module, which is what the hook and the
-    console built on it ask."""
+    """Asks the worker's locks module, read and never patched: it is the interface the hook and the console stand on,
+    and the console's own server answers over HTTP in tests/test_console_sessions.py, not this module's server."""
     locks: Locks = team.server.app.state.locks
     take(dana.as_agent("claude-code"))
     team.server.clock.advance(minutes=20)
