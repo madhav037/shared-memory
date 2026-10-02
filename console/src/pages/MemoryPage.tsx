@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
-import { PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
+import { OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose } from "../components/Prose";
 import { day, headerEnd, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
@@ -284,6 +284,16 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
             an admin decides.
           </p>
         )}
+        {memory.possibly_outdated && (
+          <p data-testid="possibly-outdated">
+            <b>Possibly outdated.</b> No coding agent has recalled or read it since{" "}
+            {memory.last_used ? day(memory.last_used) : "long ago"}, so it may no longer be true. The next agent to use it
+            is told to check it first.{" "}
+            {personal
+              ? "Its author can delete it from their coding agent if it no longer holds."
+              : "If it no longer holds, retire it here."}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -334,7 +344,10 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
           <StatusMark status={memory.status} />
           {memory.status === "active" && <span className="mark">Current</span>}
           {memory.pinned && <PinnedMark />}
+          {memory.possibly_outdated && <OutdatedMark />}
         </dd>
+        <dt>Last used</dt>
+        <dd data-testid="last-used">{memory.last_used ? day(memory.last_used) : "Not yet"}</dd>
         <dt>Type</dt>
         <dd>{typeName(memory.type)}</dd>
         <dt>Author</dt>

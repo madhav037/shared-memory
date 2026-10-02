@@ -66,6 +66,7 @@ from shared_memory.locks import Locks
 from shared_memory.memory import locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
+from shared_memory.uses import Uses
 
 CONSOLE_HEADER = "x-shared-memory-console"
 
@@ -172,8 +173,10 @@ class ConsoleApi:
         board: Board,
         activities: Activities,
         locks: Locks,
+        uses: Uses,
     ) -> None:
         self._settings = settings
+        self._uses = uses
         self._board = board
         self._activities = activities
         self._locks = locks
@@ -410,9 +413,11 @@ class ConsoleApi:
         return ProjectRepository(name=name, files=[ConnectionFile(**file) for file in files])
 
     def _detail(self, caller: Caller, path: str) -> MemoryDetail:
-        """One memory in full: what it says, its file as Claude reads it, and whether it is pinned."""
+        """One memory in full: what it says, its file as Claude reads it, whether it is pinned, and when a coding agent
+        last used it. Reading it here is no use of it."""
         memory = self._service.read(caller, path)
         memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
+        memory["last_used"] = self._uses.last_used(caller.team, memory["path"])
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         return MemoryDetail(**memory)

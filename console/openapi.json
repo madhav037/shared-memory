@@ -3266,6 +3266,10 @@
           "waiting": {
             "title": "Waiting",
             "type": "boolean"
+          },
+          "possibly_outdated": {
+            "title": "Possibly Outdated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3280,7 +3284,8 @@
           "changed",
           "pinned",
           "challenged",
-          "waiting"
+          "waiting",
+          "possibly_outdated"
         ],
         "title": "FileEntry",
         "type": "object"
@@ -3670,6 +3675,22 @@
             "title": "Pinned",
             "type": "boolean"
           },
+          "possibly_outdated": {
+            "title": "Possibly Outdated",
+            "type": "boolean"
+          },
+          "last_used": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used"
+          },
           "pending": {
             "items": {
               "$ref": "#/components/schemas/PendingChallenge"
@@ -3705,6 +3726,8 @@
           "author_name",
           "source",
           "pinned",
+          "possibly_outdated",
+          "last_used",
           "pending",
           "open_challenges"
         ],

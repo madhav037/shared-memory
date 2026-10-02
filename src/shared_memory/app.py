@@ -1025,7 +1025,7 @@ def build_app(
             audit,
             identity,
             service,
-            ConsoleMemory(identity, store, challenges),
+            ConsoleMemory(identity, store, challenges, uses),
             briefing,
             lifecycle,
             challenges,
@@ -1033,6 +1033,7 @@ def build_app(
             board,
             activities,
             locks,
+            uses,
         ).routes()
     )
     app.add_middleware(NeverCached)

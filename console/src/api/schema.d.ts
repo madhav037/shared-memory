@@ -1475,6 +1475,8 @@ export interface components {
             challenged: number;
             /** Waiting */
             waiting: boolean;
+            /** Possibly Outdated */
+            possibly_outdated: boolean;
         };
         /**
          * FolderEntry
@@ -1609,6 +1611,10 @@ export interface components {
             source: string;
             /** Pinned */
             pinned: boolean;
+            /** Possibly Outdated */
+            possibly_outdated: boolean;
+            /** Last Used */
+            last_used: string | null;
             /** Pending */
             pending: components["schemas"]["PendingChallenge"][];
             /** Open Challenges */
