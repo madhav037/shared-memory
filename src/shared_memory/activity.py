@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from shared_memory.board import TITLE_LIMIT
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
@@ -36,7 +37,7 @@ CREATE TABLE IF NOT EXISTS session_activities (
 """
 
 # The longest activity kept, in characters: one line, as long as a card's title may be.
-ACTIVITY_LIMIT = 200
+ACTIVITY_LIMIT = TITLE_LIMIT
 
 # What the briefing says of a session that stated no activity and whose member has no card in Doing.
 NONE_STATED = "no activity stated"

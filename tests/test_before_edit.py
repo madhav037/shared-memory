@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from shared_memory.connection import connection_kit, repository_root
+from shared_memory.connection import BRIEFING_SECONDS, HOOK_SECONDS, connection_kit, repository_root
 from tests.support import CLAUDE_EVENTS, REPO_ROOT, WORKING_FOLDER, Session, Team, edit_tool
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
@@ -680,6 +680,17 @@ def test_claude_codes_plugin_runs_the_hook_before_its_file_edit_tools_and_gives_
     assert fallback.startswith("echo '") and fallback.endswith("'")
     said = json.loads(fallback[len("echo '") : -1])
     assert list(said) == ["systemMessage"], "a warning for the member, and nothing that blocks the edit"
+
+
+def test_claude_codes_plugin_waits_as_long_as_every_other_agents_hooks() -> None:
+    hooks = json.loads((REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+
+    for event, entries in hooks.items():
+        seconds = BRIEFING_SECONDS if event == "SessionStart" else HOOK_SECONDS
+        for entry in entries:
+            for hook in entry["hooks"]:
+                assert f"--max-time {seconds} " in hook["command"], event
+                assert hook["timeout"] == seconds + 1, event
 
 
 def run_plugin(
