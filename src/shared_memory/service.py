@@ -17,6 +17,7 @@ from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.store import Change, Committer, MemoryStore
+from shared_memory.uses import Uses
 from shared_memory.validation import validate
 
 
@@ -90,8 +91,10 @@ class MemoryService:
         index: SearchIndex,
         challenges: Challenges,
         audit: Audit,
+        uses: Uses,
     ) -> None:
         self._settings = settings
+        self._uses = uses
         self._identity = identity
         self._store = store
         self._history = history
@@ -175,6 +178,9 @@ class MemoryService:
         memory = describe(location.path, self._store.read(caller.team, location.path))
         memory["pending"] = self._challenges.pending(caller.team, [memory["path"]])[memory["path"]]
         memory["open_challenges"] = self._challenges.against(caller, memory["path"])
+        memory["possibly_outdated"] = bool(self._uses.possibly_outdated(caller.team, {memory["path"]: memory["status"]}))
+        if memory["possibly_outdated"]:
+            memory["check"] = self._uses.check(caller.team, memory["path"])
         return memory
 
     def history(self, caller: Caller, path: str) -> dict[str, Any]:

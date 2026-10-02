@@ -91,7 +91,7 @@ A project memory that deliberately overrides a named team memory for that one pr
 _Avoid_: Override, local rule
 
 **Outdated memory**:
-A memory nobody has used for long enough that it may no longer be true.
+A memory nobody has used for long enough that it may no longer be true, and so is labelled *possibly outdated*. A memory is used when recall adds it to a prompt or a coding agent reads it; saving it starts its clock again. A pinned memory is never labelled, and nothing is done about the label automatically.
 _Avoid_: Stale, expired
 
 ### Memory types
