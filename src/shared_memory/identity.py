@@ -212,14 +212,17 @@ class Identity:
         if not caller.member.is_owner:
             raise Refused("Only the team's owner can grant admin, take it away, or hand over ownership.")
 
-    def _require_lead(self, caller: Caller, project_id: str) -> None:
-        """A project's leads look after it; the team's admins can too, because they have to be able to repair it."""
-        if caller.member.is_owner or caller.member.is_admin:
-            return
+    def looks_after(self, member: Member, project_id: str) -> bool:
+        """Whether this member looks after the project: its leads do, and so do the team's owner and admins, because
+        they have to be able to repair it."""
+        if member.is_owner or member.is_admin:
+            return True
         with self._db.transaction() as conn:
-            if self._leads_it(conn, caller.member.pk, project_id):
-                return
-        raise Refused("Only this project's leads and the team's admins can change it.")
+            return self._leads_it(conn, member.pk, project_id)
+
+    def _require_lead(self, caller: Caller, project_id: str) -> None:
+        if not self.looks_after(caller.member, project_id):
+            raise Refused("Only this project's leads and the team's admins can change it.")
 
     @staticmethod
     def _leads_it(conn: Conn, member_pk: int, project_id: str) -> bool:

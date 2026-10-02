@@ -249,10 +249,25 @@ class NoRepository(Refused):
         )
 
 
+def slashed(path: str) -> str:
+    """A path or pattern as written, trimmed and with forward slashes: the one way each is read before anything else."""
+    return path.strip().replace("\\", "/")
+
+
+def on_a_drive(path: str) -> bool:
+    """Whether a path starts with a Windows drive."""
+    return _DRIVE.match(path) is not None
+
+
+def absolute(path: str) -> bool:
+    """Whether a slashed path starts at a file system's root or a Windows drive, rather than inside a folder."""
+    return path.startswith("/") or on_a_drive(path)
+
+
 def from_root(path: str) -> str:
     """A path as a lock keeps it: from its repository's root, with forward slashes."""
-    written = path.strip().replace("\\", "/")
-    if not written or written.startswith("/") or _DRIVE.match(written) or len(written) > PATH_LIMIT:
+    written = slashed(path)
+    if not written or absolute(written) or len(written) > PATH_LIMIT:
         raise OutsideRepository(path)
     if any(ord(character) < 32 for character in written):
         raise OutsideRepository(path)
@@ -306,14 +321,14 @@ def usable(pattern: str) -> str:
     """A never-lock pattern as a project keeps it, with forward slashes. Refused with `UnusablePattern` when it
     could not match a file inside a repository, would match every file, or is written in a glob dialect that isn't
     read here."""
-    written = pattern.strip().replace("\\", "/")
+    written = slashed(pattern)
     if not written:
         raise UnusablePattern(pattern, "it is empty")
     if len(written) > PATTERN_LIMIT:
         raise UnusablePattern(pattern, f"it is longer than {PATTERN_LIMIT} characters")
     if any(ord(character) < 32 for character in written):
         raise UnusablePattern(pattern, "it has a control character in it")
-    if written.startswith("/") or _DRIVE.match(written):
+    if absolute(written):
         raise UnusablePattern(pattern, "a path is matched from the repository's root, so it starts with no slash")
     if written.endswith("/"):
         raise UnusablePattern(pattern, f"it names a folder, and files are what lock; write {written}** for its files")
@@ -649,7 +664,8 @@ class ProjectPatterns:
         """Remove one of the caller's project's own patterns, and give it back as it was kept. Files it matched lock
         again."""
         project_id = self._changeable_by(caller)
-        written = pattern.strip().replace("\\", "/")
+        # Read as `usable` reads a pattern being added, but not refused as unusable: one that isn't kept is told so.
+        written = slashed(pattern)
         if written in NEVER_LOCK:
             raise Refused(f"{written!r} is built in: it applies to every project and can't be removed.")
         with self._db.transaction() as conn:
@@ -668,8 +684,7 @@ class ProjectPatterns:
     def _changeable_by(self, caller: Caller) -> str:
         """The caller's project, when they may change its patterns."""
         project_id = caller.require_project().project_id
-        member = caller.member
-        if not (member.is_owner or member.is_admin or project_id in self._identity.leads_of(member)):
+        if not self._identity.looks_after(caller.member, project_id):
             raise Refused(
                 "Only this project's leads and the team's admins can add or remove its never-lock patterns. Any "
                 "member of the project can read them, by calling never_lock with nothing."
