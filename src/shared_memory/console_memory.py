@@ -15,6 +15,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
+from shared_memory.uses import Uses
 
 TYPE_NAMES = {
     "conventions": "Conventions",
@@ -63,10 +64,11 @@ def folder_name(folder: PurePosixPath, projects: dict[str, str], people: dict[st
 class ConsoleMemory:
     """The team's memory as the console's explorer lays it out."""
 
-    def __init__(self, identity: Identity, store: MemoryStore, challenges: Challenges) -> None:
+    def __init__(self, identity: Identity, store: MemoryStore, challenges: Challenges, uses: Uses) -> None:
         self._identity = identity
         self._store = store
         self._challenges = challenges
+        self._uses = uses
 
     def explore(self, caller: Caller, folder: str, deep: bool = False) -> dict[str, Any]:
         """One folder of the team's memory for the console's explorer.
@@ -140,6 +142,7 @@ class ConsoleMemory:
         pending = self._challenges.pending(caller.team, [str(path) for path, _ in memories])
         # One query for the team's open challenges, not one per memory: a deep folder lists hundreds.
         challenged = Counter(challenge.target_path for challenge in self._challenges.open_challenges(caller.team))
+        outdated = self._uses.possibly_outdated(caller.team, {str(path): memory.status for path, memory in memories})
         return [
             {
                 "path": str(path),
@@ -153,6 +156,7 @@ class ConsoleMemory:
                 "changed": self._store.changed(caller.team, path),
                 "challenged": challenged[str(path)],
                 "waiting": bool(pending[str(path)]),
+                "possibly_outdated": str(path) in outdated,
             }
             for path, memory in memories
         ]

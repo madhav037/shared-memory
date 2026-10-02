@@ -203,6 +203,17 @@ if __name__ == "__main__":
             reports,
             reasoning="Finance starts an hour earlier since June.",
         )
+        # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
+        # Its last use is moved back below, as the archived card's move is.
+        outdated = promote_now(
+            wes,
+            {
+                "title": "Reports render through wkhtmltopdf",
+                "summary": "Every report PDF is rendered by wkhtmltopdf.",
+                "type": "convention",
+                "body": "Render every report PDF from HTML with wkhtmltopdf, on the reporting worker.",
+            },
+        )
         # Two memories filed under a topic, so the journeys have a topic folder to pin. A topic is a folder
         # inside a type folder, which the type folder itself is not: pinning one puts everything filed under
         # it into every briefing at once.
@@ -241,6 +252,9 @@ if __name__ == "__main__":
             conn.execute(
                 "UPDATE cards SET moved_at = moved_at - interval '21 days' WHERE project_id = %s AND number = 5",
                 (project,),
+            )
+            conn.execute(
+                "UPDATE memory_uses SET last_used_at = last_used_at - interval '61 days' WHERE path = %s", (outdated,)
             )
         # Billing's active sessions, for the Sessions journey: Raj's, in Claude Code, with an activity it stated and a
         # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the

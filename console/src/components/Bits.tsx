@@ -1,4 +1,4 @@
-import { IconAlertTriangle, IconLock, IconPin, IconScale } from "@tabler/icons-react";
+import { IconAlertTriangle, IconClock, IconLock, IconPin, IconScale } from "@tabler/icons-react";
 import { Link } from "react-router";
 
 import { folderUrl, levelName } from "../lib/format";
@@ -63,6 +63,17 @@ export function ChallengedMark({ count = 1, compact = false }: { count?: number;
   return (
     <span className="mark alert" title={words}>
       <IconScale size={14} stroke={STROKE} aria-hidden />
+      {compact ? <span className="visually-hidden">{words}</span> : words}
+    </span>
+  );
+}
+
+/** No coding agent has recalled or read it for a long time: it may no longer be true. Only a label. */
+export function OutdatedMark({ compact = false }: { compact?: boolean }) {
+  const words = "Possibly outdated";
+  return (
+    <span className="mark" title="No coding agent has recalled or read it for a long time" data-testid="outdated-mark">
+      <IconClock size={14} stroke={STROKE} aria-hidden />
       {compact ? <span className="visually-hidden">{words}</span> : words}
     </span>
   );

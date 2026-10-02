@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
-import { ChallengedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
+import { ChallengedMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { day, folderUrl, memoryUrl, plural, sessionsUrl, typeName } from "../lib/format";
@@ -191,10 +191,11 @@ function Line({ memory, me }: { memory: FileEntry; me: SignedInMember }) {
           )}
           {memory.title}
         </Link>
-        {(memory.pinned || memory.challenged > 0) && (
+        {(memory.pinned || memory.challenged > 0 || memory.possibly_outdated) && (
           <span className="line-marks">
             {memory.pinned && <PinnedMark />}
             {memory.challenged > 0 && <ChallengedMark count={memory.challenged} />}
+            {memory.possibly_outdated && <OutdatedMark />}
           </span>
         )}
         <span className="leader" aria-hidden />

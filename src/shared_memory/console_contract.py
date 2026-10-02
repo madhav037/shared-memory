@@ -286,6 +286,10 @@ class MemoryDetail(BaseModel):
     author_name: str
     source: str
     pinned: bool
+    # No coding agent has recalled or read it for `outdated_after_days`, and it isn't pinned (CONTEXT.md: Outdated
+    # memory). last_used is when one last did, or when it was last saved; null for a memory the server has no use of.
+    possibly_outdated: bool
+    last_used: datetime | None
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
 
@@ -332,6 +336,7 @@ class FileEntry(BaseModel):
     pinned: bool
     challenged: int
     waiting: bool
+    possibly_outdated: bool
 
 
 class FolderSection(BaseModel):
