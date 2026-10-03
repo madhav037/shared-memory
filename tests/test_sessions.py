@@ -372,7 +372,8 @@ def test_a_session_idle_by_one_workers_reading_is_idle_by_anothers(
 def test_whatever_ends_with_a_session_is_told_when_it_ends_and_when_it_is_back_from_idle(
     team: Team, owner: Session
 ) -> None:
-    """What the modules that keep something per session (its activity, its locks) stand on."""
+    """What the modules that keep something per session (its activity, its locks) stand on. `on_gone` is an
+    in-process listener with no HTTP surface, so this reads the worker's sessions module and patches nothing."""
     sessions: Sessions = team.server.app.state.sessions
     gone: list[int] = []
     sessions.on_gone(lambda conn, ids: gone.extend(ids))
