@@ -37,6 +37,9 @@ services:
       SHARED_MEMORY_SESSION_IDLE_MINUTES: ${SHARED_MEMORY_SESSION_IDLE_MINUTES:-30}
       SHARED_MEMORY_COLLISION_THRESHOLD: ${SHARED_MEMORY_COLLISION_THRESHOLD:-0.75}
       SHARED_MEMORY_OUTDATED_AFTER_DAYS: ${SHARED_MEMORY_OUTDATED_AFTER_DAYS:-60}
+      # Only Caddy reaches the server, which publishes no port, so the scheme and host Caddy forwards are believed:
+      # the addresses the server hands out (a project's connection files, the console's) then say https.
+      FORWARDED_ALLOW_IPS: "*"
     volumes:
       - memory-data:/data
 
@@ -50,6 +53,7 @@ services:
       - server
     environment:
       SHARED_MEMORY_DOMAIN: ${SHARED_MEMORY_DOMAIN}
+      CADDY_SITE_ADDRESS: ${SHARED_MEMORY_DOMAIN}
     ports:
       - "80:80"
       - "443:443"

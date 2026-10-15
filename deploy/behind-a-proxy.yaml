@@ -1,0 +1,17 @@
+# For a host whose own web server (nginx, say) already holds ports 80 and 443 for other sites. That server keeps
+# them, holds HTTPS for this stack's domain too, and passes the domain on to this stack's Caddy, which listens
+# only on this host's loopback, over plain HTTP. Nothing of the stack is reachable from outside but through it.
+#
+# Chosen in .env, so every `docker compose` command picks it up:
+#   COMPOSE_FILE=compose.yaml:behind-a-proxy.yaml
+# The host's web server needs one site for the domain: nginx-site.conf.example. Runs under rootless Docker as is,
+# since nothing here binds a port below 1024. See docs/deployment.md, "Behind a web server the host already runs".
+services:
+  caddy:
+    environment:
+      CADDY_SITE_ADDRESS: ":80"
+      # Whatever reaches this Caddy came through the host's web server: under rootless Docker it arrives from the
+      # port forwarder's private address, not the web server's own, so every private range is believed.
+      CADDY_TRUSTED_PROXIES: private_ranges
+    ports: !override
+      - "127.0.0.1:${SHARED_MEMORY_LOCAL_PORT:-8180}:80"
