@@ -128,6 +128,32 @@ def test_a_session_is_known_by_the_coding_agent_its_tool_calls_come_from(owner: 
     assert owner.active_sessions()[0].agent == "Claude Code"
 
 
+def test_a_tool_call_without_the_agents_name_is_known_by_its_user_agent(owner: Session) -> None:
+    # An agent on protocol 2025-06-18, as Codex 0.162.1 is, names itself only when it initializes, and this server
+    # keeps nothing between requests: its tool calls carry just the User-Agent it sends with every request (#276).
+    owner.start()
+
+    response = httpx.post(
+        f"{owner.server.url}/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "briefing", "arguments": {"session": owner.identifier}},
+        },
+        headers={
+            **owner.headers(),
+            "Accept": "application/json, text/event-stream",
+            "Mcp-Protocol-Version": "2025-06-18",
+            "User-Agent": "codex-mcp-client/0.162.1",
+        },
+        timeout=30,
+    )
+
+    assert response.status_code == 200, response.text
+    assert owner.active_sessions()[0].agent == "Codex"
+
+
 def test_the_briefing_a_session_starts_with_names_its_identifier(owner: Session) -> None:
     session = owner.as_session("0b1f6c2e-session")
 
