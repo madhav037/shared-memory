@@ -79,13 +79,40 @@ listening() {
     fi
 }
 ours=$(docker compose ps --services --filter status=running 2>/dev/null | grep -cx caddy || true)
-for port in 80 443; do
-    if listening "$port" && [ "$ours" -eq 0 ]; then
-        bad "Something is already listening on port $port."
-        why "Caddy binds both to answer the certificate challenge and to serve the console."
-    fi
-done
-[ "$ours" -gt 0 ] && ok "This stack's Caddy already holds 80 and 443."
+case "${COMPOSE_FILE:-}" in
+    *behind-a-proxy.yaml*)
+        # The host's own web server holds 80 and 443 and passes the domain on to this Caddy's loopback port.
+        LOCAL_PORT="${SHARED_MEMORY_LOCAL_PORT:-8180}"
+        if listening "$LOCAL_PORT" && [ "$ours" -eq 0 ]; then
+            bad "Something is already listening on port $LOCAL_PORT."
+            why "Behind the host's web server, Caddy listens on 127.0.0.1:$LOCAL_PORT. Pick a free SHARED_MEMORY_LOCAL_PORT."
+        else
+            ok "Behind the host's web server, on 127.0.0.1:$LOCAL_PORT."
+        fi
+        if ! listening 443; then
+            warn "Nothing is listening on port 443."
+            why "The host's web server holds HTTPS for $SHARED_MEMORY_DOMAIN: add nginx-site.conf.example and run certbot."
+        fi
+        if docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; then
+            linger=$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null || true)
+            if [ "$linger" != "yes" ]; then
+                warn "Lingering is off for $(id -un), so rootless Docker stops when you log out."
+                why "Someone with root runs, once: sudo loginctl enable-linger $(id -un)"
+            fi
+        fi
+        ;;
+    *)
+        for port in 80 443; do
+            if listening "$port" && [ "$ours" -eq 0 ]; then
+                bad "Something is already listening on port $port."
+                why "Caddy binds both to answer the certificate challenge and to serve the console."
+                why "If it is a web server this host already runs for other sites, put this stack behind it instead:"
+                why "  docs/deployment.md, \"Behind a web server the host already runs\"."
+            fi
+        done
+        [ "$ours" -gt 0 ] && ok "This stack's Caddy already holds 80 and 443."
+        ;;
+esac
 
 # --- DNS, which the certificate depends on ---
 
@@ -95,7 +122,7 @@ if command -v getent >/dev/null 2>&1; then
 fi
 if [ -z "$resolved" ]; then
     bad "${SHARED_MEMORY_DOMAIN:-the domain} doesn't resolve."
-    why "Caddy asks Let's Encrypt over HTTP on port 80, which needs the name pointing here first."
+    why "The certificate is asked of Let's Encrypt over HTTP on port 80, which needs the name pointing here first."
     why "A new record can take a few minutes; the certificate attempt is rate limited, so wait rather than retry."
 else
     mine=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)

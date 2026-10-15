@@ -1,6 +1,15 @@
 # Caddy gets and renews the HTTPS certificate for the domain automatically, serves the console, and passes
 # everything the server owns through to it. One domain, one certificate, one origin for the console's cookies.
-{$SHARED_MEMORY_DOMAIN} {
+#
+# Behind a web server the host already runs (behind-a-proxy.yaml), that server holds HTTPS and the site address is a
+# plain port; it is the only thing that can reach this one, so its X-Forwarded-* headers are believed and passed on.
+{
+	servers {
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES:127.0.0.1/32}
+	}
+}
+
+{$CADDY_SITE_ADDRESS} {
 	# No request the server is passed carries more than a megabyte: a hook is a prompt plus metadata, a memory is at
 	# most 600 words, and a console request is smaller still. A bigger body is refused here, before the server sees it.
 	request_body {

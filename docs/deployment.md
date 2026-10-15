@@ -67,6 +67,32 @@ Members use `https://memory.example.com` as the **Shared Memory server URL** in 
 
 To update the server later, pull this repository and run `docker compose up -d --build` again.
 
+## Behind a web server the host already runs
+
+On a host whose own web server (nginx, say) already holds ports 80 and 443 for other sites, the stack's Caddy can't take them. Put the stack behind that web server instead. The web server keeps 80 and 443 and holds HTTPS for this domain too. It passes the domain on to Caddy, which listens only on the host's loopback (`127.0.0.1:8180`), so the stack is reachable from outside only through the web server. The other sites aren't touched: nginx tells sites apart by name.
+
+**Without a domain name.** A host with a public IP can use [sslip.io](https://sslip.io), which needs no sign-up: `203-0-113-10.sslip.io` resolves to `203.0.113.10`, and Let's Encrypt issues certificates for it like any other name.
+
+**Rootless Docker.** On a host shared with other people's work, run the stack under [rootless Docker](https://docs.docker.com/engine/security/rootless/), as an ordinary user. Membership of the `docker` group is equivalent to root, which can read and change every file on the host. A rootless daemon runs as that user, so its containers can reach only what that user already can. This mode binds no port below 1024, so it runs rootless as is.
+
+What someone with root does, once:
+
+1. Install Docker Engine with its rootless extras and `uidmap`, following [Docker's guide for the distribution](https://docs.docker.com/engine/install/). On Ubuntu, after adding Docker's apt repository: `sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras uidmap`. The system-wide daemon this installs is not needed: `sudo systemctl disable --now docker.service docker.socket` leaves it off.
+2. Let the user's services run without a login: `sudo loginctl enable-linger <user>`.
+3. Add the site from [`deploy/nginx-site.conf.example`](../deploy/nginx-site.conf.example), with the domain and the local port filled in, and get its certificate: `sudo certbot --nginx -d <domain>`.
+
+What the user does, without root:
+
+1. `dockerd-rootless-setuptool.sh install`, then `systemctl --user enable --now docker` and `export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock` (in `~/.bashrc` too).
+2. Follow **Deploy** above, adding these two lines to `.env`. `COMPOSE_FILE` makes every `docker compose` command use the override:
+
+   ```bash
+   COMPOSE_FILE=compose.yaml:behind-a-proxy.yaml
+   SHARED_MEMORY_LOCAL_PORT=8180
+   ```
+
+   The preflight then checks the local port instead of 80 and 443, and warns if lingering is off.
+
 ## Sizing
 
 The server runs several worker processes, so saves and reads in different areas use more than one CPU (ADR-0013). Two
