@@ -148,9 +148,15 @@ def _refusals_as_tool_errors(fn: F) -> F:
 
 
 def _reported_name(ctx: Context) -> str | None:
-    """The name the session's coding agent gave for itself when it connected, if it gave one."""
+    """The name the session's coding agent gave for itself when it connected, if it gave one, or else its HTTP client's
+    User-Agent. An agent on protocol 2025-06-18 names itself only when it initializes, and this server keeps nothing
+    between requests, so its tool calls carry just the User-Agent (Codex sends `codex-mcp-client/<version>`, #276)."""
     params = ctx.session.client_params
-    return params.client_info.name if params is not None and params.client_info is not None else None
+    if params is not None and params.client_info is not None:
+        name: str = params.client_info.name
+        return name
+    request = ctx.request_context.request
+    return request.headers.get("user-agent") if request is not None else None
 
 
 def _server_url(ctx: Context) -> str:
