@@ -117,7 +117,7 @@ Codex, Gemini CLI, Cursor, Devin Desktop and Cline are briefed when a session st
 
 Each of them but Copilot in VS Code also has a hook before a file edit, which checks or takes the file's lock and blocks the edit when another session holds it, and a hook as the session ends, which ends its locks at once. A server that is down, or hasn't answered in 3 seconds, lets the edit through. In Copilot in VS Code locks are guidance only: `AGENTS.md` asks the agent to call `take_lock` before it edits a file, and nothing stops an edit.
 
-On Windows, Cline runs the `.ps1` script beside each of its others, and Codex runs its own cmd.exe command; Cursor launches hooks through PowerShell, where the generated commands don't run, so its rule carries memory instead and its locks are guidance only.
+On Windows, Cline runs the `.ps1` script beside each of its others, and Codex runs its own PowerShell command; Cursor launches hooks through PowerShell, where the generated commands don't run, so its rule carries memory instead and its locks are guidance only.
 
 Wherever a hook doesn't brief a session, the server's instructions and the `AGENTS.md` section ask the agent to call `briefing` at the start of a task and `search` before answering. Each change is recorded with the agent it came from, whichever way it was made.
 
