@@ -77,7 +77,17 @@ On a host whose own web server (nginx, say) already holds ports 80 and 443 for o
 
 What someone with root does, once:
 
-1. Install Docker Engine with its rootless extras and `uidmap`, following [Docker's guide for the distribution](https://docs.docker.com/engine/install/). On Ubuntu, after adding Docker's apt repository: `sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras uidmap dbus-user-session slirp4netns`. On Ubuntu 24.04 and later, the AppArmor profile that lets `rootlesskit` create user namespaces comes with the `apparmor` package, so the packaged install needs nothing more. The system-wide daemon this installs is not needed: `sudo systemctl disable --now docker.service docker.socket` leaves it off.
+1. Install Docker Engine with its rootless extras, following [Docker's guide for the distribution](https://docs.docker.com/engine/install/) to add its apt repository. The system-wide (root) daemon isn't needed, and it should never start: when it does, it [turns on IP forwarding and sets forwarded traffic to drop](https://docs.docker.com/engine/network/packet-filtering-firewalls/) on a host that may rely on neither. `policy-rc.d` is Debian's switch for stopping a package's service from starting during install. On Ubuntu:
+
+   ```bash
+   printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d > /dev/null && sudo chmod +x /usr/sbin/policy-rc.d
+   sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+     docker-ce-rootless-extras uidmap dbus-user-session slirp4netns
+   sudo rm /usr/sbin/policy-rc.d          # left in place, it stops every service starting on later upgrades
+   sudo systemctl disable docker.service docker.socket
+   ```
+
+   On Ubuntu 24.04 and later, the AppArmor profile that lets `rootlesskit` create user namespaces comes with the `apparmor` package, so the packaged install needs nothing more.
 2. Let the user's services run without a login: `sudo loginctl enable-linger <user>`.
 3. Add the site from [`deploy/nginx-site.conf.example`](../deploy/nginx-site.conf.example), with the domain and the local port filled in, and get its certificate: `sudo certbot --nginx -d <domain>`.
 
