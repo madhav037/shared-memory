@@ -116,6 +116,7 @@ export function Timeline({ history, standing }: { history: History; standing: st
         marks={history.versions.map((_, place) => ({ value: place }))}
         size="sm"
         aria-label="Read it as it stood at"
+        thumbLabel="Read it as it stood at"
         data-testid="history-slider"
         styles={{
           track: { "--slider-track-bg": "var(--rule)" } as React.CSSProperties,

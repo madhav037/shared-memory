@@ -50,7 +50,10 @@ export function ConnectionFiles({ files, testid }: { files: ConnectionFile[]; te
             </CopyButton>
           </div>
           <p className="connection-file-how">{file.how}</p>
-          <pre className="settings-block">{file.contents}</pre>
+          {/* Focusable, so a file wider than the page scrolls from the keyboard too. */}
+          <pre className="settings-block" tabIndex={0} role="region" aria-label={file.path}>
+            {file.contents}
+          </pre>
         </div>
       ))}
     </div>

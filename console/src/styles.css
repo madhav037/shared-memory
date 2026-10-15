@@ -487,6 +487,13 @@ li[aria-expanded="true"] > .tree-row .twist {
   align-items: center;
   gap: 6px;
 }
+/* The name itself, so a long one ends in an ellipsis: a flex container never draws one. */
+.tree-row .label-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tree-row .tally {
   font-size: 0.8125rem;
   color: var(--ink-3);
@@ -1362,6 +1369,7 @@ li[aria-expanded="true"] > .tree-row .twist {
   font-variant-numeric: tabular-nums;
 }
 .versions li[aria-current] {
+  padding-right: 12px;
   background: var(--paper-2);
 }
 .versions li[aria-current] .version-number {
@@ -2097,6 +2105,11 @@ li[aria-expanded="true"] > .tree-row .twist {
   .versions {
     margin-left: calc(-2.5rem - 14px);
   }
+  /* The current version's panel starts at the gutter, so its number hangs on the paper beside it, clear of the
+     contents column's rule. */
+  .versions li[aria-current] {
+    background: linear-gradient(var(--paper-2), var(--paper-2)) right / calc(100% - 2.5rem) 100% no-repeat;
+  }
 }
 @media (max-width: 1180px) {
   .reading {
@@ -2337,7 +2350,7 @@ li[aria-expanded="true"] > .tree-row .twist {
   align-items: center;
   gap: 3px;
 }
-.label {
+.card-label {
   display: inline-block;
   padding: 0 6px;
   font-size: 0.75rem;
@@ -2345,10 +2358,10 @@ li[aria-expanded="true"] > .tree-row .twist {
   color: var(--ink-2);
   background: var(--paper-3);
 }
-.label + .label {
+.card-label + .card-label {
   margin-left: 4px;
 }
-.card-tile-meta .label + .label {
+.card-tile-meta .card-label + .card-label {
   margin-left: 0;
 }
 .priority {

@@ -522,7 +522,7 @@ function CardTile({
           </span>
         )}
         {card.labels.map((label) => (
-          <span key={label} className="label">
+          <span key={label} className="card-label">
             {label}
           </span>
         ))}
@@ -679,7 +679,7 @@ function CardPanel({
             <dt>Labels</dt>
             <dd>
               {card.labels.map((label) => (
-                <span key={label} className="label">
+                <span key={label} className="card-label">
                   {label}
                 </span>
               ))}
