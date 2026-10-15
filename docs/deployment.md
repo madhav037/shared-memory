@@ -77,7 +77,7 @@ On a host whose own web server (nginx, say) already holds ports 80 and 443 for o
 
 What someone with root does, once:
 
-1. Install Docker Engine with its rootless extras and `uidmap`, following [Docker's guide for the distribution](https://docs.docker.com/engine/install/). On Ubuntu, after adding Docker's apt repository: `sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras uidmap`. The system-wide daemon this installs is not needed: `sudo systemctl disable --now docker.service docker.socket` leaves it off.
+1. Install Docker Engine with its rootless extras and `uidmap`, following [Docker's guide for the distribution](https://docs.docker.com/engine/install/). On Ubuntu, after adding Docker's apt repository: `sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-ce-rootless-extras uidmap dbus-user-session slirp4netns`. On Ubuntu 24.04 and later, the AppArmor profile that lets `rootlesskit` create user namespaces comes with the `apparmor` package, so the packaged install needs nothing more. The system-wide daemon this installs is not needed: `sudo systemctl disable --now docker.service docker.socket` leaves it off.
 2. Let the user's services run without a login: `sudo loginctl enable-linger <user>`.
 3. Add the site from [`deploy/nginx-site.conf.example`](../deploy/nginx-site.conf.example), with the domain and the local port filled in, and get its certificate: `sudo certbot --nginx -d <domain>`.
 
