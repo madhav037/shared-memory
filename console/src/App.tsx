@@ -3,7 +3,6 @@ import {
   IconCheck,
   IconChevronDown,
   IconKey,
-  IconListTree,
   IconLogout,
   IconMenu2,
   IconSearch,
@@ -153,14 +152,6 @@ function SignedIn({
         Skip to the page
       </a>
       <header className="masthead">
-        <UnstyledButton
-          className="only-small quiet-link"
-          onClick={() => setContentsOpen(true)}
-          aria-label="Open the contents"
-          data-testid="open-contents"
-        >
-          <IconListTree size={20} stroke={1.6} />
-        </UnstyledButton>
         <Wordmark team={member.team} />
         <nav className="nav" aria-label="The console">
           {links.map((link) => (
@@ -176,6 +167,14 @@ function SignedIn({
         </nav>
         <div className="masthead-end">
           {location.pathname !== "/search" && <MastheadSearch />}
+          {/* A word, not an icon: beside the menu's icon, a second icon read as a second menu. */}
+          <UnstyledButton
+            className="only-small masthead-contents"
+            onClick={() => setContentsOpen(true)}
+            data-testid="open-contents"
+          >
+            Contents
+          </UnstyledButton>
           <Link to="/search" className="only-small quiet-link" aria-label="Search memory" data-testid="phone-search">
             <IconSearch size={20} stroke={1.6} />
           </Link>

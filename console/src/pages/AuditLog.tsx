@@ -256,7 +256,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                   const isMemory = event.target?.endsWith(".md");
                   return (
                     <tr key={event.id}>
-                      <td style={{ whiteSpace: "nowrap" }}>{moment(event.at)}</td>
+                      <td className="aside" style={{ whiteSpace: "nowrap" }}>{moment(event.at)}</td>
                       <td className="primary who-cell" title={event.actor}>
                         {nameOf(event.actor)}
                       </td>

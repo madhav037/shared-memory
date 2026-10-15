@@ -180,8 +180,8 @@ function MemberRow({
           </>
         )}
       </td>
-      <td style={{ fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{id}</td>
-      <td>
+      <td data-label="Member ID" style={{ fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{id}</td>
+      <td data-label="GitHub">
         {editing?.kind === "github" ? (
           <InlineEdit
             label="GitHub username"
@@ -196,7 +196,7 @@ function MemberRow({
           <span style={{ color: "var(--ink-3)" }}>not linked</span>
         )}
       </td>
-      <td style={{ fontWeight: member.role === "member" ? 400 : 700, color: member.role === "member" ? undefined : "var(--ink)" }}>
+      <td data-label="Role" style={{ fontWeight: member.role === "member" ? 400 : 700, color: member.role === "member" ? undefined : "var(--ink)" }}>
         {ROLE_WORDS[member.role] ?? member.role}
       </td>
     </>
@@ -207,7 +207,7 @@ function MemberRow({
       <tr className={member.removed ? "cancelled" : undefined}>
         {cells}
         {runs && (
-          <td style={{ textAlign: "right", paddingRight: 0 }}>
+          <td className="aside" style={{ textAlign: "right", paddingRight: 0 }}>
             {actionable && (
               <Menu position="bottom-end" withinPortal>
                 <Menu.Target>

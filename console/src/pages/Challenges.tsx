@@ -271,7 +271,7 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
             <tbody>
               {raised.map((one) => (
                 <tr key={one.challenge_id}>
-                  <td style={{ whiteSpace: "nowrap" }}>{day(one.raised_at)}</td>
+                  <td className="aside" style={{ whiteSpace: "nowrap" }}>{day(one.raised_at)}</td>
                   <td className="primary">
                     <Link to={memoryUrl(one.target_path)} style={{ color: "inherit" }}>
                       {one.target_title}
@@ -285,7 +285,7 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td data-label="How it ended">
                     <b style={{ color: one.state === "accepted" ? "var(--accent)" : "var(--ink)" }}>{STATES[one.state] ?? one.state}</b>
                     {one.decided_by && (
                       <div style={{ fontSize: "0.8125rem", color: "var(--ink-3)" }}>
