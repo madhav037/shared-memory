@@ -108,10 +108,17 @@ def usable(identifier: object) -> str | None:
 
 
 def briefing_line(session: Session) -> str:
-    """What tells a coding agent its session's identifier, with its briefing."""
-    return (
+    """What tells a coding agent its session's identifier, with its briefing, and the repository it works in: an agent
+    has no other way to learn the name its files are written under (repository:path)."""
+    named = (
         f"This session's identifier in Shared Memory is `{session.identifier}`. Pass it as `session` to the Shared "
         "Memory tools that take one."
+    )
+    if not session.repository:
+        return named
+    return (
+        f"{named} It works in the repository `{session.repository}`: write a file in it as `{session.repository}:` "
+        f"and its path from the repository's root, for example `{session.repository}:package.json`."
     )
 
 

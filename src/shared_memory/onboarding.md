@@ -22,7 +22,7 @@ Read each *import* file in full and cut it into proposals, one thing per memory.
 - a **type**: `convention` (a rule followed every day), `decision` (a choice made once, with its reasons), `architecture` (how the system is built), or `gotcha` (a surprising fact that wastes time);
 - a **body** of at most 600 words, keeping the source's own wording;
 - a proposed **level**: `project` if everyone on this project follows it, `team` if it holds for every project in the team, `personal` if it is one member's note that teammates may still want to read;
-- its **source**, written `repository:path` for a file in this repository, using the repository name this session is connected with;
+- its **source**, written `repository:path` for a file in this repository, using the repository name your briefing gives (its last line: "It works in the repository ....");
 - its **writer**, found as below.
 
 **The writer.** For a source in git, run `git blame --line-porcelain -L <start>,<end> -- <file>` over the lines the proposal was cut from. When one person wrote every line, they are the writer: find their GitHub username from a noreply address (`<id>+<username>@users.noreply.github.com`) or with `gh api repos/<owner>/<repository>/commits/<sha> --jq .author.login`. Lines by several people, a username you can't find, or a source outside git (your local memory, an untracked file) have no single writer: this member will be the author, and you keep the original writer's name where one is known.

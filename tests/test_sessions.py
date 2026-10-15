@@ -137,6 +137,22 @@ def test_the_briefing_a_session_starts_with_names_its_identifier(owner: Session)
     assert "`session`" in briefing
 
 
+def test_the_briefing_names_the_repository_its_session_works_in_and_how_to_write_its_files(owner: Session) -> None:
+    started = added_context(owner.as_session("repository-named").start())
+    fetched = owner.as_session("fetched").call("briefing")
+
+    for briefing in (started, fetched):
+        assert f"works in the repository `{owner.repository}`" in briefing
+        assert f"`{owner.repository}:package.json`" in briefing
+
+
+def test_a_session_that_names_no_repository_is_told_none(owner: Session) -> None:
+    briefing = added_context(dataclasses.replace(owner, repository=None).as_session("no-repository").start())
+
+    assert "no-repository" in briefing
+    assert "works in the repository" not in briefing
+
+
 def test_the_briefing_tool_without_a_session_starts_one_and_names_it(owner: Session) -> None:
     briefing = owner.call("briefing")
 
