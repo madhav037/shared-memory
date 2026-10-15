@@ -88,7 +88,6 @@ def hook_command(
     repository: str,
     *,
     seconds: int,
-    windows: bool,
     format: str = "",
     root: str = "",
     otherwise: str = "",
@@ -97,13 +96,13 @@ def hook_command(
     """The command a hook runs to post its payload and print what the server answers.
 
     It never gets in a session's way: a server that is down, slow or unhappy leaves the command printing nothing at
-    all, or `otherwise` for an agent that must be answered something. Windows gets its own variant because Codex runs
-    hooks there in cmd.exe, where a POSIX shell's syntax for an environment variable means nothing. `root` is what
-    the shell names the repository's root with (`repository_root`), for an agent that gives its hooks a folder. `agent` names the coding
-    agent the hook runs in, so a session known only by its hooks is known with its agent.
+    all, or `otherwise` for an agent that must be answered something. It runs in a POSIX shell; Codex's Windows
+    command is `codex_powershell`. `root` is what the shell names the repository's root with (`repository_root`),
+    for an agent that gives its hooks a folder. `agent` names the coding agent the hook runs in, so a session known
+    only by its hooks is known with its agent.
     """
-    token = "%" + TOKEN_VARIABLE + "%" if windows else "$" + TOKEN_VARIABLE
-    quote = '"' if windows else "'"
+    token = "$" + TOKEN_VARIABLE
+    quote = "'"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
@@ -120,9 +119,9 @@ def hook_command(
         for name, value in headers.items()
     )
     asked = f"?format={format}" if format else ""
-    failed = f"echo '{otherwise}'" if otherwise else "exit /b 0" if windows else "true"
+    failed = f"echo '{otherwise}'" if otherwise else "true"
     return (
-        f"{'curl.exe' if windows else 'curl'} -s --fail --max-time {seconds} {written} --data-binary @- "
+        f"curl -s --fail --max-time {seconds} {written} --data-binary @- "
         f"{quote}{hooks_url}/{event}{asked}{quote} || {failed}"
     )
 
@@ -144,33 +143,47 @@ CODEX_HOOKS = (
 )
 
 
+def codex_powershell(hooks_url: str, endpoint: str, project_id: str, repository: str, seconds: int) -> str:
+    """What Codex runs on Windows, as `-Command` in PowerShell: pwsh where it is installed, Windows PowerShell where
+    not (#275; Codex 0.162.1 was seen running pwsh, never cmd.exe). One line that works in both, posting the payload
+    as Cline's .ps1 does and naming the repository's root before an edit as `working_folder_root` does. A server that
+    is down, slow or unhappy leaves it printing nothing."""
+    root = (
+        "try { $up = git rev-parse --show-cdup 2>$null; "
+        "if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Root'] = \"$((Get-Location).Path)/$up\" } } catch { }; "
+        if endpoint == "before-edit"
+        else ""
+    )
+    return (
+        "$payload = [Console]::In.ReadToEnd(); "
+        f"if (-not $env:{TOKEN_VARIABLE}) {{ exit 0 }}; "
+        f'$headers = @{{ Authorization = "Bearer $env:{TOKEN_VARIABLE}"; '
+        f"'X-Shared-Memory-Project' = '{project_id}'; 'X-Shared-Memory-Repository' = '{repository}'; "
+        f"'{AGENT_HEADER}' = '{CODEX.header}' }}; "
+        f"{root}"
+        f"try {{ $answer = Invoke-WebRequest -Method Post -Uri '{hooks_url}/{endpoint}' -TimeoutSec {seconds} "
+        "-ContentType 'application/json' -UseBasicParsing -Body $payload -Headers $headers; "
+        "if ($answer.StatusCode -eq 200) { [Console]::Out.Write($answer.Content) } } catch { }; "
+        "exit 0"
+    )
+
+
 def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
     """Codex's own hooks: the briefing when a session starts, memory recalled on each prompt, the lock checked or
     taken before a file edit, and the session ended.
 
-    All post with curl rather than calling a tool through Codex's mcp_tool hook, which would need no token
+    All post over HTTP rather than calling a tool through Codex's mcp_tool hook, which would need no token
     of its own but does need a connection that is already up: prototype #2 (docs/design.md) found MCP-tool hooks don't
     run at a session's start, and Codex's own reference says its MCP-tool hooks reuse an existing connection without
-    starting one. Windows gets its own commands because Codex runs hooks there in cmd.exe.
+    starting one. Windows gets its own commands because Codex runs hooks there in PowerShell (`codex_powershell`).
     """
     written = ""
     for event, matcher, endpoint, seconds in CODEX_HOOKS:
-        # Only the POSIX command names the root: cmd.exe has no way to put git's answer in a header, so on Windows
-        # the server reads the root from the payload's working folder.
         root = working_folder_root() if endpoint == "before-edit" else ""
-        posix, windows = (
-            hook_command(
-                hooks_url,
-                endpoint,
-                project_id,
-                repository,
-                seconds=seconds,
-                windows=on_windows,
-                root="" if on_windows else root,
-                agent=CODEX.header,
-            )
-            for on_windows in (False, True)
+        posix = hook_command(
+            hooks_url, endpoint, project_id, repository, seconds=seconds, root=root, agent=CODEX.header
         )
+        windows = codex_powershell(hooks_url, endpoint, project_id, repository, seconds)
         written += f"""
 [[hooks.{event}]]
 {f"matcher = {json.dumps(matcher)}" if matcher else ""}
@@ -326,7 +339,6 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             project_id,
             repository,
             seconds=seconds,
-            windows=False,
             format=CURSOR.format,
             root=working_folder_root() if endpoint == "before-edit" else "",
             otherwise=otherwise,
@@ -457,7 +469,6 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
                             project_id,
                             repository,
                             seconds=seconds,
-                            windows=False,
                             format=DEVIN.format if endpoint == "before-edit" else "",
                             root=repository_root("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
                             agent=DEVIN.header,
@@ -498,7 +509,6 @@ def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, rep
         project_id,
         repository,
         seconds=seconds,
-        windows=False,
         format=CLINE.format,
         root=working_folder_root() if endpoint == "before-edit" else "",
         agent=CLINE.header,
@@ -609,7 +619,7 @@ def connection_kit(
             how="Add these tables to the file, keeping anything already there. Codex 0.78 or later reads them once "
             "the project is trusted; earlier versions ignore a repository's own configuration. The hooks brief each "
             "session, recall memory for each prompt, check or take a file's lock before apply_patch changes it and "
-            "end the session, with curl, and each has a cmd.exe command for Windows. An edit goes ahead unchecked "
+            "end the session, with curl, and each has a PowerShell command for Windows. An edit goes ahead unchecked "
             f"when the server hasn't answered in {HOOK_SECONDS} seconds.",
             contents=(
                 "[mcp_servers.shared-memory]\n"

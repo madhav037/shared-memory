@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import subprocess
 import tomllib
 from pathlib import Path
@@ -13,9 +14,9 @@ from typing import Any
 import pytest
 
 from shared_memory.agents import agent_named
-from shared_memory.connection import repository_root
+from shared_memory.connection import connection_kit, repository_root
 from shared_memory.hooks import AGENTS
-from tests.support import REPO_ROOT, Session, Team
+from tests.support import REPO_ROOT, Session, Team, edit_tool, member
 
 
 def by_path(files: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -144,8 +145,90 @@ def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_
         assert hook["type"] == "command"
         assert f"{team.server.url}/hooks/{event}" in hook["command"], event
         assert "$SHARED_MEMORY_TOKEN" in hook["command"], event
-        assert "curl.exe" in hook["command_windows"], event
-        assert "%SHARED_MEMORY_TOKEN%" in hook["command_windows"], event
+        assert f"{team.server.url}/hooks/{event}" in hook["command_windows"], event
+        assert "$env:SHARED_MEMORY_TOKEN" in hook["command_windows"], event
+    assert "git rev-parse --show-cdup" in before_edit["command_windows"]
+
+
+# What Codex runs a hook's command_windows with: PowerShell 7 where it is installed (#275, seen in Codex 0.162.1), and
+# Windows PowerShell on a machine without it. Neither is cmd.exe.
+POWERSHELLS = [shell for shell in ("pwsh", "powershell") if shutil.which(shell)]
+
+
+def codex_windows_hook(
+    team: Team, files: list[dict[str, Any]], event: str, payload: dict[str, Any], shell: str, cwd: Path
+) -> subprocess.CompletedProcess[str]:
+    """Run one of Codex's generated Windows hook commands the way Codex runs it."""
+    hooks = tomllib.loads(by_path(files)[".codex/config.toml"]["contents"])["hooks"]
+    command = hooks[event][0]["hooks"][0]["command_windows"]
+    return subprocess.run(
+        [shell, "-NoProfile", "-Command", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=cwd,
+        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+    )
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="Codex runs its Windows hooks in PowerShell, which isn't here")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+def test_codexs_windows_hooks_brief_a_session_in_powershell(team: Team, tmp_path: Path, shell: str) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    pinned(team.owner().in_project(created["project_id"], "billing-api"), "Use pnpm, not npm", "We use pnpm for every package.")
+    payload = {"session_id": "codex-1", "cwd": str(tmp_path), "hook_event_name": "SessionStart", "source": "startup"}
+
+    ran = codex_windows_hook(team, created["files"], "SessionStart", payload, shell, tmp_path)
+
+    assert ran.returncode == 0, ran.stderr
+    assert "Use pnpm, not npm" in json.loads(ran.stdout)["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="Codex runs its Windows hooks in PowerShell, which isn't here")
+@pytest.mark.skipif(shutil.which("git") is None, reason="the root is git's answer")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+def test_codexs_windows_before_edit_hook_started_in_a_subfolder_locks_from_the_repositorys_root(
+    team: Team, tmp_path: Path, shell: str
+) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    project = created["project_id"]
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "src").mkdir()
+    payload = {
+        "session_id": "codex-1",
+        "cwd": str(tmp_path / "src"),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": "*** Begin Patch\n*** Update File: sub.py\n@@\n-a\n+b\n*** End Patch"},
+    }
+
+    ran = codex_windows_hook(team, created["files"], "PreToolUse", payload, shell, tmp_path / "src")
+
+    assert ran.returncode == 0, ran.stderr
+    dana = member(team, project, "emp-2", "Dana Dev")
+    held = dana.hook_payload(
+        "before-edit",
+        {"session_id": "dana-1", "cwd": str(tmp_path), "hook_event_name": "PreToolUse", **edit_tool(str(tmp_path / "src" / "sub.py"))},
+    )
+    assert held["hookSpecificOutput"]["permissionDecision"] == "deny", "Codex's lock is named src/sub.py"
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="Codex runs its Windows hooks in PowerShell, which isn't here")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+def test_codexs_windows_hooks_leave_the_session_alone_when_the_server_is_down(team: Team, tmp_path: Path, shell: str) -> None:
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        down = f"http://127.0.0.1:{closed.getsockname()[1]}"
+    files = connection_kit(
+        server_url=down, marketplace="m", project_id="billing-1", project_name="Billing", repository="billing-api"
+    )
+    payload = {"session_id": "codex-1", "cwd": str(tmp_path), "hook_event_name": "UserPromptSubmit", "prompt": "hi"}
+
+    ran = codex_windows_hook(team, files, "UserPromptSubmit", payload, shell, tmp_path)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.strip() == ""
 
 
 def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(team: Team) -> None:

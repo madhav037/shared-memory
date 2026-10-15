@@ -126,9 +126,10 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
     folder followed by the way up to the root that `git rev-parse --show-cdup` gives (`connection.repository_root`).
     Without git the folder stands alone.
   - Codex, Cursor and Cline give their hooks no folder, so their kits ask git from the folder the hook's command
-    runs in (`$PWD`, or the current location in Cline's `.ps1`; `connection.working_folder_root`). Without git, or
-    outside a repository, the header is empty. Codex's Windows command (cmd.exe) sends none. Their references don't
-    say the command runs in the session's folder, so whether it does still waits for a hand-check in each agent.
+    runs in (`$PWD`, or the current location in PowerShell: Cline's `.ps1` and Codex's Windows command;
+    `connection.working_folder_root`). Without git, or outside a repository, the header is empty. Codex was seen to
+    run the command in the session's folder (#275); the others' references don't say, so that still waits for a
+    hand-check in each agent.
   - Copilot CLI's hook posts by itself, with no command to ask git in, so it sends no root: a Copilot CLI session
     started in a subfolder still names its files from that subfolder. A known limit.
 
