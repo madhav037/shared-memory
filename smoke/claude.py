@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,8 @@ def run_claude(
     run = ClaudeRun()
     started: dict[str, float] = {}
     waiting = list(prompts)
+    # Claude reports most failures on stdout, often with nothing on stderr, so a failed run quotes the tail of both.
+    last_lines: deque[str] = deque(maxlen=10)
 
     def send_next() -> None:
         # One prompt at a time: prompts sent while Claude is busy are merged into a single turn.
@@ -116,6 +119,7 @@ def run_claude(
     try:
         send_next()
         for line in stdout:
+            last_lines.append(line.rstrip()[:500])
             try:
                 event = json.loads(line)
             except ValueError:
@@ -126,7 +130,11 @@ def run_claude(
         process.wait()
     finally:
         killer.cancel()
-    assert process.returncode == 0, f"claude exited with {process.returncode}: {''.join(stderr)[-2000:]}"
+    assert process.returncode == 0, (
+        f"claude exited with {process.returncode}\n"
+        f"stderr: {''.join(stderr)[-2000:]}\n"
+        "last stdout lines:\n" + "\n".join(last_lines)
+    )
     return run
 
 
