@@ -88,6 +88,8 @@ export type AuditFilters = {
   since?: string;
   until?: string;
   before?: number;
+  /** How many changes a page holds; the server's own number when left out. */
+  limit?: number;
 };
 
 /** A page of the audit log, newest first. */

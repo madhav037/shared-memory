@@ -7,7 +7,7 @@ import { Placeholder, Refusal } from "../components/Bits";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
 import { boardUrl, cardChange } from "../lib/board";
-import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
+import { folderUrl, levelOf, memoryUrl, moment, plural, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { agentLabel } from "../lib/versions";
 
@@ -145,6 +145,16 @@ function Details({
   );
 }
 
+/** How many changes a phone asks for at a time. */
+const PHONE_PAGE = 20;
+
+/** How much of the log is on the page: the latest so many while older ones wait behind Show older, or all of it. */
+function showing(count: number, more: boolean, filtered: boolean): string {
+  const match = filtered ? (count === 1 ? " that matches" : " that match") : "";
+  if (more) return `Showing the latest ${plural(count, "change")}${match}.`;
+  return count === 1 ? `Showing the only change${match}.` : `Showing all ${count} changes${match}.`;
+}
+
 /** Who changed what, and when: the team's register, newest first. */
 export function AuditLog({ member }: { member: SignedInMember }) {
   const { projects, nameOf } = useContents();
@@ -155,11 +165,14 @@ export function AuditLog({ member }: { member: SignedInMember }) {
   const wholeTeam = member.role === "owner" || member.role === "admin";
   // Members who have left stay choosable: their changes are still in the log.
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  // A phone sets each change out as an entry several lines tall, so it asks for fewer at a time.
+  const [limit] = useState(() => (window.matchMedia("(max-width: 600px)").matches ? PHONE_PAGE : undefined));
+  const filtered = Object.values(filters).some(Boolean);
 
   useEffect(() => {
     const attempt = new AbortController();
     setEvents(null);
-    fetchAudit(filters, attempt.signal)
+    fetchAudit({ ...filters, limit }, attempt.signal)
       .then((page) => {
         setEvents(page.events);
         setNext(page.next ?? null);
@@ -169,14 +182,14 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         if (!attempt.signal.aborted) setRefused(problem.message);
       });
     return () => attempt.abort();
-  }, [filters]);
+  }, [filters, limit]);
 
   const older = useCallback(async () => {
     if (next === null) return;
-    const page = await fetchAudit({ ...filters, before: next });
+    const page = await fetchAudit({ ...filters, limit, before: next });
     setEvents((seen) => [...(seen ?? []), ...page.events]);
     setNext(page.next ?? null);
-  }, [filters, next]);
+  }, [filters, limit, next]);
 
   const set = (name: keyof AuditFilters, value: string | null) =>
     setFilters((was) => ({ ...was, [name]: value || undefined }));
@@ -243,6 +256,11 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         {!refused && events?.length === 0 && (
           <p className="empty" data-testid="audit-empty">
             Nothing matches those filters.
+          </p>
+        )}
+        {!refused && events && events.length > 0 && (
+          <p className="register-count" data-testid="audit-showing">
+            {showing(events.length, next !== null, filtered)}
           </p>
         )}
         {!refused && events && events.length > 0 && (

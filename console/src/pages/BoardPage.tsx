@@ -1,11 +1,10 @@
 import { Button, Drawer, Modal, Select } from "@mantine/core";
 import {
   IconAlertTriangle,
+  IconArrowsHorizontal,
   IconMessage,
   IconPencil,
   IconPlus,
-  IconSettings,
-  IconTerminal2,
   IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -27,7 +26,7 @@ import {
   type Card,
   type CardDetail,
 } from "../api/client";
-import { Placeholder, Refusal, Trail } from "../components/Bits";
+import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
 import { BlockedForm, CardForm, CommentForm } from "../components/CardEdits";
 import { Prose } from "../components/Prose";
 import {
@@ -42,7 +41,7 @@ import {
   type Column,
   type Priority,
 } from "../lib/board";
-import { day, folderUrl, memoryUrl, moment, plural, sessionsUrl } from "../lib/format";
+import { day, memoryUrl, moment, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 const FILTERS = ["assignee", "label", "priority"] as const;
@@ -64,6 +63,35 @@ function aimed(event: DragEvent<HTMLElement>, cards: Card[]): Card | null {
   if (at < 0) return null;
   const box = tile.getBoundingClientRect();
   return (event.clientY < box.top + box.height / 2 ? cards[at] : cards[at + 1]) ?? null;
+}
+
+/**
+ * The columns a board too wide for the screen has out of sight, whole or in part, as it scrolls sideways: none when
+ * every column fits.
+ */
+function useOutOfSight(board: HTMLDivElement | null, names: string[]): string[] {
+  const [out, setOut] = useState<string[]>([]);
+  const key = names.join("\n");
+  useEffect(() => {
+    if (!board) return setOut([]);
+    const look = () => {
+      const edge = board.getBoundingClientRect();
+      const hidden = Array.from(board.children).flatMap((column, place) => {
+        const box = column.getBoundingClientRect();
+        return box.left < edge.left - 1 || box.right > edge.right + 1 ? [key.split("\n")[place] ?? ""] : [];
+      });
+      setOut((was) => (was.join("\n") === hidden.join("\n") ? was : hidden));
+    };
+    look();
+    board.addEventListener("scroll", look, { passive: true });
+    const resized = new ResizeObserver(look);
+    resized.observe(board);
+    return () => {
+      board.removeEventListener("scroll", look);
+      resized.disconnect();
+    };
+  }, [board, key]);
+  return out;
 }
 
 /**
@@ -116,6 +144,8 @@ export function BoardPage() {
   const [blocking, setBlocking] = useState<{ number: number; position?: number } | null>(null);
   const [dragged, setDragged] = useState<Card | null>(null);
   const [aim, setAim] = useState<{ column: Column; before: number | null } | null>(null);
+  const [columnsAt, setColumnsAt] = useState<HTMLDivElement | null>(null);
+  const outOfSight = useOutOfSight(columnsAt, board?.columns.map((one) => one.name) ?? []);
 
   const changed = () => {
     setChanges((count) => count + 1);
@@ -194,17 +224,7 @@ export function BoardPage() {
         <span>
           <b>{plural(shown, "card")}</b> on the board{narrowed ? ", as narrowed" : ""}
         </span>
-        <Link to={folderUrl(home)} className="quiet-link">
-          Project memory
-        </Link>
-        <Link to={sessionsUrl(board.project_id)} className="quiet-link">
-          <IconTerminal2 size={14} stroke={1.6} aria-hidden />
-          Sessions
-        </Link>
-        <Link to={`/projects/${encodeURIComponent(board.project_id)}/settings`} className="quiet-link">
-          <IconSettings size={14} stroke={1.6} aria-hidden />
-          Project settings
-        </Link>
+        <ProjectLinks projectId={board.project_id} here="board" />
       </div>
 
       <div className="form-line board-filters">
@@ -327,51 +347,60 @@ export function BoardPage() {
           )}
         </section>
       ) : (
-        <div className="board" data-testid="board">
-          {board.columns.map((one) => (
-            <section
-              key={one.column}
-              className={`board-column ${one.column}${aim?.column === one.column ? " aimed" : ""}`}
-              aria-label={one.name}
-              data-testid={`column-${one.column}`}
-              onDragOver={(event) => {
-                if (!dragged) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                const before = aimed(event, one.cards)?.number ?? null;
-                if (aim?.column !== one.column || aim.before !== before) setAim({ column: one.column, before });
-              }}
-              onDrop={(event) => drop(event, one.column, one.cards)}
-            >
-              <h2 className="board-column-head">
-                {one.name} <span className="count-figure">{one.cards.length}</span>
-              </h2>
-              {one.cards.length === 0 ? (
-                <p className="board-empty">{narrowed ? "None match." : "Nothing here."}</p>
-              ) : (
-                <ol className={aim?.column === one.column && aim.before === null ? "board-cards drop-last" : "board-cards"}>
-                  {one.cards.map((card) => (
-                    <li
-                      key={card.number}
-                      className={aim?.column === one.column && aim.before === card.number ? "drop-above" : undefined}
-                    >
-                      <CardTile
-                        card={card}
-                        onOpen={() => open(card.number)}
-                        current={opened === card.number}
-                        lifted={dragged?.number === card.number}
-                        onLift={(lifted) => {
-                          setDragged(lifted ? card : null);
-                          if (!lifted) setAim(null);
-                        }}
-                      />
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          ))}
-        </div>
+        <>
+          {outOfSight.length > 0 && (
+            <p className="board-swipe" aria-hidden data-testid="board-swipe">
+              <IconArrowsHorizontal size={14} stroke={1.6} aria-hidden />
+              {board.columns.length - outOfSight.length} of {board.columns.length} columns in view. Swipe for{" "}
+              {new Intl.ListFormat("en-GB", { type: "conjunction" }).format(outOfSight)}.
+            </p>
+          )}
+          <div className="board" data-testid="board" ref={setColumnsAt}>
+            {board.columns.map((one) => (
+              <section
+                key={one.column}
+                className={`board-column ${one.column}${aim?.column === one.column ? " aimed" : ""}`}
+                aria-label={one.name}
+                data-testid={`column-${one.column}`}
+                onDragOver={(event) => {
+                  if (!dragged) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const before = aimed(event, one.cards)?.number ?? null;
+                  if (aim?.column !== one.column || aim.before !== before) setAim({ column: one.column, before });
+                }}
+                onDrop={(event) => drop(event, one.column, one.cards)}
+              >
+                <h2 className="board-column-head">
+                  {one.name} <span className="count-figure">{one.cards.length}</span>
+                </h2>
+                {one.cards.length === 0 ? (
+                  <p className="board-empty">{narrowed ? "None match." : "Nothing here."}</p>
+                ) : (
+                  <ol className={aim?.column === one.column && aim.before === null ? "board-cards drop-last" : "board-cards"}>
+                    {one.cards.map((card) => (
+                      <li
+                        key={card.number}
+                        className={aim?.column === one.column && aim.before === card.number ? "drop-above" : undefined}
+                      >
+                        <CardTile
+                          card={card}
+                          onOpen={() => open(card.number)}
+                          current={opened === card.number}
+                          lifted={dragged?.number === card.number}
+                          onLift={(lifted) => {
+                            setDragged(lifted ? card : null);
+                            if (!lifted) setAim(null);
+                          }}
+                        />
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            ))}
+          </div>
+        </>
       )}
 
       <Drawer
@@ -379,7 +408,17 @@ export function BoardPage() {
         onClose={() => open(null)}
         position="right"
         size="min(520px, 100%)"
-        title={opened !== null ? `Card ${opened}` : ""}
+        // The panel opens on its title, not its close button: opened from its address, nothing has been pressed yet,
+        // and the button would wear the keyboard's highlight for no keypress.
+        title={
+          opened !== null ? (
+            <span data-autofocus tabIndex={-1} className="card-drawer-start">
+              Card {opened}
+            </span>
+          ) : (
+            ""
+          )
+        }
         classNames={{ title: "card-drawer-title" }}
       >
         {opened !== null && (
