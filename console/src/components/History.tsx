@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchHistoryAt, fetchVersionAt, type MemoryVersion } from "../api/client";
 import { Amended } from "./Amended";
+import { Prose } from "./Prose";
 import { changed, wordDiff } from "../lib/diff";
 import { bodyOf, day, headerOf, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -157,7 +158,7 @@ export function ThenText({ history }: { history: History }) {
       {pieces && changed(pieces) ? (
         <Amended pieces={pieces} source={source} />
       ) : (
-        <div className="amended">{bodyOf(now)}</div>
+        <Prose>{bodyOf(now)}</Prose>
       )}
       {pieces && !changed(pieces) && <p className="unchanged">This version didn’t change its text.</p>}
     </div>

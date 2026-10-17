@@ -153,32 +153,22 @@ export function changed(pieces: Piece[]): boolean {
   return pieces.some((piece) => piece.kind !== "same");
 }
 
-/** A marked-up comparison as it is shown, where a long stretch both texts agree on is folded away. */
-export type Shown = Piece | { kind: "folded"; lines: number };
+const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 /**
- * A reader deciding between two texts looks at what changes. A long stretch of lines both agree on is folded to a
- * count, keeping the line either side of each change so it still reads in place. Folding a single line hides nothing
- * worth hiding, so a stretch is only folded when that would take out two lines or more.
+ * What an offer would change in the memory it is offered in place of. Most offers are that memory amended (a time
+ * moved, one part swapped) and read best word by word, like any amendment. An offer written afresh shares only stray
+ * words with it, and matching those shreds both into noise, so when fewer than half the words stand, it is compared a
+ * whole line at a time.
  */
-export function collapse(pieces: Piece[], context = 1): Shown[] {
-  const shown: Shown[] = [];
-  pieces.forEach((piece, at) => {
-    if (piece.kind !== "same") {
-      shown.push(piece);
-      return;
-    }
-    const lines = piece.text.split(/(?<=\n)/);
-    const head = at === 0 ? 0 : context;
-    const tail = at === pieces.length - 1 ? 0 : context;
-    const hidden = lines.length - head - tail;
-    if (hidden < 2) {
-      shown.push(piece);
-      return;
-    }
-    if (head) shown.push({ kind: "same", text: lines.slice(0, head).join("") });
-    shown.push({ kind: "folded", lines: hidden });
-    if (tail) shown.push({ kind: "same", text: lines.slice(lines.length - tail).join("") });
-  });
-  return shown;
+export function offerDiff(before: string, after: string): Piece[] {
+  const pieces = wordDiff(before, after);
+  const standing = words(
+    pieces
+      .filter((piece) => piece.kind === "same")
+      .map((piece) => piece.text)
+      .join(" "),
+  );
+  const longer = Math.max(words(before), words(after));
+  return longer === 0 || standing * 2 >= longer ? pieces : lineDiff(before, after);
 }
