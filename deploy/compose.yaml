@@ -18,7 +18,10 @@ services:
       timeout: 3s
       retries: 30
 
+  # The three images built from this repository are named, so a deploy from GitHub (deploy.sh) can hand them over
+  # ready-made and `docker compose up --no-build` finds them. Built here, `--build` gives them the same names.
   server:
+    image: shared-memory-server
     build: ..
     restart: unless-stopped
     depends_on:
@@ -45,6 +48,7 @@ services:
 
   # Caddy with the console built into it: it serves the console and passes /api, /mcp and /hooks to the server.
   caddy:
+    image: shared-memory-caddy
     build:
       context: ..
       dockerfile: deploy/console/Dockerfile
@@ -63,6 +67,7 @@ services:
       - caddy-config:/config
 
   backup:
+    image: shared-memory-backup
     build: backup
     restart: unless-stopped
     depends_on:

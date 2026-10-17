@@ -732,7 +732,7 @@ function CardPanel({
       )}
 
       {card.description && (
-        <section aria-label="Description">
+        <section aria-label="Description" className="card-description">
           <Prose>{card.description}</Prose>
         </section>
       )}

@@ -214,7 +214,7 @@ function MemberRow({
               <Menu position="bottom-end" withinPortal>
                 <Menu.Target>
                   <UnstyledButton
-                    className="quiet-link"
+                    className="quiet-link row-menu"
                     aria-label={`What to do about ${member.name}`}
                     data-testid={`actions-${id}`}
                   >
