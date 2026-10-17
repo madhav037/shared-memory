@@ -2,11 +2,13 @@ import { Button, Select, TextInput } from "@mantine/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 
-import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
+import { fetchAudit, fetchMembers, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
+import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
 import { boardUrl, cardChange } from "../lib/board";
 import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
+import { useAsked } from "../lib/useAsked";
 import { agentLabel } from "../lib/versions";
 
 /** Every kind the server records, from the contract: the words below are exhaustive over it. */
@@ -151,6 +153,8 @@ export function AuditLog({ member }: { member: SignedInMember }) {
   const [next, setNext] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const wholeTeam = member.role === "owner" || member.role === "admin";
+  // Members who have left stay choosable: their changes are still in the log.
+  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -189,12 +193,14 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       </p>
 
       <div className="form-line" style={{ marginTop: 24 }}>
-        <TextInput
-          label="Member ID"
+        <MemberPicker
+          members={team?.members ?? []}
+          label="Member"
           placeholder="Everyone"
+          clearable
           data-testid="filter-member"
-          onChange={(event) => set("member", event.currentTarget.value.trim())}
-          style={{ flex: "1 1 140px" }}
+          onChange={(memberId) => set("member", memberId)}
+          style={{ flex: "2 1 200px" }}
         />
         <Select
           label="Change"
