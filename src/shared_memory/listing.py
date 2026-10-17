@@ -31,4 +31,8 @@ def is_listed_to(name: str, caller: Caller, state: ProjectState) -> bool:
         return state.has_cards
     if name == "onboard":
         return not state.has_imported
+    if name == "guide":
+        # Claude Code has the skill itself. An agent that reports no name, or one we don't know, may not, so it is
+        # listed.
+        return caller.agent != "Claude Code"
     return True

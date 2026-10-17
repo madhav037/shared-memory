@@ -3,6 +3,8 @@ the team's admins and owner. Hiding is presentation; a tool still refuses a call
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import psycopg
 
@@ -128,3 +130,42 @@ def test_a_prompt_listing_without_a_personal_token_is_answered_as_it_always_was(
     )
 
     assert "onboard" in {prompt["name"] for prompt in answered.json()["result"]["prompts"]}
+
+
+# The guide, for the coding agents without our skill (#308)
+
+SKILL = (Path(__file__).parent.parent / "src" / "shared_memory" / "skill.md").read_text(encoding="utf-8")
+
+
+def skill_section(heading: str) -> str:
+    body = SKILL.split(f"\n## {heading}\n")[1].split("\n## ")[0]
+    return f"## {heading}\n{body}".rstrip()
+
+
+def test_guide_is_listed_to_codex_and_not_to_claude_code(owner: Session) -> None:
+    assert "guide" in listed(owner.as_agent("codex-mcp-client"))
+    assert "guide" not in listed(owner.as_agent("claude-code"))
+
+
+def test_guide_is_listed_to_an_agent_that_reports_no_name(owner: Session) -> None:
+    assert "guide" in listed(owner)
+
+
+def test_guide_gives_a_topic_of_the_skill_word_for_word(owner: Session) -> None:
+    codex = owner.as_agent("codex-mcp-client")
+
+    assert codex.call("guide", topic="sessions-and-locks") == skill_section("Sessions and locks")
+    assert codex.call("guide", topic="the-board") == skill_section("The board")
+
+
+def test_guide_refuses_an_unknown_topic_naming_the_topics(owner: Session) -> None:
+    refused = owner.as_agent("codex-mcp-client").refusal("guide", topic="cooking")
+
+    for topic in ("promoting-a-memory", "sessions-and-locks", "the-board"):
+        assert topic in refused
+
+
+def test_guide_names_its_topics_in_its_description(owner: Session) -> None:
+    description = listed(owner.as_agent("codex-mcp-client"))["guide"]
+
+    assert "promoting-a-memory" in description and "sessions-and-locks" in description
