@@ -139,6 +139,8 @@
   border-color: var(--rule-soft);
 }
 :root[data-mantine-color-scheme] .mantine-Menu-label {
+  font-style: italic;
+  font-weight: 400;
   color: var(--ink-3);
 }
 :root[data-mantine-color-scheme] .mantine-Menu-item.danger-item {
@@ -602,6 +604,20 @@ li[aria-expanded="true"] > .tree-row .twist {
   font-size: 0.9375rem;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
+}
+/* A meta line whose parts a middle dot separates (Dotted): the dot sets the space, so the line keeps no gap of its own
+   between parts, only between wrapped lines. */
+div.dotted {
+  column-gap: 0;
+}
+.dotted-part {
+  display: inline-flex;
+  align-items: center;
+}
+.dot {
+  margin: 0 0.5em;
+  color: var(--ink-3);
+  font-weight: 400;
 }
 .page-meta {
   display: flex;
@@ -1663,6 +1679,7 @@ li[aria-expanded="true"] > .tree-row .twist {
   gap: 12px;
 }
 .agent-hooks dt {
+  font-style: italic;
   color: var(--ink-3);
 }
 .agent-hooks dd {
@@ -1907,9 +1924,10 @@ li[aria-expanded="true"] > .tree-row .twist {
 }
 .reasoning-head {
   margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--ink-2);
+  font-size: 0.875rem;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink-3);
 }
 .reasoning-text {
   margin: 4px 0 0;
@@ -2537,29 +2555,34 @@ li[aria-expanded="true"] > .tree-row .twist {
   border-bottom: 1px solid var(--rule);
 }
 .card-fields dt {
+  font-style: italic;
   color: var(--ink-3);
 }
 .card-fields dd {
   margin: 0;
   color: var(--ink);
 }
+/* A part of a card or a session ("Comments", "Holds 1 file"): a label, so italic sentence case in second ink. */
 .card-section-head {
   margin: 0 0 8px;
   font-family: var(--sans);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
-/* Why a card is blocked: one signal, the word Blocked in italic red; the reason below it reads as plain text. */
-.card-blocked .card-section-head {
   font-size: 0.9375rem;
   font-style: italic;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+/* Why a card is blocked: one signal, the same label in bold red; the reason below it reads as plain text. */
+.card-blocked .card-section-head {
   font-weight: 700;
-  text-transform: none;
-  letter-spacing: normal;
   color: var(--danger);
+}
+/* "Card 3" over the card's title: which card this is, said as a label rather than a stamp. */
+.card-drawer-title {
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink-3);
 }
 .card-blocked p {
   margin: 0;
@@ -2727,22 +2750,33 @@ li[aria-expanded="true"] > .tree-row .twist {
   font-weight: 700;
   color: var(--ink);
 }
+/* A member's ID, wherever it stands beside their name: mono, at the size of the text around it. */
+.member-id {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-2);
+}
 .session-repository {
   font-family: var(--mono);
   font-size: 0.8125rem;
 }
+/* What a session says it is doing: its title, in the sans. The serif is a memory's own words only. */
 .session-activity {
   margin: 6px 0 0;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 1.1875rem;
-  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  line-height: 1.35;
   color: var(--ink);
   max-width: 60ch;
   overflow-wrap: anywhere;
 }
 .session-activity.none {
-  font-family: var(--sans);
   font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
   color: var(--ink-3);
 }
 .session-locks {

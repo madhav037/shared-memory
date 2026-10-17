@@ -381,7 +381,7 @@ export function BoardPage() {
         position="right"
         size="min(520px, 100%)"
         title={opened !== null ? `Card ${opened}` : ""}
-        styles={{ title: { fontWeight: 700, fontFamily: "var(--mono)" } }}
+        classNames={{ title: "card-drawer-title" }}
       >
         {opened !== null && (
           <CardPanel

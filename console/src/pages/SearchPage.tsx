@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { searchEverywhere, type SearchHit } from "../api/client";
-import { Placeholder, Rank, Refusal, WaitingMark } from "../components/Bits";
+import { Dotted, Placeholder, Rank, Refusal, WaitingMark } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { memoryUrl, typeName, type Level, type MemoryType } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -163,14 +163,14 @@ function Results({ query, level, type }: { query: string; level: string; type: s
             <p className="entry-summary">
               <Marked text={hit.summary} query={query} />
             </p>
-            <div className="entry-meta">
+            <Dotted className="entry-meta">
               {hit.level !== "team" && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
               <Rank level={hit.level} />
               <span>{typeName(hit.type)}</span>
               <span>by {nameOf(hit.author)}</span>
               {hit.level === "personal" && <span>not accepted by the team</span>}
               {hit.pending.length > 0 && <WaitingMark />}
-            </div>
+            </Dotted>
           </li>
         ))}
       </ol>
