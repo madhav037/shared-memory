@@ -65,7 +65,7 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
 
 Members use `https://memory.example.com` as the **Shared Memory server URL** in the plugin ([`setup.md`](./setup.md) §4), and open the **console** at `https://memory.example.com`.
 
-To update the server later, pull this repository and run `docker compose up -d --build` again.
+To update the server later, pull this repository and run `docker compose up -d --build` again, or let GitHub do it: [Deploying from GitHub](#deploying-from-github).
 
 ## Behind a web server the host already runs
 
@@ -102,6 +102,34 @@ What the user does, without root:
    ```
 
    The preflight then checks the local port instead of 80 and 443, and warns if lingering is off.
+
+## Deploying from GitHub
+
+Once the stack runs, GitHub can keep it current: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) deploys every commit on `main` that passes Checks. The images are built on GitHub's machines and handed to the host over SSH, never pushed to a registry, so the host builds nothing and no image is public. On the host, [`deploy/deploy.sh`](../deploy/deploy.sh) then:
+
+1. refuses to start if the host's nginx isn't running, nothing answers on 80 or 443, Docker isn't rootless, or there is less than 6GB of disk or 1GB of memory free;
+2. loads the images and runs a backup (`backup now`), switching nothing if either fails;
+3. switches to the new release and checks it through the host's nginx: a hook answers 200, the console loads, all four services run;
+4. puts the release it replaced back if the new one isn't healthy within three minutes, or fails to start;
+5. checks the host's web server answers on 80 and 443 as it did before, and fails loudly if not.
+
+Putting a release back restores its images and deploy files, not the database. A release that changed the database is undone from the backup step 2 took ([Restore](#restore)).
+
+GitHub's key can run nothing but that script: no shell, no port forwarding, no root. The script is installed outside the checkout, so a change to it reaches the host only when someone installs it again. Set it up once, as the stack's user:
+
+1. On your own machine, make GitHub's key: `ssh-keygen -t ed25519 -N "" -C shared-memory-deploy -f deploy_key`.
+2. On the host, install the script, and let the key run only it. `restrict` takes away the shell, forwarding and a terminal:
+
+   ```bash
+   mkdir -p ~/.local/bin && install -m 755 ~/shared-memory/deploy/deploy.sh ~/.local/bin/shared-memory-deploy
+   echo "restrict,command=\"$HOME/.local/bin/shared-memory-deploy\" $(cat deploy_key.pub)" >> ~/.ssh/authorized_keys
+   ```
+
+3. Pin the host's key: run `ssh-keyscan -t ed25519 <host>` on your machine, and check its fingerprint (`ssh-keygen -lf -` on that line) against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host.
+4. In the repository's **Settings → Environments**, add `production`, limited to the `main` branch, with the secrets `DEPLOY_SSH_KEY` (the private key) and `DEPLOY_KNOWN_HOSTS` (the line from step 3), and the variable `DEPLOY_HOST` (`user@host`). Delete `deploy_key` from your machine.
+5. In **Actions → Deploy → Run workflow**, run `check` first. It changes nothing and prints what the host's web server answers and the running release. Then run `deploy`, and once a `drill`, which redeploys the running release, treats it as unhealthy and puts it back, so the way back is known to work.
+
+The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`.
 
 ## Sizing
 
