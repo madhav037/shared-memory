@@ -126,7 +126,8 @@ spacing:
   contents: "304px"
   margin-column: "256px"
   measure: "68ch"
-  list-measure: "74ch"
+  page-measure: "760px"
+  register-measure: "1000px"
   page-top: "44px"
   page-side: "56px"
   page-foot: "104px"
@@ -304,14 +305,14 @@ A three-part frame. A sticky 60px masthead band (plus its 4px green foot); below
 
 A memory's page is a two-column reading grid: the text column at the 68ch measure and a 256px margin, 56px apart. The head (trail, title, summary, currency line, status box), the text and the history run down the left; the margin (standing, type, author, relations, cite as, actions) is sticky on the right, ruled off by a hairline on its left. At 1181px and wider, version numbers hang in the gutter to the left of the text column.
 
-Contents, folders, search and the team read at 74ch; Challenges and registers take up to 1000px; forms and refusals 760px.
+Pages share two measures, so the right edge holds from page to page: every single-column page (contents, folders, search, sessions, the team, settings, forms and refusals) is 760px; registers (Challenges, the board, the audit log) take up to 1000px.
 
 Spacing rhythm: 52px above a section heading, 64px above the history, 72px above the colophon; 16 to 24px between items within a section; list rows padded 9 to 17px.
 
 Responsive: at 1180px and below the margin folds under the text into a grid of terms and a one-line standing line appears under the currency line. At 900px and below the contents column leaves the frame (it opens as a drawer), the nav and search collapse into masthead icons, page insets drop to 16px, headline drops to 2rem, facing texts stack and folder heads stop hanging. At 600px and below dot leaders drop and figures wrap under names, and the history slider takes its own row.
 
 ### Named Rules
-**The Measure Rule.** Memory text never runs wider than 68ch; lists of contents read at 74ch. Wide registers scroll sideways inside their own container, never the page.
+**The Measure Rule.** Memory text never runs wider than 68ch; single-column pages hold to 760px. Wide registers scroll sideways inside their own container, never the page.
 
 **The Hanging Head Rule.** Part heads in a folder hang 18px into the left margin and each level below steps in 18px (12px at 900px and below), so the structure reads from the left edge like a code's numbered divisions.
 
@@ -352,7 +353,7 @@ Solid, square and standing on an edge, as GOV.UK draws them.
 - **Checkbox:** 2px ink border, filled green with white tick when checked. **Switch:** field-edge track, green when on.
 
 ### Navigation
-- **Masthead:** the near-black band, 60px, with a 4px Band Green foot. Wordmark (green square, "Shared Memory" 700, the team after a divider), then nav links in second band ink at 0.9375rem/500. Hover draws a 4px band-2 underline; the current page is white, bold italic, with a 4px Band Green underline. Focus fills the item yellow with an ink underline.
+- **Masthead:** the near-black band, 60px, with a 4px Band Green foot; in dark a 1px rule beneath the foot sets the page off from the band. Wordmark (green square, "Shared Memory" 700, the team after a divider), then nav links in second band ink at 0.9375rem/500. Hover draws a 4px band-2 underline; the current page is white, bold italic, with a 4px Band Green underline. Focus fills the item yellow with an ink underline.
 - **Contents tree:** 32px rows on the panel, indenting 14px per level, chevrons turning 90 degrees (180ms). Folders carry tallies in third ink; memory leaves are in Charis SIL; personal leaves in third ink; cancelled leaves struck through. The current row takes the signal wash, bold italic. Keyboard focus fills a row yellow with a 3px ink bar.
 - **Trail:** 0.875rem links underlined in the rule colour, separated by "›".
 - **View switch and filters:** plain text tabs; the selected one is ink, bold, over a 3px ink underline (tabs) or a 3px green underline (filters).

@@ -183,7 +183,7 @@ export function BoardPage() {
   const shown = board.columns.reduce((count, one) => count + one.cards.length, 0);
 
   return (
-    <div className="board-page">
+    <div className="board-page medium">
       <Trail steps={[{ path: home, name: board.project_name }]} />
       <h1 className="page-title wide">Board</h1>
       <p className="standfirst">
