@@ -179,7 +179,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
   const projectName = (id: string | null | undefined) => (id ? (projects.get(id)?.name ?? id) : "");
 
   return (
-    <div>
+    <div className="medium">
       <h1 className="page-title wide">Audit log</h1>
       <p className="standfirst">
         {wholeTeam
@@ -264,10 +264,18 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                         {WORDS[event.kind]}
                       </td>
                       <td className="where-cell">
-                        {projectName(event.project_id)}
-                        {event.target && (
-                          <div style={{ overflowWrap: "anywhere" }}>
-                            {isMemory ? (
+                        <span
+                          className="where-line"
+                          title={[projectName(event.project_id), event.target].filter(Boolean).join(" › ")}
+                        >
+                          {event.project_id && <span>{projectName(event.project_id)}</span>}
+                          {event.project_id && event.target && (
+                            <span className="where-step" aria-hidden>
+                              ›
+                            </span>
+                          )}
+                          {event.target &&
+                            (isMemory ? (
                               <FileLink path={event.target} />
                             ) : event.kind.startsWith("card_") && event.project_id ? (
                               <CardLink projectId={event.project_id} target={event.target} />
@@ -279,9 +287,8 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                               <span className="path">{event.target}</span>
                             ) : (
                               nameOf(event.target)
-                            )}
-                          </div>
-                        )}
+                            ))}
+                        </span>
                       </td>
                       <td style={{ fontSize: "0.8125rem" }}>
                         <Details kind={event.kind} detail={event.detail} nameOf={nameOf} />

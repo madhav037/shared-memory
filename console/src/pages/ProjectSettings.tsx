@@ -53,7 +53,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
   const home = `projects/${project.project_id}`;
 
   return (
-    <div className="medium">
+    <div className="narrow">
       <Trail steps={[{ path: home, name: project.name }]} />
       <h1 className="page-title" data-testid="project-name">
         {project.name}
