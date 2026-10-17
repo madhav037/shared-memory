@@ -7,6 +7,7 @@ import {
   IconMenu2,
   IconSearch,
 } from "@tabler/icons-react";
+import { useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
@@ -257,17 +258,31 @@ function MemberMenu({
 }) {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const goTo = useNavigate();
+  // On a phone the menu holds the console's pages too, so its name says so, and carries the waiting challenges' count
+  // that the folded nav can't show. The breakpoint is the stylesheet's.
+  const small = useMediaQuery("(max-width: 900px)");
+  const waiting = links.find((link) => link.to === "/challenges")?.count ?? 0;
+  const waitingWords = `${waiting} ${waiting === 1 ? "challenge" : "challenges"} waiting`;
   return (
     <Menu position="bottom-end" width={260} withinPortal>
       <Menu.Target>
         <UnstyledButton
           data-testid="member-menu"
-          aria-label={`${member.name}: your token, appearance and signing out`}
+          aria-label={
+            small
+              ? `${member.name}: the console's pages, your token, appearance and signing out${waiting ? `. ${waitingWords}` : ""}`
+              : `${member.name}: your token, appearance and signing out`
+          }
           style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9375rem", fontWeight: 600 }}
         >
           <span className="only-small" aria-hidden style={{ display: "inline-flex" }}>
             <IconMenu2 size={20} stroke={1.6} />
           </span>
+          {waiting > 0 && (
+            <span className="only-small count" aria-hidden data-testid="phone-waiting">
+              {waiting}
+            </span>
+          )}
           <span data-testid="who" className="who">
             {member.name}
           </span>
@@ -280,9 +295,18 @@ function MemberMenu({
         </Menu.Label>
         <div className="only-small">
           {links.map((link) => (
-            <Menu.Item key={link.to} onClick={() => goTo(link.to)}>
+            <Menu.Item
+              key={link.to}
+              onClick={() => goTo(link.to)}
+              rightSection={
+                link.count ? (
+                  <span className="count" aria-label={`${link.count} waiting`}>
+                    {link.count}
+                  </span>
+                ) : null
+              }
+            >
               {link.label}
-              {link.count ? ` (${link.count})` : ""}
             </Menu.Item>
           ))}
           <Menu.Divider />

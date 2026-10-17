@@ -28,6 +28,23 @@ test("on a phone search has a button of its own", async ({ page }) => {
   await expect(page.getByTestId("search-go")).toBeVisible();
 });
 
+test("on a phone the waiting challenges stay counted in the band, and the menu says it holds the pages", async ({
+  page,
+}) => {
+  // Mira has a challenge waiting on her memory until reject.spec.ts closes it; Olive's is decided before this runs.
+  await signInAs(page, 3, "mira");
+
+  // With the nav folded into the menu, the menu's button still counts what waits for her, and says so by name.
+  const menu = page.getByTestId("member-menu");
+  await expect(page.getByTestId("phone-waiting")).toBeVisible();
+  await expect(page.getByTestId("phone-waiting")).toHaveText(/^[1-9]\d*$/);
+  await expect(menu).toHaveAccessibleName(/the console's pages, .*\d+ challenges? waiting$/);
+
+  await menu.click();
+  await page.getByRole("menuitem", { name: /Challenges/ }).click();
+  await expect(page).toHaveURL(/\/challenges$/);
+});
+
 test("on a phone the contents button says Contents, so it can't pass for the menu beside it", async ({ page }) => {
   await signInAs(page, 1, "olive");
 
