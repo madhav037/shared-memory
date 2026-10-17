@@ -555,6 +555,17 @@ li[aria-expanded="true"] > .tree-row .twist {
 .tree-group {
   margin-top: 6px;
 }
+.contents-foot {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin: 28px 20px 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
 
 /* ---------- Page heads ---------- */
 
@@ -642,16 +653,48 @@ li[aria-expanded="true"] > .tree-row .twist {
 /* A meta line whose parts a middle dot separates (Dotted): the dot sets the space, so the line keeps no gap of its own
    between parts, only between wrapped lines. */
 div.dotted {
+  --dot-space: 1.25em;
   column-gap: 0;
+  /* Each part carries its dot in a space before it; the line starts that space early and clips it, so a part a wrap
+     carries to the start of a line sets its dot out of sight, and no line opens or ends on one. */
+  margin-left: calc(-1 * var(--dot-space));
+  clip-path: inset(-8px -8px -8px calc(var(--dot-space) - 4px));
 }
 .dotted-part {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  padding-left: var(--dot-space);
 }
 .dot {
-  margin: 0 0.5em;
+  position: absolute;
+  left: 0;
+  width: var(--dot-space);
+  text-align: center;
   color: var(--ink-3);
   font-weight: 400;
+}
+/* A project's four pages, the same on each: the one in front of you is the current place, bold italic in ink. */
+.project-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: inherit;
+}
+.project-link-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--ink);
+}
+.register-count {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 .page-meta {
   display: flex;
@@ -2301,10 +2344,13 @@ div.dotted {
   .versions {
     margin-left: calc(-2.5rem - 14px);
   }
-  /* The current version's panel starts at the gutter, so its number hangs on the paper beside it, clear of the
-     contents column's rule. */
+  /* The current version's panel starts where the text column does, so its number hangs on the paper beside it, and
+     its words step in from the panel's edge as far as they stop short of its right. */
   .versions li[aria-current] {
-    background: linear-gradient(var(--paper-2), var(--paper-2)) right / calc(100% - 2.5rem - 7px) 100% no-repeat;
+    background: linear-gradient(var(--paper-2), var(--paper-2)) right / calc(100% - 2.5rem - 14px) 100% no-repeat;
+  }
+  .versions li[aria-current] > div {
+    padding-left: 12px;
   }
 }
 @media (max-width: 1180px) {
@@ -2425,11 +2471,24 @@ div.dotted {
     display: none !important;
   }
 }
+/* The narrowest phones: the band's items close up rather than push it past the screen's edge. */
+@media (max-width: 359px) {
+  .masthead {
+    gap: 6px;
+    padding: 0 10px;
+  }
+  .masthead-end {
+    gap: 9px;
+  }
+  .wordmark {
+    gap: 8px;
+  }
+}
 
 /*
  * A project's board: four columns, each headed by a heavy rule the way a register heads a section, and its cards are
- * the entries under it, each on its own rule; a card's number is its citation. Blocked is marked in red, Done in green,
- * each with its word, never the hue alone.
+ * the entries under it, each on its own rule; a card's number is its citation. Blocked is marked in red, with its word,
+ * never the hue alone. Done keeps the ink rule: green means in force, here and go, and finished work is none of those.
  */
 .board-filters {
   margin-top: 24px;
@@ -2493,8 +2552,18 @@ div.dotted {
 .board-column.blocked {
   border-top-color: var(--danger);
 }
-.board-column.done {
-  border-top-color: var(--accent);
+/* A board too wide for the screen says how much of it is in view and what lies sideways. */
+.board-swipe {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 22px 0 0;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.board-swipe + .board {
+  margin-top: 10px;
 }
 .board-column-head {
   display: flex;
@@ -2685,6 +2754,11 @@ div.dotted {
   font-style: italic;
   font-weight: 400;
   color: var(--ink-3);
+}
+/* The panel opens with focus on its title, which is not a control: it takes no highlight. */
+.card-drawer-start:focus {
+  outline: none;
+  box-shadow: none;
 }
 .card-blocked p {
   margin: 0;

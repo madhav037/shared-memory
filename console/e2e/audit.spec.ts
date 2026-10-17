@@ -9,6 +9,7 @@ test("the owner signs in and finds that sign-in in the audit log", async ({ page
   const rows = page.getByTestId("audit-table").locator("tbody tr");
   await expect(rows.first()).toContainText("Olive Owner");
   await expect(rows.first()).toContainText("Signed in");
+  await expect(page.getByTestId("audit-showing")).toHaveText(/^Showing (the latest|all) \d+ changes\.$/);
 
   await page.getByTestId("filter-kind").click();
   await page.getByRole("option", { name: "Sign-in refused" }).click();

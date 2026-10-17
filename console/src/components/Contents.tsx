@@ -1,6 +1,6 @@
-import { IconChevronRight, IconLock, IconPin, IconScale } from "@tabler/icons-react";
+import { IconChevronRight, IconLock, IconPin, IconKey, IconScale } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { type FileEntry } from "../api/client";
 import { currentPath, useContents } from "../lib/contents";
@@ -72,6 +72,14 @@ export function ContentsTree({ onOpen, heading = true }: { onOpen?: () => void; 
           />
         ))}
       </ul>
+      {/* What a new member needs first, at the foot of what they can read. */}
+      <p className="contents-foot">
+        <span>New here? Your coding agent reads and writes this memory once it is connected.</span>
+        <Link to="/connect" className="quiet-link" onClick={onOpen} data-testid="contents-connect">
+          <IconKey size={14} stroke={1.6} aria-hidden />
+          Connect your agent
+        </Link>
+      </p>
     </nav>
   );
 }

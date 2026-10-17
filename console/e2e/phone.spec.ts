@@ -78,6 +78,32 @@ test("on a phone the registers set each row out as an entry the width of the pag
   await expectStacked(page, "raised");
 });
 
+test("on a phone the band fits the narrowest screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await signInAs(page, 1, "olive");
+
+  await expect(page.getByTestId("open-contents")).toHaveText("Contents");
+  const right = await page.locator(".masthead-end").evaluate((end) => end.getBoundingClientRect().right);
+  expect(right).toBeLessThanOrEqual(320);
+});
+
+test("on a phone the audit log says how much of it is shown, and pages older changes in", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.goto("/audit");
+
+  await expect(page.getByTestId("audit-showing")).toHaveText(/^Showing (the latest 20|all \d+) changes\.$/);
+  expect(await page.getByTestId("audit-table").locator("tbody tr").count()).toBeLessThanOrEqual(20);
+});
+
+test("on a phone the board says how many of its columns are in view, and which lie sideways", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByRole("link", { name: "Board" }).first().click();
+
+  await expect(page.getByTestId("board-swipe")).toHaveText("1 of 4 columns in view. Swipe for Doing, Blocked and Done.");
+  await page.getByTestId("board").evaluate((board) => (board.scrollLeft = board.scrollWidth));
+  await expect(page.getByTestId("board-swipe")).toContainText("Swipe for To do");
+});
+
 test("on a phone the board's filters sit in rows: the view and Add card, the assignee, then label and priority", async ({
   page,
 }) => {

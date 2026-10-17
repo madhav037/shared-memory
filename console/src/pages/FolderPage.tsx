@@ -1,13 +1,22 @@
 import { Button } from "@mantine/core";
-import { IconLayoutColumns, IconPin, IconPinnedOff, IconSettings, IconTerminal2 } from "@tabler/icons-react";
+import { IconPin, IconPinnedOff } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
-import { ChallengedMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, RestrictedMark, Trail } from "../components/Bits";
-import { boardUrl } from "../lib/board";
+import {
+  ChallengedMark,
+  OutdatedMark,
+  PinnedMark,
+  Placeholder,
+  ProjectLinks,
+  Rank,
+  Refusal,
+  RestrictedMark,
+  Trail,
+} from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, memoryUrl, plural, sessionsUrl, typeName } from "../lib/format";
+import { day, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** What each folder holds, in the words CONTEXT.md defines them with. */
@@ -83,24 +92,7 @@ export function FolderPage({ member }: { member: SignedInMember }) {
           {folder.inside.length > 0 ? ` in ${plural(folder.inside.length, "folder")}` : ""}
         </span>
         {project?.restricted && <RestrictedMark />}
-        {folder.kind === "project" && projectId && (
-          <Link to={boardUrl(projectId)} className="quiet-link" data-testid="to-board">
-            <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
-            Board
-          </Link>
-        )}
-        {folder.kind === "project" && projectId && (
-          <Link to={sessionsUrl(projectId)} className="quiet-link" data-testid="to-sessions">
-            <IconTerminal2 size={14} stroke={1.6} aria-hidden />
-            Sessions
-          </Link>
-        )}
-        {folder.kind === "project" && projectId && (
-          <Link to={`/projects/${encodeURIComponent(projectId)}/settings`} className="quiet-link">
-            <IconSettings size={14} stroke={1.6} aria-hidden />
-            Project settings
-          </Link>
-        )}
+        {folder.kind === "project" && projectId && <ProjectLinks projectId={projectId} here="memory" />}
         {folder.pinned && <PinnedMark />}
         {folder.pinnable &&
           (folder.pinned ? (
@@ -201,7 +193,7 @@ function Line({ memory, me }: { memory: FileEntry; me: SignedInMember }) {
         <span className="leader" aria-hidden />
         <span className="line-figures">
           <span>{typeName(memory.type)}</span>
-          <span>{memory.author === me.member_id ? "you" : memory.author_name}</span>
+          <span>{memory.author === me.member_id ? "You" : memory.author_name}</span>
           {memory.changed && <span>{day(memory.changed)}</span>}
         </span>
       </div>

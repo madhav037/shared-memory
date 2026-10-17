@@ -1,7 +1,7 @@
 import { Button, TextInput } from "@mantine/core";
 import { IconLock, IconLockOpen } from "@tabler/icons-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 
 import {
   addRepository,
@@ -18,12 +18,10 @@ import {
   type ProjectDetail,
   type SignedInMember,
 } from "../api/client";
-import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
+import { Placeholder, ProjectLinks, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
-import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
-import { folderUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Who looks after a project, who can reach it, and the repositories that belong to it. */
@@ -60,12 +58,10 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
   return (
     <div className="narrow">
       <Trail steps={[{ path: home, name: project.name }]} />
-      <h1 className="page-title" data-testid="project-name">
-        {project.name}
-      </h1>
+      <h1 className="page-title">Settings</h1>
       <p className="standfirst">
-        Settings for this project. Its ID is <code data-testid="project-id">{project.project_id}</code>; every repository
-        commits it to connect.
+        Who looks after <b data-testid="project-name">{project.name}</b>, who can reach it, and its repositories. Its ID
+        is <code data-testid="project-id">{project.project_id}</code>; every repository commits it to connect.
       </p>
       <div className="page-meta">
         {project.restricted ? <span data-testid="restricted"><RestrictedMark /></span> : <span>Open to the whole team</span>}
@@ -74,12 +70,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             You lead this project
           </span>
         )}
-        <Link to={folderUrl(home)} className="quiet-link">
-          Browse its memory
-        </Link>
-        <Link to={boardUrl(project.project_id)} className="quiet-link">
-          Its board
-        </Link>
+        <ProjectLinks projectId={project.project_id} here="settings" />
       </div>
 
       {!project.you_may_change && (

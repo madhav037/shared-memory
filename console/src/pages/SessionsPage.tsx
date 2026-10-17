@@ -1,10 +1,9 @@
-import { IconLayoutColumns, IconSettings } from "@tabler/icons-react";
-import { Link, useParams } from "react-router";
+import { IconLayoutColumns } from "@tabler/icons-react";
+import { useParams } from "react-router";
 
 import { fetchSessions, type ActiveSession } from "../api/client";
-import { Placeholder, Refusal, Trail } from "../components/Bits";
-import { boardUrl } from "../lib/board";
-import { folderUrl, moment, plural } from "../lib/format";
+import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
+import { moment, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /**
@@ -40,17 +39,7 @@ export function SessionsPage() {
           <b>{plural(found.sessions.length, "active session")}</b>
           {files > 0 ? `, holding ${plural(files, "file")}` : ""}
         </span>
-        <Link to={folderUrl(home)} className="quiet-link">
-          Project memory
-        </Link>
-        <Link to={boardUrl(found.project_id)} className="quiet-link">
-          <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
-          Board
-        </Link>
-        <Link to={`/projects/${encodeURIComponent(found.project_id)}/settings`} className="quiet-link">
-          <IconSettings size={14} stroke={1.6} aria-hidden />
-          Project settings
-        </Link>
+        <ProjectLinks projectId={found.project_id} here="sessions" />
       </div>
 
       {found.sessions.length === 0 ? (
