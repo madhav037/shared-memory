@@ -17,8 +17,8 @@ import { Link, useSearchParams } from "react-router";
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
 import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { Prose } from "../components/Prose";
-import { day, headerEnd, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
+import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
 import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "../components/History";
@@ -29,7 +29,7 @@ export function MemoryPage() {
   const path = asked.get("path") ?? "";
   const { answer: memory, refused, reload } = useAsked((signal) => fetchMemoryAt(path, signal), [path]);
   const { folders, load } = useContents();
-  const [view, setView] = useState<"text" | "source">("text");
+  const [view, setView] = useState<ReadingView>("text");
   const history = useHistory(path);
   const text = useRef<HTMLDivElement>(null);
   const parent = path.split("/").slice(0, -1).join("/");
@@ -79,26 +79,7 @@ export function MemoryPage() {
       <Margin memory={memory} history={history} onChanged={reload} />
 
       <div className="reading-text" ref={text}>
-        <div className="view-switch" role="tablist" aria-label="How to read it">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "text"}
-            onClick={() => setView("text")}
-            data-testid="view-text"
-          >
-            Text
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "source"}
-            onClick={() => setView("source")}
-            data-testid="view-source"
-          >
-            As your agent reads it
-          </button>
-        </div>
+        <ViewSwitch view={view} onChange={setView} />
 
         {history && <Timeline history={history} standing={memory.status} />}
 
@@ -297,22 +278,6 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         )}
       </div>
     </div>
-  );
-}
-
-/** The file as it is on disk: its header, then its body. */
-function Source({ text }: { text: string }) {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const closing = headerEnd(text);
-  return (
-    <pre className="source" data-testid="memory-source">
-      {lines.map((line, number) => (
-        <span key={number} className={number <= closing ? "header-line" : undefined}>
-          {line}
-          {"\n"}
-        </span>
-      ))}
-    </pre>
   );
 }
 

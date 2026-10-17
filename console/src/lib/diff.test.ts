@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changed, collapse, lineDiff, wordDiff, type Piece } from "./diff";
+import { changed, lineDiff, offerDiff, wordDiff, type Piece } from "./diff";
 
 /** One side of the comparison, read back: what the pieces say the text was, or became. */
 const side = (pieces: Piece[], leaving: Piece["kind"]) =>
@@ -62,34 +62,21 @@ describe("line by line, for two texts written separately", () => {
   });
 });
 
-describe("collapsing what did not change", () => {
-  const lines = (from: number, to: number) =>
-    Array.from({ length: to - from + 1 }, (_, place) => `line ${from + place}`).join("\n");
+describe("an offer, against the memory it would replace", () => {
+  it("is read word by word when it is that memory amended", () => {
+    const pieces = offerDiff("- Language: Go\n- Queue: RabbitMQ", "- Language: Go\n- Queue: Kafka");
 
-  it("folds a long unchanged stretch between two changes, keeping a line either side", () => {
-    const before = `first\n${lines(1, 6)}\nlast`;
-    const after = `FIRST\n${lines(1, 6)}\nLAST`;
-
-    const shown = collapse(lineDiff(before, after));
-
-    expect(shown.map((piece) => piece.kind)).toEqual(["delete", "insert", "same", "folded", "same", "delete", "insert"]);
-    expect(shown[2]).toEqual({ kind: "same", text: "line 1\n" });
-    expect(shown[3]).toEqual({ kind: "folded", lines: 4 });
-    expect(shown[4]).toEqual({ kind: "same", text: "line 6\n" });
+    expect(pieces.filter((piece) => piece.kind !== "same").map((piece) => piece.text)).toEqual(["RabbitMQ", "Kafka"]);
   });
 
-  it("folds the unchanged opening and close down to the line next to the change", () => {
-    const shown = collapse(lineDiff(`${lines(1, 5)}\nold\n${lines(6, 10)}`, `${lines(1, 5)}\nnew\n${lines(6, 10)}`));
+  it("is read a line at a time when it was written afresh", () => {
+    const pieces = offerDiff(
+      "Deploys go out on Wednesdays.\nAsk Olive first.",
+      "Releases ship whenever main is green.\nAsk Olive first.",
+    );
 
-    expect(shown[0]).toEqual({ kind: "folded", lines: 4 });
-    expect(shown[1]).toEqual({ kind: "same", text: "line 5\n" });
-    expect(shown[4]).toEqual({ kind: "same", text: "line 6\n" });
-    expect(shown[5]).toEqual({ kind: "folded", lines: 4 });
-  });
-
-  it("leaves a short unchanged stretch alone, since folding one line hides nothing worth hiding", () => {
-    const pieces = lineDiff("a\nsame 1\nsame 2\nsame 3\nb", "A\nsame 1\nsame 2\nsame 3\nB");
-
-    expect(collapse(pieces)).toEqual(pieces);
+    expect(pieces.filter((piece) => piece.kind === "delete").map((piece) => piece.text)).toEqual([
+      "Deploys go out on Wednesdays.\n",
+    ]);
   });
 });

@@ -1252,8 +1252,10 @@ div.dotted {
   max-width: var(--measure);
 }
 .amended {
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.then-text .prose {
+  margin-top: 0;
 }
 .amended ins {
   text-decoration: none;
@@ -1959,40 +1961,6 @@ div.dotted {
 .proposal-by b {
   color: var(--ink);
 }
-/* An offer read as a marked-up draft: what goes, struck through, and what comes in, underlined. */
-.tracked-key {
-  margin: 0 0 8px;
-  font-size: 0.8125rem;
-  color: var(--ink-3);
-}
-.tracked-text {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: 1.0625rem;
-  line-height: 1.62;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--ink);
-}
-.tracked-folded {
-  font-family: var(--sans);
-  font-size: 0.8125rem;
-  color: var(--ink-3);
-}
-.tracked del,
-.tracked-key del {
-  color: var(--danger);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-.tracked ins,
-.tracked-key ins {
-  color: var(--accent);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
 /* Why the member who raised a challenge is asking, in their own words: plain text, never read as markdown. */
 .reasoning {
   margin: 0 0 14px;
@@ -2083,8 +2051,34 @@ div.dotted {
   font-family: var(--serif);
   font-size: 1.0625rem;
   line-height: 1.62;
-  white-space: pre-wrap;
   color: var(--ink);
+}
+.facing .prose {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  max-width: none;
+}
+.facing .source {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 0.8125rem;
+  max-width: none;
+}
+.facing .amendments {
+  margin-top: 16px;
+  font-size: 0.875rem;
+}
+.facing .retire-it {
+  color: var(--ink-2);
+}
+/* How every offer below is read: as text or as an agent reads it, and whether its amendments are marked. */
+.waiting > .view-switch {
+  margin-top: 8px;
+}
+.waiting-marks {
+  min-height: 1.5rem;
+  margin: 12px 0 16px;
 }
 .facing .by {
   margin: 6px 0 0;
