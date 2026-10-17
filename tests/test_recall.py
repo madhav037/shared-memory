@@ -156,3 +156,51 @@ def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningS
     owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
 
     assert "was rejected" in added_context(dana.prompt("which package manager do we use?"))
+
+
+def test_a_memory_is_recalled_once_per_session(owner: Session) -> None:
+    path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    prompt = "store the refund amount in the database"
+
+    assert path in added_context(owner.prompt(prompt))
+    assert path not in added_context(owner.prompt(prompt))
+
+
+def test_another_session_of_the_same_member_is_told_the_memory_again(owner: Session) -> None:
+    path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    prompt = "store the refund amount in the database"
+    owner.prompt(prompt)
+
+    assert path in added_context(owner.as_session("second-session").prompt(prompt))
+
+
+def test_a_memory_that_changed_is_recalled_again(owner: Session) -> None:
+    path = remember(owner, "Staging database", "The staging database is wiped and reseeded every night.", type="gotcha")
+    prompt = "the staging db lost my test data"
+    assert path in added_context(owner.prompt(prompt))
+
+    remember(owner, "Staging database", "The staging database is wiped and reseeded every night at two.", type="gotcha")
+
+    assert "at two" in added_context(owner.prompt(prompt))
+
+
+def test_a_told_memory_does_not_hold_back_the_next_strongest_match(owner: Session) -> None:
+    for number in range(5):
+        promote(owner, f"Retry rule {number}", f"When a card charge fails we retry it (rule {number}).")
+    prompt = "why did the charge fail and get retried"
+
+    first = added_context(owner.prompt(prompt))
+    second = added_context(owner.prompt(prompt))
+
+    told = {line for line in first.splitlines() if line.startswith("[")}
+    assert len(told) == 3
+    assert second
+    assert not told & {line for line in second.splitlines() if line.startswith("[")}
+
+
+def test_a_prompt_naming_no_session_is_recalled_every_time(owner: Session) -> None:
+    path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    payload = {"prompt": "store the refund amount in the database", "cwd": "/work", "hook_event_name": "UserPromptSubmit"}
+
+    for _ in range(2):
+        assert path in added_context(owner.hook_payload("prompt-submitted", payload))
