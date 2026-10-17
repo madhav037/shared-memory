@@ -2139,6 +2139,17 @@ div.dotted {
   color: var(--ink-3);
   margin: 2px 0 0;
 }
+/* Results with none of the words searched for, set apart under their own head: close in meaning is weaker. */
+.weaker-heading {
+  margin: 40px 0 4px;
+  font-family: var(--sans);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.weaker .section-lede {
+  margin-bottom: 0;
+}
 
 /* ---------- A whole part of the contents, with its heads hanging into the margin ---------- */
 

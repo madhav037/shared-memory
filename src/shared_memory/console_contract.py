@@ -305,6 +305,9 @@ class SearchHit(BaseModel):
     summary: str
     label: str
     pending: list[PendingChallenge]
+    # The section that matched has the words searched for, as written or in another form of the same word. False is a
+    # match by meaning alone: among the closest there are, but weaker, since nothing in it says it in those words.
+    words_match: bool
 
 
 class SearchResults(BaseModel):

@@ -1700,6 +1700,8 @@ export interface components {
             label: string;
             /** Pending */
             pending: components["schemas"]["PendingChallenge"][];
+            /** Words Match */
+            words_match: boolean;
         };
         /** SearchResults */
         SearchResults: {

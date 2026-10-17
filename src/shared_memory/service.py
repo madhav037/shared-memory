@@ -313,7 +313,8 @@ class MemoryService:
 
     def _found(self, caller: Caller, hits: list[Hit], for_agent: bool = False) -> list[dict[str, Any]]:
         """Search hits as the memories they came from, with the heading of the section that matched. For a coding
-        agent, each also says whether it is possibly outdated; the console's search page doesn't show that."""
+        agent, each also says whether it is possibly outdated; the console's search page doesn't show that. For the
+        console, each says whether it matched the words searched for, so a match by meaning alone can be set apart."""
         pending = self._challenges.pending(caller.team, [hit.path for hit in hits])
         found: list[tuple[Hit, Memory]] = []
         for hit in hits:
@@ -341,6 +342,7 @@ class MemoryService:
                     "label": label(caller, hit.level, hit.member_id),
                     "pending": pending[hit.path],
                     "possibly_outdated": hit.path in outdated,
+                    **({} if for_agent else {"words_match": hit.words_match}),
                 }
             )
         return results
