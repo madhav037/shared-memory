@@ -224,13 +224,13 @@ def build_app(
     store.subscribe(uses)
     service = MemoryService(settings, identity, store, history, index, challenges, audit, uses)
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
-    recall = Recall(settings, index, store, uses)
     board = Board(settings, db, identity, audit, clock, challenges.tell, lifecycle.retire_fixed)
     identity.on_access_lost(board.return_cards)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
     sessions = Sessions(settings, db, identity, clock)
     identity.on_access_lost(sessions.end_unreachable)
+    recall = Recall(settings, db, sessions, index, store, uses)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
@@ -384,7 +384,7 @@ def build_app(
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
             prompt = hooks.prompt_in(payload)
-            return recall.for_prompt(current, prompt) if prompt else None
+            return recall.for_prompt(current, prompt, session_of(current, payload)) if prompt else None
 
         return await hook(request, "UserPromptSubmit", notices, recalled)
 

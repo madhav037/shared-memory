@@ -171,7 +171,7 @@ A mark that puts a memory into every briefing.
 _Avoid_: Star, favorite
 
 **Recall**:
-Memories added to a prompt automatically because they match it.
+Memories added to a prompt automatically because they match it. A session is given each memory once, and again only if the memory has changed.
 _Avoid_: Injection, auto-search
 
 **Hook**:
