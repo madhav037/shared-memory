@@ -152,7 +152,9 @@ function FolderNode({
       >
         <IconChevronRight className="twist" size={14} stroke={1.8} aria-hidden />
         <span className="label">
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+          <span className="label-text" title={name}>
+            {name}
+          </span>
           {project?.restricted && <IconLock size={13} stroke={1.8} aria-label="Restricted" />}
         </span>
         <span className="tally" aria-hidden>
@@ -161,7 +163,12 @@ function FolderNode({
       </div>
       {open && (
         <ul role="group">
-          {!folder && <li className="tree-note" style={{ "--depth": depth + 1 } as React.CSSProperties}>…</li>}
+          {/* A note in a tree is neither a treeitem nor a list item: role none keeps it plain text. */}
+          {!folder && (
+            <li role="none" className="tree-note" style={{ "--depth": depth + 1 } as React.CSSProperties}>
+              …
+            </li>
+          )}
           {folder?.folders.map((sub) => (
             <FolderNode key={sub.path} path={sub.path} name={sub.name} tally={sub.memories} depth={depth + 1} onOpen={onOpen} />
           ))}
@@ -172,7 +179,7 @@ function FolderNode({
             <MemoryNode key={memory.path} memory={memory} depth={depth + 1} onOpen={onOpen} />
           ))}
           {folder && folder.folders.length === 0 && folder.memories.length === 0 && (
-            <li className="tree-note" style={{ "--depth": depth + 1 } as React.CSSProperties}>
+            <li role="none" className="tree-note" style={{ "--depth": depth + 1 } as React.CSSProperties}>
               Nothing here yet
             </li>
           )}
@@ -228,10 +235,12 @@ function MemoryNode({ memory, depth, onOpen }: { memory: FileEntry; depth: numbe
           event.stopPropagation();
           open();
         }}
-        title={memory.summary}
+        title={`${memory.title}\n${memory.summary}`}
       >
         <span aria-hidden />
-        <span className="label">{memory.title}</span>
+        <span className="label">
+          <span className="label-text">{memory.title}</span>
+        </span>
         <span className="tally" aria-hidden style={{ display: "flex", gap: 4 }}>
           {memory.pinned && <IconPin size={13} stroke={1.8} />}
           {memory.challenged > 0 && <IconScale size={13} stroke={1.8} />}
