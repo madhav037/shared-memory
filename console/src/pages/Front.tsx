@@ -122,7 +122,7 @@ export function Front({ member }: { member: SignedInMember }) {
                       : `Led by ${project.leads.map((lead) => lead.name).join(", ")}.`}
                     {project.you_lead ? " You lead this." : ""}{" "}
                     <Link to={boardUrl(project.project_id)}>Board</Link>
-                    {" · "}
+                    {"\u00a0·\u00a0"}
                     <Link to={`/projects/${encodeURIComponent(project.project_id)}/settings`}>Settings</Link>
                   </p>
                 )}
@@ -242,7 +242,7 @@ function Told() {
               {moment(notice.created_at)}
               {notice.project_id && (
                 <>
-                  {" · "}
+                  {"\u00a0·\u00a0"}
                   <Link
                     className="quiet-link"
                     to={boardUrl(notice.project_id, { card: notice.card ?? undefined })}

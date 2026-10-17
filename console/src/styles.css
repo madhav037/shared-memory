@@ -1868,7 +1868,8 @@ div.dotted {
   color: var(--ink-2);
   font-size: 1rem;
   line-height: 1.55;
-  max-width: 62ch;
+  /* The rules run the width of the column, as every other part's do; the words keep to their measure. */
+  padding-right: max(0px, calc(100% - 62ch));
 }
 .empty b {
   color: var(--ink);
