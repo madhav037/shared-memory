@@ -2319,12 +2319,21 @@ li[aria-expanded="true"] > .tree-row .twist {
 }
 
 /*
- * A project's board: four columns, each headed by a heavy rule the way a register heads a section. A card is a slip of
- * paper on the page, set square; its number is its citation. Blocked is marked in red, Done in green, each with its
- * word, never the hue alone.
+ * A project's board: four columns, each headed by a heavy rule the way a register heads a section, and its cards are
+ * the entries under it, each on its own rule; a card's number is its citation. Blocked is marked in red, Done in green,
+ * each with its word, never the hue alone.
  */
 .board-filters {
   margin-top: 24px;
+}
+/* Board or Archive: the console's text tabs, sitting on the fields' foot line. */
+.board-filters .view-switch {
+  margin: 0 10px 0 0;
+  align-self: flex-end;
+  border-bottom: 0;
+}
+.board-filters .view-switch button {
+  padding-bottom: 8px;
 }
 /* On a phone the filters sit in rows rather than wrapping where they fall: the view and Add card, then who, then
    label and priority side by side. */
@@ -2384,7 +2393,8 @@ li[aria-expanded="true"] > .tree-row .twist {
   align-items: baseline;
   justify-content: space-between;
   margin: 0;
-  padding: 10px 0 12px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid var(--rule);
   font-family: var(--sans);
   font-size: 1rem;
   font-weight: 700;
@@ -2400,35 +2410,30 @@ li[aria-expanded="true"] > .tree-row .twist {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
 }
 .board-empty {
   margin: 0;
-  padding: 14px 0;
+  padding: 14px 10px;
   font-size: 0.875rem;
   color: var(--ink-3);
-  border-top: 1px dashed var(--rule);
 }
+/* A card is an entry: flat on the paper, divided from the next by a rule. Hover is the hover paper, as a register
+   row's is; the card open in the panel is the current place, in the signal wash. */
 .card-tile {
   display: grid;
   gap: 6px;
   width: 100%;
-  padding: 10px 12px 12px;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-left-width: 3px;
+  padding: 11px 10px 13px;
+  border-bottom: 1px solid var(--rule);
   color: var(--ink);
   text-align: left;
-  transition: border-color 120ms ease;
+  transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .card-tile:hover {
-  border-color: var(--ink-3);
+  background: var(--paper-3);
 }
 .card-tile.current {
-  border-color: var(--ink);
-}
-.board-column.blocked .card-tile {
-  border-left-color: var(--danger);
+  background: var(--accent-wash);
 }
 .card-tile-top {
   display: flex;
@@ -2456,10 +2461,9 @@ li[aria-expanded="true"] > .tree-row .twist {
 }
 .card-tile-reason {
   font-size: 0.8125rem;
+  font-style: italic;
   line-height: 1.4;
   color: var(--ink-2);
-  padding-left: 8px;
-  border-left: 2px solid var(--danger);
 }
 .card-tile-meta {
   display: flex;
@@ -2474,29 +2478,23 @@ li[aria-expanded="true"] > .tree-row .twist {
   align-items: center;
   gap: 3px;
 }
+/* Labels are plain words, set one after another with commas, never chips. */
 .card-label {
-  display: inline-block;
-  padding: 0 6px;
-  font-size: 0.75rem;
-  line-height: 1.5;
   color: var(--ink-2);
-  background: var(--paper-3);
 }
-.card-label + .card-label {
-  margin-left: 4px;
+.card-label + .card-label::before {
+  content: ", ";
 }
-.card-tile-meta .card-label + .card-label {
-  margin-left: 0;
-}
+/* Priority is a word in the label voice: italic and sentence case, High in ink and bold, Low in third ink. Normal
+   says nothing. */
 .priority {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.8125rem;
+  font-style: italic;
   color: var(--ink-3);
 }
 .priority.high {
-  color: var(--danger);
+  font-weight: 700;
+  color: var(--ink);
 }
 .due.alert {
   color: var(--danger);
@@ -2554,12 +2552,13 @@ li[aria-expanded="true"] > .tree-row .twist {
   letter-spacing: 0.06em;
   color: var(--ink-3);
 }
-.card-blocked {
-  padding: 12px 14px;
-  background: var(--danger-wash);
-  border-left: 4px solid var(--danger);
-}
+/* Why a card is blocked: one signal, the word Blocked in italic red; the reason below it reads as plain text. */
 .card-blocked .card-section-head {
+  font-size: 0.9375rem;
+  font-style: italic;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--danger);
 }
 .card-blocked p {
@@ -2651,13 +2650,13 @@ li[aria-expanded="true"] > .tree-row .twist {
   pointer-events: none;
 }
 .board-cards li.drop-above::before {
-  top: -6px;
+  top: -2px;
 }
 .board-cards.drop-last {
   position: relative;
 }
 .board-cards.drop-last::after {
-  bottom: -6px;
+  bottom: -2px;
 }
 .board-told {
   margin: 20px 0 0;
