@@ -1,9 +1,9 @@
 import { Button, Select, TextInput } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { fetchAudit, fetchMembers, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
-import { Placeholder, Refusal } from "../components/Bits";
+import { Dotted, Placeholder, Refusal } from "../components/Bits";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
 import { boardUrl, cardChange } from "../lib/board";
@@ -81,6 +81,17 @@ function CardLink({ projectId, target }: { projectId: string; target: string }) 
   return <Link to={boardUrl(projectId, { card: number })}>Card {number}</Link>;
 }
 
+/** What the record says, part by part, a middle dot between each that never opens or ends a line. */
+function DetailLine({ said }: { said: React.ReactNode[] }) {
+  return (
+    <Dotted className="audit-details">
+      {said.map((one, place) => (
+        <Fragment key={place}>{one}</Fragment>
+      ))}
+    </Dotted>
+  );
+}
+
 /** What else the record says about a change, in words rather than field names. */
 function Details({
   kind,
@@ -94,7 +105,7 @@ function Details({
   if (kind.startsWith("card_")) {
     const said = cardChange(detail, nameOf);
     if (typeof detail.agent === "string") said.unshift(agentLabel(detail.agent));
-    return <>{said.join(" · ")}</>;
+    return <DetailLine said={said} />;
   }
   const text = (name: string) => {
     const value = detail[name];
@@ -133,16 +144,7 @@ function Details({
   if (text("github")) said.push(`GitHub @${text("github")}`);
   if (text("for")) said.push(text("for") === "themselves" ? "Their own token" : `For ${nameOf(text("for")!)}`);
   if (text("reason")) said.push(text("reason"));
-  return (
-    <>
-      {said.map((one, place) => (
-        <span key={place}>
-          {place > 0 ? " · " : ""}
-          {one}
-        </span>
-      ))}
-    </>
-  );
+  return <DetailLine said={said} />;
 }
 
 /** How many changes a phone asks for at a time. */
@@ -232,7 +234,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
           data={[...projects.values()].map((one) => ({ value: one.project_id, label: one.name }))}
           data-testid="filter-project"
           onChange={(value) => set("project", value)}
-          style={{ flex: "2 1 180px" }}
+          style={{ flex: "2 1 220px" }}
         />
         <TextInput
           label="From"
