@@ -10,7 +10,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
-from tests.support import RunningServer, Session, Team, added_context, new_team
+from tests.support import RunningServer, Session, Team, added_context, new_team, promote_keeping_both
 
 
 def remember(session: Session, title: str, body: str, type: str = "convention") -> str:
@@ -79,6 +79,44 @@ def test_recall_returns_at_most_three_memories(owner: Session) -> None:
     context = added_context(owner.prompt("why did the charge fail and get retried"))
 
     assert context.count("[project memory]") == 3
+
+
+def promote_retry_rules(session: Session) -> None:
+    for number in range(3):
+        promote_keeping_both(
+            session,
+            {
+                "title": f"Retry rule {number}",
+                "summary": f"Failed card charges are retried (rule {number}).",
+                "type": "convention",
+                "body": f"When a card charge fails we retry it (rule {number}). Detail only in the body {number}.",
+            },
+        )
+
+
+def test_recall_gives_the_top_hit_in_full_and_the_rest_as_pointers(owner: Session) -> None:
+    promote_retry_rules(owner)
+
+    context = added_context(owner.prompt("why did the charge fail and get retried"))
+
+    entries = [line for line in context.splitlines() if line.startswith("[project memory]")]
+    assert len(entries) == 3
+    assert context.count("Detail only in the body") == 1
+    pointers = [line for line in entries if "Detail only" not in line and ": Failed card charges are retried" in line]
+    assert len(pointers) == 2
+    assert all(line.startswith("[project memory] Retry rule ") and ".md)" in line for line in pointers)
+    assert "`read`" in context
+
+
+def test_a_memory_given_as_a_pointer_is_not_recalled_again_in_that_session(owner: Session) -> None:
+    promote_retry_rules(owner)
+    prompt = "why did the charge fail and get retried"
+
+    first = added_context(owner.prompt(prompt))
+    second = added_context(owner.prompt(prompt))
+
+    assert "Retry rule" in first
+    assert not second
 
 
 def test_an_unrelated_prompt_gets_no_recall(owner: Session) -> None:

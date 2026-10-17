@@ -272,3 +272,17 @@ def test_looking_at_a_memory_in_the_console_is_no_use(console: Console, signed_o
     console.clock.advance(days=40)
 
     assert labelled(in_project, path)
+
+
+def test_a_pointer_is_labelled_possibly_outdated_and_counts_as_used(team: Team, owner: Session) -> None:
+    paths = [
+        promote_keeping_both(owner, {**PNPM, "title": f"Package rule {number}", "summary": f"Package rule {number}."})
+        for number in range(3)
+    ]
+    team.server.clock.advance(days=61)
+
+    context = added_context(owner.prompt("which package manager do we use?"))
+
+    pointers = [line for line in context.splitlines() if line.startswith("[project memory, possibly outdated]") and "): " in line]
+    assert pointers
+    assert not any(labelled(owner, path) for path in paths)
