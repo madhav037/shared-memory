@@ -34,17 +34,27 @@ test("the timeline walks a memory back to how it first stood, and forward again"
   await expect(timeline).toContainText("First written");
   await expect(timeline).toContainText("Current");
 
+  // A screen reader hears which version the slider is on and when it was the text, not a bare number.
   const slider = page.getByTestId("history-slider").getByRole("slider");
+  await expect(slider).toHaveAttribute("aria-valuetext", /^Version 2 of 2, in force since /);
   await slider.focus();
   await page.keyboard.press("ArrowLeft");
 
+  await expect(slider).toHaveAttribute("aria-valuetext", /^Version 1 of 2, in force /);
   await expect(page.getByTestId("history-stamp")).toContainText("As it stood: version 1");
   await expect(page.getByTestId("version-text")).toContainText("second lockfile");
+  // The margin stands at that version too; pinning and retiring still act on the memory as it is now.
+  const margin = page.getByTestId("memory-details");
+  await expect(margin.getByTestId("standing-past")).toHaveText("As it stood: version 1");
+  await expect(margin).not.toContainText("Current");
+  await expect(margin.getByTestId("acts-on-current")).toContainText("act on the memory as it stands now");
 
   await page.keyboard.press("ArrowRight");
 
   await expect(page.getByTestId("memory-body")).toContainText("second lockfile");
   await expect(page.getByTestId("version-text")).toHaveCount(0);
+  await expect(margin).toContainText("Current");
+  await expect(margin.getByTestId("acts-on-current")).toHaveCount(0);
 });
 
 test("the contents say how current the team's memory is", async ({ page }) => {
