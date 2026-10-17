@@ -18,7 +18,8 @@ test("a project is restricted, a member is let in, and then loses access", async
   await page.getByTestId("create-project").click();
   const projectId = ((await page.getByTestId("project-id").textContent()) ?? "").trim();
 
-  await page.getByTestId("new-access").fill("emp-ray");
+  await page.getByTestId("new-access").fill("ray-reader");
+  await page.getByRole("option", { name: /Ray Reader/ }).click();
   await page.getByTestId("add-access").click();
   await expect(page.getByTestId("access")).toContainText("Ray Reader");
   await page.getByTestId("restrict").click();

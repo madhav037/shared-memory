@@ -71,7 +71,7 @@ export const theme = createTheme({
     // What a field is missing is said between its label and the field, so the field stays level with its button.
     TextInput: { defaultProps: { radius: 0, inputWrapperOrder: ["label", "description", "error", "input"] } },
     Textarea: { defaultProps: { inputWrapperOrder: ["label", "description", "error", "input"] } },
-    Select: { defaultProps: { radius: 0 } },
+    Select: { defaultProps: { radius: 0, inputWrapperOrder: ["label", "description", "error", "input"] } },
     Menu: { defaultProps: { radius: 0, shadow: "md" } },
     Drawer: { defaultProps: { radius: 0 } },
     Tooltip: { defaultProps: { radius: 0, withArrow: false, openDelay: 250 } },

@@ -2855,6 +2855,25 @@ div.dotted {
   font-weight: 500;
   color: var(--ink-2);
 }
+/* A member as the pickers list them: the name in ink, then their member ID and GitHub account in second ink. */
+.member-picker-dropdown {
+  min-width: 240px;
+  max-width: calc(100vw - 32px);
+}
+.member-option {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.member-option-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+.member-option-meta {
+  color: var(--ink-2);
+}
+.member-option .member-id {
+  font-size: 0.8125rem;
+}
 .session-repository {
   font-family: var(--mono);
   font-size: 0.8125rem;

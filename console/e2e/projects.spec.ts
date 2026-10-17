@@ -20,7 +20,8 @@ test("an admin creates a project, appoints a lead, and that lead sees it as thei
   await expect(page.getByTestId("project-name")).toHaveText("Warehouse");
   await expect(page.getByTestId("leads")).toContainText("Olive Owner");
 
-  await page.getByTestId("new-lead").fill("emp-lead");
+  await page.getByTestId("new-lead").fill("Lee");
+  await page.getByRole("option", { name: /Lee Lead · emp-lead · @lee-lead/ }).click();
   await page.getByTestId("add-lead").click();
   await expect(page.getByTestId("leads")).toContainText("Lee Lead");
 

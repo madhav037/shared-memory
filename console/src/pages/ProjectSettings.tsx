@@ -6,6 +6,7 @@ import { Link, useParams } from "react-router";
 import {
   addRepository,
   appointLead,
+  fetchMembers,
   fetchProject,
   grantAccess,
   removeLead,
@@ -13,11 +14,13 @@ import {
   renameProject,
   restrictProject,
   revokeAccess,
+  type MemberSummary,
   type ProjectDetail,
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { ConnectionFiles } from "../components/ConnectionFiles";
+import { MemberPicker } from "../components/MemberPicker";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { folderUrl } from "../lib/format";
@@ -29,6 +32,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
   const { answer: project, refused: notFound, setAnswer } = useAsked((signal) => fetchProject(projectId, signal), [projectId]);
   const [refused, setRefused] = useState<string | null>(null);
   const { refresh } = useContents();
+  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const current = (team?.members ?? []).filter((one) => !one.removed);
 
   const attempt = async (what: () => Promise<ProjectDetail>) => {
     try {
@@ -137,13 +142,12 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           ))}
         </ul>
         {project.you_may_change && (
-          <Adding
-            label="Member ID"
-            placeholder="e.g. E1042"
-            missing="Enter the member ID of who to let in."
+          <Choosing
+            members={current.filter((one) => !project.access.some((person) => person.member_id === one.member_id))}
+            missing="Choose who to let in."
             action="Let them in"
             testid="access"
-            onAdd={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
+            onChosen={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
           />
         )}
         {!project.restricted && project.access.length > 0 && (
@@ -183,13 +187,12 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           ))}
         </ul>
         {project.you_may_change && (
-          <Adding
-            label="Member ID"
-            placeholder="e.g. E1042"
-            missing="Enter the member ID of who to appoint."
+          <Choosing
+            members={current.filter((one) => !project.leads.some((lead) => lead.member_id === one.member_id))}
+            missing="Choose who to appoint."
             action="Appoint as lead"
             testid="lead"
-            onAdd={(memberId) => attempt(() => appointLead(project.project_id, memberId))}
+            onChosen={(memberId) => attempt(() => appointLead(project.project_id, memberId))}
           />
         )}
       </section>
@@ -277,6 +280,54 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
         </Button>
       </form>
     </section>
+  );
+}
+
+/** Choose a member and send their member ID; sent with nobody chosen, it says so beside the field. */
+function Choosing({
+  members,
+  missing,
+  action,
+  testid,
+  onChosen,
+}: {
+  members: MemberSummary[];
+  missing: string;
+  action: string;
+  testid: string;
+  onChosen: (memberId: string) => void;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
+  return (
+    <form
+      className="form-line"
+      style={{ marginTop: 14, borderTop: 0 }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!chosen) return setTried(true);
+        onChosen(chosen);
+        setChosen(null);
+        setTried(false);
+      }}
+    >
+      <MemberPicker
+        members={members}
+        label="Member"
+        placeholder="Search by name, member ID or GitHub"
+        value={chosen}
+        error={tried && !chosen ? missing : undefined}
+        data-testid={`new-${testid}`}
+        onChange={(memberId) => {
+          setChosen(memberId);
+          setTried(false);
+        }}
+        style={{ flex: "1 1 260px", maxWidth: 380 }}
+      />
+      <Button type="submit" variant="default" data-testid={`add-${testid}`}>
+        {action}
+      </Button>
+    </form>
   );
 }
 
