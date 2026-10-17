@@ -1,5 +1,6 @@
 """The HTTP interface: MCP tools for any coding agent, and the hook endpoints agents call to be briefed and recall."""
 
+import contextvars
 import dataclasses
 import functools
 import json
@@ -15,6 +16,7 @@ import mcp.server._streamable_http_modern as _modern_http
 from mcp.server.context import ServerRequestContext
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.session import ServerSession
 from mcp_types import ListPromptsResult, ListToolsResult, PaginatedRequestParams
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -87,9 +89,11 @@ log = logging.getLogger("shared_memory")
 # schema, and finds that schema by running a whole `tools/list` through its request pipeline: every tool's schema
 # built and serialized, for every call. Under load that was a fifth of the time the server held the GIL. The tools
 # here are registered once, at start, and a tool's schema is the same for whoever is listed it (callers differ only in
-# which tools they are listed, see `listing.py`), so each tool's schema is looked up once.
+# which tools they are listed, see `listing.py`), so each tool's schema is looked up once. It is looked up in the
+# listing as it is before anyone is listed less of it, or a tool hidden from the first caller would have no schema.
 _listed_tool_schema = _modern_http._tool_input_schema
 _tool_schemas: dict[tuple[int, str], Any] = {}
+_unfiltered = contextvars.ContextVar("unfiltered_listing", default=False)
 
 
 async def _tool_input_schema(
@@ -97,7 +101,11 @@ async def _tool_input_schema(
 ) -> Any | None:
     key = (id(app), name)
     if key not in _tool_schemas:
-        schema = await _listed_tool_schema(app, request, request_id, verdict, lifespan_state, name)
+        token = _unfiltered.set(True)
+        try:
+            schema = await _listed_tool_schema(app, request, request_id, verdict, lifespan_state, name)
+        finally:
+            _unfiltered.reset(token)
         if schema is None:
             return None  # the listing failed or never named the tool: look again next time
         _tool_schemas[key] = schema
@@ -150,7 +158,7 @@ def _refusals_as_tool_errors(fn: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
-def _reported_name(session: Any, request: Any) -> str | None:
+def _reported_name(session: ServerSession, request: Request | None) -> str | None:
     """The name the session's coding agent gave for itself when it connected, if it gave one, or else its HTTP client's
     User-Agent. An agent on protocol 2025-06-18 names itself only when it initializes, and this server keeps nothing
     between requests, so its tool calls carry just the User-Agent (Codex sends `codex-mcp-client/<version>`, #276)."""
@@ -240,7 +248,7 @@ def build_app(
         project, repository = current.project, current.repository
         return ProjectState(
             has_cards=project is not None and board.has_cards(project.project_id),
-            has_imported=repository is not None and audit.has_imported_from(current.member, repository),
+            has_imported=repository is not None and audit.has_imported_from(current, repository),
         )
 
     class CallerListingServer(MCPServer):
@@ -253,7 +261,7 @@ def build_app(
             shown = await self._listed_to(ctx, [tool.name for tool in everything.tools])
             if shown is None:
                 return everything  # nobody to list for: the listing is what it always was
-            return ListToolsResult(tools=[tool for tool in everything.tools if tool.name in shown])
+            return everything.model_copy(update={"tools": [tool for tool in everything.tools if tool.name in shown]})
 
         async def _handle_list_prompts(
             self, ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
@@ -262,11 +270,16 @@ def build_app(
             shown = await self._listed_to(ctx, [prompt.name for prompt in everything.prompts])
             if shown is None:
                 return everything
-            return ListPromptsResult(prompts=[prompt for prompt in everything.prompts if prompt.name in shown])
+            return everything.model_copy(
+                update={"prompts": [prompt for prompt in everything.prompts if prompt.name in shown]}
+            )
 
         @staticmethod
         async def _listed_to(ctx: ServerRequestContext[Any], names: list[str]) -> set[str] | None:
-            """The names listed to this request's caller, or None when it has no caller."""
+            """The names listed to this request's caller, or None when it has no caller or the schema lookup asks for
+            the whole listing."""
+            if _unfiltered.get():
+                return None
             try:
                 current = authenticate(getattr(ctx.request, "headers", None) or {})
             except Refused:
