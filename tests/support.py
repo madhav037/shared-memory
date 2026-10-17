@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import threading
 import time
@@ -198,6 +199,15 @@ class Session:
             tools = await client.list_tools()
             instructions = client.instructions or ""
         return instructions, {tool.name: tool.description or "" for tool in tools.tools}
+
+    def tool_listing(self) -> str:
+        """The whole tools/list result an agent is given on connecting, as JSON: names, descriptions, input schemas."""
+        return self.server.portal.call(self._tool_listing)
+
+    async def _tool_listing(self) -> str:
+        async with self._connected() as client:
+            listed = await client.list_tools()
+        return json.dumps([tool.model_dump(mode="json", exclude_none=True) for tool in listed.tools], separators=(",", ":"))
 
     @asynccontextmanager
     async def _connected(self) -> AsyncIterator[Client]:
