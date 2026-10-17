@@ -94,7 +94,7 @@ export function CardForm({
       <TagsInput
         label="Memories"
         description="The path of each memory the card is about, as its page in the console shows it."
-        placeholder={draft.memories.length ? undefined : "e.g. projects/…/shared/decisions/….md"}
+        placeholder={draft.memories.length ? undefined : "projects/…/shared/decisions/….md"}
         value={draft.memories}
         splitChars={[",", " "]}
         onChange={(value) => set({ memories: value })}
