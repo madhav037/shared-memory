@@ -69,7 +69,7 @@ export function SearchPage() {
       >
         <TextInput
           aria-label="What to look for"
-          placeholder="which package manager do we use"
+          placeholder="e.g. which package manager do we use"
           value={typed}
           onChange={(event) => setTyped(event.currentTarget.value)}
           leftSection={<IconSearch size={16} stroke={1.6} aria-hidden />}

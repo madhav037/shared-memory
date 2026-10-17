@@ -29,9 +29,8 @@ export function Challenges() {
     <div className="medium">
       <h1 className="page-title wide">Challenges</h1>
       <p className="standfirst">
-        A challenge asks for a memory to be superseded or retired. Its author can decide it, and so can a lead of its
-        project or an admin, unless they raised it; for team memory, its author or an admin. If nobody has after a few
-        days, or its author has left the team, anyone can.
+        A challenge asks for a memory to be superseded or retired. You decide the ones waiting here as their author, or for
+        the reason each one gives.
       </p>
 
       {refused && <Refusal>{refused}</Refusal>}

@@ -2,7 +2,7 @@ import { Button, CopyButton, Select } from "@mantine/core";
 import { IconCheck, IconCopy, IconKey } from "@tabler/icons-react";
 import { useState, type ReactNode } from "react";
 
-import { fetchProject, reissueMyToken, type IssuedToken, type SignedInMember } from "../api/client";
+import { fetchProject, reissueMyToken, type IssuedToken } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { ConnectionFiles, EVERY_AGENT } from "../components/ConnectionFiles";
 import { hooksOf, whatHappens } from "../lib/agentHooks";
@@ -140,7 +140,7 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
 ];
 
 /** How a member connects whichever coding agent they use, and where they get the token to do it with. */
-export function ConnectAgent({ member }: { member: SignedInMember }) {
+export function ConnectAgent() {
   const [agent, setAgent] = useState(AGENTS[0]!.name);
   const chosen = AGENTS.find((one) => one.name === agent) ?? AGENTS[0]!;
 
@@ -152,7 +152,7 @@ export function ConnectAgent({ member }: { member: SignedInMember }) {
         a few small files the repository commits.
       </p>
 
-      <Token member={member} />
+      <Token />
 
       <h2 className="section-heading">Your agent</h2>
       <div className="view-switch" role="tablist" aria-label="Your coding agent">
@@ -200,7 +200,7 @@ export function ConnectAgent({ member }: { member: SignedInMember }) {
 }
 
 /** Issue a personal token, shown once, and how to set it for every agent on this machine. */
-function Token({ member }: { member: SignedInMember }) {
+function Token() {
   const [issued, setIssued] = useState<IssuedToken | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const [issuing, setIssuing] = useState(false);
@@ -250,7 +250,7 @@ function Token({ member }: { member: SignedInMember }) {
             )}
           </CopyButton>
           <p style={{ marginTop: 10 }}>
-            This is the only time it is shown. Any token {member.member_id} had before has stopped working. Set it in
+            This is the only time it is shown. Any token you had before has stopped working. Set it in
             your terminal’s profile with <code>export SHARED_MEMORY_TOKEN=…</code>, or on Windows with{" "}
             <code>setx SHARED_MEMORY_TOKEN …</code>, then restart your agent.
           </p>

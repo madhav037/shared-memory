@@ -65,7 +65,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
       <div className="page-meta">
         {project.restricted ? <span data-testid="restricted"><RestrictedMark /></span> : <span>Open to the whole team</span>}
         {project.you_lead && (
-          <span className="mark strong" data-testid="you-lead">
+          <span data-testid="you-lead">
             You lead this project
           </span>
         )}
@@ -103,7 +103,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </p>
         {project.you_may_change && (
           <Button
-            variant={project.restricted ? "default" : "filled"}
+            variant="default"
             leftSection={project.restricted ? <IconLockOpen size={16} stroke={1.6} /> : <IconLock size={16} stroke={1.6} />}
             onClick={() => attempt(() => restrictProject(project.project_id, !project.restricted))}
             data-testid="restrict"
@@ -139,7 +139,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         {project.you_may_change && (
           <Adding
             label="Member ID"
-            placeholder="E1042"
+            placeholder="e.g. E1042"
+            missing="Enter the member ID of who to let in."
             action="Let them in"
             testid="access"
             onAdd={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
@@ -184,7 +185,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         {project.you_may_change && (
           <Adding
             label="Member ID"
-            placeholder="E1042"
+            placeholder="e.g. E1042"
+            missing="Enter the member ID of who to appoint."
             action="Appoint as lead"
             testid="lead"
             onAdd={(memberId) => attempt(() => appointLead(project.project_id, memberId))}
@@ -230,7 +232,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         {project.you_may_change && (
           <Adding
             label="Repository name"
-            placeholder="billing-api"
+            placeholder="e.g. billing-api"
+            missing="Enter the repository’s name."
             action="Add repository"
             testid="repository"
             onAdd={(name) => attempt(() => addRepository(project.project_id, name))}
@@ -243,6 +246,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
 
 function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) => void }) {
   const [asked, setAsked] = useState(name);
+  const [tried, setTried] = useState(false);
+  const missing = !asked.trim() ? "Enter the new name." : asked.trim() === name ? "That is already its name." : null;
   return (
     <section aria-labelledby="name-heading">
       <h2 className="section-heading" id="name-heading">
@@ -252,17 +257,22 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
         className="form-line"
         onSubmit={(event) => {
           event.preventDefault();
-          if (asked.trim() && asked !== name) onRenamed(asked.trim());
+          if (missing) setTried(true);
+          else onRenamed(asked.trim());
         }}
       >
         <TextInput
           label="What the team calls it"
           value={asked}
+          error={tried ? missing : undefined}
           data-testid="project-new-name"
-          onChange={(event) => setAsked(event.currentTarget.value)}
+          onChange={(event) => {
+            setAsked(event.currentTarget.value);
+            setTried(false);
+          }}
           style={{ flex: "1 1 260px", maxWidth: 380 }}
         />
-        <Button type="submit" variant="default" disabled={!asked.trim() || asked === name} data-testid="rename-project">
+        <Button type="submit" variant="default" data-testid="rename-project">
           Rename
         </Button>
       </form>
@@ -273,37 +283,43 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
 function Adding({
   label,
   placeholder,
+  missing,
   action,
   testid,
   onAdd,
 }: {
   label: string;
   placeholder: string;
+  /** What to say beside the field when it is sent empty. */
+  missing: string;
   action: string;
   testid: string;
   onAdd: (value: string) => void;
 }) {
   const [value, setValue] = useState("");
+  const [tried, setTried] = useState(false);
   return (
     <form
       className="form-line"
       style={{ marginTop: 14, borderTop: 0 }}
       onSubmit={(event) => {
         event.preventDefault();
-        if (!value.trim()) return;
+        if (!value.trim()) return setTried(true);
         onAdd(value.trim());
         setValue("");
+        setTried(false);
       }}
     >
       <TextInput
         label={label}
         placeholder={placeholder}
         value={value}
+        error={tried && !value.trim() ? missing : undefined}
         data-testid={`new-${testid}`}
         onChange={(event) => setValue(event.currentTarget.value)}
         style={{ flex: "1 1 200px", maxWidth: 300 }}
       />
-      <Button type="submit" variant="default" disabled={!value.trim()} data-testid={`add-${testid}`}>
+      <Button type="submit" variant="default" data-testid={`add-${testid}`}>
         {action}
       </Button>
     </form>

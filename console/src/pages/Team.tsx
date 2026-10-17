@@ -76,7 +76,7 @@ export function Team({ me }: { me: SignedInMember }) {
       )}
       {issued && (
         <div className="issued appear" style={{ marginTop: 24 }} data-testid="new-member-token" role="status">
-          <b>{issued.member_id}’s personal token</b>
+          <b>{members.find((one) => one.member_id === issued.member_id)?.name ?? issued.member_id}’s personal token</b>
           <code data-testid="new-member-token-value">{issued.personal_token}</code>
           <CopyButton value={issued.personal_token}>
             {({ copied, copy }) => (
@@ -333,6 +333,7 @@ function AddMember({
   const [name, setName] = useState("");
   const [github, setGithub] = useState("");
   const [adding, setAdding] = useState(false);
+  const [missing, setMissing] = useState(false);
 
   const add = async () => {
     setAdding(true);
@@ -343,6 +344,7 @@ function AddMember({
       setMemberId("");
       setName("");
       setGithub("");
+      setMissing(false);
     } catch (problem) {
       onRefused((problem as Error).message);
     } finally {
@@ -364,27 +366,29 @@ function AddMember({
         onSubmit={(event) => {
           event.preventDefault();
           if (memberId.trim() && name.trim()) void add();
+          else setMissing(true);
         }}
       >
         <TextInput
           label="Member ID"
-          placeholder="E1042"
+          placeholder="e.g. E1042"
           value={memberId}
+          error={missing && !memberId.trim() ? "Enter their member ID." : undefined}
           data-testid="new-member-id"
           onChange={(event) => setMemberId(event.currentTarget.value)}
           style={{ flex: "1 1 130px" }}
         />
         <TextInput
           label="Name"
-          placeholder="Dana Dev"
           value={name}
+          error={missing && !name.trim() ? "Enter their name." : undefined}
           data-testid="new-name"
           onChange={(event) => setName(event.currentTarget.value)}
           style={{ flex: "2 1 180px" }}
         />
         <TextInput
           label="GitHub username"
-          placeholder="dana-dev"
+          placeholder="e.g. dana-dev"
           value={github}
           data-testid="new-github"
           onChange={(event) => setGithub(event.currentTarget.value)}
@@ -393,7 +397,6 @@ function AddMember({
         <Button
           type="submit"
           loading={adding}
-          disabled={!memberId.trim() || !name.trim()}
           leftSection={<IconUserPlus size={16} stroke={1.6} />}
           data-testid="add-member"
         >

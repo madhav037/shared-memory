@@ -15,7 +15,7 @@ import {
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, longDay, memoryUrl, moment, plural } from "../lib/format";
+import { day, folderUrl, longDay, memoryUrl, moment, plural, readableNotice } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Before signing in: the title page of the team's memory, and what the console is for. */
@@ -217,7 +217,10 @@ function Waiting() {
  */
 function Told() {
   const { answer } = useAsked((signal) => fetchNotices(signal), []);
+  const { nameOf, projects } = useContents();
   if (!answer || answer.notices.length === 0) return null;
+  const known = (memberId: string) => (nameOf(memberId) === memberId ? undefined : nameOf(memberId));
+  const projectNames = [...projects].map(([projectId, project]): [string, string] => [projectId, project.name]);
   const count = answer.notices.length;
   return (
     <section className="notice told appear" aria-labelledby="told-heading" data-testid="notices">
@@ -228,7 +231,7 @@ function Told() {
       <ol>
         {answer.notices.map((notice) => (
           <li key={notice.notice_id} data-testid="notice">
-            <span className="notice-text">{notice.text}</span>
+            <span className="notice-text">{readableNotice(notice.text, known, projectNames)}</span>
             <span className="notice-when">
               {moment(notice.created_at)}
               {notice.project_id && (
@@ -256,6 +259,7 @@ function NewProject() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const { refresh } = useContents();
   const goTo = useNavigate();
 
@@ -287,17 +291,19 @@ function NewProject() {
         onSubmit={(event) => {
           event.preventDefault();
           if (name.trim()) void create();
+          else setMissing(true);
         }}
       >
         <TextInput
           label="Project name"
-          placeholder="Billing"
+          placeholder="e.g. Payments"
           value={name}
+          error={missing && !name.trim() ? "Enter the project’s name." : undefined}
           onChange={(event) => setName(event.currentTarget.value)}
           data-testid="new-project-name"
           style={{ flex: "1 1 240px", maxWidth: 360 }}
         />
-        <Button type="submit" loading={creating} disabled={!name.trim()} data-testid="create-project">
+        <Button type="submit" loading={creating} data-testid="create-project">
           Create project
         </Button>
       </form>

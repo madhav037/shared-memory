@@ -68,7 +68,9 @@ export const theme = createTheme({
         } as React.CSSProperties,
       }),
     }),
-    TextInput: { defaultProps: { radius: 0 } },
+    // What a field is missing is said between its label and the field, so the field stays level with its button.
+    TextInput: { defaultProps: { radius: 0, inputWrapperOrder: ["label", "description", "error", "input"] } },
+    Textarea: { defaultProps: { inputWrapperOrder: ["label", "description", "error", "input"] } },
     Select: { defaultProps: { radius: 0 } },
     Menu: { defaultProps: { radius: 0, shadow: "md" } },
     Drawer: { defaultProps: { radius: 0 } },
