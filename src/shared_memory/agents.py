@@ -7,6 +7,7 @@ session may do.
 from __future__ import annotations
 
 ANOTHER_AGENT = "another agent"
+CLAUDE_CODE = "Claude Code"
 
 # Checked in order: Cursor reports "cursor-vscode", which must not be taken for VS Code.
 _KNOWN: list[tuple[tuple[str, ...], str]] = [
@@ -15,7 +16,7 @@ _KNOWN: list[tuple[tuple[str, ...], str]] = [
     (("cline",), "Cline"),
     (("gemini",), "Gemini CLI"),
     (("codex",), "Codex"),
-    (("claude-code", "claude code"), "Claude Code"),
+    (("claude-code", "claude code"), CLAUDE_CODE),
     (("visual studio code", "visual-studio-code", "vscode", "copilot"), "GitHub Copilot"),
 ]
 

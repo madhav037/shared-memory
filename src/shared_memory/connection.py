@@ -147,6 +147,7 @@ HOOK_SECONDS = 3
 
 # Codex's hooks: its event, the matcher on it, the endpoint it posts to and how long it waits. Codex edits files with
 # apply_patch and also answers to Edit and Write. It gives a SessionEnd hook 3 seconds at most, its timeout included.
+# Codex documents SessionStart's `source: compact` (https://learn.chatgpt.com/docs/hooks).
 CODEX_HOOKS = (
     ("SessionStart", "^(startup|resume|clear|compact)$", "session-start", BRIEFING_SECONDS),
     ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),

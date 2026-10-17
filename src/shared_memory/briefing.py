@@ -57,7 +57,8 @@ class Work:
 COUNTS_TOKENS = 50
 
 
-def _tokens(text: str) -> int:
+def estimate_tokens(text: str) -> int:
+    """About four characters to a token."""
     return (len(text) + 3) // 4
 
 
@@ -81,7 +82,7 @@ def _work_sections(work: Work, sessions: list[str], budget: int) -> list[str]:
     for heading, lines, kind in parts:
         shown: list[str] = []
         for line in lines:
-            cost = _tokens(line) + 1 + (0 if shown else _tokens(heading) + 1)
+            cost = estimate_tokens(line) + 1 + (0 if shown else estimate_tokens(heading) + 1)
             if not full and cost <= budget:
                 shown.append(line)
                 budget -= cost
@@ -155,11 +156,11 @@ class Briefing:
         cap = self._settings.briefing_cap_tokens
         for project_id in projects or [None]:
             pinned = self._pinned(caller.team, project_id)
-            total = _tokens(FRAMING) + sum(tokens for _, tokens in pinned) + _tokens(rendered)
+            total = estimate_tokens(FRAMING) + sum(tokens for _, tokens in pinned) + estimate_tokens(rendered)
             if total > cap:
                 listing = "; ".join(f"{pin_path} (about {tokens} tokens)" for pin_path, tokens in pinned) or "nothing"
                 raise Refused(
-                    f"Pinning this (about {_tokens(rendered)} tokens) would put the briefing over its cap of about "
+                    f"Pinning this (about {estimate_tokens(rendered)} tokens) would put the briefing over its cap of about "
                     f"{cap} tokens. Unpin something first. Pinned now: {listing}."
                 )
         with self._db.transaction() as conn:
@@ -220,7 +221,7 @@ class Briefing:
                     "kind": target.kind,
                     "level": target.level,
                     "title": self._name(caller.team, target),
-                    "tokens": _tokens(rendered) if rendered else 0,
+                    "tokens": estimate_tokens(rendered) if rendered else 0,
                     "pinned_by": row["pinned_by"],
                     "pinned_at": row["pinned_at"],
                 }
@@ -269,13 +270,13 @@ class Briefing:
         but takes its room out of what is left for the work."""
         if caller.project is None:
             return None
-        budget = self._settings.briefing_cap_tokens - _tokens(FRAMING)
+        budget = self._settings.briefing_cap_tokens - estimate_tokens(FRAMING)
         sections: list[str] = []
         left_out: list[str] = []
         for path, text in self._pinned_texts(caller.team, caller.project.project_id):
-            if _tokens(text) <= budget:
+            if estimate_tokens(text) <= budget:
                 sections.append(text)
-                budget -= _tokens(text)
+                budget -= estimate_tokens(text)
             else:
                 left_out.append(path)
         notes = list(extra or [])
@@ -286,9 +287,9 @@ class Briefing:
                 "Suggest the member unpin something to make room.",
             )
         sections.extend(notes)
-        budget -= sum(_tokens(note) for note in notes)
+        budget -= sum(estimate_tokens(note) for note in notes)
         if followed_by:
-            budget -= _tokens(followed_by) + 1
+            budget -= estimate_tokens(followed_by) + 1
         sections.extend(_work_sections(work or Work(), sessions or [], budget))
         if not sections:
             return None
@@ -314,7 +315,7 @@ class Briefing:
 
     def _pinned(self, team: str, project_id: str | None) -> list[tuple[str, int]]:
         """(path, approximate tokens) for each pin visible from a project."""
-        return [(path, _tokens(text)) for path, text in self._pinned_texts(team, project_id)]
+        return [(path, estimate_tokens(text)) for path, text in self._pinned_texts(team, project_id)]
 
     def _render(self, team: str, target: PinTarget) -> str | None:
         if target.kind == "memory":

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from shared_memory.agents import CLAUDE_CODE
 from shared_memory.identity import Caller
 
 # The tools only the team's owner and its admins can use (`Identity._require_admin`).
@@ -34,5 +35,5 @@ def is_listed_to(name: str, caller: Caller, state: ProjectState) -> bool:
     if name == "guide":
         # Claude Code has the skill itself. An agent that reports no name, or one we don't know, may not, so it is
         # listed.
-        return caller.agent != "Claude Code"
+        return caller.agent != CLAUDE_CODE
     return True

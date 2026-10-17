@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import psycopg
 
+from shared_memory import app as app_module
 from tests.support import RunningServer, Session, Team
 
 MCP_HEADERS = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
@@ -40,6 +41,18 @@ def test_a_tool_the_caller_is_not_listed_still_refuses_them_as_before(dana: Sess
     refused = dana.refusal("add_member", member_id="emp-9", name="Eve")
 
     assert "Only the team's owner and its admins can manage members and personal tokens." in refused
+
+
+def test_a_tool_hidden_from_the_first_caller_still_works_for_an_admin_after(team: Team, dana: Session) -> None:
+    assert "Only the team's owner" in dana.refusal("add_member", member_id="emp-9", name="Eve")
+
+    assert team.owner().call("add_member", member_id="emp-9", name="Eve")["member_id"] == "emp-9"
+
+
+def test_a_hidden_tool_has_its_schema_looked_up_whoever_called_it_first(dana: Session) -> None:
+    dana.refusal("add_member", member_id="emp-9", name="Eve")
+
+    assert any(name == "add_member" for _, name in app_module._tool_schemas)
 
 
 def test_a_tool_listed_to_everyone_is_described_the_same_to_a_member_and_the_owner(team: Team, dana: Session) -> None:
