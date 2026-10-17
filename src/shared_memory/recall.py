@@ -68,6 +68,11 @@ class Recall:
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         conn.execute("DELETE FROM recall_told WHERE session_id = ANY(%s)", (list(ids),))
 
+    def forget(self, session: Session) -> None:
+        """Start the session's recall over, as after a compaction, which leaves it none of what it was told."""
+        with self._db.transaction() as conn:
+            self._clear(conn, [session.id])
+
     def _untold(self, session: Session, found: list[_Found]) -> list[_Found]:
         """Those of the sections this session has not been told, or was told before their text changed."""
         if not found:

@@ -419,6 +419,8 @@ def build_app(
     async def session_start(request: Request) -> Response:
         def briefed(current: Caller, payload: dict[str, Any]) -> str | None:
             session = session_of(current, payload)
+            if session and hooks.source_in(payload) == "compact":
+                recall.forget(session)
             named = briefing_line(session) if session else None
             return "\n\n".join(part for part in (composed_briefing(current, named, session), named) if part) or None
 

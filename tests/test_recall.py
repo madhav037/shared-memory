@@ -204,3 +204,29 @@ def test_a_prompt_naming_no_session_is_recalled_every_time(owner: Session) -> No
 
     for _ in range(2):
         assert path in added_context(owner.hook_payload("prompt-submitted", payload))
+
+
+def start_from(session: Session, source: str | None) -> None:
+    payload = {"session_id": session.identifier, "cwd": "/work", "hook_event_name": "SessionStart"}
+    session.hook_payload("session-start", payload if source is None else {**payload, "source": source})
+
+
+def test_a_memory_is_recalled_again_after_a_compaction(owner: Session) -> None:
+    path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    prompt = "store the refund amount in the database"
+    assert path in added_context(owner.prompt(prompt))
+
+    start_from(owner, "compact")
+
+    assert path in added_context(owner.prompt(prompt))
+
+
+@pytest.mark.parametrize("source", ["startup", "resume", None])
+def test_a_session_start_that_is_not_a_compaction_leaves_what_was_told(owner: Session, source: str | None) -> None:
+    path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    prompt = "store the refund amount in the database"
+    owner.prompt(prompt)
+
+    start_from(owner, source)
+
+    assert path not in added_context(owner.prompt(prompt))
