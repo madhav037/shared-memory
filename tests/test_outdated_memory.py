@@ -159,7 +159,8 @@ def test_recall_labels_a_possibly_outdated_memory_once(team: Team, owner: Sessio
     team.server.clock.advance(days=61)
 
     first = added_context(owner.prompt("which package manager do we use?"))
-    second = added_context(owner.prompt("which package manager do we use?"))
+    # A session is told a memory once (#303), so the second telling is to another session.
+    second = added_context(owner.as_session("second-session").prompt("which package manager do we use?"))
 
     assert f"[project memory, possibly outdated] Use pnpm, not npm ({path})" in first
     assert "Check it still holds" in first
