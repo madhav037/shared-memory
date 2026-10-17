@@ -15,7 +15,7 @@ import mcp.server._streamable_http_modern as _modern_http
 from mcp.server.context import ServerRequestContext
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp_types import ListToolsResult, PaginatedRequestParams
+from mcp_types import ListPromptsResult, ListToolsResult, PaginatedRequestParams
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.datastructures import Headers
@@ -44,7 +44,7 @@ from shared_memory.connection import GUIDANCE_ONLY
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
-from shared_memory.listing import is_listed_to
+from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
 from shared_memory.recall import Recall
@@ -236,18 +236,45 @@ def build_app(
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, model)
 
+    def state_of(current: Caller) -> ProjectState:
+        """What the caller's project and repository hold, asked once per listing and only as far as the caller has
+        a project and a repository."""
+        project, repository = current.project, current.repository
+        return ProjectState(
+            has_cards=project is not None and board.has_cards(project.project_id),
+            has_imported=repository is not None and audit.has_imported_from(current.member, repository),
+        )
+
     class CallerListingServer(MCPServer):
-        """An MCP server that lists each caller only the tools `listing.py` shows them."""
+        """An MCP server that lists each caller only the tools and prompts `listing.py` shows them."""
 
         async def _handle_list_tools(
             self, ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
         ) -> ListToolsResult:
             everything = await super()._handle_list_tools(ctx, params)
+            shown = await self._listed_to(ctx, [tool.name for tool in everything.tools])
+            if shown is None:
+                return everything  # nobody to list for: the listing is what it always was
+            return ListToolsResult(tools=[tool for tool in everything.tools if tool.name in shown])
+
+        async def _handle_list_prompts(
+            self, ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
+        ) -> ListPromptsResult:
+            everything = await super()._handle_list_prompts(ctx, params)
+            shown = await self._listed_to(ctx, [prompt.name for prompt in everything.prompts])
+            if shown is None:
+                return everything
+            return ListPromptsResult(prompts=[prompt for prompt in everything.prompts if prompt.name in shown])
+
+        @staticmethod
+        async def _listed_to(ctx: ServerRequestContext[Any], names: list[str]) -> set[str] | None:
+            """The names listed to this request's caller, or None when it has no caller."""
             try:
                 current = authenticate(getattr(ctx.request, "headers", None) or {})
             except Refused:
-                return everything  # nobody to list for: the listing is what it always was
-            return ListToolsResult(tools=[tool for tool in everything.tools if is_listed_to(tool.name, current)])
+                return None
+            state = await anyio.to_thread.run_sync(state_of, current)
+            return {name for name in names if is_listed_to(name, current, state)}
 
     server = CallerListingServer(name="shared-memory", instructions=INSTRUCTIONS)
 
