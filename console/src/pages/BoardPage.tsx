@@ -1,4 +1,4 @@
-import { Button, Drawer, Modal, SegmentedControl, Select } from "@mantine/core";
+import { Button, Drawer, Modal, Select } from "@mantine/core";
 import {
   IconAlertTriangle,
   IconMessage,
@@ -209,18 +209,24 @@ export function BoardPage() {
       </div>
 
       <div className="form-line board-filters">
-        <SegmentedControl
-          aria-label="Board or archive"
-          className="board-view"
-          data-testid="board-view"
-          value={inArchive ? "archive" : "board"}
-          onChange={(value) => change((next) => (value === "archive" ? next.set("view", "archive") : next.delete("view")))}
-          data={[
-            { value: "board", label: "Board" },
-            { value: "archive", label: "Archive" },
-          ]}
-          style={{ flex: "0 0 auto", alignSelf: "flex-end" }}
-        />
+        <div className="view-switch board-view" role="tablist" aria-label="Board or archive" data-testid="board-view">
+          {(
+            [
+              ["board", "Board"],
+              ["archive", "Archive"],
+            ] as const
+          ).map(([value, name]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={(value === "archive") === inArchive}
+              onClick={() => change((next) => (value === "archive" ? next.set("view", "archive") : next.delete("view")))}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
         <Select
           label="Assignee"
           placeholder="Anyone"
@@ -456,6 +462,19 @@ function PriorityMark({ priority }: { priority: Priority }) {
   return <span className={`priority ${priority}`}>{PRIORITY_NAMES[priority]}</span>;
 }
 
+/** A card's labels as plain words, one after another, the way a register lists them. */
+function Labels({ labels }: { labels: string[] }) {
+  return (
+    <span className="card-labels">
+      {labels.map((label) => (
+        <span key={label} className="card-label">
+          {label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function Due({ date }: { date: string | null }) {
   if (!date) return null;
   const state = dueness(date, today());
@@ -526,11 +545,7 @@ function CardTile({
             <IconMessage size={13} stroke={1.6} aria-hidden /> {card.comments.length}
           </span>
         )}
-        {card.labels.map((label) => (
-          <span key={label} className="card-label">
-            {label}
-          </span>
-        ))}
+        {card.labels.length > 0 && <Labels labels={card.labels} />}
       </span>
     </div>
   );
@@ -683,11 +698,7 @@ function CardPanel({
           <>
             <dt>Labels</dt>
             <dd>
-              {card.labels.map((label) => (
-                <span key={label} className="card-label">
-                  {label}
-                </span>
-              ))}
+              <Labels labels={card.labels} />
             </dd>
           </>
         )}
