@@ -939,6 +939,11 @@ div.dotted {
   color: var(--danger);
   font-weight: 700;
 }
+.mark.past {
+  color: var(--past);
+  font-weight: 700;
+  white-space: normal;
+}
 .dagger {
   font-family: var(--serif);
   font-weight: 700;

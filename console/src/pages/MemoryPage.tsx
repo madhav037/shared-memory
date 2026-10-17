@@ -288,6 +288,8 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
   const [told, setTold] = useState<string | null>(null);
   const accepted = memory.level !== "personal";
   const active = memory.status === "active";
+  // While an earlier version is open, the standing is that version's; the actions still act on the memory as it is.
+  const past = history && !history.current ? history.position + 1 : null;
 
   const act = async (what: () => Promise<unknown>, after?: string) => {
     try {
@@ -307,10 +309,19 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
         <dt>Standing</dt>
         <dd style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
           <Rank level={memory.level} />
-          <StatusMark status={memory.status} />
-          {memory.status === "active" && <span className="mark">Current</span>}
-          {memory.pinned && <PinnedMark />}
-          {memory.possibly_outdated && <OutdatedMark />}
+          {past !== null ? (
+            <span className="mark past" data-testid="standing-past">
+              <IconClockHour4 size={14} stroke={1.6} aria-hidden />
+              As it stood: version {past}
+            </span>
+          ) : (
+            <>
+              <StatusMark status={memory.status} />
+              {memory.status === "active" && <span className="mark">Current</span>}
+              {memory.pinned && <PinnedMark />}
+              {memory.possibly_outdated && <OutdatedMark />}
+            </>
+          )}
         </dd>
         {memory.status === "active" && (
           <>
@@ -386,6 +397,11 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
 
       {accepted && active && (
         <div className="margin-actions">
+          {past !== null && (
+            <p className="margin-help" data-testid="acts-on-current">
+              These act on the memory as it stands now, not on version {past}.
+            </p>
+          )}
           {refused && <Refusal testid="pin-refused">{refused}</Refusal>}
           {told && (
             <p className="margin-help" data-testid="retired" role="status">
