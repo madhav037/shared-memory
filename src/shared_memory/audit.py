@@ -173,6 +173,17 @@ class Audit:
             detail=detail,
         )
 
+    def has_imported_from(self, member: Member, repository: str) -> bool:
+        """Whether the member has ever promoted an import whose source is a file of this repository. The imports
+        table forgets a memory once it moves, so the promotion's entry is what remembers who imported from where."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM audit_events WHERE kind = %s AND actor_id = %s"
+                " AND split_part(detail->>'imported_from', ':', 1) = %s LIMIT 1",
+                (MEMORY_PROMOTED, member.pk, repository),
+            ).fetchone()
+        return row is not None
+
     def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: Any) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
         these entries (ADR-0014)."""
