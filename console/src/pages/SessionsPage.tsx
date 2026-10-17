@@ -32,8 +32,8 @@ export function SessionsPage() {
       <Trail steps={[{ path: home, name: found.project_name }]} />
       <h1 className="page-title">Sessions</h1>
       <p className="standfirst">
-        The coding agents at work in {found.project_name} now: whose each session is, what it is working on and the
-        files it holds. A session leaves this page when it ends or goes idle. Nothing here changes one.
+        The coding agents at work in {found.project_name} now, and the files each session holds. A session leaves this
+        page when it ends or goes idle.
       </p>
       <div className="page-meta">
         <span>

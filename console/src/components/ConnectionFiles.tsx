@@ -35,7 +35,7 @@ export function ConnectionFiles({ files, testid }: { files: ConnectionFile[]; te
             <code className="path">{file.path}</code>
             <span className="connection-file-action">
               {file.kept_in === "machine"
-                ? "Once, on each member's machine"
+                ? "Once, on each member’s machine"
                 : file.action === "merge"
                   ? "Merge into it"
                   : "Create it"}

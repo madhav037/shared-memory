@@ -211,7 +211,7 @@ function SignedIn({
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/team" element={<Team me={member} />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
-            <Route path="/connect" element={<ConnectAgent member={member} />} />
+            <Route path="/connect" element={<ConnectAgent />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -298,7 +298,7 @@ function MemberMenu({
             onClick={() => setColorScheme(scheme)}
             rightSection={colorScheme === scheme ? <IconCheck size={14} stroke={1.8} /> : null}
           >
-            {scheme === "auto" ? "Match this computer" : scheme === "light" ? "Printed page (light)" : "Bound volume (dark)"}
+            {scheme === "auto" ? "Match this computer" : scheme === "light" ? "Light" : "Dark"}
           </Menu.Item>
         ))}
         <Menu.Divider />

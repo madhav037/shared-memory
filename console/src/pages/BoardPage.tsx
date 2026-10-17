@@ -187,9 +187,8 @@ export function BoardPage() {
       <Trail steps={[{ path: home, name: board.project_name }]} />
       <h1 className="page-title wide">Board</h1>
       <p className="standfirst">
-        The work in {board.project_name}, from To do to Done. Members and their coding agents add, claim and move its
-        cards: drag one to move it, or open it to change it. A card done more than 14 days ago leaves the board for the
-        archive.
+        The work in {board.project_name}, from To do to Done. Drag a card to move it, or open it to change it; a card
+        done more than 14 days ago moves to the archive.
       </p>
       <div className="page-meta">
         <span>

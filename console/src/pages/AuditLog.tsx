@@ -183,15 +183,15 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       <h1 className="page-title wide">Audit log</h1>
       <p className="standfirst">
         {wholeTeam
-          ? `Every change in team ${member.team}, newest first: members, roles, access, tokens, memory and cards, from the console and from every coding agent.`
+          ? `Every change in team ${member.team}, newest first, from the console and from every coding agent.`
           : "Every change in the projects you lead, newest first."}{" "}
         What a memory said lives in its history; this records who changed it and when.
       </p>
 
       <div className="form-line" style={{ marginTop: 24 }}>
         <TextInput
-          label="Member"
-          placeholder="Member ID"
+          label="Member ID"
+          placeholder="Everyone"
           data-testid="filter-member"
           onChange={(event) => set("member", event.currentTarget.value.trim())}
           style={{ flex: "1 1 140px" }}

@@ -25,7 +25,7 @@ test("a member picks their coding agent and gets its steps and the repository's 
 
   await page.getByTestId("connect-Cline").click();
 
-  await expect(page.getByTestId("agent-files")).toContainText("Once, on each member's machine");
+  await expect(page.getByTestId("agent-files")).toContainText("Once, on each member’s machine");
 });
 
 test("a member sees which of their agent's locks a hook takes, and where the agent is asked to take them", async ({

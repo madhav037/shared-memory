@@ -1611,6 +1611,21 @@ div.dotted {
   color: var(--ink-2);
   margin-bottom: 4px;
 }
+/* What a field is missing, between its label and the field: red ink and a word, said once. */
+.mantine-InputWrapper-error {
+  margin: 0 0 6px;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--danger);
+}
+.mantine-Input-input[data-error] {
+  --input-color: var(--ink);
+  --input-placeholder-color: var(--ink-3);
+  --input-section-color: var(--ink-3);
+  border-color: var(--danger);
+}
 .issued {
   margin: 0 0 28px;
   padding: 16px 18px 15px;

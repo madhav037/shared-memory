@@ -103,7 +103,7 @@ export function CardForm({
       <TagsInput
         label="Files"
         description="Each file written repository:path."
-        placeholder={draft.files.length ? undefined : "billing-api:package.json"}
+        placeholder={draft.files.length ? undefined : "e.g. billing-api:package.json"}
         value={draft.files}
         splitChars={[","]}
         onChange={(value) => set({ files: value })}
@@ -203,13 +203,18 @@ export function BlockedForm({
 export function CommentForm({ onSubmit }: { onSubmit: (text: string) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
   return (
     <form
       className="card-form"
       onSubmit={async (event) => {
         event.preventDefault();
+        if (!text.trim()) return setTried(true);
         setBusy(true);
-        if (await onSubmit(text)) setText("");
+        if (await onSubmit(text)) {
+          setText("");
+          setTried(false);
+        }
         setBusy(false);
       }}
     >
@@ -219,11 +224,12 @@ export function CommentForm({ onSubmit }: { onSubmit: (text: string) => Promise<
         minRows={2}
         maxRows={8}
         value={text}
+        error={tried && !text.trim() ? "Write the comment first." : undefined}
         onChange={(event) => setText(event.currentTarget.value)}
         data-testid="comment-text"
       />
       <div className="card-form-actions">
-        <Button size="xs" type="submit" loading={busy} disabled={!text.trim()} data-testid="comment-send">
+        <Button size="xs" type="submit" loading={busy} data-testid="comment-send">
           Comment
         </Button>
       </div>

@@ -111,3 +111,30 @@ export function projectIn(path: string): string | null {
   const parts = path.split("/");
   return parts[0] === "projects" && parts[1] ? parts[1] : null;
 }
+
+/**
+ * A notice as a person reads it. The server words a notice for a coding agent, which acts on IDs: "Raj Raiser
+ * (emp-raj) commented on your card 1 "Retry" in billing-00f655". Here a known member is their name alone, a known
+ * project is its name, and the quotes are curled.
+ */
+export function readableNotice(
+  text: string,
+  memberName: (memberId: string) => string | undefined,
+  projects: Iterable<[string, string]>,
+): string {
+  let readable = text.replace(/ \(([^()\s]+)\)/g, (whole, memberId: string) => (memberName(memberId) ? "" : whole));
+  for (const [projectId, name] of projects) {
+    // A project ID is lowercase letters, figures and hyphens, so it needs no escaping inside a pattern.
+    readable = readable.replace(new RegExp(`(?<![\\w-])${projectId}(?![\\w-])`, "g"), name);
+  }
+  return curled(readable);
+}
+
+/** Straight quotes and apostrophes as printed ones: “these”, ‘these’ and it’s. */
+export function curled(text: string): string {
+  return text
+    .replace(/(^|[\s([{—-])"/g, "$1“")
+    .replace(/"/g, "”")
+    .replace(/(^|[\s([{—-])'/g, "$1‘")
+    .replace(/'/g, "’");
+}
