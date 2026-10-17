@@ -180,7 +180,9 @@ function MemberRow({
           </>
         )}
       </td>
-      <td data-label="Member ID" style={{ fontFamily: "var(--mono)", fontSize: "0.8125rem" }}>{id}</td>
+      <td data-label="Member ID" className="member-id">
+        {id}
+      </td>
       <td data-label="GitHub">
         {editing?.kind === "github" ? (
           <InlineEdit

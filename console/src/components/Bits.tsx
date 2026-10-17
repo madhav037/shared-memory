@@ -1,4 +1,5 @@
 import { IconAlertTriangle, IconClock, IconLock, IconPin, IconScale } from "@tabler/icons-react";
+import { Children, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { folderUrl, levelName } from "../lib/format";
@@ -41,6 +42,39 @@ export function Trail({ steps }: { steps: { path: string; name: string }[] }) {
         ))}
       </ol>
     </nav>
+  );
+}
+
+/**
+ * A meta line whose parts are separated by a middle dot, as in "First written 2 Jun 2026 · 4 versions". Each dot
+ * travels with the part before it, so a wrapped line never opens on one; parts left out leave no stray dot.
+ */
+export function Dotted({
+  className,
+  testid,
+  hidden = false,
+  children,
+}: {
+  className: string;
+  testid?: string;
+  /** For a line that only repeats what is said elsewhere on the page. */
+  hidden?: boolean;
+  children: ReactNode;
+}) {
+  const parts = Children.toArray(children);
+  return (
+    <div className={`dotted ${className}`} data-testid={testid} aria-hidden={hidden || undefined}>
+      {parts.map((part, place) => (
+        <span className="dotted-part" key={place}>
+          {part}
+          {place < parts.length - 1 && (
+            <span className="dot" aria-hidden>
+              ·
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
   );
 }
 

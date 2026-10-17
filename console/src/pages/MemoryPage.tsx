@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
-import { OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
+import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose } from "../components/Prose";
 import { day, headerEnd, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
@@ -65,12 +65,13 @@ export function MemoryPage() {
         </h1>
         <p className="standfirst summary">{memory.summary}</p>
         {history && <Currency history={history} />}
-        <p className="standing-line" aria-hidden>
+        <Dotted className="standing-line" hidden>
           <Rank level={memory.level} />
-          <StatusMark status={memory.status} />
+          {/* A current memory has no mark, and an empty part would leave a stray dot. */}
+          {memory.status !== "active" && <StatusMark status={memory.status} />}
           <span>{typeName(memory.type)}</span>
           <span>by {memory.author_name}</span>
-        </p>
+        </Dotted>
 
         <Status memory={memory} history={history} />
       </header>
@@ -138,7 +139,7 @@ function Currency({ history }: { history: History }) {
   const last = history.versions[history.versions.length - 1];
   if (!first || !last) return null;
   return (
-    <p className="currency" data-testid="currency">
+    <Dotted className="currency" testid="currency">
       <span>First written {day(first.at)}</span>
       {history.versions.length > 1 && (
         <span>
@@ -146,7 +147,7 @@ function Currency({ history }: { history: History }) {
         </span>
       )}
       <a href="#history">{plural(history.versions.length, "version")}</a>
-    </p>
+    </Dotted>
   );
 }
 
