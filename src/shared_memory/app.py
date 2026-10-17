@@ -12,8 +12,10 @@ import anyio
 import anyio.from_thread
 import anyio.to_thread
 import mcp.server._streamable_http_modern as _modern_http
+from mcp.server.context import ServerRequestContext
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp_types import ListToolsResult, PaginatedRequestParams
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.datastructures import Headers
@@ -42,6 +44,7 @@ from shared_memory.connection import GUIDANCE_ONLY
 from shared_memory.identity import Caller, Identity
 from shared_memory.index import SearchIndex
 from shared_memory.known_issues import KnownIssues
+from shared_memory.listing import is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
 from shared_memory.recall import Recall
@@ -84,7 +87,8 @@ log = logging.getLogger("shared_memory")
 # Before every tool call with arguments, the MCP SDK checks the call's `Mcp-Param-*` headers against the tool's input
 # schema, and finds that schema by running a whole `tools/list` through its request pipeline: every tool's schema
 # built and serialized, for every call. Under load that was a fifth of the time the server held the GIL. The tools
-# here are registered once, at start, and every caller is shown the same list, so each tool's schema is looked up once.
+# here are registered once, at start, and a tool's schema is the same for whoever is listed it (callers differ only in
+# which tools they are listed, see `listing.py`), so each tool's schema is looked up once.
 _listed_tool_schema = _modern_http._tool_input_schema
 _tool_schemas: dict[tuple[int, str], Any] = {}
 
@@ -232,7 +236,20 @@ def build_app(
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, model)
 
-    server =MCPServer(name="shared-memory", instructions=INSTRUCTIONS)
+    class CallerListingServer(MCPServer):
+        """An MCP server that lists each caller only the tools `listing.py` shows them."""
+
+        async def _handle_list_tools(
+            self, ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
+        ) -> ListToolsResult:
+            everything = await super()._handle_list_tools(ctx, params)
+            try:
+                current = authenticate(getattr(ctx.request, "headers", None) or {})
+            except Refused:
+                return everything  # nobody to list for: the listing is what it always was
+            return ListToolsResult(tools=[tool for tool in everything.tools if is_listed_to(tool.name, current)])
+
+    server = CallerListingServer(name="shared-memory", instructions=INSTRUCTIONS)
 
     def saving(tool: F) -> F:
         """A tool that saves memory: it waits for its turn without holding a worker thread (see `saves.py`)."""
