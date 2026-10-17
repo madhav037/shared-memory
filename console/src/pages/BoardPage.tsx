@@ -211,6 +211,7 @@ export function BoardPage() {
       <div className="form-line board-filters">
         <SegmentedControl
           aria-label="Board or archive"
+          className="board-view"
           data-testid="board-view"
           value={inArchive ? "archive" : "board"}
           onChange={(value) => change((next) => (value === "archive" ? next.set("view", "archive") : next.delete("view")))}
@@ -228,6 +229,7 @@ export function BoardPage() {
           value={asked.get("assignee")}
           data={(team?.members ?? []).map((one) => ({ value: one.member_id, label: one.name }))}
           onChange={(value) => filter("assignee", value)}
+          className="filter-assignee"
           data-testid="filter-assignee"
           style={{ flex: "2 1 180px" }}
         />
@@ -239,6 +241,7 @@ export function BoardPage() {
           value={asked.get("label")}
           data={board.labels}
           onChange={(value) => filter("label", value)}
+          className="filter-label"
           data-testid="filter-label"
           style={{ flex: "2 1 160px" }}
         />
@@ -249,13 +252,14 @@ export function BoardPage() {
           value={asked.get("priority")}
           data={Object.entries(PRIORITY_NAMES).map(([value, label]) => ({ value, label }))}
           onChange={(value) => filter("priority", value)}
+          className="filter-priority"
           data-testid="filter-priority"
           style={{ flex: "1 1 140px" }}
         />
         {narrowed && (
           <button
             type="button"
-            className="quiet-link"
+            className="quiet-link clear-filters"
             style={{ alignSelf: "flex-end", paddingBottom: 8 }}
             onClick={() => change((next) => FILTERS.forEach((name) => next.delete(name)))}
             data-testid="clear-filters"
@@ -267,6 +271,7 @@ export function BoardPage() {
           size="sm"
           leftSection={<IconPlus size={15} stroke={1.8} />}
           onClick={() => setAdding(true)}
+          className="add-card"
           data-testid="add-card"
           style={{ flex: "0 0 auto", alignSelf: "flex-end", marginLeft: "auto" }}
         >

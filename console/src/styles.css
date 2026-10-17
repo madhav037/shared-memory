@@ -240,6 +240,7 @@ a:hover {
 }
 a:focus-visible,
 .quiet-link:focus-visible,
+.masthead-contents:focus-visible,
 .view-switch button:focus-visible,
 .filter button:focus-visible {
   outline: none;
@@ -401,6 +402,14 @@ mark {
 .masthead .quiet-link,
 .masthead [data-testid="member-menu"] {
   color: var(--band-ink);
+}
+/* On a phone the contents open from a word in the band, set like a nav item. */
+.masthead-contents {
+  color: var(--band-ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 8px 0;
 }
 
 .frame {
@@ -1440,6 +1449,80 @@ li[aria-expanded="true"] > .tree-row .twist {
 .scroll-x {
   overflow-x: auto;
 }
+/*
+ * On a phone a register's row is an entry under a soft rule, not a row of narrow columns: who or what it is about
+ * first, its date or its menu beside that, and the rest beneath at the full width, labelled where a value alone
+ * wouldn't say what it is.
+ */
+@media (max-width: 600px) {
+  .register thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .register,
+  .register tbody {
+    display: block;
+  }
+  .register tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  /* The line ends after what the entry is about and its date or menu, whatever else would fit beside them. */
+  .register tr::after {
+    content: "";
+    flex-basis: 100%;
+    order: 1;
+  }
+  .register tbody tr:first-child {
+    border-top: 2px solid var(--ink);
+  }
+  .register td {
+    display: block;
+    flex: 1 0 100%;
+    order: 2;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .register td.who-cell,
+  .register td.what-cell {
+    white-space: normal;
+  }
+  .register td.primary {
+    flex: 1 1 0;
+    order: 0;
+    min-width: 0;
+  }
+  .register td.aside {
+    flex: 0 0 auto;
+    order: 1;
+    text-align: right;
+    font-size: 0.875rem;
+    color: var(--ink-3);
+  }
+  .register td.aside .quiet-link {
+    padding: 6px;
+    margin: -6px;
+  }
+  /* Short labelled values share a line where they fit. */
+  .register td[data-label] {
+    flex: 0 1 auto;
+  }
+  .register td[data-label]::before {
+    content: attr(data-label) " ";
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--ink-3);
+  }
+}
 
 /* ---------- Forms, set on a ruled line ---------- */
 
@@ -1916,6 +1999,11 @@ li[aria-expanded="true"] > .tree-row .twist {
   gap: 12px;
   margin-top: 16px;
 }
+@media (max-width: 600px) {
+  .decide {
+    display: grid;
+  }
+}
 
 /* ---------- Search ---------- */
 
@@ -2237,6 +2325,42 @@ li[aria-expanded="true"] > .tree-row .twist {
  */
 .board-filters {
   margin-top: 24px;
+}
+/* On a phone the filters sit in rows rather than wrapping where they fall: the view and Add card, then who, then
+   label and priority side by side. */
+@media (max-width: 600px) {
+  .board-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "view add"
+      "assignee assignee"
+      "label priority"
+      "clear clear";
+    align-items: end;
+    gap: 12px;
+  }
+  .board-filters .board-view {
+    grid-area: view;
+    justify-self: start;
+  }
+  .board-filters .add-card {
+    grid-area: add;
+    justify-self: end;
+  }
+  .board-filters .filter-assignee {
+    grid-area: assignee;
+  }
+  .board-filters .filter-label {
+    grid-area: label;
+  }
+  .board-filters .filter-priority {
+    grid-area: priority;
+  }
+  .board-filters .clear-filters {
+    grid-area: clear;
+    justify-self: start;
+  }
 }
 .board {
   display: grid;
