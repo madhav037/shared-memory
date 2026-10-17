@@ -166,12 +166,12 @@ function Proposal({
                   <b>{difference.label}</b>{" "}
                   {difference.kind === "changed" ? (
                     <>
-                      changes from “{difference.from}” to “{difference.to}”
+                      changes from <q>{difference.from}</q> to <q>{difference.to}</q>
                     </>
                   ) : difference.kind === "added" ? (
-                    <>is added: “{difference.to}”</>
+                    <>is added: <q>{difference.to}</q></>
                   ) : (
-                    <>is dropped, where it now says “{difference.from}”</>
+                    <>is dropped, where it now says <q>{difference.from}</q></>
                   )}
                 </li>
               ))}
