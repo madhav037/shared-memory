@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Puts a release of Shared Memory on this host. GitHub Actions runs it over SSH (.github/workflows/deploy.yml).
 #
-#   check                   check the host and print the running release; changes nothing
-#   deploy <commit>         read the release's images from stdin (docker save, gzipped), back up, switch to them, and
-#                           put the running release back if the new one isn't healthy
-#   deploy <commit> drill   the same, but treat the new release as unhealthy, to rehearse putting one back. Only for
-#                           the commit already running, so the database is never switched back under a newer server.
+#   check            check the host and print the running release; changes nothing
+#   deploy <commit>  read the release's images from stdin (docker save, gzipped), back up, switch to them, and put the
+#                    running release back if the new one isn't healthy
+#   drill            rehearse putting a release back: back up, run the release before this one, check it's healthy, and
+#                    come back. Refused when that release is the same images, since nothing would really swap.
 #
 # GitHub's key may run nothing but this script (`restrict,command=` in ~/.ssh/authorized_keys), so this file is the
 # whole of what GitHub can do here. It is installed by hand, outside the checkout, so a change to it reaches the host
@@ -27,7 +27,7 @@ SERVICES="backup caddy db server"
 
 log()  { echo "$(date -u +%H:%M:%S) $*"; }
 fail() { echo "$(date -u +%H:%M:%S) ✗ $*" >&2; exit 1; }
-usage() { fail "usage: check | deploy <commit> [drill]"; }
+usage() { fail "usage: check | deploy <commit> | drill"; }
 
 compose() { (cd "$REPO/deploy" && docker compose "$@"); }
 listening() { ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN; }
@@ -87,9 +87,8 @@ check() {
 }
 
 deploy() {
-    local commit=$1 drill=${2:-} previous before after image
+    local commit=$1 previous before after image
     [[ $commit =~ ^[0-9a-f]{40}$ ]] || fail "Not a full commit hash: $commit"
-    [ -z "$drill" ] || [ "$drill" = drill ] || usage
 
     exec 9>"$STATE/lock"
     flock -n 9 || fail "Another deploy is running."
@@ -97,7 +96,6 @@ deploy() {
     git -C "$REPO" fetch -q origin main
     git -C "$REPO" merge-base --is-ancestor "$commit" origin/main 2>/dev/null || fail "$commit isn't on main."
     previous=$(git -C "$REPO" rev-parse HEAD)
-    [ -z "$drill" ] || [ "$commit" = "$previous" ] || fail "A drill redeploys the running release, $previous."
 
     before=$(web_server)
     room
@@ -115,16 +113,15 @@ deploy() {
     for image in "${IMAGES[@]}"; do docker tag "$image:latest" "$image:previous"; done
     log "Switching to $commit"
     # A release that fails to start counts as unhealthy, so it too is replaced by the one it replaced.
-    if switch_to "$commit" "$commit" && [ -z "$drill" ] && healthy; then
+    if switch_to "$commit" "$commit" && healthy; then
         log "$commit is healthy"
     else
-        if [ -n "$drill" ]; then log "Drill: treating $commit as unhealthy"; else log "$commit isn't healthy"; fi
-        log "Putting $previous back"
+        log "$commit isn't healthy. Putting $previous back"
         { switch_to previous "$previous" && healthy; } \
             || fail "$previous isn't healthy either. Look now: docker compose ps, docker compose logs."
-        [ -n "$drill" ] || fail "$commit wasn't healthy, so $previous runs again."
-        log "Drill done: $previous was put back and is healthy"
+        fail "$commit wasn't healthy, so $previous runs again."
     fi
+    echo "$previous" > "$STATE/previous"
 
     after=$(web_server)
     [ "$after" = "$before" ] || fail "The host's web server answered $before before the deploy and $after after it."
@@ -138,6 +135,46 @@ deploy() {
     log "Done. Running $(git -C "$REPO" rev-parse HEAD)"
 }
 
+# Puts the release before this one back for real, as an unhealthy deploy would, then comes back to this one.
+drill() {
+    local current earlier before after image same=yes earlier_healthy=yes
+    exec 9>"$STATE/lock"
+    flock -n 9 || fail "Another deploy is running."
+
+    current=$(git -C "$REPO" rev-parse HEAD)
+    earlier=$(cat "$STATE/previous" 2>/dev/null || true)
+    [ -n "$earlier" ] || fail "No release before $current to drill with. Drill after a deploy."
+    for image in "${IMAGES[@]}"; do
+        docker image inspect "$image:previous" >/dev/null 2>&1 || fail "No release before $current: $image:previous is gone."
+        [ "$(docker image inspect -f '{{.Id}}' "$image:previous")" = "$(docker image inspect -f '{{.Id}}' "$image:latest")" ] \
+            || same=no
+    done
+    [ "$same" = no ] || fail "The release before is the same images as $current, so nothing would swap. Drill after the next deploy."
+
+    before=$(web_server)
+    room
+    log "Drill: running $earlier, the release before $current, then coming back. The host's web server answers: $before"
+    log "Backing up first"
+    compose exec -T backup backup now || fail "The backup failed, so nothing was switched."
+
+    for image in "${IMAGES[@]}"; do docker tag "$image:latest" "$image:drill"; done
+    if switch_to previous "$earlier" && healthy; then
+        log "$earlier is healthy"
+    else
+        log "$earlier isn't healthy"
+        earlier_healthy=no
+    fi
+    log "Coming back to $current"
+    { switch_to drill "$current" && healthy; } \
+        || fail "$current isn't healthy after coming back. Look now: docker compose ps, docker compose logs."
+    for image in "${IMAGES[@]}"; do docker image rm -f "$image:drill" >/dev/null; done
+
+    after=$(web_server)
+    [ "$after" = "$before" ] || fail "The host's web server answered $before before the drill and $after after it."
+    [ "$earlier_healthy" = yes ] || fail "$earlier isn't healthy, so a deploy couldn't fall back to it. $current runs again."
+    log "Drill done: $earlier ran and was healthy, and $current runs again"
+}
+
 main() {
     set -euo pipefail
     export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
@@ -147,7 +184,8 @@ main() {
     if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then read -r -a args <<< "$SSH_ORIGINAL_COMMAND"; else args=("$@"); fi
     case "${args[0]:-}" in
         check)  [ "${#args[@]}" -eq 1 ] || usage; check ;;
-        deploy) [ "${#args[@]}" -ge 2 ] && [ "${#args[@]}" -le 3 ] || usage; deploy "${args[1]}" "${args[2]:-}" ;;
+        deploy) [ "${#args[@]}" -eq 2 ] || usage; deploy "${args[1]}" ;;
+        drill)  [ "${#args[@]}" -eq 1 ] || usage; drill ;;
         *) usage ;;
     esac
 }
