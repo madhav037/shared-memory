@@ -3910,6 +3910,10 @@
             },
             "title": "Pending",
             "type": "array"
+          },
+          "words_match": {
+            "title": "Words Match",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3922,7 +3926,8 @@
           "author",
           "summary",
           "label",
-          "pending"
+          "pending",
+          "words_match"
         ],
         "title": "SearchHit",
         "type": "object"

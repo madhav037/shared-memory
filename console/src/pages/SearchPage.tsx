@@ -127,7 +127,6 @@ function Hints() {
 }
 
 function Results({ query, level, type }: { query: string; level: string; type: string }) {
-  const { projects, nameOf } = useContents();
   const { answer, refused } = useAsked(
     (signal) => searchEverywhere({ query, level: level || undefined, type: type || undefined, limit: 10 }, signal),
     [query, level, type],
@@ -143,38 +142,75 @@ function Results({ query, level, type }: { query: string; level: string; type: s
       </p>
     );
 
-  // One result per memory, strongest first, each saying where it lives.
-  const seen = new Set<string>();
-  const unique = answer.results.filter((hit) => (seen.has(hit.path) ? false : (seen.add(hit.path), true)));
-  const where = (hit: SearchHit) => projects.get(hit.project_id ?? "")?.name ?? hit.project_id ?? "";
+  // One result per memory, strongest first. A memory has the words searched for if any section of it matched them.
+  const unique = new Map<string, SearchHit>();
+  for (const hit of answer.results) {
+    const known = unique.get(hit.path);
+    unique.set(hit.path, known ? { ...known, words_match: known.words_match || hit.words_match } : hit);
+  }
+  const hits = [...unique.values()];
+  const worded = hits.filter((hit) => hit.words_match);
+  const close = hits.filter((hit) => !hit.words_match);
 
   return (
     <div data-testid="results">
-      <p className="history-stamp" role="status">
-        {unique.length === 1 ? "One memory matches, strongest first." : `The ${unique.length} closest memories, strongest first.`}
+      <p className="history-stamp" role="status" data-testid="results-count">
+        {strength(worded.length, close.length)}
       </p>
-      <ol className="entries" style={{ marginTop: 14 }}>
-        {unique.map((hit) => (
-          <li className={hit.level === "personal" ? "entry personal" : "entry"} key={hit.path}>
-            <Link className="entry-title" to={memoryUrl(hit.path)}>
-              <Marked text={hit.title} query={query} />
-            </Link>
-            {hit.heading !== hit.title && <p className="matched">Matched in “{hit.heading}”</p>}
-            <p className="entry-summary">
-              <Marked text={hit.summary} query={query} />
-            </p>
-            <Dotted className="entry-meta">
-              {hit.level !== "team" && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
-              <Rank level={hit.level} />
-              <span>{typeName(hit.type)}</span>
-              <span>by {nameOf(hit.author)}</span>
-              {hit.level === "personal" && <span>not accepted by the team</span>}
-              {hit.pending.length > 0 && <WaitingMark />}
-            </Dotted>
-          </li>
-        ))}
-      </ol>
+      {worded.length > 0 && <Entries hits={worded} query={query} testid="worded" />}
+      {close.length > 0 && (
+        <section className="weaker" aria-labelledby="weaker-heading" data-testid="weaker">
+          {worded.length > 0 && (
+            <>
+              <h2 className="weaker-heading" id="weaker-heading">
+                Weaker matches
+              </h2>
+              <p className="section-lede">Close in meaning, but without the words you searched for.</p>
+            </>
+          )}
+          <Entries hits={close} query={query} testid="close" />
+        </section>
+      )}
     </div>
+  );
+}
+
+/** How many results have the words searched for, and how many come only close in meaning. */
+function strength(worded: number, close: number): string {
+  const have = worded === 1 ? "One memory has" : `${worded} memories have`;
+  if (close === 0) return `${have} the words you searched for${worded > 1 ? ", strongest first" : ""}.`;
+  const more = close === 1 ? "one more comes" : `${close} more come`;
+  if (worded > 0) return `${have} the words you searched for, and ${more} close in meaning.`;
+  return close === 1
+    ? "None has the words you searched for. This one comes closest in meaning."
+    : `None has the words you searched for. These ${close} come closest in meaning, strongest first.`;
+}
+
+function Entries({ hits, query, testid }: { hits: SearchHit[]; query: string; testid: string }) {
+  const { projects, nameOf } = useContents();
+  const where = (hit: SearchHit) => projects.get(hit.project_id ?? "")?.name ?? hit.project_id ?? "";
+  return (
+    <ol className="entries" style={{ marginTop: 14 }} data-testid={testid}>
+      {hits.map((hit) => (
+        <li className={hit.level === "personal" ? "entry personal" : "entry"} key={hit.path}>
+          <Link className="entry-title" to={memoryUrl(hit.path)}>
+            <Marked text={hit.title} query={query} />
+          </Link>
+          {hit.heading !== hit.title && <p className="matched">Matched in “{hit.heading}”</p>}
+          <p className="entry-summary">
+            <Marked text={hit.summary} query={query} />
+          </p>
+          <Dotted className="entry-meta">
+            {hit.level !== "team" && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
+            <Rank level={hit.level} />
+            <span>{typeName(hit.type)}</span>
+            <span>by {nameOf(hit.author)}</span>
+            {hit.level === "personal" && <span>not accepted by the team</span>}
+            {hit.pending.length > 0 && <WaitingMark />}
+          </Dotted>
+        </li>
+      ))}
+    </ol>
   );
 }
 
