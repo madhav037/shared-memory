@@ -324,6 +324,12 @@ def session_in(payload: Mapping[str, Any]) -> str | None:
     return None
 
 
+def source_in(payload: Mapping[str, Any]) -> str | None:
+    """Why a session-start hook fired (`startup`, `resume`, `clear`, `compact`), or None when the payload says none."""
+    value = payload.get("source")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 def notice(format: str | None, text: str) -> dict[str, Any]:
     """A word for the member rather than for the model, such as that Shared Memory is unavailable. Claude Code's format
     is the only one with a field for it; the rest are answered empty, which leaves their sessions untouched."""

@@ -135,6 +135,7 @@ def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_
     end = hooks["SessionEnd"][0]["hooks"][0]
 
     assert hooks["PreToolUse"][0]["matcher"] == "^(apply_patch|Edit|Write)$"
+    assert "compact" in hooks["SessionStart"][0]["matcher"], "a compaction starts the session's recall over"
     assert end["timeout"] <= 3, "Codex gives a SessionEnd hook 3 seconds at most"
     for hook, event in (
         (briefing, "session-start"),
