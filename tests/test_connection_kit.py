@@ -563,3 +563,30 @@ def test_clines_windows_hook_script_briefs_a_task_without_cancelling_it(team: Te
 
     assert answer["cancel"] is False
     assert "Use pnpm, not npm" in answer["contextModification"]
+
+
+#: A plugin's MCP tool is named `mcp__plugin_<plugin>_<server>__<tool>`; both the plugin and its server are `shared-memory`.
+SEARCH_TOOLS = [f"mcp__plugin_shared-memory_shared-memory__{tool}" for tool in ("search", "read", "list", "tree")]
+
+
+def test_the_claude_code_plugin_ships_a_memory_search_subagent_that_can_only_read_memory() -> None:
+    plugin = REPO_ROOT / "plugin"
+    text = (plugin / "agents" / "memory-search.md").read_text(encoding="utf-8")
+    _, frontmatter, prompt = text.split("---\n", 2)
+    fields = dict(line.split(": ", 1) for line in frontmatter.strip().splitlines())
+
+    assert fields["name"] == "memory-search"
+    assert fields["description"]
+    assert [tool.strip() for tool in fields["tools"].split(",")] == SEARCH_TOOLS
+    assert "path" in prompt and "never save" in prompt.lower()
+
+    name = json.loads((plugin / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["name"]
+    server = next(iter(json.loads((plugin / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]))
+    assert all(tool.startswith(f"mcp__plugin_{name}_{server}__") for tool in SEARCH_TOOLS)
+
+
+def test_the_skill_says_when_to_hand_a_search_to_the_memory_search_subagent() -> None:
+    skill = (REPO_ROOT / "plugin" / "skills" / "shared-memory" / "SKILL.md").read_text(encoding="utf-8")
+    finding = skill.split("## Finding memory", 1)[1].split("\n## ", 1)[0]
+
+    assert "memory-search" in finding
