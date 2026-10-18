@@ -18,3 +18,20 @@ test("a member is told on the front page that their card was commented on, and o
   await expect(page.getByTestId("card-panel")).toContainText("Retry failed webhooks");
   await expect(page.getByTestId("card-comments")).toContainText("The provider retries three times on its side too.");
 });
+
+test("a member told a memory was promoted in their name reads who did it and opens the memory by its title", async ({
+  page,
+}) => {
+  await signInAs(page, 3, "mira");
+
+  // The server words it for her coding agent, with Olive's member ID and the memory's path; here it names them.
+  const notice = page.getByTestId("notices").getByTestId("notice").filter({ hasText: "promoted a memory in your name" });
+  await expect(notice).toContainText("Olive Owner promoted a memory in your name: Money is integer cents");
+  await expect(notice).not.toContainText("E1001");
+  await expect(notice).not.toContainText("projects/");
+  await expect(notice.locator(".notice-memory")).toHaveText("Money is integer cents");
+
+  await notice.getByTestId("notice-memory-link").click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Money is integer cents");
+});

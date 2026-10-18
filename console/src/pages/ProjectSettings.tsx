@@ -123,7 +123,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
               {project.access.map((person) => (
                 <li className="entry" key={person.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span>
-                    {person.name} <span className="member-id">{person.member_id}</span>
+                    {person.name}
                   </span>
                   {project.you_may_change && (
                     <button
@@ -165,7 +165,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           {project.leads.map((lead) => (
             <li className="entry" key={lead.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>
-                {lead.name} <span className="member-id">{lead.member_id}</span>
+                {lead.name}
               </span>
               {runsTheTeam && (
                 <button

@@ -26,6 +26,10 @@ test("a member picks their coding agent and gets its steps and the repository's 
   await expect(files).toContainText("bearer_token_env_var");
   await expect(files).toContainText("billing-api");
   await expect(files).not.toContainText("smt_");
+  // The address the page gives is the one the repository's files name, the server's, not wherever the page is open.
+  const serverUrl = (await page.getByTestId("server-url").textContent()) ?? "";
+  expect(serverUrl).toMatch(/^http/);
+  await expect(files).toContainText(serverUrl);
   await files.getByTestId("copy-.codex/config.toml").click();
   await expect(files.getByTestId("copy-.codex/config.toml")).toContainText("Copied");
   const copied = await page.evaluate(() => navigator.clipboard.readText());

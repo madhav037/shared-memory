@@ -13,7 +13,7 @@ import { Children, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { boardUrl } from "../lib/board";
-import { folderUrl, levelName, sessionsUrl } from "../lib/format";
+import { folderName, folderUrl, levelName, sessionsUrl } from "../lib/format";
 
 const STROKE = 1.6;
 
@@ -48,7 +48,7 @@ export function Trail({ steps }: { steps: { path: string; name: string }[] }) {
         </li>
         {steps.map((step) => (
           <li key={step.path}>
-            <Link to={folderUrl(step.path)}>{step.name}</Link>
+            <Link to={folderUrl(step.path)}>{folderName(step.path, step.name)}</Link>
           </li>
         ))}
       </ol>

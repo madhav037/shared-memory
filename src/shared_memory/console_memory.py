@@ -8,10 +8,12 @@ session depends on.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory.challenges import Challenges
+from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
@@ -69,6 +71,16 @@ class ConsoleMemory:
         self._store = store
         self._challenges = challenges
         self._uses = uses
+
+    def titles(self, team: str, paths: Iterable[str]) -> dict[str, str]:
+        """The title each of these memories has now, for the ones still there; a memory that moved or went has none."""
+        found: dict[str, str] = {}
+        for path in set(paths):
+            try:
+                found[path] = self._store.read(team, PurePosixPath(path)).title
+            except Refused:
+                continue
+        return found
 
     def explore(self, caller: Caller, folder: str, deep: bool = False) -> dict[str, Any]:
         """One folder of the team's memory for the console's explorer.

@@ -37,6 +37,8 @@ class Status(BaseModel):
     signed_in: bool
     github_sign_in: bool
     member: SignedInMember | None
+    # The address every coding agent reaches this server at: the one the repository's files name.
+    server_url: str
 
 
 class AuditEvent(BaseModel):
@@ -48,6 +50,9 @@ class AuditEvent(BaseModel):
     kind: Kind
     project_id: str | None
     target: str | None
+    # A memory's title as it is now, read from the memory when the log is asked for: the log itself keeps only where
+    # the memory is. None for anything that isn't a memory, and for a memory no longer at that path.
+    title: str | None
     detail: dict[str, Any]
 
 

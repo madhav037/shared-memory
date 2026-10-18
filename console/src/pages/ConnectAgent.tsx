@@ -141,7 +141,7 @@ const AGENTS: { name: AgentName; steps: ReactNode[]; automatic: ReactNode }[] = 
 ];
 
 /** How a member connects whichever coding agent they use, and where they get the token to do it with. */
-export function ConnectAgent() {
+export function ConnectAgent({ serverUrl }: { serverUrl: string }) {
   const [agent, setAgent] = useChosenAgent();
   const chosen = AGENTS.find((one) => one.name === agent) ?? AGENTS[0]!;
 
@@ -153,7 +153,7 @@ export function ConnectAgent() {
         a few small files the repository commits.
       </p>
 
-      <Token />
+      <Token serverUrl={serverUrl} />
 
       <h2 className="section-heading">Your agent</h2>
       <AgentSelect agent={chosen.name} onChange={setAgent} />
@@ -187,13 +187,14 @@ export function ConnectAgent() {
   );
 }
 
-/** Issue a personal token, shown once, and how to set it for every agent on this machine. */
-function Token() {
+/** Issue a personal token, shown once, and how to set it for every agent on this machine. The server's address is the
+ * one it names in the repository's files, which can differ from the address this console is open at. */
+function Token({ serverUrl: known }: { serverUrl: string }) {
   const [issued, setIssued] = useState<IssuedToken | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const [issuing, setIssuing] = useState(false);
   const [sure, setSure] = useState(false);
-  const serverUrl = issued?.server_url ?? window.location.origin;
+  const serverUrl = issued?.server_url ?? known;
 
   const issue = async () => {
     setIssuing(true);
@@ -216,7 +217,7 @@ function Token() {
       <p className="section-lede">
         It proves which member a session belongs to. Set it once on each machine, in the{" "}
         <code>SHARED_MEMORY_TOKEN</code> environment variable, which most coding agents read; Claude Code and VS Code
-        ask for it instead and keep it themselves. It never goes in a committed file. This server is at{" "}
+        ask for it instead and keep it themselves. It never goes in a committed file. Agents reach this server at{" "}
         <code data-testid="server-url">{serverUrl}</code>.
       </p>
       {refused && <Refusal testid="token-refused">{refused}</Refusal>}

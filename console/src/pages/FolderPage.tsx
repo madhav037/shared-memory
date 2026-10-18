@@ -16,7 +16,7 @@ import {
   Trail,
 } from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
+import { day, folderName, folderUrl, memoryUrl, plural, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** What each folder holds, in the words CONTEXT.md defines them with. */
@@ -59,6 +59,9 @@ export function FolderPage({ member }: { member: SignedInMember }) {
   const projectId = path.startsWith("projects/") ? path.split("/")[1] : undefined;
   const project = projectId ? projects.get(projectId) : undefined;
   const total = folder.memories.length + folder.inside.reduce((sum, section) => sum + section.memories.length, 0);
+  // The folders a member means are the ones memory is in, a type or a topic, not the ones that only hold folders.
+  const holding =
+    (folder.memories.length > 0 ? 1 : 0) + folder.inside.filter((section) => section.memories.length > 0).length;
   const meaning = MEANING[folder.kind === "type" ? folder.name : folder.kind];
 
   const pinTopic = async (pin: boolean) => {
@@ -76,7 +79,7 @@ export function FolderPage({ member }: { member: SignedInMember }) {
     <div className="column" data-testid="folder">
       <Trail steps={folder.trail} />
       <h1 className="page-title" data-testid="folder-name">
-        {folder.name}
+        {folderName(path, folder.name)}
       </h1>
       {folder.kind === "project" && project ? (
         <p className="standfirst">
@@ -89,7 +92,7 @@ export function FolderPage({ member }: { member: SignedInMember }) {
       <div className="page-meta">
         <span>
           <b>{plural(total, "memory", "memories")}</b>
-          {folder.inside.length > 0 ? ` in ${plural(folder.inside.length, "folder")}` : ""}
+          {holding > 1 ? ` in ${plural(holding, "folder")}` : ""}
         </span>
         {project?.restricted && <RestrictedMark />}
         {folder.kind === "project" && projectId && <ProjectLinks projectId={projectId} here="memory" />}
@@ -132,13 +135,13 @@ export function FolderPage({ member }: { member: SignedInMember }) {
         <div className="part-contents" data-testid="tree">
           {folder.memories.length > 0 && <Lines memories={folder.memories} me={member} depth={1} />}
           {folder.inside.map((section) => (
-            <section key={section.path} aria-label={section.name} style={{ "--depth": section.depth } as React.CSSProperties}>
+            <section key={section.path} aria-label={folderName(section.path, section.name)} style={{ "--depth": section.depth } as React.CSSProperties}>
               <Link
                 className={section.depth > 1 ? "part-head deep" : "part-head"}
                 to={folderUrl(section.path)}
                 data-testid="subfolder"
               >
-                <span className="name">{section.name}</span>
+                <span className="name">{folderName(section.path, section.name)}</span>
                 <span className="leader" aria-hidden />
                 <span className="figures">
                   {plural(section.count, "memory", "memories")}
@@ -243,7 +246,8 @@ function Briefing({ projectId }: { projectId: string }) {
                     </Link>
                   ) : (
                     <Link className="entry-title" to={folderUrl(one.path)}>
-                      {one.title} <span style={{ fontWeight: 400, color: "var(--ink-3)" }}>(topic)</span>
+                      {folderName(one.path, one.title)}{" "}
+                      <span style={{ fontWeight: 400, color: "var(--ink-3)" }}>(topic)</span>
                     </Link>
                   )}
                   <span className="entry-meta" style={{ marginTop: 4 }}>

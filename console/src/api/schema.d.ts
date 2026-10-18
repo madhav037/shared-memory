@@ -771,6 +771,8 @@ export interface components {
             /** Github Sign In */
             github_sign_in: boolean;
             member: components["schemas"]["SignedInMember"] | null;
+            /** Server Url */
+            server_url: string;
         };
         /**
          * ProjectMember
@@ -1386,6 +1388,8 @@ export interface components {
             project_id: string | null;
             /** Target */
             target: string | null;
+            /** Title */
+            title: string | null;
             /** Detail */
             detail: {
                 [key: string]: unknown;

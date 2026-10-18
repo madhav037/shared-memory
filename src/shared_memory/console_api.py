@@ -267,7 +267,7 @@ class ConsoleApi:
     # --- the calls ---
 
     def _status(self, request: Request) -> Response:
-        return JSONResponse(self._describe(self._member(request)).model_dump(mode="json"))
+        return JSONResponse(self._describe(self._member(request), request).model_dump(mode="json"))
 
     def _sign_in(self, request: Request) -> Response:
         try:
@@ -937,15 +937,18 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         except ValueError:
             return JSONResponse({"message": "That filter wasn't understood."}, status_code=422)
+        titles = self._explorer.titles(
+            member.team_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
+        )
         answer = AuditPage(
-            events=[AuditEvent(**vars(event)) for event in page.events],
+            events=[AuditEvent(**vars(event), title=titles.get(event.target or "")) for event in page.events],
             next=page.next,
         )
         return JSONResponse(answer.model_dump(mode="json"))
 
     def _sign_out(self, request: Request) -> Response:
         self._sessions.end(request.cookies.get(COOKIE))
-        signed_out = JSONResponse(self._describe(None).model_dump(mode="json"))
+        signed_out = JSONResponse(self._describe(None, request).model_dump(mode="json"))
         signed_out.delete_cookie(COOKIE, path="/", httponly=True, secure=self._https(request), samesite="lax")
         return signed_out
 
@@ -954,10 +957,11 @@ class ConsoleApi:
     def _member(self, request: Request) -> Member | None:
         return self._sessions.member_for(request.cookies.get(COOKIE))
 
-    def _describe(self, member: Member | None) -> Status:
+    def _describe(self, member: Member | None, request: Request) -> Status:
         return Status(
             signed_in=member is not None,
             github_sign_in=self._sessions.configured,
+            server_url=self._server_url(request),
             member=None
             if member is None
             else SignedInMember(

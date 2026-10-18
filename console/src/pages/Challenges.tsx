@@ -22,17 +22,26 @@ import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
-export function Challenges({ readsAudit }: { readsAudit: boolean }) {
+export function Challenges({
+  readsAudit,
+  onDecided,
+}: {
+  readsAudit: boolean;
+  /** Told what is still waiting once a decision lands, so the masthead's count needn't wait for the next page. */
+  onDecided?: (left: ChallengeList) => void;
+}) {
   const { answer, refused, setAnswer } = useAsked((signal) => fetchChallenges(signal), []);
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
   const [slip, setSlip] = useState<Slip | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map((team?.members ?? []).map((one) => [one.member_id, one.name]));
-  const who = (memberId: string) => (names.get(memberId) ? `${names.get(memberId)} (${memberId})` : memberId);
+  // A member is their name here; their member ID belongs on Team.
+  const who = (memberId: string) => names.get(memberId) ?? memberId;
 
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
     setAnswer(left);
+    onDecided?.(left);
   };
   const dismiss = () => {
     setSlip(null);

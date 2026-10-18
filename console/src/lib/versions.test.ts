@@ -54,7 +54,7 @@ describe("what a version did, from the message the server wrote", () => {
       "First written by Olive Owner in Codex",
     );
     expect(whatHappened(version(`Remember: ${TITLE}`, { agent: "another agent" }), TITLE)).toBe(
-      "First written by Olive Owner from another agent",
+      "First written by Olive Owner",
     );
   });
 });
@@ -66,9 +66,13 @@ describe("which agent a change came from", () => {
     expect(inAgent("")).toBe("");
   });
 
+  it("says nothing when the server knew only that it was some other agent", () => {
+    expect(inAgent("another agent")).toBe("");
+    expect(agentLabel("another agent")).toBe("");
+  });
+
   it("stands on its own, capitalised", () => {
     expect(agentLabel("Codex")).toBe("In Codex");
-    expect(agentLabel("another agent")).toBe("From another agent");
   });
 });
 
