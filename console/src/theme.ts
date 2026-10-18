@@ -50,8 +50,8 @@ export const theme = createTheme({
         const danger = props.color === "red";
         return {
           root: {
-            "--button-bg": danger ? "var(--danger)" : "var(--accent)",
-            "--button-hover": danger ? "var(--danger-hover)" : "var(--accent-hover)",
+            "--button-bg": danger ? "var(--danger-face)" : "var(--accent-face)",
+            "--button-hover": danger ? "var(--danger-face-hover)" : "var(--accent-face-hover)",
             "--button-color": "var(--accent-ink)",
           },
         };
