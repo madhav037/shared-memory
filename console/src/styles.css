@@ -247,6 +247,7 @@ a:hover {
 }
 a:focus-visible,
 .quiet-link:focus-visible,
+.fold:focus-visible,
 .masthead-contents:focus-visible,
 .view-switch button:focus-visible,
 .filter button:focus-visible {
@@ -2254,6 +2255,71 @@ div.dotted {
 }
 .weaker .section-lede {
   margin-bottom: 0;
+}
+/* A search no memory has the words of: said first, between the rules an empty part takes, with what to try next. */
+.no-words {
+  margin-top: 18px;
+  padding: 20px 0 22px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.no-words-lead {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.next-steps {
+  margin: 10px 0 0;
+  padding: 0 0 0 1.2em;
+  display: grid;
+  gap: 4px;
+  max-width: 62ch;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.next-steps .quiet-link {
+  font-size: inherit;
+}
+/* What comes only close in meaning, folded behind a plain button that says how many it holds. */
+.weaker {
+  margin-top: 28px;
+}
+.fold {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px 0 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.fold:hover {
+  color: var(--accent-hover);
+  text-decoration-thickness: 2px;
+}
+.fold .twist {
+  flex: none;
+  color: currentColor;
+  transition: transform 180ms var(--ease);
+}
+.fold[aria-expanded="true"] .twist {
+  transform: rotate(90deg);
+}
+.fold + div > .section-lede {
+  margin: 2px 0 0;
 }
 
 /* ---------- A whole part of the contents, with its heads hanging into the margin ---------- */
