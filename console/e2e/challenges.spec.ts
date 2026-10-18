@@ -31,8 +31,39 @@ test("the owner decides a challenge waiting for them and the memory is supersede
   await page.getByLabel("Show what each offer takes out and puts in").uncheck();
   await expect(dispute.getByTestId("amended")).toHaveCount(0);
   await expect(dispute.getByTestId("facing-text").last()).toContainText("every night at 02:17 UTC");
+
+  // The decision is held at the server's door, so what the page does while it is on its way can be seen.
+  let sent = 0;
+  let letThrough = () => {};
+  const held = new Promise<void>((resolve) => (letThrough = resolve));
+  await page.route("**/api/challenges/*/decide", async (route) => {
+    sent += 1;
+    await held;
+    await route.continue();
+  });
   await dispute.getByRole("button", { name: "Accept: supersede it" }).click();
-  await expect(page.getByTestId("nothing-waiting")).toBeVisible();
+  const deciding = dispute.getByRole("button", { name: "Deciding…" });
+  await expect(deciding).toBeDisabled();
+  await expect(deciding).toBeFocused();
+  await expect(dispute.getByRole("button", { name: "Reject: keep it as it is" })).toBeDisabled();
+  await deciding.click({ force: true });
+  letThrough();
+
+  // What was decided stands where the challenge was, is announced, and takes the focus.
+  const slip = page.getByTestId("decided");
+  await expect(slip).toContainText(
+    "You accepted it. ‘Staging resets at 02:17 UTC’ now supersedes ‘Staging resets nightly’.",
+  );
+  await expect(slip).toBeFocused();
+  await expect(page.getByRole("status").filter({ has: slip })).toHaveCount(1);
+  await expect(slip.getByRole("link", { name: "See it in the audit log" })).toHaveAttribute("href", "/audit");
+  await expect(page.getByTestId("nothing-waiting")).toHaveText("Nothing else is waiting for your decision.");
+  expect(sent).toBe(1);
+
+  // Reading it goes to the memory now in force, at the place promoting it gave it.
+  await slip.getByRole("link", { name: "Read it" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Staging resets at 02:17 UTC");
+  await expect(page.getByTestId("in-force")).toBeVisible();
 
   await openInContents(page, "Billing", "Project memory", "Gotchas", "Staging resets nightly");
   await expect(page.getByTestId("superseded-by")).toBeVisible();

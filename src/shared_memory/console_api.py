@@ -50,7 +50,7 @@ from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
@@ -742,18 +742,30 @@ class ConsoleApi:
                 {"message": f"There is no open challenge {challenge_id} in your team."}, status_code=403
             )
         try:
-            self._lifecycle.decide_challenge(self._working_in(member, project_of(challenge)), challenge_id, asked.decision)
+            result = self._lifecycle.decide_challenge(
+                self._working_in(member, project_of(challenge)), challenge_id, asked.decision
+            )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        return self._disputes(self._identity.caller_in(member, None))
+        if result["status"] == "rejected":
+            decided = Decided(challenge_id=challenge.id, decision="rejected", in_force=challenge.target_path)
+        else:
+            decided = Decided(challenge_id=challenge.id, decision="accepted", in_force=result.get("path"))
+        left = self._challenge_list(self._identity.caller_in(member, None))
+        return JSONResponse(
+            DecidedChallenges(waiting=left.waiting, raised=left.raised, decided=decided).model_dump(mode="json")
+        )
 
     def _disputes(self, caller: Caller) -> Response:
+        return JSONResponse(self._challenge_list(caller).model_dump(mode="json"))
+
+    def _challenge_list(self, caller: Caller) -> ChallengeList:
         waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
         raised = [
             RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
-        return JSONResponse(ChallengeList(waiting=waiting, raised=raised).model_dump(mode="json"))
+        return ChallengeList(waiting=waiting, raised=raised)
 
     def _dispute(self, caller: Caller, waiting: Waiting) -> ChallengeDetail:
         challenge = waiting.challenge

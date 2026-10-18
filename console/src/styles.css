@@ -195,8 +195,8 @@
 .mantine-Button-root[data-variant="default"] {
   box-shadow: 0 2px 0 var(--edge, var(--accent-edge));
 }
-.mantine-Button-root[data-variant="filled"]:active:not(:disabled),
-.mantine-Button-root[data-variant="default"]:active:not(:disabled) {
+.mantine-Button-root[data-variant="filled"]:active:not(:disabled, [data-disabled]),
+.mantine-Button-root[data-variant="default"]:active:not(:disabled, [data-disabled]) {
   box-shadow: none;
   transform: translateY(2px);
 }
@@ -2144,6 +2144,62 @@ div.dotted {
   .decide {
     display: grid;
   }
+}
+.decide + .refusal {
+  margin: 14px 0 0;
+}
+/* What a decision did, standing where the challenge was: green while a memory is in force, the cancelled panel once
+   a retire is accepted. A status line the member is taken to, not a control, so focus doesn't ring it. */
+.decided {
+  margin: 4px 0 28px;
+  padding: 14px 18px 13px;
+  border: 1px solid var(--accent);
+  border-bottom-width: 4px;
+  background: var(--accent-wash);
+  color: var(--ink);
+}
+.decided.retired {
+  border-color: var(--ink-3);
+  background: var(--paper-2);
+}
+.decided:focus,
+.decided:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.decided-what {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.decided-what svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.decided.retired .decided-what svg {
+  color: var(--ink-3);
+}
+.decided-name {
+  font-family: var(--serif);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.decided-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 10px 0 0 28px;
+}
+.decided-dismiss {
+  margin-left: auto;
+  color: var(--ink-2);
+}
+.decided-dismiss:hover {
+  color: var(--ink);
 }
 
 /* ---------- Search ---------- */
