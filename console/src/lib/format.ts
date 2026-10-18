@@ -106,28 +106,70 @@ export function sessionsUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/sessions`;
 }
 
+/** Whether a folder is a topic: a folder of its own inside a type, as the server's console_memory.folder_kind has it. */
+export function isTopic(path: string): boolean {
+  const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "team") return parts.length > 2;
+  if (parts[0] !== "projects" || parts.length < 4) return false;
+  return parts[2] === "shared" ? parts.length > 4 : parts.length > 5;
+}
+
+/** A folder's name as the console shows it. A topic is named as it was written, often lowercase ("invoicing"), so it
+ * takes sentence case to sit beside the types around it ("Conventions", "Invoicing"); every other folder is named as
+ * the server names it. */
+export function folderName(path: string, name: string): string {
+  return isTopic(path) ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+}
+
 /** The project a memory path or folder lives in, or nothing for team memory. */
 export function projectIn(path: string): string | null {
   const parts = path.split("/");
   return parts[0] === "projects" && parts[1] ? parts[1] : null;
 }
 
+/** One piece of a notice as a person reads it: words, or a memory it names, to be shown by its title and linked. */
+export type NoticePart = string | { title: string; path: string };
+
+/** A memory a notice cites the way the server words it for an agent: its quoted title, then its path in brackets. */
+const CITED_MEMORY = /"([^"]+)" \(([^()\s]+\.md)\)/g;
+
 /**
  * A notice as a person reads it. The server words a notice for a coding agent, which acts on IDs: "Raj Raiser
- * (emp-raj) commented on your card 1 "Retry" in billing-00f655". Here a known member is their name alone, a known
- * project is its name, and the quotes are curled.
+ * (emp-raj) commented on your card 1 "Retry" in billing-00f655", or "E1001 promoted a memory in your name: "Use
+ * pnpm" (projects/billing-00f655/shared/conventions/use-pnpm.md), …". Here a known member is their name alone,
+ * whether the notice named them with their ID in brackets or by the ID alone at its start; a known project is its
+ * name; a memory cited by title and path becomes a part of its own, for the page to link by its title; and the quotes
+ * are curled. Anything it can't put a name to stays as the server said it.
  */
 export function readableNotice(
   text: string,
   memberName: (memberId: string) => string | undefined,
   projects: Iterable<[string, string]>,
-): string {
-  let readable = text.replace(/ \(([^()\s]+)\)/g, (whole, memberId: string) => (memberName(memberId) ? "" : whole));
-  for (const [projectId, name] of projects) {
-    // A project ID is lowercase letters, figures and hyphens, so it needs no escaping inside a pattern.
-    readable = readable.replace(new RegExp(`(?<![\\w-])${projectId}(?![\\w-])`, "g"), name);
+): NoticePart[] {
+  const named = [...projects];
+  const words = (piece: string, opening: boolean) => {
+    let readable = piece.replace(/ \(([^()\s]+)\)/g, (whole, memberId: string) => (memberName(memberId) ? "" : whole));
+    if (opening) readable = readable.replace(/^(\S+)(?= )/, (memberId) => memberName(memberId) ?? memberId);
+    for (const [projectId, name] of named) {
+      // A project ID is lowercase letters, figures and hyphens, so it needs no escaping inside a pattern.
+      readable = readable.replace(new RegExp(`(?<![\\w-])${projectId}(?![\\w-])`, "g"), name);
+    }
+    return curled(readable);
+  };
+  const parts: NoticePart[] = [];
+  let from = 0;
+  for (const cited of text.matchAll(CITED_MEMORY)) {
+    if (cited.index > from) parts.push(words(text.slice(from, cited.index), from === 0));
+    parts.push({ title: cited[1]!, path: cited[2]! });
+    from = cited.index + cited[0].length;
   }
-  return curled(readable);
+  if (from < text.length) parts.push(words(text.slice(from), from === 0));
+  return parts;
+}
+
+/** The first memory a notice names, if it names one. */
+export function noticeMemory(parts: NoticePart[]): { title: string; path: string } | undefined {
+  return parts.find((part): part is { title: string; path: string } => typeof part !== "string");
 }
 
 /** Straight quotes and apostrophes as printed ones: “these”, ‘these’ and it’s. */

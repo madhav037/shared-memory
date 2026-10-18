@@ -282,7 +282,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
 }
 
 function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history: History | null; onChanged: () => void }) {
-  const { refresh } = useContents();
+  const { nameOf, refresh } = useContents();
   const [refused, setRefused] = useState<string | null>(null);
   const [retiring, setRetiring] = useState(false);
   const [told, setTold] = useState<string | null>(null);
@@ -332,19 +332,19 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
         <dt>Type</dt>
         <dd>{typeName(memory.type)}</dd>
         <dt>Author</dt>
-        <dd>
-          {memory.author_name} <span style={{ color: "var(--ink-3)" }}>({memory.author})</span>
-        </dd>
+        <dd title={memory.author}>{memory.author_name}</dd>
         {memory.promoted_by && (
           <>
             <dt>Promoted by</dt>
-            <dd>{memory.promoted_by}</dd>
+            <dd title={memory.promoted_by}>{nameOf(memory.promoted_by)}</dd>
           </>
         )}
         {memory.imported_by && (
           <>
             <dt>Imported by</dt>
-            <dd data-testid="imported-by">{memory.imported_by}</dd>
+            <dd data-testid="imported-by" title={memory.imported_by}>
+              {nameOf(memory.imported_by)}
+            </dd>
           </>
         )}
         {memory.imported_from && (

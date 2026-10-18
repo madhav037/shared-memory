@@ -102,7 +102,7 @@ export function App() {
 
   return (
     <ContentsProvider>
-      <SignedIn member={member} onLeave={leave} refused={signInRefused} />
+      <SignedIn member={member} serverUrl={status.server_url} onLeave={leave} refused={signInRefused} />
     </ContentsProvider>
   );
 }
@@ -119,10 +119,12 @@ function Wordmark({ team }: { team: string | null }) {
 
 function SignedIn({
   member,
+  serverUrl,
   onLeave,
   refused,
 }: {
   member: SignedInMember;
+  serverUrl: string;
   onLeave: () => void;
   refused: string | null;
 }) {
@@ -204,7 +206,10 @@ function SignedIn({
             <Route path="/files" element={<FolderPage member={member} />} />
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/challenges" element={<Challenges readsAudit={readsAudit} />} />
+            <Route
+              path="/challenges"
+              element={<Challenges readsAudit={readsAudit} onDecided={(left) => setWaiting(left.waiting.length)} />}
+            />
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
@@ -212,7 +217,7 @@ function SignedIn({
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/team" element={<Team me={member} />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
-            <Route path="/connect" element={<ConnectAgent />} />
+            <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

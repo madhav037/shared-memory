@@ -809,6 +809,17 @@ div.dotted {
   color: inherit;
   text-decoration: underline;
 }
+/* A memory the notice names, by its title, in the memory's own serif. */
+.notice.told li a.notice-memory {
+  font-family: var(--serif);
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.18em;
+}
+.notice.told li a.notice-memory:hover {
+  text-decoration-color: currentColor;
+}
 
 /* ---------- A table of contents: each part, then its folders, with what each holds ---------- */
 
@@ -1556,6 +1567,20 @@ div.dotted {
 }
 .where-step {
   margin: 0 6px;
+  color: var(--ink-3);
+}
+.where-line .audit-memory {
+  font-family: var(--serif);
+  font-weight: 700;
+  color: var(--ink);
+}
+.register .where-path {
+  display: block;
+  max-width: 22rem;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
   color: var(--ink-3);
 }
 .register td.who-cell,

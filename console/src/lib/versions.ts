@@ -55,13 +55,14 @@ export function inForce(versions: MemoryVersion[], place: number, standing = "ac
 /** What the server records when a coding agent didn't say which one it is. */
 export const ANOTHER_AGENT = "another agent";
 
-/** Which coding agent a change came from, as a phrase to follow its author: " in Codex", " from another agent". */
+/** Which coding agent a change came from, as a phrase to follow its author: " in Codex". Nothing when the server
+ * recorded none, or only that it wasn't one it knows: "from another agent" reads as a fact the server doesn't have. */
 export function inAgent(agent: string | null | undefined): string {
-  if (!agent) return "";
-  return agent === ANOTHER_AGENT ? ` from ${ANOTHER_AGENT}` : ` in ${agent}`;
+  if (!agent || agent === ANOTHER_AGENT) return "";
+  return ` in ${agent}`;
 }
 
-/** The same, standing on its own: "In Codex", "From another agent". */
+/** The same, standing on its own: "In Codex", or nothing. */
 export function agentLabel(agent: string): string {
   const phrase = inAgent(agent).trim();
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);

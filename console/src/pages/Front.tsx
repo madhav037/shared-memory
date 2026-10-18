@@ -1,6 +1,6 @@
 import { Button, TextInput } from "@mantine/core";
 import { IconArrowRight, IconBell, IconBrandGithub, IconScale } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import {
@@ -15,7 +15,7 @@ import {
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
-import { day, folderUrl, longDay, memoryUrl, moment, plural, readableNotice } from "../lib/format";
+import { day, folderName, folderUrl, longDay, memoryUrl, moment, noticeMemory, plural, readableNotice } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Before signing in: the title page of the team's memory, and what the console is for. */
@@ -171,7 +171,7 @@ function PartContents({ path, kind }: { path: string; kind: string }) {
         <li key={section.path} className={section.depth > 1 ? "deeper" : undefined}>
           <Link className="toc-line" to={folderUrl(section.path)}>
             <span className="name">
-              <span>{section.name}</span>
+              <span>{folderName(section.path, section.name)}</span>
             </span>
             <span className="leader" aria-hidden />
             <span className="figures">
@@ -235,26 +235,48 @@ function Told() {
         {count === 1 ? "A notice for you" : `${count} notices for you`}
       </h2>
       <ol>
-        {answer.notices.map((notice) => (
-          <li key={notice.notice_id} data-testid="notice">
-            <span className="notice-text">{readableNotice(notice.text, known, projectNames)}</span>
-            <span className="notice-when">
-              {moment(notice.created_at)}
-              {notice.project_id && (
-                <>
-                  {"\u00a0·\u00a0"}
-                  <Link
-                    className="quiet-link"
-                    to={boardUrl(notice.project_id, { card: notice.card ?? undefined })}
-                    data-testid="notice-link"
-                  >
-                    {notice.card === null ? "Open the board" : `Open card ${notice.card}`}
-                  </Link>
-                </>
-              )}
-            </span>
-          </li>
-        ))}
+        {answer.notices.map((notice) => {
+          const parts = readableNotice(notice.text, known, projectNames);
+          const memory = noticeMemory(parts);
+          return (
+            <li key={notice.notice_id} data-testid="notice">
+              <span className="notice-text">
+                {parts.map((part, place) =>
+                  typeof part === "string" ? (
+                    <Fragment key={place}>{part}</Fragment>
+                  ) : (
+                    <Link key={place} className="notice-memory" to={memoryUrl(part.path)} title={part.path}>
+                      {part.title}
+                    </Link>
+                  ),
+                )}
+              </span>
+              <span className="notice-when">
+                {moment(notice.created_at)}
+                {memory && (
+                  <>
+                    {" · "}
+                    <Link className="quiet-link" to={memoryUrl(memory.path)} data-testid="notice-memory-link">
+                      Open it
+                    </Link>
+                  </>
+                )}
+                {notice.project_id && (
+                  <>
+                    {"\u00a0·\u00a0"}
+                    <Link
+                      className="quiet-link"
+                      to={boardUrl(notice.project_id, { card: notice.card ?? undefined })}
+                      data-testid="notice-link"
+                    >
+                      {notice.card === null ? "Open the board" : `Open card ${notice.card}`}
+                    </Link>
+                  </>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );

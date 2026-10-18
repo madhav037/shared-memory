@@ -74,6 +74,17 @@ function FileLink({ path }: { path: string }) {
   );
 }
 
+/** A memory the record names, by its title as it is now. A memory that has moved or gone since has no title to give,
+ * so its file name stands in. */
+function MemoryLink({ path, title }: { path: string; title: string | null }) {
+  if (!title) return <FileLink path={path} />;
+  return (
+    <Link to={memoryUrl(path)} title={path} className="audit-memory">
+      {title}
+    </Link>
+  );
+}
+
 /** A card the record names, as "card 12", opened on its project's board. */
 function CardLink({ projectId, target }: { projectId: string; target: string }) {
   const number = Number(target.replace(/^card /, ""));
@@ -104,7 +115,7 @@ function Details({
 }) {
   if (kind.startsWith("card_")) {
     const said = cardChange(detail, nameOf);
-    if (typeof detail.agent === "string") said.unshift(agentLabel(detail.agent));
+    if (typeof detail.agent === "string" && agentLabel(detail.agent)) said.unshift(agentLabel(detail.agent));
     return <DetailLine said={said} />;
   }
   const text = (name: string) => {
@@ -113,7 +124,7 @@ function Details({
   };
   const said: React.ReactNode[] = [];
   const agent = text("agent");
-  if (agent) said.push(agentLabel(agent));
+  if (agent && agentLabel(agent)) said.push(agentLabel(agent));
   const level = text("level");
   const challenge = text("challenge");
   if (text("type")) said.push(text("type") === "architecture" ? "As architecture" : `As a ${typeName(text("type")!).toLowerCase()}`);
@@ -302,7 +313,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                           )}
                           {event.target &&
                             (isMemory ? (
-                              <FileLink path={event.target} />
+                              <MemoryLink path={event.target} title={event.title} />
                             ) : event.kind.startsWith("card_") && event.project_id ? (
                               <CardLink projectId={event.project_id} target={event.target} />
                             ) : /^(team|projects)\//.test(event.target) ? (
@@ -315,6 +326,13 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                               nameOf(event.target)
                             ))}
                         </span>
+                        {/* The title leads; where the memory is follows, quieter, for whoever needs the path. */}
+                        {isMemory && event.title && (
+                          <span className="where-path path" title={event.target ?? undefined}>
+                            {/* The project already leads the line, so the path starts inside it. */}
+                            {event.target?.replace(/^projects\/[^/]+\//, "")}
+                          </span>
+                        )}
                       </td>
                       <td style={{ fontSize: "0.8125rem" }}>
                         <Details kind={event.kind} detail={event.detail} nameOf={nameOf} />

@@ -1573,12 +1573,17 @@
                 "type": "null"
               }
             ]
+          },
+          "server_url": {
+            "title": "Server Url",
+            "type": "string"
           }
         },
         "required": [
           "signed_in",
           "github_sign_in",
-          "member"
+          "member",
+          "server_url"
         ],
         "title": "Status",
         "type": "object"
@@ -3070,6 +3075,17 @@
             ],
             "title": "Target"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "detail": {
             "additionalProperties": true,
             "title": "Detail",
@@ -3083,6 +3099,7 @@
           "kind",
           "project_id",
           "target",
+          "title",
           "detail"
         ],
         "title": "AuditEvent",

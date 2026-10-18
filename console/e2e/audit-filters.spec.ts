@@ -26,6 +26,9 @@ test("the audit log narrows to one project", async ({ page }) => {
   const where = page.getByTestId("audit-table").locator("tbody tr .where-cell");
   await expect(where.first()).toContainText("Billing");
   await expect(where.filter({ hasNotText: "Billing" })).toHaveCount(0);
+  // A memory is named by its title first, and its path follows, quieter.
+  await expect(where.locator(".audit-memory").first()).toBeVisible();
+  await expect(where.locator(".where-path").first()).toContainText(/\.md$/);
 });
 
 test("the audit log narrows to a day, and says so when nothing happened on it", async ({ page }) => {
