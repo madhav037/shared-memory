@@ -204,7 +204,7 @@ function SignedIn({
             <Route path="/files" element={<FolderPage member={member} />} />
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/challenges" element={<Challenges />} />
+            <Route path="/challenges" element={<Challenges readsAudit={readsAudit} />} />
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />

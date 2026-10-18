@@ -254,6 +254,22 @@ class Decision(BaseModel):
     decision: Literal["accept", "reject"]
 
 
+class Decided(BaseModel):
+    """What deciding a challenge did."""
+
+    challenge_id: int
+    decision: Literal["accepted", "rejected"]
+    # The memory in force now: the one offered in its place, at the path promoting it gave it, when a supersede was
+    # accepted; the challenged memory when the challenge was rejected; none when a retire was accepted.
+    in_force: str | None
+
+
+class DecidedChallenges(ChallengeList):
+    """What deciding a challenge did, and what is still waiting for this member's decision."""
+
+    decided: Decided
+
+
 class Retired(BaseModel):
     """What retiring did: the memory is retired, or its author has been asked to retire it. A known issue that a
     card moved to Done could not retire is not_retired, with the reason."""
@@ -936,7 +952,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="POST",
         operation_id="decide_challenge",
         summary="Accept a challenge or reject it.",
-        answers=ChallengeList,
+        answers=DecidedChallenges,
         changes=True,
         accepts=Decision,
     ),

@@ -1831,6 +1831,32 @@ export interface components {
             notices: components["schemas"]["Notice"][];
         };
         /**
+         * Decided
+         * @description What deciding a challenge did.
+         */
+        Decided: {
+            /** Challenge Id */
+            challenge_id: number;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** In Force */
+            in_force: string | null;
+        };
+        /**
+         * DecidedChallenges
+         * @description What deciding a challenge did, and what is still waiting for this member's decision.
+         */
+        DecidedChallenges: {
+            /** Waiting */
+            waiting: components["schemas"]["ChallengeDetail"][];
+            /** Raised */
+            raised: components["schemas"]["RaisedChallenge"][];
+            decided: components["schemas"]["Decided"];
+        };
+        /**
          * Decision
          * @description Accept a challenge or reject it.
          */
@@ -2794,7 +2820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChallengeList"];
+                    "application/json": components["schemas"]["DecidedChallenges"];
                 };
             };
         };
