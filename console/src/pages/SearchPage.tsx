@@ -1,5 +1,5 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconSearch } from "@tabler/icons-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
@@ -40,8 +40,14 @@ export function SearchPage() {
   const level = asked.get("level") ?? "";
   const type = asked.get("type") ?? "";
   const [typed, setTyped] = useState(query);
+  // Type is the filter reached for least, so it waits behind "More filters" unless one is already set.
+  const [more, setMore] = useState(Boolean(type));
+  const typeFilter = useId();
 
   useEffect(() => setTyped(query), [query]);
+  useEffect(() => {
+    if (type) setMore(true);
+  }, [type]);
 
   const set = (name: string, value: string) => {
     const next = new URLSearchParams(asked);
@@ -84,7 +90,30 @@ export function SearchPage() {
 
       <div className="filters">
         <Filter label="Level" options={LEVELS} value={level} onChange={(value) => set("level", value)} testid="level" />
-        <Filter label="Type" options={TYPES} value={type} onChange={(value) => set("type", value)} testid="type" />
+        {/* While a type narrows the search its filter stays in view; folding it away would hide why results are few. */}
+        {!type && (
+          <button
+            type="button"
+            className="quiet-link more-filters"
+            aria-expanded={more}
+            aria-controls={typeFilter}
+            onClick={() => setMore(!more)}
+            data-testid="more-filters"
+          >
+            {more ? "Fewer filters" : "More filters"}
+            <IconChevronDown size={14} stroke={1.6} aria-hidden />
+          </button>
+        )}
+        {more && (
+          <Filter
+            id={typeFilter}
+            label="Type"
+            options={TYPES}
+            value={type}
+            onChange={(value) => set("type", value)}
+            testid="type"
+          />
+        )}
       </div>
 
       {query ? (
@@ -108,12 +137,14 @@ export function SearchPage() {
 }
 
 function Filter({
+  id,
   label,
   options,
   value,
   onChange,
   testid,
 }: {
+  id?: string;
   label: string;
   options: { value: string; label: string }[];
   value: string;
@@ -121,7 +152,7 @@ function Filter({
   testid: string;
 }) {
   return (
-    <div className="filter" role="group" aria-label={label} data-testid={testid}>
+    <div className="filter" id={id} role="group" aria-label={label} data-testid={testid}>
       <span>{label}</span>
       {options.map((option) => (
         <button key={option.value} type="button" aria-pressed={value === option.value} onClick={() => onChange(option.value)}>

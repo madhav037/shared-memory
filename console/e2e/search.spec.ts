@@ -21,11 +21,18 @@ test("a search narrowed to a type nothing here was written as says so", async ({
   await page.getByTestId("search-go").click();
   await expect(page.getByTestId("results")).toContainText("Use pnpm, not npm");
 
+  // Type waits behind "More filters"; Level is always in view.
+  await expect(page.getByTestId("type")).toHaveCount(0);
+  await page.getByTestId("more-filters").click();
   await page.getByTestId("type").getByRole("button", { name: "Architecture" }).click();
 
   await expect(page.getByTestId("nothing-found")).toContainText("Nothing matches");
   await expect(page.getByTestId("nothing-found")).toContainText("with those filters");
   await expect(page.getByTestId("results")).toHaveCount(0);
+
+  // A type set in the address opens the filters by itself.
+  await page.reload();
+  await expect(page.getByTestId("type").getByRole("button", { name: "Architecture" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("results with the words searched for come first, and the ones only close in meaning are set apart", async ({ page }) => {

@@ -4,14 +4,15 @@ import { useState, type ReactNode } from "react";
 
 import { fetchProject, reissueMyToken, type IssuedToken } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
-import { ConnectionFiles, EVERY_AGENT } from "../components/ConnectionFiles";
+import { AgentSelect, useChosenAgent, type AgentName } from "../components/AgentChoice";
+import { ConnectionFiles } from "../components/ConnectionFiles";
 import { hooksOf, whatHappens } from "../lib/agentHooks";
 import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
 
 /** What a member does in each coding agent, and what else to know about its hooks; which hooks it has, and what it
- * does with the team's memory by itself, is in lib/agentHooks. */
-const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
+ * does with the team's memory by itself, is in lib/agentHooks. In AGENT_NAMES's order. */
+const AGENTS: { name: AgentName; steps: ReactNode[]; automatic: ReactNode }[] = [
   {
     name: "Claude Code",
     steps: [
@@ -141,7 +142,7 @@ const AGENTS: { name: string; steps: ReactNode[]; automatic: ReactNode }[] = [
 
 /** How a member connects whichever coding agent they use, and where they get the token to do it with. */
 export function ConnectAgent() {
-  const [agent, setAgent] = useState(AGENTS[0]!.name);
+  const [agent, setAgent] = useChosenAgent();
   const chosen = AGENTS.find((one) => one.name === agent) ?? AGENTS[0]!;
 
   return (
@@ -155,20 +156,7 @@ export function ConnectAgent() {
       <Token />
 
       <h2 className="section-heading">Your agent</h2>
-      <div className="view-switch" role="tablist" aria-label="Your coding agent">
-        {AGENTS.map((one) => (
-          <button
-            key={one.name}
-            type="button"
-            role="tab"
-            aria-selected={one.name === agent}
-            onClick={() => setAgent(one.name)}
-            data-testid={`connect-${one.name}`}
-          >
-            {one.name}
-          </button>
-        ))}
-      </div>
+      <AgentSelect agent={chosen.name} onChange={setAgent} />
       <ol className="steps" data-testid="agent-steps">
         {chosen.steps.map((step, place) => (
           <li key={place}>{step}</li>
@@ -327,11 +315,7 @@ function RepositoryFiles({ agent }: { agent: string }) {
       ) : !chosen ? (
         <p className="empty">This project has no repositories yet. A project lead adds them in the project’s settings.</p>
       ) : (
-        <ConnectionFiles
-          key={`${chosen.name}-${agent}`}
-          files={chosen.files.filter((file) => file.agent === agent || file.agent === EVERY_AGENT)}
-          testid="agent-files"
-        />
+        <ConnectionFiles key={chosen.name} files={chosen.files} agent={agent} testid="agent-files" />
       )}
     </section>
   );

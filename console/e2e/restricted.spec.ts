@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { signInAs, signOut } from "./helpers";
 
-test("a project is restricted, a member is let in, and then loses access", async ({ page }) => {
+test("a project is restricted, its access list appears, a member is let in, and then loses access", async ({ page }) => {
   await signInAs(page, 1, "olive");
 
   // Someone to let in, and a project to keep from everyone else.
@@ -18,12 +18,17 @@ test("a project is restricted, a member is let in, and then loses access", async
   await page.getByTestId("create-project").click();
   const projectId = ((await page.getByTestId("project-id").textContent()) ?? "").trim();
 
+  // While it is open to everyone there is no list to keep, only a line saying so.
+  await expect(page.getByTestId("reach")).toContainText("Every member of the team can reach its memory");
+  await expect(page.getByTestId("access")).toHaveCount(0);
+  await page.getByTestId("restrict").click();
+  await expect(page.getByTestId("restricted")).toBeVisible();
+  await expect(page.getByTestId("access")).toContainText("Nobody has been let in yet");
+
   await page.getByTestId("new-access").fill("ray-reader");
   await page.getByRole("option", { name: /Ray Reader/ }).click();
   await page.getByTestId("add-access").click();
   await expect(page.getByTestId("access")).toContainText("Ray Reader");
-  await page.getByTestId("restrict").click();
-  await expect(page.getByTestId("restricted")).toBeVisible();
 
   // Ray is on the access list, so the project is theirs to read.
   await signOut(page);

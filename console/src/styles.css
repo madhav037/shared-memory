@@ -1826,9 +1826,16 @@ div.dotted {
   color: var(--ink-3);
 }
 
-/* The files a repository commits to connect each coding agent, one agent at a time. */
-.connection-files .view-switch {
-  margin-top: 14px;
+/* The files a repository commits to connect each coding agent, for the one agent chosen on the page. */
+.agent-select {
+  max-width: 18rem;
+  margin: 20px 0 20px;
+}
+.connection-group-name {
+  margin: 22px 0 0;
+  font-size: 0.875rem;
+  font-style: italic;
+  color: var(--ink-3);
 }
 .connection-file {
   margin-top: 16px;
@@ -2239,6 +2246,20 @@ div.dotted {
 }
 .filter button:hover {
   color: var(--ink);
+}
+/* Type waits behind "More filters"; once shown it takes its own line under Level. */
+.filters > .more-filters {
+  font-size: 0.9375rem;
+}
+.filters > .more-filters svg {
+  transition: transform 180ms var(--ease);
+}
+.filters > .more-filters[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.filters > .more-filters ~ .filter,
+.filters > .filter + .filter {
+  flex-basis: 100%;
 }
 .matched {
   font-size: 0.875rem;
