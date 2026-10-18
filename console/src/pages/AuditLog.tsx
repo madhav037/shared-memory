@@ -1,12 +1,14 @@
 import { Button, Select, TextInput } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 
-import { fetchAudit, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
-import { Placeholder, Refusal } from "../components/Bits";
+import { fetchAudit, fetchMembers, type AuditEvent, type AuditFilters, type SignedInMember } from "../api/client";
+import { Dotted, Placeholder, Refusal } from "../components/Bits";
+import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
 import { boardUrl, cardChange } from "../lib/board";
-import { folderUrl, levelOf, memoryUrl, moment, typeName } from "../lib/format";
+import { folderUrl, levelOf, memoryUrl, moment, plural, typeName } from "../lib/format";
+import { useAsked } from "../lib/useAsked";
 import { agentLabel } from "../lib/versions";
 
 /** Every kind the server records, from the contract: the words below are exhaustive over it. */
@@ -79,6 +81,17 @@ function CardLink({ projectId, target }: { projectId: string; target: string }) 
   return <Link to={boardUrl(projectId, { card: number })}>Card {number}</Link>;
 }
 
+/** What the record says, part by part, a middle dot between each that never opens or ends a line. */
+function DetailLine({ said }: { said: React.ReactNode[] }) {
+  return (
+    <Dotted className="audit-details">
+      {said.map((one, place) => (
+        <Fragment key={place}>{one}</Fragment>
+      ))}
+    </Dotted>
+  );
+}
+
 /** What else the record says about a change, in words rather than field names. */
 function Details({
   kind,
@@ -92,7 +105,7 @@ function Details({
   if (kind.startsWith("card_")) {
     const said = cardChange(detail, nameOf);
     if (typeof detail.agent === "string") said.unshift(agentLabel(detail.agent));
-    return <>{said.join(" · ")}</>;
+    return <DetailLine said={said} />;
   }
   const text = (name: string) => {
     const value = detail[name];
@@ -131,16 +144,17 @@ function Details({
   if (text("github")) said.push(`GitHub @${text("github")}`);
   if (text("for")) said.push(text("for") === "themselves" ? "Their own token" : `For ${nameOf(text("for")!)}`);
   if (text("reason")) said.push(text("reason"));
-  return (
-    <>
-      {said.map((one, place) => (
-        <span key={place}>
-          {place > 0 ? " · " : ""}
-          {one}
-        </span>
-      ))}
-    </>
-  );
+  return <DetailLine said={said} />;
+}
+
+/** How many changes a phone asks for at a time. */
+const PHONE_PAGE = 20;
+
+/** How much of the log is on the page: the latest so many while older ones wait behind Show older, or all of it. */
+function showing(count: number, more: boolean, filtered: boolean): string {
+  const match = filtered ? (count === 1 ? " that matches" : " that match") : "";
+  if (more) return `Showing the latest ${plural(count, "change")}${match}.`;
+  return count === 1 ? `Showing the only change${match}.` : `Showing all ${count} changes${match}.`;
 }
 
 /** Who changed what, and when: the team's register, newest first. */
@@ -151,11 +165,16 @@ export function AuditLog({ member }: { member: SignedInMember }) {
   const [next, setNext] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
   const wholeTeam = member.role === "owner" || member.role === "admin";
+  // Members who have left stay choosable: their changes are still in the log.
+  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  // A phone sets each change out as an entry several lines tall, so it asks for fewer at a time.
+  const [limit] = useState(() => (window.matchMedia("(max-width: 600px)").matches ? PHONE_PAGE : undefined));
+  const filtered = Object.values(filters).some(Boolean);
 
   useEffect(() => {
     const attempt = new AbortController();
     setEvents(null);
-    fetchAudit(filters, attempt.signal)
+    fetchAudit({ ...filters, limit }, attempt.signal)
       .then((page) => {
         setEvents(page.events);
         setNext(page.next ?? null);
@@ -165,14 +184,14 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         if (!attempt.signal.aborted) setRefused(problem.message);
       });
     return () => attempt.abort();
-  }, [filters]);
+  }, [filters, limit]);
 
   const older = useCallback(async () => {
     if (next === null) return;
-    const page = await fetchAudit({ ...filters, before: next });
+    const page = await fetchAudit({ ...filters, limit, before: next });
     setEvents((seen) => [...(seen ?? []), ...page.events]);
     setNext(page.next ?? null);
-  }, [filters, next]);
+  }, [filters, limit, next]);
 
   const set = (name: keyof AuditFilters, value: string | null) =>
     setFilters((was) => ({ ...was, [name]: value || undefined }));
@@ -189,12 +208,14 @@ export function AuditLog({ member }: { member: SignedInMember }) {
       </p>
 
       <div className="form-line" style={{ marginTop: 24 }}>
-        <TextInput
-          label="Member ID"
+        <MemberPicker
+          members={team?.members ?? []}
+          label="Member"
           placeholder="Everyone"
+          clearable
           data-testid="filter-member"
-          onChange={(event) => set("member", event.currentTarget.value.trim())}
-          style={{ flex: "1 1 140px" }}
+          onChange={(memberId) => set("member", memberId)}
+          style={{ flex: "2 1 200px" }}
         />
         <Select
           label="Change"
@@ -213,7 +234,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
           data={[...projects.values()].map((one) => ({ value: one.project_id, label: one.name }))}
           data-testid="filter-project"
           onChange={(value) => set("project", value)}
-          style={{ flex: "2 1 180px" }}
+          style={{ flex: "2 1 220px" }}
         />
         <TextInput
           label="From"
@@ -237,6 +258,11 @@ export function AuditLog({ member }: { member: SignedInMember }) {
         {!refused && events?.length === 0 && (
           <p className="empty" data-testid="audit-empty">
             Nothing matches those filters.
+          </p>
+        )}
+        {!refused && events && events.length > 0 && (
+          <p className="register-count" data-testid="audit-showing">
+            {showing(events.length, next !== null, filtered)}
           </p>
         )}
         {!refused && events && events.length > 0 && (

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchHistoryAt, fetchVersionAt, type MemoryVersion } from "../api/client";
 import { Amended } from "./Amended";
+import { Prose } from "./Prose";
 import { changed, wordDiff } from "../lib/diff";
 import { bodyOf, day, headerOf, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -112,11 +113,15 @@ export function Timeline({ history, standing }: { history: History; standing: st
         step={1}
         value={history.position}
         onChange={(value) => history.moveTo(value === last ? null : value)}
-        label={(value) => `Version ${value + 1} · ${day(history.versions[value]?.at)}`}
+        // At either end the label would cover the end's own words, which already say the same.
+        label={(value) =>
+          value === 0 || value === last ? null : `Version ${value + 1} · ${day(history.versions[value]?.at)}`
+        }
         marks={history.versions.map((_, place) => ({ value: place }))}
         size="sm"
         aria-label="Read it as it stood at"
         thumbLabel="Read it as it stood at"
+        thumbValueText={(value) => spoken(history, value, standing)}
         data-testid="history-slider"
         styles={{
           track: { "--slider-track-bg": "var(--rule)" } as React.CSSProperties,
@@ -139,6 +144,12 @@ export function Timeline({ history, standing }: { history: History; standing: st
   );
 }
 
+/** A point on the timeline as a screen reader says it: "Version 1 of 2, in force from 2 Jun 2026, 10:30 to …". */
+function spoken(history: History, place: number, standing: string): string {
+  const when = inForce(history.versions, place, standing);
+  return `Version ${place + 1} of ${history.versions.length}, ${when.charAt(0).toLowerCase()}${when.slice(1)}`;
+}
+
 /** The memory's text as it stood at an earlier version, with what that version put in and took out marked up. */
 export function ThenText({ history }: { history: History }) {
   const { now, then, marked } = history;
@@ -157,7 +168,7 @@ export function ThenText({ history }: { history: History }) {
       {pieces && changed(pieces) ? (
         <Amended pieces={pieces} source={source} />
       ) : (
-        <div className="amended">{bodyOf(now)}</div>
+        <Prose>{bodyOf(now)}</Prose>
       )}
       {pieces && !changed(pieces) && <p className="unchanged">This version didn’t change its text.</p>}
     </div>

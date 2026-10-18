@@ -1,8 +1,19 @@
-import { IconAlertTriangle, IconClock, IconLock, IconPin, IconScale } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconClock,
+  IconFolder,
+  IconLayoutColumns,
+  IconLock,
+  IconPin,
+  IconScale,
+  IconSettings,
+  IconTerminal2,
+} from "@tabler/icons-react";
 import { Children, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { folderUrl, levelName } from "../lib/format";
+import { boardUrl } from "../lib/board";
+import { folderUrl, levelName, sessionsUrl } from "../lib/format";
 
 const STROKE = 1.6;
 
@@ -45,9 +56,48 @@ export function Trail({ steps }: { steps: { path: string; name: string }[] }) {
   );
 }
 
+/** The pages every project has, the one in front of you named rather than linked. */
+const PROJECT_PAGES = [
+  { page: "memory", name: "Memory", Icon: IconFolder },
+  { page: "board", name: "Board", Icon: IconLayoutColumns },
+  { page: "sessions", name: "Sessions", Icon: IconTerminal2 },
+  { page: "settings", name: "Settings", Icon: IconSettings },
+] as const;
+
+type ProjectPage = (typeof PROJECT_PAGES)[number]["page"];
+
+function projectPageUrl(projectId: string, page: ProjectPage): string {
+  if (page === "memory") return folderUrl(`projects/${projectId}`);
+  if (page === "board") return boardUrl(projectId);
+  if (page === "sessions") return sessionsUrl(projectId);
+  return `/projects/${encodeURIComponent(projectId)}/settings`;
+}
+
+/** One project's pages, the same four links on each of them. */
+export function ProjectLinks({ projectId, here }: { projectId: string; here: ProjectPage }) {
+  return (
+    <nav className="project-links" aria-label="This project’s pages">
+      {PROJECT_PAGES.map(({ page, name, Icon }) =>
+        page === here ? (
+          <span key={page} className="project-link-here" aria-current="page">
+            <Icon size={14} stroke={STROKE} aria-hidden />
+            {name}
+          </span>
+        ) : (
+          <Link key={page} to={projectPageUrl(projectId, page)} className="quiet-link" data-testid={`to-${page}`}>
+            <Icon size={14} stroke={STROKE} aria-hidden />
+            {name}
+          </Link>
+        ),
+      )}
+    </nav>
+  );
+}
+
 /**
  * A meta line whose parts are separated by a middle dot, as in "First written 2 Jun 2026 · 4 versions". Each dot
- * travels with the part before it, so a wrapped line never opens on one; parts left out leave no stray dot.
+ * travels with the part after it and sits in a margin the line clips off, so a dot that a wrap carries to the start of
+ * a line is out of sight: no line opens or ends on one, and parts left out leave no stray dot.
  */
 export function Dotted({
   className,
@@ -66,12 +116,12 @@ export function Dotted({
     <div className={`dotted ${className}`} data-testid={testid} aria-hidden={hidden || undefined}>
       {parts.map((part, place) => (
         <span className="dotted-part" key={place}>
-          {part}
-          {place < parts.length - 1 && (
+          {place > 0 && (
             <span className="dot" aria-hidden>
               ·
             </span>
           )}
+          {part}
         </span>
       ))}
     </div>

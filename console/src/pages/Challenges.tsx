@@ -10,11 +10,12 @@ import {
   type ChallengeDetail,
   type RaisedChallenge,
 } from "../api/client";
-import { Tracked } from "../components/Tracked";
+import { Amended } from "../components/Amended";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
+import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
-import { changed, lineDiff } from "../lib/diff";
+import { changed, offerDiff } from "../lib/diff";
 import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
@@ -62,7 +63,8 @@ function Waiting({
   onDecided: () => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
-  const [marked, setMarked] = useState(false);
+  const [view, setView] = useState<ReadingView>("text");
+  const [marked, setMarked] = useState(true);
   const { refresh } = useContents();
 
   const decide = async (challengeId: number, decision: "accept" | "reject") => {
@@ -81,15 +83,19 @@ function Waiting({
   for (const one of waiting) memories.set(one.target.path, [...(memories.get(one.target.path) ?? []), one]);
 
   return (
-    <div data-testid="waiting">
-      <Checkbox
-        radius={0}
-        size="xs"
-        label="Show what each offer takes out and puts in"
-        checked={marked}
-        onChange={(event) => setMarked(event.currentTarget.checked)}
-        style={{ margin: "4px 0 14px" }}
-      />
+    <div className="waiting" data-testid="waiting">
+      <ViewSwitch view={view} onChange={setView} />
+      <div className="waiting-marks">
+        {view === "text" && (
+          <Checkbox
+            radius={0}
+            size="xs"
+            label="Show what each offer takes out and puts in"
+            checked={marked}
+            onChange={(event) => setMarked(event.currentTarget.checked)}
+          />
+        )}
+      </div>
       {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
       {[...memories].map(([path, against]) => {
         const first = against[0];
@@ -109,7 +115,14 @@ function Waiting({
               </p>
             )}
             {against.map((challenge) => (
-              <Proposal key={challenge.challenge_id} challenge={challenge} who={who} marked={marked} onDecide={decide} />
+              <Proposal
+                key={challenge.challenge_id}
+                challenge={challenge}
+                who={who}
+                view={view}
+                marked={marked}
+                onDecide={decide}
+              />
             ))}
           </section>
         );
@@ -129,16 +142,18 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
 function Proposal({
   challenge,
   who,
+  view,
   marked,
   onDecide,
 }: {
   challenge: ChallengeDetail;
   who: (memberId: string) => string;
+  view: ReadingView;
   marked: boolean;
   onDecide: (challengeId: number, decision: "accept" | "reject") => void;
 }) {
   const offered = challenge.challenger;
-  const pieces = offered ? lineDiff(challenge.target.body, offered.body) : null;
+  const pieces = offered && marked ? offerDiff(challenge.target.body, offered.body) : null;
   const changes = offered ? whatChanges(challenge.target.body, offered.body) : null;
   return (
     <div className="proposal">
@@ -192,7 +207,13 @@ function Proposal({
             {challenge.target.title}
           </Link>
           <p className="by">As it stands now, by {who(challenge.target.author)}</p>
-          <p className="body">{challenge.target.body}</p>
+          <div className="body">
+            {view === "source" ? (
+              <Source text={challenge.target.body} testid="facing-source" />
+            ) : (
+              <Prose testid="facing-text">{challenge.target.body}</Prose>
+            )}
+          </div>
         </div>
         <div>
           {offered ? (
@@ -202,10 +223,12 @@ function Proposal({
               </Link>
               <p className="by">Offered in its place by {who(offered.author)}</p>
               <div className="body">
-                {marked && pieces && changed(pieces) ? (
-                  <Tracked pieces={pieces} testid="tracked" />
+                {view === "source" ? (
+                  <Source text={offered.body} testid="facing-source" />
+                ) : pieces && changed(pieces) ? (
+                  <Amended pieces={pieces} source="this offer" testid="amended" />
                 ) : (
-                  offered.body
+                  <Prose testid="facing-text">{offered.body}</Prose>
                 )}
               </div>
             </>
@@ -215,9 +238,7 @@ function Proposal({
                 Nothing in its place
               </span>
               <p className="by">Asked for by {who(challenge.raised_by)}</p>
-              <p className="body" style={{ color: "var(--ink-2)" }}>
-                Retire it: {who(challenge.raised_by)} says it is no longer true.
-              </p>
+              <p className="body retire-it">Retire it: {who(challenge.raised_by)} says it is no longer true.</p>
             </>
           )}
         </div>

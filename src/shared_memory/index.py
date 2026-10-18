@@ -75,6 +75,8 @@ class Hit:
     type: str
     author: str
     similarity: float
+    # Whether the section has the words searched for, not only something close to them in meaning.
+    words_match: bool = False
 
 
 def split_sections(memory: Memory) -> list[tuple[str, str]]:
@@ -344,6 +346,7 @@ class SearchIndex:
                 params,
             ).fetchall()
             by_words = self._keyword(conn, columns, where, params)
+        worded = {(row["path"], row["section_no"]) for row in by_words}
         scores: dict[tuple[str, int], float] = {}
         rows: dict[tuple[str, int], dict[str, Any]] = {}
         for ranking in (by_meaning, by_words):
@@ -365,6 +368,7 @@ class SearchIndex:
                 type=rows[key]["type"],
                 author=rows[key]["author"],
                 similarity=float(rows[key]["similarity"]),
+                words_match=key in worded,
             )
             for key in ordered[:limit]
         ]

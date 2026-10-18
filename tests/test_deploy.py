@@ -33,7 +33,7 @@ case "$1" in
     load) while read -r line; do echo "$line" > "$images/$line"; done ;;
     image)
         case "$2" in
-            inspect) [ -e "$images/$3" ] ;;
+            inspect) if [ "$3" = -f ]; then cat "$images/$5"; else [ -e "$images/$3" ]; fi ;;
             rm) rm -f "$images/$4" ;;
             prune) ;;
         esac ;;
@@ -228,9 +228,9 @@ def test_only_a_commit_on_main_deploys(host: Host) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["bash -c id", "deploy $(id)", "deploy main", "check; id", "deploy {commit} drill extra", ""],
+    ["bash -c id", "deploy $(id)", "deploy main", "check; id", "deploy {commit} drill", "drill now", ""],
 )
-def test_the_key_can_ask_for_nothing_but_a_check_or_a_deploy(host: Host, command: str) -> None:
+def test_the_key_can_ask_for_nothing_but_a_check_a_deploy_or_a_drill(host: Host, command: str) -> None:
     done = host.ssh(command.format(commit=host.newer))
 
     assert done.returncode == 1
@@ -247,18 +247,50 @@ def test_a_check_changes_nothing(host: Host) -> None:
         assert change not in host.calls()
 
 
-def test_a_drill_puts_the_running_release_back_and_succeeds(host: Host) -> None:
-    done = host.ssh(f"deploy {host.running} drill", host.release(host.running))
+def deployed(host: Host) -> Host:
+    """The host after `newer` was deployed over `running`, with an empty record of calls."""
+    done = host.ssh(f"deploy {host.newer}", host.release(host.newer))
+    assert done.returncode == 0, done.stderr.decode()
+    host.log.write_text("", encoding="utf-8")
+    return host
+
+
+def test_a_drill_really_runs_the_release_before_and_comes_back(host: Host) -> None:
+    done = deployed(host).ssh("drill")
 
     assert done.returncode == 0, done.stderr.decode()
+    ups = [line for line in host.calls().splitlines() if line.startswith("up ")]
+    assert ups == ["up shared-memory-server@running", f"up shared-memory-server:{host.newer}"], "a swap both ways"
+    assert host.calls().index("backup backup now") < host.calls().index("compose up")
+    assert host.serving() == f"shared-memory-server:{host.newer}"
+    assert host.head() == host.newer
     assert b"Drill done" in done.stdout
-    assert host.calls().count("compose up") == 2
-    assert host.serving() == "shared-memory-server@running"
 
 
-def test_a_drill_refuses_any_release_but_the_running_one(host: Host) -> None:
-    done = host.ssh(f"deploy {host.newer} drill", host.release(host.newer))
+def test_a_drill_whose_release_before_is_unhealthy_comes_back_and_says_so(host: Host) -> None:
+    done = deployed(host).ssh("drill", STUB_UNHEALTHY="shared-memory-server@running")
 
     assert done.returncode == 1
-    assert b"A drill redeploys the running release" in done.stderr
-    assert "docker load" not in host.calls()
+    assert b"isn't healthy" in done.stderr
+    assert host.serving() == f"shared-memory-server:{host.newer}"
+    assert host.head() == host.newer
+
+
+def test_a_drill_with_no_release_before_changes_nothing(host: Host) -> None:
+    done = host.ssh("drill")
+
+    assert done.returncode == 1
+    assert b"No release before" in done.stderr
+    assert "compose up" not in host.calls()
+
+
+def test_a_drill_refuses_when_the_release_before_is_the_same_images(host: Host) -> None:
+    deployed(host)
+    for image in IMAGES:
+        shutil.copy(host.images / f"{image}:latest", host.images / f"{image}:previous")
+
+    done = host.ssh("drill")
+
+    assert done.returncode == 1
+    assert b"the same images" in done.stderr
+    assert "compose up" not in host.calls()

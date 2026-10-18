@@ -37,8 +37,9 @@ def test_an_agent_is_told_on_connecting_its_session_habits(team: Team) -> None:
         assert habit in instructions, habit
 
 
-def test_guidance_an_agent_must_not_miss_is_in_the_tools_themselves(team: Team) -> None:
-    _, tools = team.owner().on_connecting()
+def test_guidance_an_agent_must_not_miss_is_in_the_tools_themselves(owner: Session) -> None:
+    owner.call("add_card", title="Tidy up")  # the tools that change a card are listed once the project has one
+    _, tools = owner.on_connecting()
 
     assert "start of a task" in tools["briefing"]
     assert "before answering" in tools["search"]

@@ -76,3 +76,13 @@ def test_recall_marks_an_exception_so_claude_applies_it_in_that_project(owner: S
     context = added_context(owner.prompt("how does the billing service write its logs?"))
 
     assert f"exception to {team_memory}" in context
+
+
+def test_a_pointer_to_an_exception_says_so(owner: Session, dana: Session) -> None:
+    team_memory = promote_now(dana, JSON_LOGS, level="team")
+    promote_superseding(owner, PLAIN_LOGS, target=team_memory)
+
+    context = added_context(owner.prompt("do all services write structured JSON logs to stdout?"))
+
+    pointers = [line for line in context.splitlines() if line.startswith("[") and "): " in line]
+    assert any(f"exception to {team_memory}" in line for line in pointers), context

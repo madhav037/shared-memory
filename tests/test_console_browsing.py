@@ -103,6 +103,26 @@ def test_search_finds_memories_by_meaning_and_by_exact_words(console: Console, s
     assert filtered["results"] == []
 
 
+def test_a_search_result_says_whether_it_has_the_words_or_only_comes_close_in_meaning(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-browse-words", 308)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    owner.in_project(project, "billing-api").call(
+        "remember",
+        title="Use pnpm, not npm",
+        summary="Every package in billing is managed with pnpm, never npm.",
+        type="convention",
+        body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
+    )
+
+    worded = ask(signed_out, "/api/search", query="pnpm lockfile")
+    close = ask(signed_out, "/api/search", query="javascript dependency installer")
+
+    assert [(hit["title"], hit["words_match"]) for hit in worded["results"]] == [("Use pnpm, not npm", True)]
+    assert [(hit["title"], hit["words_match"]) for hit in close["results"]] == [("Use pnpm, not npm", False)]
+
+
 def test_another_members_personal_memory_is_labelled_as_not_accepted(
     console: Console, signed_out: ConsoleClient
 ) -> None:

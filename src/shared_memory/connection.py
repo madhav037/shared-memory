@@ -8,6 +8,7 @@ where it asks for the token (Claude Code, VS Code).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from importlib import resources
 from typing import Any, Literal
@@ -53,6 +54,17 @@ def skill() -> str:
     `plugin/skills/<name>/SKILL.md`. tests/test_connection_kit.py fails if they drift, and says how to sync.
     """
     return resources.files("shared_memory").joinpath("skill.md").read_text(encoding="utf-8")
+
+
+def skill_sections() -> dict[str, str]:
+    """The skill's `##` sections, word for word and heading included, each under its heading as a short name
+    ("Sessions and locks" is "sessions-and-locks")."""
+    sections: dict[str, str] = {}
+    for part in re.split(r"^(?=## )", skill(), flags=re.MULTILINE):
+        if part.startswith("## "):
+            heading = part.splitlines()[0][3:]
+            sections[re.sub(r"[^a-z0-9]+", "-", heading.lower()).strip("-")] = part.rstrip()
+    return sections
 
 
 def repository_root(variable: str) -> str:
@@ -135,8 +147,9 @@ HOOK_SECONDS = 3
 
 # Codex's hooks: its event, the matcher on it, the endpoint it posts to and how long it waits. Codex edits files with
 # apply_patch and also answers to Edit and Write. It gives a SessionEnd hook 3 seconds at most, its timeout included.
+# Codex documents SessionStart's `source: compact` (https://learn.chatgpt.com/docs/hooks).
 CODEX_HOOKS = (
-    ("SessionStart", "^(startup|resume|clear)$", "session-start", BRIEFING_SECONDS),
+    ("SessionStart", "^(startup|resume|clear|compact)$", "session-start", BRIEFING_SECONDS),
     ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),
     ("PreToolUse", "^(apply_patch|Edit|Write)$", "before-edit", HOOK_SECONDS),
     ("SessionEnd", "", "session-end", 2),

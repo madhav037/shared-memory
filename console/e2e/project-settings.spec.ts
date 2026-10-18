@@ -24,6 +24,7 @@ test("a member who leads nothing reads a project's settings and can change none 
   await signInAs(page, 2, "dana");
   await page.getByTestId("project-card").filter({ hasText: "Billing" }).getByRole("link", { name: "Settings" }).click();
 
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
   await expect(page.getByTestId("project-name")).toHaveText("Billing");
   await expect(page.getByTestId("read-only")).toContainText("You can read everything here");
   await expect(page.getByTestId("you-lead")).toHaveCount(0);

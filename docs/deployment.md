@@ -127,7 +127,9 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 
 3. Pin the host's key: run `ssh-keyscan -t ed25519 <host>` on your machine, and check its fingerprint (`ssh-keygen -lf -` on that line) against `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host.
 4. In the repository's **Settings → Environments**, add `production`, limited to the `main` branch, with the secrets `DEPLOY_SSH_KEY` (the private key) and `DEPLOY_KNOWN_HOSTS` (the line from step 3), and the variable `DEPLOY_HOST` (`user@host`). Delete `deploy_key` from your machine.
-5. In **Actions → Deploy → Run workflow**, run `check` first. It changes nothing and prints what the host's web server answers and the running release. Then run `deploy`, and once a `drill`, which redeploys the running release, treats it as unhealthy and puts it back, so the way back is known to work.
+5. In **Actions → Deploy → Run workflow**, run `check` first. It changes nothing and prints what the host's web server answers and the running release. Then run `deploy`. After the next deploy, run a `drill` once: it backs up, runs the release before the running one, checks it's healthy, and comes back, so the way back is known to work. It needs no build, and it's refused while the release before is the same images, since nothing would really swap.
+
+When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
 
 The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`.
 

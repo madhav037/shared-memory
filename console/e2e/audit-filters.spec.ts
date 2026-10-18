@@ -6,7 +6,9 @@ test("the audit log narrows to one member", async ({ page }) => {
   await signInAs(page, 1, "olive");
   await page.getByTestId("to-audit").click();
 
+  // Found by member ID; the option names who that is.
   await page.getByTestId("filter-member").fill("emp-dana");
+  await page.getByRole("option", { name: /Raj Raiser/ }).click();
 
   // Only the Who column: a row of Raj's can still name Olive in its details, as a challenge he raised does.
   const who = page.getByTestId("audit-table").locator("tbody tr .who-cell");

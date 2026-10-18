@@ -276,6 +276,12 @@ class Board:
             raise restricted_project(project_id)
         return project_id
 
+    def has_cards(self, project_id: str) -> bool:
+        """Whether the project's board holds a card, in the archive or not."""
+        with self._db.transaction() as conn:
+            row = conn.execute("SELECT 1 FROM cards WHERE project_id = %s LIMIT 1", (project_id,)).fetchone()
+        return row is not None
+
     def read(
         self,
         caller: Caller,

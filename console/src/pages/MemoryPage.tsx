@@ -17,8 +17,8 @@ import { Link, useSearchParams } from "react-router";
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
 import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
-import { Prose } from "../components/Prose";
-import { day, headerEnd, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
+import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
 import { headerChanges, HistoryLedger, ThenText, Timeline, useHistory, type History } from "../components/History";
@@ -29,7 +29,7 @@ export function MemoryPage() {
   const path = asked.get("path") ?? "";
   const { answer: memory, refused, reload } = useAsked((signal) => fetchMemoryAt(path, signal), [path]);
   const { folders, load } = useContents();
-  const [view, setView] = useState<"text" | "source">("text");
+  const [view, setView] = useState<ReadingView>("text");
   const history = useHistory(path);
   const text = useRef<HTMLDivElement>(null);
   const parent = path.split("/").slice(0, -1).join("/");
@@ -79,26 +79,7 @@ export function MemoryPage() {
       <Margin memory={memory} history={history} onChanged={reload} />
 
       <div className="reading-text" ref={text}>
-        <div className="view-switch" role="tablist" aria-label="How to read it">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "text"}
-            onClick={() => setView("text")}
-            data-testid="view-text"
-          >
-            Text
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "source"}
-            onClick={() => setView("source")}
-            data-testid="view-source"
-          >
-            As your agent reads it
-          </button>
-        </div>
+        <ViewSwitch view={view} onChange={setView} />
 
         {history && <Timeline history={history} standing={memory.status} />}
 
@@ -300,22 +281,6 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
   );
 }
 
-/** The file as it is on disk: its header, then its body. */
-function Source({ text }: { text: string }) {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const closing = headerEnd(text);
-  return (
-    <pre className="source" data-testid="memory-source">
-      {lines.map((line, number) => (
-        <span key={number} className={number <= closing ? "header-line" : undefined}>
-          {line}
-          {"\n"}
-        </span>
-      ))}
-    </pre>
-  );
-}
-
 function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history: History | null; onChanged: () => void }) {
   const { refresh } = useContents();
   const [refused, setRefused] = useState<string | null>(null);
@@ -323,6 +288,8 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
   const [told, setTold] = useState<string | null>(null);
   const accepted = memory.level !== "personal";
   const active = memory.status === "active";
+  // While an earlier version is open, the standing is that version's; the actions still act on the memory as it is.
+  const past = history && !history.current ? history.position + 1 : null;
 
   const act = async (what: () => Promise<unknown>, after?: string) => {
     try {
@@ -342,10 +309,19 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
         <dt>Standing</dt>
         <dd style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
           <Rank level={memory.level} />
-          <StatusMark status={memory.status} />
-          {memory.status === "active" && <span className="mark">Current</span>}
-          {memory.pinned && <PinnedMark />}
-          {memory.possibly_outdated && <OutdatedMark />}
+          {past !== null ? (
+            <span className="mark past" data-testid="standing-past">
+              <IconClockHour4 size={14} stroke={1.6} aria-hidden />
+              As it stood: version {past}
+            </span>
+          ) : (
+            <>
+              <StatusMark status={memory.status} />
+              {memory.status === "active" && <span className="mark">Current</span>}
+              {memory.pinned && <PinnedMark />}
+              {memory.possibly_outdated && <OutdatedMark />}
+            </>
+          )}
         </dd>
         {memory.status === "active" && (
           <>
@@ -421,6 +397,11 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
 
       {accepted && active && (
         <div className="margin-actions">
+          {past !== null && (
+            <p className="margin-help" data-testid="acts-on-current">
+              These act on the memory as it stands now, not on version {past}.
+            </p>
+          )}
           {refused && <Refusal testid="pin-refused">{refused}</Refusal>}
           {told && (
             <p className="margin-help" data-testid="retired" role="status">

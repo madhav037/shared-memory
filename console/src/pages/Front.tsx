@@ -122,11 +122,17 @@ export function Front({ member }: { member: SignedInMember }) {
                       : `Led by ${project.leads.map((lead) => lead.name).join(", ")}.`}
                     {project.you_lead ? " You lead this." : ""}{" "}
                     <Link to={boardUrl(project.project_id)}>Board</Link>
-                    {" · "}
+                    {"\u00a0·\u00a0"}
                     <Link to={`/projects/${encodeURIComponent(project.project_id)}/settings`}>Settings</Link>
                   </p>
                 )}
-                {part.kind === "team" && <p className="toc-part-note">Holds for every project in the team.</p>}
+                {part.kind === "team" && (
+                  <p className="toc-part-note" data-testid="team-note">
+                    Holds for every project in the team.
+                    {part.memories === 0 &&
+                      " It arrives when a member’s coding agent promotes a memory in a session; the console never writes it."}
+                  </p>
+                )}
                 <PartContents path={part.path} kind={part.kind} />
               </li>
             );
@@ -236,7 +242,7 @@ function Told() {
               {moment(notice.created_at)}
               {notice.project_id && (
                 <>
-                  {" · "}
+                  {"\u00a0·\u00a0"}
                   <Link
                     className="quiet-link"
                     to={boardUrl(notice.project_id, { card: notice.card ?? undefined })}

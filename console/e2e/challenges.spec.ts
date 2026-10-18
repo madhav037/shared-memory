@@ -22,11 +22,15 @@ test("the owner decides a challenge waiting for them and the memory is supersede
   await expect(reasoning.locator("em, strong")).toHaveCount(0);
   await expect(dispute.locator('[data-testid="reasoning"] ~ [data-testid="facing"]')).toHaveCount(1);
 
-  // An offer is shown in its own words. Marking up what it takes out and puts in is there for whoever wants it.
-  await expect(dispute.getByTestId("tracked")).toHaveCount(0);
-  await page.getByLabel("Show what each offer takes out and puts in").check();
-  await expect(dispute.locator(".tracked-text del")).toContainText("every night.");
-  await expect(dispute.locator(".tracked-text ins")).toContainText("02:17 UTC");
+  // An offer is marked up the way a memory's history is: what it puts in, bracketed and keyed to a note saying
+  // what it took out. Without the marks it reads in its own words.
+  await expect(dispute.getByTestId("amended").locator("ins")).toContainText("02:17 UTC");
+  await expect(dispute.getByRole("list", { name: "Amendments" })).toContainText(
+    "Words substituted by this offer, in place of night.",
+  );
+  await page.getByLabel("Show what each offer takes out and puts in").uncheck();
+  await expect(dispute.getByTestId("amended")).toHaveCount(0);
+  await expect(dispute.getByTestId("facing-text").last()).toContainText("every night at 02:17 UTC");
   await dispute.getByRole("button", { name: "Accept: supersede it" }).click();
   await expect(page.getByTestId("nothing-waiting")).toBeVisible();
 
