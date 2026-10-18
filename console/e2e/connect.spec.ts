@@ -2,6 +2,15 @@ import { expect, test } from "@playwright/test";
 
 import { signInAs } from "./helpers";
 
+test("a new member finds Connect your agent at the foot of the contents", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+
+  await page.locator(".contents-column.docked").getByTestId("contents-connect").click();
+
+  await expect(page).toHaveURL(/\/connect$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connect your agent");
+});
+
 test("a member picks their coding agent and gets its steps and the repository's files for it", async ({ page }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await signInAs(page, 1, "olive");

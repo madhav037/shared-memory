@@ -41,6 +41,8 @@ test("a card opens in a side panel with its links and comments", async ({ page }
   // The card a blocked card waits on opens from the blocked card's panel.
   await page.goto(page.url().replace("card=1", "card=3"));
   await expect(panel).toContainText("Needs the new retry rules first.");
+  // Opened from its address, the panel starts on its title, so no control wears the keyboard's highlight unasked.
+  await expect(page.locator(".card-drawer-start")).toBeFocused();
   await panel.getByTestId("waits-on").click();
   await expect(panel).toContainText("Retry failed webhooks");
 
