@@ -1,7 +1,9 @@
 import { Button, Drawer, Modal, Select } from "@mantine/core";
 import {
-  IconAlertTriangle,
+  IconAlarm,
   IconArrowsHorizontal,
+  IconClockHour4,
+  IconHandStop,
   IconMessage,
   IconPencil,
   IconPlus,
@@ -372,7 +374,12 @@ export function BoardPage() {
                 onDrop={(event) => drop(event, one.column, one.cards)}
               >
                 <h2 className="board-column-head">
-                  {one.name} <span className="count-figure">{one.cards.length}</span>
+                  <span className="board-column-name">
+                    {/* Blocked is a state, so it is a mark and a word; it isn't a challenge, so it isn't red. */}
+                    {one.column === "blocked" && <IconHandStop size={16} stroke={1.6} aria-hidden />}
+                    {one.name}
+                  </span>{" "}
+                  <span className="count-figure">{one.cards.length}</span>
                 </h2>
                 {one.cards.length === 0 ? (
                   <p className="board-empty">{narrowed ? "None match." : "Nothing here."}</p>
@@ -517,9 +524,11 @@ function Due({ date }: { date: string | null }) {
   if (!date) return null;
   const state = dueness(date, today());
   const words = state === "overdue" ? "Overdue" : state === "today" ? "Due today" : "Due";
+  // Late and due today are urgent, not challenged: bold ink with a mark, never the red that means a challenge.
   return (
-    <span className={state ? "due alert" : "due"}>
-      {state === "overdue" && <IconAlertTriangle size={13} stroke={1.8} aria-hidden />}
+    <span className={state ? `due ${state}` : "due"}>
+      {state === "overdue" && <IconAlarm size={14} stroke={1.8} aria-hidden />}
+      {state === "today" && <IconClockHour4 size={14} stroke={1.6} aria-hidden />}
       {words} {day(date)}
     </span>
   );
@@ -756,7 +765,10 @@ function CardPanel({
 
       {card.column === "blocked" && card.blocked_reason && (
         <section className="card-blocked" aria-label="Why it is blocked">
-          <h3 className="card-section-head">Blocked</h3>
+          <h3 className="card-section-head">
+            <IconHandStop size={15} stroke={1.6} aria-hidden />
+            Blocked
+          </h3>
           <p>{card.blocked_reason}</p>
           {card.waits_on !== null && (
             <p>

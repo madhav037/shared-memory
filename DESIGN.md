@@ -48,6 +48,8 @@ colors:
   danger-hover-dark: "#ff9989"
   danger-edge-dark: "#7a2417"
   danger-wash-dark: "#2e1612"
+  accent-face-dark: "#36a46f"
+  danger-face-dark: "#de5a45"
   past-dark: "#f2b544"
   past-wash-dark: "#291f0c"
   highlight-soft-dark: "#574a00"
@@ -242,7 +244,8 @@ A neutral register: white, three near-greys and near-black ink, with one green a
 - **Signal Green** (`accent`; `accent-dark` at night): what is in force, the current place, links, primary buttons, a checked control, the pinned mark, the version part of a citation stamp. GOV.UK's button green; 6.2:1 on paper.
 - **Deep Signal** (`accent-hover`): hover on green buttons and links.
 - **Signal Edge** (`accent-edge`): the 2px edge a green button stands on.
-- **Signal Wash** (`accent-wash`): the in-force status box, the current row in the contents tree, a just-issued token slip. The only green surfaces.
+- **Signal Wash** (`accent-wash`): the in-force status box, the current row in the contents tree, a just-issued token slip, and the slip that says what a decision did while the memory stays in force. The only green surfaces; what finishing a card did to the known issues it fixes takes the cancelled panel, since it retires them.
+- **Button Face** (`accent-face`, `danger-face`): a filled button's face. In light it is the signal colour itself; in dark it steps down (`accent-face-dark`, `danger-face-dark`) so a button stands off the night page as far as it does off white paper (about 6:1 green, 5:1 red) instead of shouting, and lifts to the bright text ink on hover. Dark ink on it stays above 5:1.
 - **Band Green** (`band-accent`): the 4px foot of the masthead, the current nav item's underline and the wordmark's square. The same green in both schemes, because the band is dark in both.
 
 ### Secondary
@@ -262,7 +265,7 @@ A neutral register: white, three near-greys and near-black ink, with one green a
 - **Band** (`band`, `band-2`, `band-ink`, `band-ink-2`): the masthead: near-black, its divider and hover underline, white and second ink on it.
 
 ### Named Rules
-**The One Meaning Rule.** Each hue means one thing. Green is in force, here, and go; red is challenged or taken away; amber is an earlier point in time; yellow is focus or a match. Nothing else on the page is coloured.
+**The One Meaning Rule.** Each hue means one thing. Green is in force, here, and go; red is challenged or taken away; amber is an earlier point in time; yellow is focus or a match. Nothing else on the page is coloured. Urgency is not one of those meanings: on the board, Blocked is a hand and the word under the same ink rule as every column, Overdue is bold ink with an alarm, and Due today semibold ink with a clock.
 
 **The Mark-and-Word Rule.** State is a mark and a word, never a hue alone. Every coloured status box leads with an icon or the dagger and a bold word ("In force.", "Challenged.", "Superseded.", "Retired.", "As it stood: version 2 of 3.").
 
@@ -339,7 +342,7 @@ Every corner is square: the theme sets every Mantine radius to 0, fields and but
 ### Buttons
 Solid, square and standing on an edge, as GOV.UK draws them.
 - **Shape:** square (0px).
-- **Primary:** signal green with white text, weight 600, on a 2px signal edge. Hover deepens to `accent-hover`.
+- **Primary:** signal green with white text, weight 600, on a 2px signal edge. Hover deepens to `accent-hover`. In dark the face is `accent-face-dark` with dark ink, lifting to the bright green on hover, so it weighs what it does in light.
 - **Danger:** challenge red on its own darker edge, only to confirm taking something away.
 - **Default:** hover-paper fill, ink text, on a field-edge 2px edge; the second choice beside a primary (Reject, Keep it, Pin, Unpin).
 - **Press:** the edge disappears and the button drops 2px.

@@ -28,6 +28,11 @@
   --danger-edge: #55150b;
   --danger-ink: #ffffff;
   --danger-wash: #fbeae7;
+  /* A filled button's face: the signal colour itself on white paper. */
+  --accent-face: var(--accent);
+  --accent-face-hover: var(--accent-hover);
+  --danger-face: var(--danger);
+  --danger-face-hover: var(--danger-hover);
   --past: #7a4f00;
   --past-rule: #e09a1b;
   --past-wash: #fff5e1;
@@ -66,6 +71,13 @@
   --danger-edge: #7a2417;
   --danger-ink: #0b0d0e;
   --danger-wash: #2e1612;
+  /* At night the signal inks are bright for text, which makes a whole button of them shout. A button's face steps
+     down to stand off the page as far as its light face does (about 6:1 green, 5:1 red), and lifts to the text ink
+     on hover; dark ink on it stays above 5:1. */
+  --accent-face: #36a46f;
+  --accent-face-hover: #4cc38a;
+  --danger-face: #de5a45;
+  --danger-face-hover: #ff7a66;
   --past: #f2b544;
   --past-rule: #f2b544;
   --past-wash: #291f0c;
@@ -898,6 +910,7 @@ div.dotted {
   color: var(--ink-2);
 }
 .toc-part-note {
+  max-width: 66ch;
   margin: 4px 0 0;
   font-size: 0.875rem;
   color: var(--ink-3);
@@ -1339,14 +1352,21 @@ div.dotted {
 }
 .marker {
   font-family: var(--sans);
-  font-size: 0.6em;
+  font-size: max(0.75rem, 0.6em);
   font-weight: 700;
   line-height: 0;
   margin: 0 2px;
 }
+/* A superscript is a small target, so the link reaches past it on every side without changing how it looks. */
 .marker a {
+  position: relative;
   color: var(--accent);
   text-decoration: none;
+}
+.marker a::after {
+  content: "";
+  position: absolute;
+  inset: -10px -8px;
 }
 .amended del .marker a {
   color: var(--danger);
@@ -2718,8 +2738,11 @@ div.dotted {
   border-top: 4px solid var(--ink);
   min-width: 0;
 }
-.board-column.blocked {
-  border-top-color: var(--danger);
+/* Blocked heads its column with a hand and the word: a state, not a challenge, so it keeps the ink rule. */
+.board-column-name svg {
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--ink);
 }
 /* A board too wide for the screen says how much of it is in view and what lies sideways. */
 .board-swipe {
@@ -2847,8 +2870,15 @@ div.dotted {
   align-items: center;
   gap: 4px;
 }
-.due.alert {
-  color: var(--danger);
+/* Late or due today: urgent, said in bold ink with a mark, since red means a challenge or something taken away. */
+.due.overdue,
+.due.today {
+  color: var(--ink);
+}
+.due.overdue {
+  font-weight: 700;
+}
+.due.today {
   font-weight: 600;
 }
 .register-open {
@@ -2911,10 +2941,14 @@ div.dotted {
   font-weight: 400;
   color: var(--ink-2);
 }
-/* Why a card is blocked: one signal, the same label in bold red; the reason below it reads as plain text. */
+/* Why a card is blocked: one signal, the hand and the label in bold ink; the reason below it reads as plain text. */
 .card-blocked .card-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-style: normal;
   font-weight: 700;
-  color: var(--danger);
+  color: var(--ink);
 }
 /* "Card 3" over the card's title: which card this is, said as a label rather than a stamp. */
 .card-drawer-title {
@@ -3031,12 +3065,14 @@ div.dotted {
 .board-cards.drop-last::after {
   bottom: -2px;
 }
+/* What finishing a card did to the known issues it fixes: retiring them, or asking to. That takes memory out of
+   force rather than putting it in, so it is the cancelled panel, not the green one. */
 .board-told {
   margin: 20px 0 0;
   padding: 12px 14px 11px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--ink-3);
   border-bottom-width: 4px;
-  background: var(--accent-wash);
+  background: var(--paper-2);
   font-size: 0.9375rem;
   line-height: 1.5;
 }
