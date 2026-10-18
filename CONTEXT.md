@@ -36,6 +36,10 @@ _Avoid_: Manager, superuser, moderator
 A member who looks after one project: its access, its repositories and who else leads it.
 _Avoid_: Maintainer, project admin, project owner
 
+**Keeper**:
+A member a project lead assigns to one or more of that project's foundations; with the project's leads, a keeper drafts those foundations and decides their foundation challenges.
+_Avoid_: Steward, curator, maintainer
+
 **Restricted project**:
 A project only its **access list**, its project leads and the team's admins can reach; every other project is open to the whole team.
 _Avoid_: Private project, locked project
@@ -57,6 +61,10 @@ _Avoid_: Note, doc, context, knowledge
 **Topic**:
 A folder of memories with an index, used when a subject is too long for one memory.
 _Avoid_: Long memory, folder memory
+
+**Foundation**:
+A topic every project must have, holding one of its sources of truth: its architecture, product, glossary or decisions, and any extra a project lead adds. At project level, architecture and decision memories live only in their foundation, and a foundation outweighs other project and team memory.
+_Avoid_: Source of truth, charter, core doc, required topic
 
 **Author**:
 The member who wrote a memory; for an imported memory promoted in its writer's name, the member who wrote the passage it was cut from.
@@ -133,6 +141,10 @@ _Avoid_: Replace, overwrite, update
 **Challenge**:
 A request to supersede or retire another author's memory, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
 _Avoid_: Approval, proposal, change request
+
+**Foundation challenge**:
+A challenge to add a memory to a foundation, or to supersede or retire one of its memories, even the challenger's own; a keeper of that foundation or a project lead decides it, and it is shown apart from other challenges.
+_Avoid_: Foundation request, merge request
 
 **Reasoning**:
 Why the member raising a challenge believes the memory it targets should be superseded or retired, carried on the challenge for whoever decides it.

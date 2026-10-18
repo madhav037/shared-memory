@@ -20,7 +20,20 @@ def get(server: RunningServer, path: str) -> dict[str, Any]:
 def test_the_console_is_told_that_nobody_is_signed_in(server: RunningServer) -> None:
     status = get(server, "/api/status")
 
-    assert status == {"signed_in": False, "github_sign_in": False, "member": None}
+    assert status == {"signed_in": False, "github_sign_in": False, "member": None, "server_url": server.url}
+
+
+def test_the_console_is_told_the_address_agents_reach_the_server_at_the_one_the_repositorys_files_name(
+    team: Team,
+) -> None:
+    owner = team.owner()
+    project = owner.call("create_project", name="Billing")
+    named = {file["path"]: file["contents"] for file in project["files"]}
+
+    status = get(team.server, "/api/status")
+
+    assert status["server_url"] == team.server.url
+    assert f"{status['server_url']}/mcp" in named[".codex/config.toml"]
 
 
 def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: RunningServer) -> None:
@@ -34,6 +47,7 @@ def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: 
         "signed_in",
         "github_sign_in",
         "member",
+        "server_url",
     }
     assert "SignedInMember" in document["components"]["schemas"]
     assert document["paths"]["/api/sign-in/github"]["get"]["responses"].keys() == {"302"}

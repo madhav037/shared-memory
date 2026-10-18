@@ -113,3 +113,22 @@ def test_the_log_holds_no_memory_content(console: Console, signed_out: ConsoleCl
     log = read_log(signed_out)
 
     assert "must never be copied" not in str(log)
+
+
+def test_the_log_names_each_memory_by_its_title_now_and_keeps_the_path(console: Console, signed_out: ConsoleClient) -> None:
+    team, owner_token = console.a_team("olive-audit-seven")
+    owner = Session(console.server, owner_token)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    remembered = owner.in_project(project, "billing-api").call(
+        "remember", title="Use pnpm, not npm", summary="Billing uses pnpm.", type="convention", body="pnpm."
+    )
+    console.github.as_(209, "olive-audit-seven")
+    signed_out.sign_in()
+
+    events = read_log(signed_out)["events"]
+
+    saved = next(event for event in events if event["target"] == remembered["path"])
+    assert saved["title"] == "Use pnpm, not npm"
+    created = next(event for event in events if event["kind"] == "project_created")
+    assert created["title"] is None
+

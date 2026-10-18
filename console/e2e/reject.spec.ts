@@ -47,8 +47,33 @@ test("a member reads what a challenge would change and rejects it, and the memor
   await expect(facing.getByTestId("facing-source").last()).toContainText("- Queue: Kafka");
   await page.getByTestId("view-text").click();
 
-  await page.getByRole("button", { name: "Reject: keep it as it is" }).click();
+  // A refusal is said beside the buttons, and the challenge stays to be decided again.
+  await page.route(
+    "**/api/challenges/*/decide",
+    (route) => route.fulfill({ status: 403, json: { message: "That challenge can’t be decided just now." } }),
+    { times: 1 },
+  );
+  const reject = page.getByRole("button", { name: "Reject: keep it as it is" });
+  await reject.click();
+  await expect(page.getByTestId("decide-refused")).toHaveText("That challenge can’t be decided just now.");
+  await expect(page.locator(".decide + .refusal")).toHaveCount(1);
+  await expect(reject).toBeEnabled();
+  await expect(page.getByTestId("decided")).toHaveCount(0);
+
+  await reject.click();
+  const slip = page.getByTestId("decided");
+  await expect(slip).toContainText("You rejected it. ‘How Billing is built’ stays as it is.");
+  await expect(slip).toBeFocused();
+  await expect(page.getByTestId("decide-refused")).toHaveCount(0);
+  // Mira is no admin and leads no project, so the audit log isn't hers to read.
+  await expect(slip.getByRole("link", { name: "See it in the audit log" })).toHaveCount(0);
   await expect(page.getByTestId("nothing-waiting")).toBeVisible();
+
+  // It stays until she dismisses it; the focus goes back to the heading it sat under.
+  await slip.getByRole("button", { name: "Dismiss" }).click();
+  await expect(slip).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Waiting for your decision" })).toBeFocused();
+  await expect(page.getByTestId("nothing-waiting")).toHaveText("Nothing is waiting for your decision.");
 
   await openInContents(page, "Billing", "Project memory", "Decisions", "How Billing is built");
   await expect(page.getByTestId("in-force")).toBeVisible();

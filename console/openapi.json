@@ -1263,7 +1263,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChallengeList"
+                  "$ref": "#/components/schemas/DecidedChallenges"
                 }
               }
             }
@@ -1573,12 +1573,17 @@
                 "type": "null"
               }
             ]
+          },
+          "server_url": {
+            "title": "Server Url",
+            "type": "string"
           }
         },
         "required": [
           "signed_in",
           "github_sign_in",
-          "member"
+          "member",
+          "server_url"
         ],
         "title": "Status",
         "type": "object"
@@ -3070,6 +3075,17 @@
             ],
             "title": "Target"
           },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "detail": {
             "additionalProperties": true,
             "title": "Detail",
@@ -3083,6 +3099,7 @@
           "kind",
           "project_id",
           "target",
+          "title",
           "detail"
         ],
         "title": "AuditEvent",
@@ -4273,6 +4290,70 @@
           "notices"
         ],
         "title": "Notices",
+        "type": "object"
+      },
+      "Decided": {
+        "description": "What deciding a challenge did.",
+        "properties": {
+          "challenge_id": {
+            "title": "Challenge Id",
+            "type": "integer"
+          },
+          "decision": {
+            "enum": [
+              "accepted",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "in_force": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Force"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "decision",
+          "in_force"
+        ],
+        "title": "Decided",
+        "type": "object"
+      },
+      "DecidedChallenges": {
+        "description": "What deciding a challenge did, and what is still waiting for this member's decision.",
+        "properties": {
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/ChallengeDetail"
+            },
+            "title": "Waiting",
+            "type": "array"
+          },
+          "raised": {
+            "items": {
+              "$ref": "#/components/schemas/RaisedChallenge"
+            },
+            "title": "Raised",
+            "type": "array"
+          },
+          "decided": {
+            "$ref": "#/components/schemas/Decided"
+          }
+        },
+        "required": [
+          "waiting",
+          "raised",
+          "decided"
+        ],
+        "title": "DecidedChallenges",
         "type": "object"
       },
       "Decision": {

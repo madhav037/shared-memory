@@ -25,3 +25,9 @@ export async function openInContents(page: Page, ...names: string[]) {
     await page.locator(".contents-column .tree-row", { hasText: name }).first().click();
   }
 }
+
+/** Choose a coding agent from the page's one "Agent" select, on Settings or Connect your agent. */
+export async function chooseAgent(page: Page, name: string) {
+  await page.getByTestId("agent-choice").click();
+  await page.getByRole("option", { name, exact: true }).click();
+}

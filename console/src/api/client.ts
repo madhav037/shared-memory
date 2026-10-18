@@ -23,6 +23,8 @@ export type Pins = components["schemas"]["Pins"];
 export type Pin = components["schemas"]["Pin"];
 export type ChallengeList = components["schemas"]["ChallengeList"];
 export type ChallengeDetail = components["schemas"]["ChallengeDetail"];
+export type DecidedChallenges = components["schemas"]["DecidedChallenges"];
+export type Decided = components["schemas"]["Decided"];
 export type RaisedChallenge = components["schemas"]["RaisedChallenge"];
 export type Notices = components["schemas"]["Notices"];
 export type Notice = components["schemas"]["Notice"];
@@ -168,9 +170,9 @@ export function fetchNotices(signal?: AbortSignal): Promise<Notices> {
   return ask<Notices>("/api/notices", { signal });
 }
 
-/** Accept a challenge or reject it. */
-export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<ChallengeList> {
-  return change<ChallengeList>(`/api/challenges/${challengeId}/decide`, { decision });
+/** Accept a challenge or reject it; the answer says what that did, and what is still waiting. */
+export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<DecidedChallenges> {
+  return change<DecidedChallenges>(`/api/challenges/${challengeId}/decide`, { decision });
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */

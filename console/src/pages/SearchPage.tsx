@@ -1,6 +1,6 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconSearch } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { IconChevronDown, IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { searchEverywhere, type SearchHit } from "../api/client";
@@ -40,8 +40,14 @@ export function SearchPage() {
   const level = asked.get("level") ?? "";
   const type = asked.get("type") ?? "";
   const [typed, setTyped] = useState(query);
+  // Type is the filter reached for least, so it waits behind "More filters" unless one is already set.
+  const [more, setMore] = useState(Boolean(type));
+  const typeFilter = useId();
 
   useEffect(() => setTyped(query), [query]);
+  useEffect(() => {
+    if (type) setMore(true);
+  }, [type]);
 
   const set = (name: string, value: string) => {
     const next = new URLSearchParams(asked);
@@ -84,21 +90,61 @@ export function SearchPage() {
 
       <div className="filters">
         <Filter label="Level" options={LEVELS} value={level} onChange={(value) => set("level", value)} testid="level" />
-        <Filter label="Type" options={TYPES} value={type} onChange={(value) => set("type", value)} testid="type" />
+        {/* While a type narrows the search its filter stays in view; folding it away would hide why results are few. */}
+        {!type && (
+          <button
+            type="button"
+            className="quiet-link more-filters"
+            aria-expanded={more}
+            aria-controls={typeFilter}
+            onClick={() => setMore(!more)}
+            data-testid="more-filters"
+          >
+            {more ? "Fewer filters" : "More filters"}
+            <IconChevronDown size={14} stroke={1.6} aria-hidden />
+          </button>
+        )}
+        {more && (
+          <Filter
+            id={typeFilter}
+            label="Type"
+            options={TYPES}
+            value={type}
+            onChange={(value) => set("type", value)}
+            testid="type"
+          />
+        )}
       </div>
 
-      {query ? <Results query={query} level={level} type={type} /> : <Hints />}
+      {query ? (
+        <Results
+          key={`${query}|${level}|${type}`}
+          query={query}
+          level={level}
+          type={type}
+          onClearFilters={() => {
+            const next = new URLSearchParams(asked);
+            next.delete("level");
+            next.delete("type");
+            setAsked(next, { replace: true });
+          }}
+        />
+      ) : (
+        <Hints />
+      )}
     </div>
   );
 }
 
 function Filter({
+  id,
   label,
   options,
   value,
   onChange,
   testid,
 }: {
+  id?: string;
   label: string;
   options: { value: string; label: string }[];
   value: string;
@@ -106,7 +152,7 @@ function Filter({
   testid: string;
 }) {
   return (
-    <div className="filter" role="group" aria-label={label} data-testid={testid}>
+    <div className="filter" id={id} role="group" aria-label={label} data-testid={testid}>
       <span>{label}</span>
       {options.map((option) => (
         <button key={option.value} type="button" aria-pressed={value === option.value} onClick={() => onChange(option.value)}>
@@ -126,7 +172,17 @@ function Hints() {
   );
 }
 
-function Results({ query, level, type }: { query: string; level: string; type: string }) {
+function Results({
+  query,
+  level,
+  type,
+  onClearFilters,
+}: {
+  query: string;
+  level: string;
+  type: string;
+  onClearFilters: () => void;
+}) {
   const { answer, refused } = useAsked(
     (signal) => searchEverywhere({ query, level: level || undefined, type: type || undefined, limit: 10 }, signal),
     [query, level, type],
@@ -152,26 +208,101 @@ function Results({ query, level, type }: { query: string; level: string; type: s
   const worded = hits.filter((hit) => hit.words_match);
   const close = hits.filter((hit) => !hit.words_match);
 
+  // Search by meaning always finds something, however unlike the question, so a search no memory has the words of
+  // says that first, and keeps what comes near in meaning folded away until it is asked for.
+  if (worded.length === 0)
+    return (
+      <div data-testid="results">
+        <div className="no-words" data-testid="no-words">
+          <p className="no-words-lead" role="status" data-testid="results-count">
+            No memory has the words <b>“{query}”</b>
+            {level || type ? " with those filters" : ""}.
+          </p>
+          <ul className="next-steps">
+            <li>Check the spelling.</li>
+            <li>Try fewer words, or other words for the same thing.</li>
+            {(level || type) && (
+              <li>
+                <button type="button" className="quiet-link inline" onClick={onClearFilters} data-testid="clear-filters">
+                  Clear the filters
+                </button>{" "}
+                and search every level and type.
+              </li>
+            )}
+            <li>
+              Or browse the <Link to="/">Contents</Link>.
+            </li>
+          </ul>
+        </div>
+        <Folded
+          shown={(open) =>
+            open
+              ? close.length === 1
+                ? "Hide the one that comes close in meaning"
+                : `Hide the ${close.length} that come close in meaning`
+              : close.length === 1
+                ? "Show the one that comes close in meaning"
+                : `Show ${close.length} that come close in meaning`
+          }
+          lede="None of these has the words you searched for. They are only the closest in meaning, strongest first."
+        >
+          <Entries hits={close} query={query} testid="close" />
+        </Folded>
+      </div>
+    );
+
   return (
     <div data-testid="results">
       <p className="history-stamp" role="status" data-testid="results-count">
         {strength(worded.length, close.length)}
       </p>
-      {worded.length > 0 && <Entries hits={worded} query={query} testid="worded" />}
+      <Entries hits={worded} query={query} testid="worded" />
       {close.length > 0 && (
-        <section className="weaker" aria-labelledby="weaker-heading" data-testid="weaker">
-          {worded.length > 0 && (
-            <>
-              <h2 className="weaker-heading" id="weaker-heading">
-                Weaker matches
-              </h2>
-              <p className="section-lede">Close in meaning, but without the words you searched for.</p>
-            </>
-          )}
+        <Folded
+          shown={(open) =>
+            open
+              ? close.length === 1
+                ? "Hide the weaker match"
+                : `Hide the ${close.length} weaker matches`
+              : close.length === 1
+                ? "Show 1 weaker match"
+                : `Show ${close.length} weaker matches`
+          }
+          lede="Close in meaning, but without the words you searched for."
+        >
           <Entries hits={close} query={query} testid="close" />
-        </section>
+        </Folded>
       )}
     </div>
+  );
+}
+
+/** Results that come only close in meaning, folded away behind a button until the member asks for them. */
+function Folded({ shown, lede, children }: { shown: (open: boolean) => string; lede: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <section className="weaker" aria-label="Weaker matches" data-testid="weaker">
+      <button
+        type="button"
+        className="fold"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((was) => !was)}
+        data-testid="weaker-toggle"
+      >
+        <IconChevronRight className="twist" size={16} stroke={1.6} aria-hidden />
+        {shown(open)}
+      </button>
+      <div id={id} hidden={!open}>
+        {open && (
+          <>
+            <p className="section-lede">{lede}</p>
+            {children}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -180,10 +311,7 @@ function strength(worded: number, close: number): string {
   const have = worded === 1 ? "One memory has" : `${worded} memories have`;
   if (close === 0) return `${have} the words you searched for${worded > 1 ? ", strongest first" : ""}.`;
   const more = close === 1 ? "one more comes" : `${close} more come`;
-  if (worded > 0) return `${have} the words you searched for, and ${more} close in meaning.`;
-  return close === 1
-    ? "None has the words you searched for. This one comes closest in meaning."
-    : `None has the words you searched for. These ${close} come closest in meaning, strongest first.`;
+  return `${have} the words you searched for, and ${more} close in meaning.`;
 }
 
 function Entries({ hits, query, testid }: { hits: SearchHit[]; query: string; testid: string }) {

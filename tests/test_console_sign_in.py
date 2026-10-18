@@ -23,6 +23,7 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
             "role": "owner",
             "leads_a_project": False,
         },
+        "server_url": signed_out.server.url,
     }
 
 
@@ -130,7 +131,7 @@ def test_a_sign_in_that_did_not_start_here_is_refused(console: Console, signed_o
 def test_a_server_without_github_cannot_sign_anyone_in(server: RunningServer) -> None:
     client = ConsoleClient(server)
     try:
-        assert client.status() == {"signed_in": False, "github_sign_in": False, "member": None}
+        assert client.status() == {"signed_in": False, "github_sign_in": False, "member": None, "server_url": server.url}
         landed = client.sign_in()
         assert "isn't set up on this server" in sign_in_error(landed)
     finally:

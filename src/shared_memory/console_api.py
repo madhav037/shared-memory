@@ -50,7 +50,7 @@ from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
@@ -267,7 +267,7 @@ class ConsoleApi:
     # --- the calls ---
 
     def _status(self, request: Request) -> Response:
-        return JSONResponse(self._describe(self._member(request)).model_dump(mode="json"))
+        return JSONResponse(self._describe(self._member(request), request).model_dump(mode="json"))
 
     def _sign_in(self, request: Request) -> Response:
         try:
@@ -742,18 +742,30 @@ class ConsoleApi:
                 {"message": f"There is no open challenge {challenge_id} in your team."}, status_code=403
             )
         try:
-            self._lifecycle.decide_challenge(self._working_in(member, project_of(challenge)), challenge_id, asked.decision)
+            result = self._lifecycle.decide_challenge(
+                self._working_in(member, project_of(challenge)), challenge_id, asked.decision
+            )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        return self._disputes(self._identity.caller_in(member, None))
+        if result["status"] == "rejected":
+            decided = Decided(challenge_id=challenge.id, decision="rejected", in_force=challenge.target_path)
+        else:
+            decided = Decided(challenge_id=challenge.id, decision="accepted", in_force=result.get("path"))
+        left = self._challenge_list(self._identity.caller_in(member, None))
+        return JSONResponse(
+            DecidedChallenges(waiting=left.waiting, raised=left.raised, decided=decided).model_dump(mode="json")
+        )
 
     def _disputes(self, caller: Caller) -> Response:
+        return JSONResponse(self._challenge_list(caller).model_dump(mode="json"))
+
+    def _challenge_list(self, caller: Caller) -> ChallengeList:
         waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
         raised = [
             RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
-        return JSONResponse(ChallengeList(waiting=waiting, raised=raised).model_dump(mode="json"))
+        return ChallengeList(waiting=waiting, raised=raised)
 
     def _dispute(self, caller: Caller, waiting: Waiting) -> ChallengeDetail:
         challenge = waiting.challenge
@@ -925,15 +937,18 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         except ValueError:
             return JSONResponse({"message": "That filter wasn't understood."}, status_code=422)
+        titles = self._explorer.titles(
+            member.team_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
+        )
         answer = AuditPage(
-            events=[AuditEvent(**vars(event)) for event in page.events],
+            events=[AuditEvent(**vars(event), title=titles.get(event.target or "")) for event in page.events],
             next=page.next,
         )
         return JSONResponse(answer.model_dump(mode="json"))
 
     def _sign_out(self, request: Request) -> Response:
         self._sessions.end(request.cookies.get(COOKIE))
-        signed_out = JSONResponse(self._describe(None).model_dump(mode="json"))
+        signed_out = JSONResponse(self._describe(None, request).model_dump(mode="json"))
         signed_out.delete_cookie(COOKIE, path="/", httponly=True, secure=self._https(request), samesite="lax")
         return signed_out
 
@@ -942,10 +957,11 @@ class ConsoleApi:
     def _member(self, request: Request) -> Member | None:
         return self._sessions.member_for(request.cookies.get(COOKIE))
 
-    def _describe(self, member: Member | None) -> Status:
+    def _describe(self, member: Member | None, request: Request) -> Status:
         return Status(
             signed_in=member is not None,
             github_sign_in=self._sessions.configured,
+            server_url=self._server_url(request),
             member=None
             if member is None
             else SignedInMember(

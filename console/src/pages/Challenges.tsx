@@ -1,6 +1,6 @@
 import { Button, Checkbox } from "@mantine/core";
-import { IconScale } from "@tabler/icons-react";
-import { useState } from "react";
+import { IconHistory, IconScale } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import {
@@ -8,6 +8,8 @@ import {
   fetchChallenges,
   fetchMembers,
   type ChallengeDetail,
+  type ChallengeList,
+  type Decided,
   type RaisedChallenge,
 } from "../api/client";
 import { Amended } from "../components/Amended";
@@ -20,11 +22,31 @@ import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
-export function Challenges() {
-  const { answer, refused, reload } = useAsked((signal) => fetchChallenges(signal), []);
+export function Challenges({
+  readsAudit,
+  onDecided,
+}: {
+  readsAudit: boolean;
+  /** Told what is still waiting once a decision lands, so the masthead's count needn't wait for the next page. */
+  onDecided?: (left: ChallengeList) => void;
+}) {
+  const { answer, refused, setAnswer } = useAsked((signal) => fetchChallenges(signal), []);
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const [slip, setSlip] = useState<Slip | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map((team?.members ?? []).map((one) => [one.member_id, one.name]));
-  const who = (memberId: string) => (names.get(memberId) ? `${names.get(memberId)} (${memberId})` : memberId);
+  // A member is their name here; their member ID belongs on Team.
+  const who = (memberId: string) => names.get(memberId) ?? memberId;
+
+  const decided = (said: Slip, left: ChallengeList) => {
+    setSlip(said);
+    setAnswer(left);
+    onDecided?.(left);
+  };
+  const dismiss = () => {
+    setSlip(null);
+    heading.current?.focus();
+  };
 
   return (
     <div className="medium">
@@ -38,17 +60,81 @@ export function Challenges() {
       {!answer && !refused && <Placeholder lines={8} />}
       {answer && (
         <>
-          <h2 className="section-heading">Waiting for your decision</h2>
+          <h2 className="section-heading" ref={heading} tabIndex={-1}>
+            Waiting for your decision
+          </h2>
+          {/* Always on the page, so what was decided is announced when it arrives. */}
+          <div role="status" data-testid="decided-region">
+            {slip && <DecidedSlip slip={slip} readsAudit={readsAudit} onDismiss={dismiss} />}
+          </div>
           {answer.waiting.length === 0 ? (
             <p className="empty" data-testid="nothing-waiting">
-              Nothing is waiting for your decision.
+              {slip ? "Nothing else is waiting for your decision." : "Nothing is waiting for your decision."}
             </p>
           ) : (
-            <Waiting waiting={answer.waiting} who={who} onDecided={reload} />
+            <Waiting waiting={answer.waiting} who={who} onDecided={decided} />
           )}
           <Raised raised={answer.raised} who={who} />
         </>
       )}
+    </div>
+  );
+}
+
+/** What the member just decided: the server's answer, with the challenge it was about. */
+type Slip = { decided: Decided; challenge: ChallengeDetail; others: number };
+
+/** Says what a decision did, in place of the challenge it decided, until the member dismisses it or leaves. */
+function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: boolean; onDismiss: () => void }) {
+  const here = useRef<HTMLDivElement>(null);
+  useEffect(() => here.current?.focus(), [slip]);
+
+  const { decided, challenge, others } = slip;
+  const old = challenge.target.title;
+  const offered = challenge.challenger?.title;
+  return (
+    <div
+      className={decided.in_force ? "decided appear" : "decided retired appear"}
+      ref={here}
+      tabIndex={-1}
+      data-testid="decided"
+    >
+      <p className="decided-what">
+        <IconScale size={18} stroke={1.6} aria-hidden />
+        <span>
+          {decided.decision === "rejected" ? (
+            <>
+              <b>You rejected it.</b> <span className="decided-name">‘{old}’</span> stays as it is.
+            </>
+          ) : offered ? (
+            <>
+              <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> now supersedes{" "}
+              <span className="decided-name">‘{old}’</span>.
+            </>
+          ) : (
+            <>
+              <b>You accepted it.</b> <span className="decided-name">‘{old}’</span> is retired.
+            </>
+          )}
+          {decided.decision === "accepted" && others > 0 && (
+            <> Every other challenge against it is closed, and whoever raised it is told why.</>
+          )}
+        </span>
+      </p>
+      <p className="decided-links">
+        <Link className="quiet-link" to={memoryUrl(decided.in_force ?? challenge.target.path)} data-testid="decided-read">
+          Read it
+        </Link>
+        {readsAudit && (
+          <Link className="quiet-link" to="/audit" data-testid="decided-audit">
+            <IconHistory size={14} stroke={1.6} aria-hidden />
+            See it in the audit log
+          </Link>
+        )}
+        <button type="button" className="quiet-link decided-dismiss" onClick={onDismiss} data-testid="decided-dismiss">
+          Dismiss
+        </button>
+      </p>
     </div>
   );
 }
@@ -60,21 +146,30 @@ function Waiting({
 }: {
   waiting: ChallengeDetail[];
   who: (memberId: string) => string;
-  onDecided: () => void;
+  onDecided: (slip: Slip, left: ChallengeList) => void;
 }) {
-  const [refused, setRefused] = useState<string | null>(null);
+  // One decision at a time: the ref stops a second click before React has re-rendered the buttons as busy.
+  const [deciding, setDeciding] = useState<{ challengeId: number; decision: Choice } | null>(null);
+  const busy = useRef(false);
+  const [refused, setRefused] = useState<{ challengeId: number; message: string } | null>(null);
   const [view, setView] = useState<ReadingView>("text");
   const [marked, setMarked] = useState(true);
   const { refresh } = useContents();
 
-  const decide = async (challengeId: number, decision: "accept" | "reject") => {
+  const decide = async (challenge: ChallengeDetail, decision: Choice, others: number) => {
+    if (busy.current) return;
+    busy.current = true;
+    setDeciding({ challengeId: challenge.challenge_id, decision });
+    setRefused(null);
     try {
-      await decideChallenge(challengeId, decision);
-      setRefused(null);
+      const answer = await decideChallenge(challenge.challenge_id, decision);
       refresh();
-      onDecided();
+      onDecided({ decided: answer.decided, challenge, others }, { waiting: answer.waiting, raised: answer.raised });
     } catch (problem) {
-      setRefused((problem as Error).message);
+      setRefused({ challengeId: challenge.challenge_id, message: (problem as Error).message });
+    } finally {
+      busy.current = false;
+      setDeciding(null);
     }
   };
 
@@ -96,7 +191,6 @@ function Waiting({
           />
         )}
       </div>
-      {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
       {[...memories].map(([path, against]) => {
         const first = against[0];
         if (!first) return null;
@@ -121,7 +215,9 @@ function Waiting({
                 who={who}
                 view={view}
                 marked={marked}
-                onDecide={decide}
+                deciding={deciding}
+                refused={refused?.challengeId === challenge.challenge_id ? refused.message : null}
+                onDecide={(decision) => decide(challenge, decision, against.length - 1)}
               />
             ))}
           </section>
@@ -139,19 +235,30 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
   author_left: "its author has left the team, so anyone may",
 };
 
+type Choice = "accept" | "reject";
+
 function Proposal({
   challenge,
   who,
   view,
   marked,
+  deciding,
+  refused,
   onDecide,
 }: {
   challenge: ChallengeDetail;
   who: (memberId: string) => string;
   view: ReadingView;
   marked: boolean;
-  onDecide: (challengeId: number, decision: "accept" | "reject") => void;
+  /** The decision being sent, on this challenge or another; while one is, none can be. */
+  deciding: { challengeId: number; decision: Choice } | null;
+  refused: string | null;
+  onDecide: (decision: Choice) => void;
 }) {
+  const pressed = (decision: Choice) =>
+    deciding?.challengeId === challenge.challenge_id && deciding.decision === decision;
+  // Busy, not disabled: a disabled button drops the focus it holds, and the guard in decide refuses a second send.
+  const busy = deciding ? { "data-disabled": true, "aria-disabled": true } : {};
   const offered = challenge.challenger;
   const pieces = offered && marked ? offerDiff(challenge.target.body, offered.body) : null;
   const changes = offered ? whatChanges(challenge.target.body, offered.body) : null;
@@ -243,19 +350,21 @@ function Proposal({
           )}
         </div>
       </div>
-      <div className="decide">
-        <Button size="sm" onClick={() => onDecide(challenge.challenge_id, "accept")} data-testid={`accept-${challenge.challenge_id}`}>
-          {offered ? "Accept: supersede it" : "Accept: retire it"}
+      <div className="decide" aria-busy={deciding?.challengeId === challenge.challenge_id || undefined}>
+        <Button size="sm" {...busy} onClick={() => onDecide("accept")} data-testid={`accept-${challenge.challenge_id}`}>
+          {pressed("accept") ? "Deciding…" : offered ? "Accept: supersede it" : "Accept: retire it"}
         </Button>
         <Button
           size="sm"
           variant="default"
-          onClick={() => onDecide(challenge.challenge_id, "reject")}
+          {...busy}
+          onClick={() => onDecide("reject")}
           data-testid={`reject-${challenge.challenge_id}`}
         >
-          Reject: keep it as it is
+          {pressed("reject") ? "Deciding…" : "Reject: keep it as it is"}
         </Button>
       </div>
+      {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
     </div>
   );
 }

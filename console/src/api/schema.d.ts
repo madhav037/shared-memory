@@ -771,6 +771,8 @@ export interface components {
             /** Github Sign In */
             github_sign_in: boolean;
             member: components["schemas"]["SignedInMember"] | null;
+            /** Server Url */
+            server_url: string;
         };
         /**
          * ProjectMember
@@ -1386,6 +1388,8 @@ export interface components {
             project_id: string | null;
             /** Target */
             target: string | null;
+            /** Title */
+            title: string | null;
             /** Detail */
             detail: {
                 [key: string]: unknown;
@@ -1829,6 +1833,32 @@ export interface components {
         Notices: {
             /** Notices */
             notices: components["schemas"]["Notice"][];
+        };
+        /**
+         * Decided
+         * @description What deciding a challenge did.
+         */
+        Decided: {
+            /** Challenge Id */
+            challenge_id: number;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
+            /** In Force */
+            in_force: string | null;
+        };
+        /**
+         * DecidedChallenges
+         * @description What deciding a challenge did, and what is still waiting for this member's decision.
+         */
+        DecidedChallenges: {
+            /** Waiting */
+            waiting: components["schemas"]["ChallengeDetail"][];
+            /** Raised */
+            raised: components["schemas"]["RaisedChallenge"][];
+            decided: components["schemas"]["Decided"];
         };
         /**
          * Decision
@@ -2794,7 +2824,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChallengeList"];
+                    "application/json": components["schemas"]["DecidedChallenges"];
                 };
             };
         };

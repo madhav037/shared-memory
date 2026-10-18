@@ -10,6 +10,6 @@ test("a memory imported in its writer's name shows its importer and its source b
 
   const details = page.getByTestId("memory-details");
   await expect(details).toContainText("Mira Maker");
-  await expect(details.getByTestId("imported-by")).toHaveText("E1001");
+  await expect(details.getByTestId("imported-by")).toHaveText("Olive Owner");
   await expect(details.getByTestId("imported-from")).toHaveText("billing-api:CLAUDE.md");
 });

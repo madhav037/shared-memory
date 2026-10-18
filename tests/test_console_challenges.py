@@ -94,6 +94,11 @@ def test_accepting_a_challenge_supersedes_the_memory(console: Console, signed_ou
     assert superseded["status"] == "superseded"
     assert superseded["superseded_by"] is not None
     assert ask(signed_out, "/api/memory", path=superseded["superseded_by"])["level"] == "project"
+    assert accepted.json()["decided"] == {
+        "challenge_id": challenge_id,
+        "decision": "accepted",
+        "in_force": superseded["superseded_by"],
+    }
 
 
 def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_out: ConsoleClient) -> None:
@@ -108,6 +113,23 @@ def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_
 
     assert rejected.status_code == 200, rejected.text
     assert ask(signed_out, "/api/memory", path=mine)["status"] == "active"
+    assert rejected.json()["decided"] == {"challenge_id": challenge_id, "decision": "rejected", "in_force": mine}
+
+
+def test_accepting_a_retire_challenge_leaves_no_memory_in_force_in_its_place(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-disputes-retired", 1170)
+    theirs = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
+    dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-retired", 1171)
+    challenge_id = dana_console.post_json("/api/memory/retire", {"path": theirs}).json()["challenge_id"]
+
+    accepted = decide(signed_out, challenge_id, "accept")
+
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["decided"] == {"challenge_id": challenge_id, "decision": "accepted", "in_force": None}
+    assert ask(signed_out, "/api/memory", path=theirs)["status"] == "retired"
+    dana_console.close()
 
 
 def test_several_challenges_against_one_memory_are_shown_together_and_accepting_one_closes_the_others(

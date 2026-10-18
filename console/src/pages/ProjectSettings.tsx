@@ -19,6 +19,7 @@ import {
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, RestrictedMark, Trail } from "../components/Bits";
+import { AgentSelect, useChosenAgent } from "../components/AgentChoice";
 import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
@@ -32,6 +33,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
   const { refresh } = useContents();
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
   const current = (team?.members ?? []).filter((one) => !one.removed);
+  const [agent, setAgent] = useChosenAgent();
 
   const attempt = async (what: () => Promise<ProjectDetail>) => {
     try {
@@ -92,10 +94,12 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         <h2 className="section-heading" id="reach-heading">
           Who can reach it
         </h2>
-        <p className="section-lede">
+        <p className="section-lede" data-testid="reach">
           {project.restricted
             ? "Restricted: only the members below, this project’s leads and the team’s admins can reach its memory — in the console and in every coding agent session."
-            : "Open to the whole team. Restricting it keeps its memory to the members below, its leads and the team’s admins."}
+            : project.access.length > 0
+              ? `Every member of the team can reach its memory. Restricting it again lets the ${project.access.length === 1 ? "member" : `${project.access.length} members`} on its access list straight back in.`
+              : "Every member of the team can reach its memory, in the console and in every coding agent session."}
         </p>
         {project.you_may_change && (
           <Button
@@ -107,44 +111,43 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             {project.restricted ? "Open it to the whole team" : "Restrict it to its access list"}
           </Button>
         )}
-        <h3 className="sub-heading">Access list</h3>
-        <ul className="entries" data-testid="access">
-          {project.access.length === 0 && (
-            <li className="entry" style={{ color: "var(--ink-3)", fontSize: "0.9375rem" }}>
-              Nobody has been let in yet.
-            </li>
-          )}
-          {project.access.map((person) => (
-            <li className="entry" key={person.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <span>
-                {person.name} <span className="member-id">{person.member_id}</span>
-              </span>
-              {project.you_may_change && (
-                <button
-                  type="button"
-                  className="quiet-link danger"
-                  onClick={() => attempt(() => revokeAccess(project.project_id, person.member_id))}
-                  data-testid={`revoke-${person.member_id}`}
-                >
-                  Take access away
-                </button>
+        {project.restricted && (
+          <>
+            <h3 className="sub-heading">Access list</h3>
+            <ul className="entries" data-testid="access">
+              {project.access.length === 0 && (
+                <li className="entry" style={{ color: "var(--ink-3)", fontSize: "0.9375rem" }}>
+                  Nobody has been let in yet.
+                </li>
               )}
-            </li>
-          ))}
-        </ul>
-        {project.you_may_change && (
-          <Choosing
-            members={current.filter((one) => !project.access.some((person) => person.member_id === one.member_id))}
-            missing="Choose who to let in."
-            action="Let them in"
-            testid="access"
-            onChosen={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
-          />
-        )}
-        {!project.restricted && project.access.length > 0 && (
-          <p className="section-lede" style={{ marginTop: 10 }}>
-            The list is kept while the project is open, so restricting it again lets the same members straight back in.
-          </p>
+              {project.access.map((person) => (
+                <li className="entry" key={person.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <span>
+                    {person.name}
+                  </span>
+                  {project.you_may_change && (
+                    <button
+                      type="button"
+                      className="quiet-link danger"
+                      onClick={() => attempt(() => revokeAccess(project.project_id, person.member_id))}
+                      data-testid={`revoke-${person.member_id}`}
+                    >
+                      Take access away
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {project.you_may_change && (
+              <Choosing
+                members={current.filter((one) => !project.access.some((person) => person.member_id === one.member_id))}
+                missing="Choose who to let in."
+                action="Let them in"
+                testid="access"
+                onChosen={(memberId) => attempt(() => grantAccess(project.project_id, memberId))}
+              />
+            )}
+          </>
         )}
       </section>
 
@@ -162,7 +165,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           {project.leads.map((lead) => (
             <li className="entry" key={lead.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>
-                {lead.name} <span className="member-id">{lead.member_id}</span>
+                {lead.name}
               </span>
               {runsTheTeam && (
                 <button
@@ -196,6 +199,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           Each repository commits a few small files that connect it to this project, one set per coding agent your team
           uses. They name the project, never a token: each member sets theirs once in <code>SHARED_MEMORY_TOKEN</code>.
         </p>
+        {project.repositories.length > 0 && <AgentSelect agent={agent} onChange={setAgent} />}
         <div data-testid="repositories">
           {project.repositories.length === 0 && (
             <p className="empty">No repositories yet. Add one to get the files it commits.</p>
@@ -219,7 +223,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
                   )}
                 </span>
               </div>
-              <ConnectionFiles files={repository.files} testid={`files-${repository.name}`} />
+              <ConnectionFiles files={repository.files} agent={agent} testid={`files-${repository.name}`} />
             </div>
           ))}
         </div>

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 
 import { type FileEntry } from "../api/client";
 import { currentPath, useContents } from "../lib/contents";
-import { folderUrl, memoryUrl } from "../lib/format";
+import { folderName, folderUrl, memoryUrl } from "../lib/format";
 
 /** The contents column: team memory, then every project, each opening onto its folders and memories. */
 export function ContentsTree({ onOpen, heading = true }: { onOpen?: () => void; heading?: boolean }) {
@@ -178,7 +178,7 @@ function FolderNode({
             </li>
           )}
           {folder?.folders.map((sub) => (
-            <FolderNode key={sub.path} path={sub.path} name={sub.name} tally={sub.memories} depth={depth + 1} onOpen={onOpen} />
+            <FolderNode key={sub.path} path={sub.path} name={folderName(sub.path, sub.name)} tally={sub.memories} depth={depth + 1} onOpen={onOpen} />
           ))}
           {current.map((memory) => (
             <MemoryNode key={memory.path} memory={memory} depth={depth + 1} onOpen={onOpen} />
