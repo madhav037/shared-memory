@@ -475,7 +475,7 @@ def build_app(
         work = Work(due, working, known_issues.titles(current))
         return briefing.for_session(
             current,
-            extra=challenges.briefing_notices(current),
+            extra=[*lifecycle.foundation_lines(current), *challenges.briefing_notices(current)],
             work=work,
             followed_by=named,
             sessions=activities.for_briefing(current, session) if with_sessions else None,

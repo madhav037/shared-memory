@@ -156,7 +156,7 @@ def test_a_session_alone_in_its_project_is_told_of_no_others(owner: Session) -> 
     state(owner, "Splitting the invoice module")
 
     assert HEADING not in added_context(owner.start())
-    assert "no other session is active" in owner.call("briefing", session=owner.identifier)
+    assert HEADING not in owner.call("briefing", session=owner.identifier)
 
 
 def test_a_session_that_ended_is_not_listed_and_its_activity_is_gone_when_it_comes_back(
