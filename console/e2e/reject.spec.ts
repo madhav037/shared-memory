@@ -75,7 +75,7 @@ test("a member reads what a challenge would change and rejects it, and the memor
   await expect(page.getByRole("heading", { name: "Waiting for your decision" })).toBeFocused();
   await expect(page.getByTestId("nothing-waiting")).toHaveText("Nothing is waiting for your decision.");
 
-  await openInContents(page, "Billing", "Project memory", "Decisions", "How Billing is built");
+  await openInContents(page, "Billing", "Project memory", "Gotchas", "How Billing is built");
   await expect(page.getByTestId("in-force")).toBeVisible();
   await expect(page.getByTestId("memory-body")).toContainText("RabbitMQ");
   await expect(page.getByTestId("superseded-by")).toHaveCount(0);

@@ -11,7 +11,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
-import { fetchChallenges, fetchStatus, signOut, type SignedInMember, type Status } from "./api/client";
+import { fetchChallenges, fetchStatus, signInUrl, signOut, type SignedInMember, type Status } from "./api/client";
 import { Refusal } from "./components/Bits";
 import { ContentsTree } from "./components/Contents";
 import { ContentsProvider } from "./lib/contents";
@@ -21,7 +21,9 @@ import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
-import { Front, TitlePage } from "./pages/Front";
+import { ComingSoon, NotFound } from "./pages/Elsewhere";
+import { Front } from "./pages/Front";
+import { Landing } from "./pages/Landing";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
@@ -35,6 +37,23 @@ function refusal(): string | null {
   const reason = new URLSearchParams(window.location.search).get("sign-in-error");
   return reason && reason.trim() ? reason : null;
 }
+
+/**
+ * The console's own addresses, as the signed-in routes below have them. A visitor who isn't signed in sees the
+ * landing page, and its sign-in, at any of these; anywhere else is not found.
+ */
+const CONSOLE_ADDRESSES = [
+  "/",
+  "/files",
+  "/memory",
+  "/search",
+  "/challenges",
+  "/projects/*",
+  "/team",
+  "/audit",
+  "/connect",
+  "/my-token",
+];
 
 export function App() {
   const [connection, setConnection] = useState<Connection>({ state: "asking" });
@@ -92,9 +111,26 @@ export function App() {
       <>
         <header className="masthead">
           <Wordmark team={null} />
+          <nav className="nav" aria-label="This page">
+            <Link to="/#how">How it works</Link>
+            <Link to="/#pricing">Pricing</Link>
+          </nav>
+          {status.github_sign_in && (
+            <div className="masthead-end">
+              <a className="quiet-link" href={signInUrl}>
+                Sign in
+              </a>
+            </div>
+          )}
         </header>
         <main id="page">
-          <TitlePage status={status} refused={signInRefused} />
+          <Routes>
+            <Route path="/coming-soon" element={<ComingSoon />} />
+            {CONSOLE_ADDRESSES.map((path) => (
+              <Route key={path} path={path} element={<Landing status={status} refused={signInRefused} />} />
+            ))}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </main>
       </>
     );
@@ -219,7 +255,8 @@ function SignedIn({
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/coming-soon" element={<ComingSoon inConsole />} />
+            <Route path="*" element={<NotFound inConsole />} />
           </Routes>
         </main>
       </div>

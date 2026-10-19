@@ -23,6 +23,12 @@ KNOWN_ISSUE = "known_issue"
 FOLDER_TYPES = {folder: kind for kind, folder in TYPE_FOLDERS.items()}
 INDEX_NAME = "index.md"
 
+# A foundation is a topic of project memory at projects/<project>/shared/foundations/<slug>/ (ADR-0019). Every project
+# has the core four; the type a foundation takes is fixed for two of them, and any type but a known issue fits the rest.
+FOUNDATIONS_FOLDER = "foundations"
+CORE_FOUNDATIONS = ("architecture", "product", "glossary", "decisions")
+FOUNDATION_TYPE = {"architecture": "architecture", "decisions": "decision"}
+
 Level = Literal["team", "project", "personal"]
 
 
@@ -75,10 +81,12 @@ class Location:
 
     path: PurePosixPath
     level: Level
-    type: str
+    # None in a foundation: the folder says which foundation it is, and the memory's header says its type.
+    type: str | None
     project_id: str | None
     member_id: str | None
     topic: str | None = None
+    foundation: str | None = None
 
 
 def locate(path: str) -> Location:
@@ -86,6 +94,8 @@ def locate(path: str) -> Location:
     parts = pure.parts
     if pure.is_absolute() or ".." in parts or not parts or pure.suffix != ".md" or pure.name == INDEX_NAME:
         raise Refused(f"{path!r} is not a memory path.")
+    if len(parts) == 6 and parts[0] == "projects" and parts[2] == "shared" and parts[3] == FOUNDATIONS_FOLDER:
+        return Location(pure, "project", None, parts[1], None, foundation=parts[4])
     if parts[0] == "team" and len(parts) in (3, 4):
         level: Level = "team"
         project_id = member_id = None
@@ -151,6 +161,11 @@ def level_folder(level: Level, kind: str, project_id: str | None = None, member_
         return PurePosixPath("projects", project_id, "shared", type_folder(kind))
     assert member_id is not None
     return PurePosixPath("projects", project_id, "people", member_id, type_folder(kind))
+
+
+def foundation_folder(project_id: str, foundation: str) -> PurePosixPath:
+    """The topic folder of one of a project's foundations."""
+    return PurePosixPath("projects", project_id, "shared", FOUNDATIONS_FOLDER, foundation)
 
 
 def type_folder(kind: str) -> str:

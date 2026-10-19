@@ -55,6 +55,7 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
         "path": str(path),
         "level": location.level,
         "project_id": location.project_id,
+        "foundation": location.foundation,
         "title": memory.title,
         "summary": memory.summary,
         "type": memory.type,
@@ -230,6 +231,7 @@ class MemoryService:
                     "title": m.title,
                     "summary": m.summary,
                     "type": m.type,
+                    "foundation": locate(str(path)).foundation,
                     "status": m.status,
                     "author": m.author,
                     "pending": pending[str(path)],
@@ -262,7 +264,13 @@ class MemoryService:
             {
                 "folder": str(folder),
                 "memories": [
-                    {"path": str(path), "title": m.title, "summary": m.summary, "pending": pending[str(path)]}
+                    {
+                        "path": str(path),
+                        "title": m.title,
+                        "summary": m.summary,
+                        "foundation": locate(str(path)).foundation,
+                        "pending": pending[str(path)],
+                    }
                     for path, m in memories
                 ],
             }
@@ -337,6 +345,7 @@ class MemoryService:
                     "heading": sections[hit.section_no][0] if hit.section_no < len(sections) else memory.title,
                     "level": hit.level,
                     "type": hit.type,
+                    "foundation": locate(hit.path).foundation,
                     "author": hit.author,
                     "summary": memory.summary,
                     "label": label(caller, hit.level, hit.member_id),

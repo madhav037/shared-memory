@@ -40,7 +40,7 @@ TOPIC = "How the billing service settles a charge with the card networks"
 LONG = {
     "title": "Settlement batches close at midnight in the merchant's own time zone",
     "summary": "A settlement batch closes at the merchant's midnight.",
-    "type": "architecture",
+    "type": "convention",
     "body": "Each merchant's settlement batch closes at midnight in that merchant's own time zone, never in UTC.",
     "topic": TOPIC,
 }
