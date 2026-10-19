@@ -248,7 +248,7 @@ class Challenges:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation,"
-                " reasoning FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
+                " reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
                 (caller.team, caller.member_id),
             ).fetchall()
         return [
@@ -263,6 +263,7 @@ class Challenges:
                 "decided_at": row["decided_at"],
                 "explanation": row["explanation"],
                 "reasoning": row["reasoning"],
+                "foundation": row["foundation"],
             }
             for row in rows
         ]

@@ -46,7 +46,7 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenges, Waiting, project_of
+from shared_memory.challenges import Challenge, Challenges, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
@@ -814,7 +814,7 @@ class ConsoleApi:
     def _challenge_list(self, caller: Caller) -> ChallengeList:
         waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
         raised = [
-            RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
+            RaisedChallenge(**one, target_title=self._target(caller, one["kind"], one["foundation"], one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
         return ChallengeList(waiting=waiting, raised=raised)
@@ -829,9 +829,27 @@ class ConsoleApi:
             raised_at=challenge.raised_at,
             yours=waiting.decides_as == "author",
             decides_as=waiting.decides_as,
-            target=self._side(caller, challenge.target_path),
+            foundation=challenge.foundation,
+            foundation_name=self._foundation_named(challenge),
+            target=self._target(caller, challenge.kind, challenge.foundation, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,
+        )
+
+    def _foundation_named(self, challenge: Challenge) -> str | None:
+        project_id = project_of(challenge)
+        if challenge.foundation is None or project_id is None:
+            return challenge.foundation
+        return self._identity.foundation_name(project_id, challenge.foundation)
+
+    def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:
+        """What a challenge is against: a memory, or for an "add" the foundation whose folder the path is."""
+        if kind != "add" or foundation is None:
+            return self._side(caller, path)
+        parts = path.split("/")
+        name = self._identity.foundation_name(parts[1], foundation) if parts[0] == "projects" else foundation
+        return ChallengedMemory(
+            path=path, title=name, summary="", body="", level="project", type="", author="", status="foundation"
         )
 
     def _side(self, caller: Caller, path: str) -> ChallengedMemory:
