@@ -450,14 +450,15 @@
   line-height: 1.5;
   color: var(--ink-2);
 }
-.lp-wipe {
+.lp-wipe > span {
+  display: block;
   clip-path: inset(0 0 100% 0);
   transform: translateY(24px);
   transition:
     clip-path 900ms var(--ease),
     transform 900ms var(--ease);
 }
-.lp-wipe.in {
+.lp-wipe.in > span {
   clip-path: inset(0 0 -10% 0);
   transform: none;
 }
@@ -1540,7 +1541,7 @@
 /* Reduced motion: every scene shows its last frame and nothing loops. */
 @media (prefers-reduced-motion: reduce) {
   .lp-hero h1 .lp-line > span,
-  .lp-wipe,
+  .lp-wipe > span,
   .lp-level {
     opacity: 1;
     clip-path: none;
