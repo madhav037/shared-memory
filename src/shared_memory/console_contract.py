@@ -245,6 +245,10 @@ class ChallengeDetail(BaseModel):
     # Whether the challenged memory is this member's own, and in what capacity the challenge is theirs to decide.
     yours: bool
     decides_as: DecidesAs
+    # The foundation (slug and name) the challenge is about, when it is one. An "add" challenge has no challenged
+    # memory: its target stands for the foundation, and the challenger is the memory to add.
+    foundation: str | None
+    foundation_name: str | None
     target: ChallengedMemory
     challenger: ChallengedMemory | None
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
@@ -259,6 +263,7 @@ class RaisedChallenge(BaseModel):
     target_path: str
     target_title: str
     challenger_path: str | None
+    foundation: str | None
     raised_at: datetime
     state: str
     decided_by: str | None

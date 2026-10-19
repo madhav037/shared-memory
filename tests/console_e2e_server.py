@@ -137,7 +137,7 @@ if __name__ == "__main__":
             {
                 "title": "How Billing is built",
                 "summary": "The stack Billing runs on.",
-                "type": "decision",
+                "type": "gotcha",
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: RabbitMQ",
             },
         )
@@ -146,7 +146,7 @@ if __name__ == "__main__":
             {
                 "title": "How Billing is built now",
                 "summary": "The stack Billing runs on since the queue moved.",
-                "type": "decision",
+                "type": "gotcha",
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: Kafka",
             },
             stack,
@@ -203,6 +203,32 @@ if __name__ == "__main__":
             reports,
             reasoning="Finance starts an hour earlier since June.",
         )
+        # A foundation challenge for its journey, in a project of its own that only Tess leads: Kai keeps the Product
+        # foundation, and Nell asks for a memory of hers to join it. Neither Olive (an admin, but foundations are
+        # decided by their keepers and leads) nor any member another journey signs in as has it waiting.
+        tess = Session(
+            server, owner.call("add_member", member_id="emp-tess", name="Tess Treasurer")["personal_token"]
+        )
+        treasury = tess.call("create_project", name="Treasury", repository="treasury-api")["project_id"]
+        owner.call("add_member", member_id="emp-kai", name="Kai Keeper", github="kai")
+        nell = Session(
+            server, owner.call("add_member", member_id="emp-nell", name="Nell Raiser")["personal_token"]
+        ).in_project(treasury, "treasury-api")
+        settlement = promote_now(
+            nell,
+            {
+                "title": "Settlements close at 17:00 UTC",
+                "summary": "Every settlement batch closes at 17:00 UTC.",
+                "type": "convention",
+                "body": "Every settlement batch closes at 17:00 UTC; anything later waits for the next day's batch.",
+            },
+        )
+        nell.call(
+            "add_to_foundation",
+            path=settlement,
+            foundation="product",
+            reasoning="Settlement timing is a product rule that finance and support both rely on.",
+        )
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
         outdated = promote_now(
@@ -248,6 +274,13 @@ if __name__ == "__main__":
         in_project.call("update_card", number=4, column="done")
         in_project.call("update_card", number=5, column="done")
         with psycopg.connect(settings.database_url, autocommit=True) as conn:
+            # Kai keeps Treasury's Product foundation, as a lead assigning him in the console would have made him.
+            conn.execute(
+                "INSERT INTO foundation_keepers (project_id, foundation, member_id, assigned_by, assigned_at)"
+                " SELECT %s, 'product', kai.id, tess.id, now() FROM members kai, members tess"
+                " WHERE kai.member_id = 'emp-kai' AND tess.member_id = 'emp-tess'",
+                (treasury,),
+            )
             # Done three weeks before the journeys' clock, which never moves: the only way a card reaches the archive.
             conn.execute(
                 "UPDATE cards SET moved_at = moved_at - interval '21 days' WHERE project_id = %s AND number = 5",

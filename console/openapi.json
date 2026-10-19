@@ -4249,6 +4249,28 @@
             "title": "Decides As",
             "type": "string"
           },
+          "foundation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foundation"
+          },
+          "foundation_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foundation Name"
+          },
           "target": {
             "$ref": "#/components/schemas/ChallengedMemory"
           },
@@ -4282,6 +4304,8 @@
           "raised_at",
           "yours",
           "decides_as",
+          "foundation",
+          "foundation_name",
           "target",
           "challenger",
           "reasoning"
@@ -4368,6 +4392,17 @@
             ],
             "title": "Challenger Path"
           },
+          "foundation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Foundation"
+          },
           "raised_at": {
             "format": "date-time",
             "title": "Raised At",
@@ -4429,6 +4464,7 @@
           "target_path",
           "target_title",
           "challenger_path",
+          "foundation",
           "raised_at",
           "state",
           "decided_by",

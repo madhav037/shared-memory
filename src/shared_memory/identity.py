@@ -806,6 +806,12 @@ class Identity:
         ).fetchall()
         return listed + [(row["slug"], row["name"], False) for row in rows]
 
+    def foundation_name(self, project_id: str, slug: str) -> str:
+        """What a project calls one of its foundations; its slug, capitalised, when it is gone."""
+        with self._db.transaction() as conn:
+            named = {one: name for one, name, _ in self._foundations_listed(conn, project_id)}
+        return named.get(slug, slug.capitalize())
+
     def foundations_of(self, project_id: str) -> list[str]:
         """The slugs of a project's foundations, core and extra."""
         with self._db.transaction() as conn:

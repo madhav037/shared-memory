@@ -1837,6 +1837,10 @@ export interface components {
              * @enum {string}
              */
             decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left";
+            /** Foundation */
+            foundation: string | null;
+            /** Foundation Name */
+            foundation_name: string | null;
             target: components["schemas"]["ChallengedMemory"];
             challenger: components["schemas"]["ChallengedMemory"] | null;
             /** Reasoning */
@@ -1879,6 +1883,8 @@ export interface components {
             target_title: string;
             /** Challenger Path */
             challenger_path: string | null;
+            /** Foundation */
+            foundation: string | null;
             /**
              * Raised At
              * Format: date-time
