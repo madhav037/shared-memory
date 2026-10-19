@@ -49,17 +49,35 @@ Call `remember` for each approved proposal; every one lands first as this member
 
 **Done when** every approved proposal has a memory path, or a refusal the member has been told about.
 
-## 5. Promote what the member approved, one at a time
+## 5. Map repository documents onto foundations
+
+A project's **foundations** hold its sources of truth: `architecture`, `product`, `glossary` and `decisions`, and any extra a project lead added (the briefing's foundations line names them). Map each approved repository-document proposal bound for `project` level onto one, and show the member the mapping:
+
+- `ARCHITECTURE.md` and the like: `architecture`. ADRs and `docs/adr/`: `decisions`. `PRODUCT.md` and a vision or requirements document: `product`. `CONTEXT.md` or a glossary: `glossary`. A document that fits no foundation stays a plain project memory.
+- The `architecture` foundation takes only `architecture` memories, and `decisions` only `decision` memories; the others take any type except a known issue, so retype a proposal that doesn't fit, with the member's say.
+
+**Done when** every such proposal has a foundation or is marked as plain project memory.
+
+## 6. Promote what the member approved, one at a time
 
 Take the memories approved for `project` or `team` level in turn, and finish each `promote` before starting the next, so the similar-memory check runs on every one.
 
 - **A single writer with a GitHub username**: call `promote` with `author="@<username>"` and `imported_from="<source>"`. That member becomes the author, this member is recorded as its importer, and the author is told in their next briefing. If the server answers that they are not a member or can't reach this project, add the `Originally written by` line with `edit_memory` and promote without `author` and `imported_from`.
 - **No single writer**: call `promote` with the path and level alone.
+- **A foundation was mapped**: also pass `foundation` on every call of that promotion; an `architecture` or `decision` memory goes to its foundation without it.
 - **`similar_memories` comes back**: judge whether each similar memory contradicts this one, show the member each with your judgement, and call `promote` again with the `reference` and their `resolutions`. A memory that turns out to repeat an existing one is `cancel`; offer to `delete_memory` it.
-- **`challenge_raised` comes back**: tell the member whose decision it waits on. The memory stays personal until then.
+- **`challenge_raised` comes back**: tell the member whose decision it waits on. The memory stays personal until then. A member who is neither a keeper of the foundation nor a project lead always gets one for a foundation, a foundation challenge a keeper or lead decides.
 
 **Done when** every memory approved for project or team level is promoted, waiting on a challenge, or cancelled on the member's word.
 
-## 6. Report
+## 7. Replace imported files with pointers
 
-Tell the member what was promoted to project and to team memory and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in the repository or in your local memory. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.
+Once a repository document's passages are all in a foundation, its file duplicates it and will drift. **Ask the member first**, listing each file you would replace, and change nothing without their yes. Where they agree, replace the file's whole content with a short pointer, in this wording:
+
+> This document now lives in Shared Memory, in the `<foundation>` foundation of the project `<project>`. Read it with Shared Memory: `read` the foundation's index (`projects/<project>/shared/foundations/<foundation>/index.md`) or `search` for it; the briefing names the foundations. Edit it there, not here.
+
+Leave a file alone when any of its passages is still waiting on a foundation challenge or was left out: the pointer would hide what is not yet in the foundation. **Done when** every file the member agreed to is replaced, and the rest are listed with the reason.
+
+## 8. Report
+
+Tell the member what was promoted to project and to team memory and to which foundation and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in the repository or in your local memory, except the pointers the member approved in step 7. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.

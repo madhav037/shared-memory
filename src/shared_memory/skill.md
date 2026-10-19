@@ -86,7 +86,13 @@ If the member chooses **supersede** for a memory someone else wrote, it is not s
 
 When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge, decided as any challenge is. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
 
-To bring an existing project memory into a foundation, call `add_to_foundation` with its path and the foundation. A keeper of that foundation or a lead of the project moves it at once; anyone else raises a challenge they decide, and the memory stays where it is until then.
+## Foundations
+
+A **foundation** is a topic every project has, holding one of its sources of truth: architecture, product, glossary or decisions, and any extra a project lead adds with `add_foundation`. At project level, `architecture` and `decision` memories live only in their foundation, and a foundation outweighs other project and team memory. The briefing's foundations line names them, and says which are missing.
+
+- A **keeper** is a member a project lead assigns to a foundation. With the project's leads, keepers draft it and decide its **foundation challenges**.
+- Pass `foundation` to `promote` to put a memory in one. A keeper's or lead's change lands at once; anyone else's raises a foundation challenge, and the memory stays personal until it is decided.
+- `add_to_foundation` (path and foundation) brings in a project memory that sits outside any foundation, the same way.
 
 ## The board
 
