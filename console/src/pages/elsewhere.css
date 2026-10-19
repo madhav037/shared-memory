@@ -1,0 +1,189 @@
+/* ---------- Coming soon, and not found: the pages for addresses that lead nowhere yet ---------- */
+
+.lp-elsewhere {
+  --night: #111415;
+  --night-2: #1b1f21;
+  --night-3: #2a2f31;
+  --night-ink: #eef1f2;
+  --night-ink-2: #aeb6ba;
+  --glow: #4cc38a;
+  position: relative;
+  overflow: hidden;
+  min-height: calc(100vh - var(--masthead) - 4px);
+  display: grid;
+  align-content: center;
+  padding: 72px 56px 104px;
+  background: var(--night);
+  color: var(--night-ink);
+}
+.lp-elsewhere::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, #ffffff14 1px, transparent 0);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 75%);
+  pointer-events: none;
+}
+.lp-elsewhere-inner {
+  position: relative;
+  width: min(880px, 100%);
+}
+.lp-elsewhere h1 {
+  margin: 0;
+  font: 700 clamp(3rem, 8vw, 6.5rem) / 0.94 var(--sans);
+  letter-spacing: -0.045em;
+  color: var(--night-ink);
+  text-wrap: balance;
+}
+.lp-elsewhere h1 em {
+  font-style: normal;
+  color: var(--glow);
+}
+.lp-elsewhere .lead {
+  max-width: 50ch;
+  margin: 26px 0 0;
+  font-size: 1.3125rem;
+  line-height: 1.5;
+  color: var(--night-ink);
+}
+.lp-elsewhere .then {
+  max-width: 56ch;
+  margin: 14px 0 34px;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  color: var(--night-ink-2);
+}
+.lp-elsewhere code {
+  padding: 2px 6px;
+  background: var(--night-3);
+  color: var(--night-ink);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.lp-elsewhere .lp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 16px;
+}
+
+/* Coming soon: fifteen seats filling up, one after another, over and over. */
+.lp-filling {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  gap: 6px;
+  width: min(420px, 100%);
+  margin-bottom: 40px;
+}
+.lp-filling i {
+  aspect-ratio: 1;
+  background: var(--night-3);
+  animation: lp-fill 3.6s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 120ms);
+}
+@keyframes lp-fill {
+  0%,
+  8% {
+    background: var(--night-3);
+    transform: none;
+  }
+  20%,
+  70% {
+    background: var(--glow);
+    transform: translateY(-4px);
+  }
+  85%,
+  100% {
+    background: var(--night-3);
+    transform: none;
+  }
+}
+
+/* Not found: 4, a turning square, 4. */
+.lp-code {
+  display: flex;
+  align-items: center;
+  gap: 0.08em;
+  margin-bottom: 28px;
+  font: 700 clamp(5rem, 16vw, 12rem) / 0.8 var(--sans);
+  letter-spacing: -0.05em;
+  color: var(--night-ink);
+}
+.lp-code span {
+  display: inline-block;
+  animation: lp-drop 800ms var(--ease) both;
+}
+.lp-code span:nth-child(2) {
+  animation-delay: 90ms;
+}
+.lp-code span:nth-child(3) {
+  animation-delay: 180ms;
+}
+.lp-code .square {
+  width: 0.62em;
+  height: 0.62em;
+  margin: 0 0.06em;
+  border: 0.09em solid var(--glow);
+  animation:
+    lp-drop 800ms 90ms var(--ease) both,
+    lp-turn 6s linear 900ms infinite;
+}
+@keyframes lp-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+}
+@keyframes lp-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Inside the signed-in console the page sits in the reading column, so it keeps the column's paper. */
+.lp-elsewhere.in-console {
+  min-height: 0;
+  padding: 24px 0 64px;
+  background: none;
+  color: var(--ink);
+}
+.lp-elsewhere.in-console::before {
+  display: none;
+}
+.lp-elsewhere.in-console h1,
+.lp-elsewhere.in-console .lead,
+.lp-elsewhere.in-console .lp-code {
+  color: var(--ink);
+}
+.lp-elsewhere.in-console .then {
+  color: var(--ink-2);
+}
+.lp-elsewhere.in-console code {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.lp-elsewhere.in-console .lp-code .square {
+  border-color: var(--accent);
+}
+.lp-elsewhere.in-console .lp-filling i {
+  background: var(--rule-soft);
+}
+
+@media (max-width: 640px) {
+  .lp-elsewhere {
+    padding: 48px 16px 72px;
+  }
+  .lp-elsewhere.in-console {
+    padding: 16px 0 48px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-filling i,
+  .lp-code span,
+  .lp-code .square {
+    animation: none;
+  }
+  .lp-filling i:nth-child(-n + 9) {
+    background: var(--glow);
+  }
+}

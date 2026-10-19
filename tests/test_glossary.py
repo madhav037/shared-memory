@@ -79,6 +79,7 @@ ALLOWED: tuple[Allow, ...] = (
             SERVER + "identity.py",
             "console/src/App.tsx",
             PAGES + "AuditLog.tsx",
+            PAGES + "Landing.tsx",
             PAGES + "ProjectSettings.tsx",
             PAGES + "Team.tsx",
         ),
@@ -135,6 +136,16 @@ ALLOWED: tuple[Allow, ...] = (
         "collision",
         "two sessions on the same work, the glossary's Collision; avoided only for a contradiction between memories",
         (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py"),
+    ),
+    Allow(
+        "collision",
+        "the landing page's example of two sessions reaching for one file, the glossary's Collision",
+        (PAGES + "Landing.tsx",),
+    ),
+    Allow(
+        "lock",
+        "the landing page's example of a session's lock on a file, the glossary's Lock",
+        (PAGES + "Landing.tsx",),
     ),
     Allow(
         "activity",

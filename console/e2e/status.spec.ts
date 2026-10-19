@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("the console shows that it reached the server and offers to sign in", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Shared Memory" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("What one agent learns, every agent knows.");
   await expect(page.getByTestId("status")).toContainText(/connected to the server/i);
   await expect(page.getByTestId("sign-in")).toBeVisible();
 });
