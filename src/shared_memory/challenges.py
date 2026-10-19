@@ -34,10 +34,12 @@ CREATE TABLE IF NOT EXISTS challenges (
     decided_by TEXT,
     decided_at TIMESTAMPTZ,
     explanation TEXT,
-    reasoning TEXT
+    reasoning TEXT,
+    foundation TEXT
 );
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS promoted_by TEXT;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reasoning TEXT;
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS foundation TEXT;
 
 CREATE TABLE IF NOT EXISTS notices (
     id BIGSERIAL PRIMARY KEY,
@@ -62,6 +64,9 @@ class Challenge:
     promoted_by: str | None
     raised_at: datetime
     reasoning: str | None
+    # The foundation (ADR-0019) a challenge is about: its lead decides it. A kind "add" challenge has no challenged
+    # memory, so its target_path is the foundation's folder.
+    foundation: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Challenge:
@@ -76,6 +81,7 @@ class Challenge:
             row["promoted_by"],
             row["raised_at"],
             row["reasoning"],
+            row.get("foundation"),
         )
 
 
@@ -131,21 +137,24 @@ class Challenges:
         challenger_path: str | None = None,
         promoted_by: str | None = None,
         reasoning: str | None = None,
+        foundation: str | None = None,
     ) -> int:
         with self._db.transaction() as conn:
             row = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, challenger_path, level, raised_by,"
-                " promoted_by, raised_at, state, reasoning) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s)"
+                " promoted_by, raised_at, state, reasoning, foundation) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)"
                 " RETURNING id",
                 (
                     caller.team, kind, target_path, target_author, challenger_path, level, caller.member_id,
-                    promoted_by, self._clock(), reasoning,
+                    promoted_by, self._clock(), reasoning, foundation,
                 ),  # fmt: skip
             ).fetchone()
         assert row is not None
         challenge_id: int = row["id"]
+        about = {} if foundation is None else {"foundation": foundation}
         self._audit.memory(
-            caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author
+            caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author,
+            **about,
         )
         return challenge_id
 
@@ -266,7 +275,14 @@ class Challenges:
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
         the team's admins, unless they raised the challenge themselves; team memory has no project, so only admins
         stand there. Once the author has left, or after the fallback period, any member may.
+
+        A foundation challenge is the exception: only a lead of the project it is in decides it, and never whoever
+        raised it. No author, admin or fallback standing applies.
         """
+        if challenge.foundation is not None:
+            if challenge.raised_by != caller.member_id and self._leads_the_challenged(caller, challenge):
+                return "lead"
+            return None
         if challenge.target_author == caller.member_id:
             return "author"
         if challenge.raised_by != caller.member_id:
@@ -291,6 +307,16 @@ class Challenges:
         decides_as = self.decides_as(caller, challenge)
         if decides_as is not None:
             return decides_as
+        if challenge.foundation is not None:
+            if challenge.raised_by == caller.member_id:
+                raise Refused(
+                    f"You raised challenge {challenge.id}, so you can't decide it. A lead of the project decides a "
+                    f"challenge to the {challenge.foundation} foundation."
+                )
+            raise Refused(
+                f"Only a lead of the project decides a challenge to the {challenge.foundation} foundation: not its "
+                "author, not an admin who isn't a lead, and not any member however long it has been open."
+            )
         days = self._settings.challenge_fallback_days
         in_project = project_in(challenge.target_path) is not None
         if challenge.raised_by == caller.member_id and (
@@ -311,7 +337,7 @@ class Challenges:
     def tell_author(self, caller: Caller, challenge: Challenge, decides_as: DecidesAs, decision: str) -> None:
         """Tell the challenged memory's author that someone else decided a challenge against it, and in what
         capacity. An author who decided it themselves, or who has left, is told nothing."""
-        if decides_as in ("author", "author_left"):
+        if decides_as in ("author", "author_left") or challenge.target_author == challenge.raised_by:
             return
         if decision == "rejected":
             outcome = "your memory stands as it is"
@@ -344,7 +370,9 @@ class Challenges:
     def prompt_notices(self, caller: Caller) -> str | None:
         """Challenges against the member's memories not yet shown on a prompt (with the others against the same
         memory), and news not yet delivered."""
-        mine = [c for c in self.open_challenges(caller.team) if c.target_author == caller.member_id]
+        mine = [
+            c for c in self.open_challenges(caller.team) if c.target_author == caller.member_id and c.foundation is None
+        ]
         with self._db.transaction() as conn:
             fresh_targets = {
                 row["target_path"]
@@ -363,25 +391,38 @@ class Challenges:
         return f"<shared-memory-notices>\n{text}\n</shared-memory-notices>" if text else None
 
     def _render(self, caller: Caller, waiting: list[Waiting]) -> str | None:
+        ordinary = [one for one in waiting if one.challenge.foundation is None]
+        foundations = [one for one in waiting if one.challenge.foundation is not None]
+        parts = [
+            self._render_group(caller, ordinary, "[challenges waiting for your decision]"),
+            self._render_group(caller, foundations, "[foundation challenges waiting for your decision]"),
+        ]
+        return "\n\n".join(part for part in parts if part) or None
+
+    def _render_group(self, caller: Caller, waiting: list[Waiting], heading: str) -> str | None:
         if not waiting:
             return None
-        lines = ["[challenges waiting for your decision]"]
+        lines = [heading]
         for target_path in dict.fromkeys(one.challenge.target_path for one in waiting):
-            lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
+            first = next(one.challenge for one in waiting if one.challenge.target_path == target_path)
+            if first.foundation is not None and first.kind == "add":
+                lines.append(f"The {first.foundation} foundation ({target_path}):")
+            elif first.foundation is not None:
+                lines.append(f"{self._title(caller.team, target_path)} ({target_path}), in the {first.foundation} foundation:")
+            else:
+                lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
             for one in (one for one in waiting if one.challenge.target_path == target_path):
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
                 whose = "" if one.decides_as == "author" else f", yours to decide {self._capacity(one.decides_as)}"
-                if c.challenger_path is None:
+                if c.kind == "add":
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c)} to the {c.foundation} foundation"
+                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                elif c.challenger_path is None:
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: retire it"
                     line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 else:
-                    try:
-                        challenger = self._store.read(caller.team, PurePosixPath(c.challenger_path))
-                        replacement = f'"{challenger.title}" ({c.challenger_path}): {challenger.summary}'
-                    except Refused:
-                        replacement = c.challenger_path
-                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: supersede it with {replacement}"
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: supersede it with {self._replacement(caller, c)}"
                     if c.reasoning:
                         line += f" — reasoning: {c.reasoning}"
                 lines.append(line)
@@ -391,6 +432,15 @@ class Challenges:
             "told who decided and in what capacity."
         )
         return "\n".join(lines)
+
+    def _replacement(self, caller: Caller, challenge: Challenge) -> str:
+        """The challenging memory, titled and summarised when it can still be read."""
+        assert challenge.challenger_path is not None
+        try:
+            challenger = self._store.read(caller.team, PurePosixPath(challenge.challenger_path))
+        except Refused:
+            return challenge.challenger_path
+        return f'"{challenger.title}" ({challenge.challenger_path}): {challenger.summary}'
 
     def _title(self, team: str, path: str) -> str:
         try:

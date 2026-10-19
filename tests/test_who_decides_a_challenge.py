@@ -186,3 +186,49 @@ def test_an_author_who_decides_their_own_challenge_is_told_nothing_more(owner: S
     owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
 
     assert "shared memory news" not in news(owner)
+
+
+# A foundation challenge (ADR-0019) is decided by a lead of its project and nobody else.
+
+FOUNDATION_HEADING = "[foundation challenges waiting for your decision]"
+SERVICES = {
+    "title": "Billing runs as three services",
+    "summary": "Billing is an API, a ledger worker and a webhook relay.",
+    "type": "architecture",
+    "body": "Billing is three services: the API takes requests, the ledger worker writes entries, and the relay "
+    "delivers webhooks.",
+}
+
+
+def an_add(eve: Session) -> int:
+    personal = eve.call("remember", **SERVICES)["path"]
+    raised = eve.call("promote", path=personal, level="project")
+    assert raised["status"] == "challenge_raised", raised
+    return int(raised["challenge_id"])
+
+
+def test_an_admin_who_doesnt_lead_the_project_cant_decide_a_foundation_challenge_but_its_lead_can(
+    team: Team, dana: Session
+) -> None:
+    lead, _, eve, admin = payments(team, dana)
+    challenge_id = an_add(eve)
+
+    refusal = admin.refusal("decide_challenge", challenge_id=challenge_id, decision="accept")
+    accepted = lead.call("decide_challenge", challenge_id=challenge_id, decision="accept")
+
+    assert "lead of the project" in refusal
+    assert FOUNDATION_HEADING not in news(admin)
+    assert accepted["status"] == "accepted"
+    assert "/foundations/architecture/" in accepted["path"]
+
+
+def test_nobody_else_decides_a_foundation_challenge_once_the_fallback_has_passed(team: Team, dana: Session) -> None:
+    lead, cole, eve, _ = payments(team, dana)
+    challenge_id = an_add(eve)
+
+    team.server.clock.advance(days=4)
+    refusal = cole.refusal("decide_challenge", challenge_id=challenge_id, decision="accept")
+
+    assert "lead of the project" in refusal
+    assert FOUNDATION_HEADING not in news(cole)
+    assert FOUNDATION_HEADING in news(lead)
