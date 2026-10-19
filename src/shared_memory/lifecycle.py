@@ -393,6 +393,46 @@ class Lifecycle:
             )
         self._identity.remove_foundation(caller, project_id, slug)
 
+    def foundation_lines(self, caller: Caller) -> list[str]:
+        """What the briefing says of the project's foundations: every session is told which there are; a lead or a keeper
+        is also told which are missing and how many architecture and decision memories sit outside their foundation."""
+        project = caller.project
+        if project is None or project.project_id in caller.unreachable:
+            return []
+        slugs = self._identity.foundations_of(project.project_id)
+        lines = [f"[foundations] Foundations: {', '.join(slugs)}. Read the one covering your change first, and follow it."]
+        if not (self._leads(caller, project) or self._identity.keeps_any(caller.member, project.project_id)):
+            return lines
+        asked = {one.foundation for one in self._challenges.open_challenges(caller.team) if one.kind == "add"}
+        missing = [
+            slug
+            for slug in slugs
+            if slug not in asked
+            and not any(
+                memory.status == "active"
+                for _, memories in self._store.walk(caller.team, foundation_folder(project.project_id, slug))
+                for _, memory in memories
+            )
+        ]
+        if missing:
+            lines.append(
+                f"[foundations missing] No active memory yet in: {', '.join(missing)}. Draft each from the code and "
+                "promote it with foundation."
+            )
+        outside = sum(
+            1
+            for kind in ("architecture", "decision")
+            for _, memories in self._store.walk(caller.team, level_folder("project", kind, project.project_id))
+            for _, memory in memories
+            if memory.status == "active" and memory.type == kind
+        )
+        if outside:
+            lines.append(
+                f"[foundations outside] {outside} architecture and decision memor{'y' if outside == 1 else 'ies'} "
+                "sit outside their foundation: add_to_foundation brings each in."
+            )
+        return lines
+
     def _leads(self, caller: Caller, project: Project) -> bool:
         return project.project_id in self._identity.leads_of(caller.member)
 

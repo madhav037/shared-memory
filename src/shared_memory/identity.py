@@ -797,6 +797,14 @@ class Identity:
             ).fetchone()
         return found is not None
 
+    def keeps_any(self, member: Member, project_id: str) -> bool:
+        """Whether this member keeps at least one foundation of the project."""
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT 1 FROM foundation_keepers WHERE project_id = %s AND member_id = %s LIMIT 1", (project_id, member.pk)
+            ).fetchone()
+        return found is not None
+
     @staticmethod
     def _foundations_listed(conn: Conn, project_id: str) -> list[tuple[str, str, bool]]:
         """A project's foundations as (slug, name, whether core): the core four, then its extras in the order added."""
