@@ -303,8 +303,9 @@ function useCounted(target: number): number {
 function Heading({ children }: { children: ReactNode }) {
   const [ref, seen] = useSeen<HTMLHeadingElement>();
   return (
+    // The heading is watched and only its words are clipped: a heading clipped away entirely never counts as seen.
     <h2 ref={ref} className={seen ? "lp-wipe in" : "lp-wipe"}>
-      {children}
+      <span>{children}</span>
     </h2>
   );
 }

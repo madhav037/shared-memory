@@ -51,3 +51,11 @@ test("the landing page's address tells search engines and link previews what Sha
   const graph = JSON.parse(described![1]!)["@graph"] as { "@type": string; name: string }[];
   expect(graph.map((thing) => thing["@type"])).toEqual(["Organization", "SoftwareApplication"]);
 });
+
+test("a section's heading wipes into view once the visitor scrolls to it", async ({ page }) => {
+  await page.goto("/");
+
+  const heading = page.locator("#how h2");
+  await heading.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await expect(heading).toHaveClass(/\bin\b/);
+});
