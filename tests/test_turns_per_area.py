@@ -128,7 +128,7 @@ def test_saves_into_the_same_project_memory_still_take_turns(
     sessions = split(members(team, project, 3), elsewhere)
     subjects = ["Kafka topic naming", "Terraform state locking", "Pixel density of icons"]
     personal = [
-        session.call("remember", **note(subject, f"{subject} is settled: {word()}.", type="architecture"))
+        session.call("remember", **note(subject, f"{subject} is settled: {word()}.", type="convention"))
         for session, subject in zip(sessions, subjects)
     ]
     slow_turns()
