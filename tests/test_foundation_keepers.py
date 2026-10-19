@@ -2,45 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from tests.support import Console, ConsoleClient, Session, add, added_context, create, fetch_project, signed_in_owner
-from tests.test_console_projects import signed_in_member
-from tests.test_foundations import (
+from tests.support import (
     CENTS,
     FOUNDATION_HEADING,
     INVOICE,
     SERVICES,
     SERVICES_TWO,
+    Console,
+    ConsoleClient,
+    Crew,
+    Session,
+    added_context,
+    create,
+    fetch_project,
+    keepers,
     promote,
+    signed_in_owner,
     supersede,
 )
-
-
-class Crew:
-    """A project led by the console's owner, with a keeper-to-be (Kit), a raiser (Rae) and a bystander (Bea)."""
-
-    def __init__(self, console: Console, client: ConsoleClient, account: int) -> None:
-        self.client = client
-        owner = signed_in_owner(console, client, f"olive-keepers-{account}", account)
-        self.project: str = owner.call("create_project", name="Billing")["project_id"]
-        self.owner = owner.in_project(self.project, "billing-api")
-        self.kit = self._add(console, "emp-kit", "Kit Keeper")
-        self.rae = self._add(console, "emp-rae", "Rae Raiser")
-        self.bea = self._add(console, "emp-bea", "Bea Bystander")
-
-    def _add(self, console: Console, member_id: str, name: str) -> Session:
-        token = add(self.client, member_id, name)["personal_token"]
-        return Session(console.server, token, self.project, "billing-api")
-
-    def assign(self, member_id: str, foundation: str = "architecture") -> Any:
-        where = f"/api/projects/{self.project}/foundations/{foundation}/keepers"
-        return self.client.post_json(where, {"member_id": member_id})
-
-
-def keepers(project: dict[str, Any], foundation: str) -> list[str]:
-    (found,) = [one for one in project["foundations"] if one["slug"] == foundation]
-    return [keeper["member_id"] for keeper in found["keepers"]]
+from tests.test_console_projects import signed_in_member
 
 
 def briefing(session: Session) -> str:

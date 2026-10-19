@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from tests.support import Console, ConsoleClient, Session
-from tests.test_foundation_keepers import Crew
-from tests.test_foundations import BUG, CENTS, INVOICE, SERVICES, promote
+from tests.support import BUG, CENTS, INVOICE, SERVICES, Console, ConsoleClient, Crew, Session, promote
 
 
 def project_memory(session: Session, memory: dict[str, str]) -> str:

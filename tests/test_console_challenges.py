@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
-from tests.test_foundation_keepers import Crew
-from tests.test_foundations import INVOICE, SERVICES, SERVICES_TWO, promote, supersede
+from tests.support import (
+    INVOICE,
+    SERVICES,
+    SERVICES_TWO,
+    Console,
+    ConsoleClient,
+    Crew,
+    Session,
+    add,
+    ask,
+    promote,
+    signed_in_owner,
+    supersede,
+)
 
 
 def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:

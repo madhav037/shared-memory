@@ -4,56 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Session, Team, added_context
-
-SERVICES = {
-    "title": "Billing runs as three services",
-    "summary": "Billing is an API, a ledger worker and a webhook relay.",
-    "type": "architecture",
-    "body": "Billing is three services: the API takes requests, the ledger worker writes entries, and the relay "
-    "delivers webhooks.",
-}
-POSTGRES = {
-    "title": "Postgres is the only database",
-    "summary": "We chose Postgres over Mongo for every service.",
-    "type": "decision",
-    "body": "Every service stores its data in Postgres. We chose it over Mongo because ledgers need transactions.",
-}
-CENTS = {
-    "title": "Money amounts",
-    "summary": "Money is integer cents.",
-    "type": "convention",
-    "body": "All money amounts are stored as integer cents, never floats.",
-}
-INVOICE = {
-    "title": "Invoice",
-    "summary": "An invoice is a request for payment sent to a customer.",
-    "type": "convention",
-    "body": "An invoice is the document asking a customer to pay for what they bought.",
-}
-BUG = {
-    "title": "Refunds hang",
-    "summary": "Refunds over 10k hang in the ledger worker.",
-    "body": "Refunds above 10000 cents hang in the ledger worker.\n\nWorkaround: split the refund in two.",
-}
-
-
-def remember(session: Session, memory: dict[str, str]) -> str:
-    path: str = session.call("remember", **memory)["path"]
-    return path
-
-
-def promote(session: Session, memory: dict[str, str], level: str = "project", **extra: Any) -> dict[str, Any]:
-    """Promote a memory, keeping both of any similar memory it is shown, so a test of where it lands isn't one of
-    contradictions."""
-    personal = remember(session, memory)
-    result: dict[str, Any] = session.call("promote", path=personal, level=level, **extra)
-    if result["status"] == "similar_memories":
-        keep_both = {similar["path"]: "keep_both" for similar in result["similar"]}
-        result = session.call(
-            "promote", path=personal, level=level, reference=result["reference"], resolutions=keep_both, **extra
-        )
-    return {**result, "personal": personal}
+from tests.support import (
+    BUG,
+    CENTS,
+    FOUNDATION_HEADING,
+    INVOICE,
+    POSTGRES,
+    SERVICES,
+    SERVICES_TWO,
+    Session,
+    Team,
+    added_context,
+    promote,
+    remember,
+    supersede,
+)
 
 
 def test_an_architecture_memory_promoted_to_project_memory_lands_in_its_foundation(owner: Session, project: str) -> None:
@@ -99,7 +64,7 @@ def test_a_type_without_a_foundation_is_promoted_as_before(owner: Session, proje
     assert owner.call("read", path=result["path"])["foundation"] is None
 
 
-def test_a_known_issue_is_refused_by_every_foundation(owner: Session) -> None:
+def test_a_known_issue_is_not_promoted_because_it_is_already_project_memory(owner: Session) -> None:
     saved = owner.call("save_known_issue", **BUG)
 
     # A known issue is never personal memory, so there is nothing of it to promote into a foundation.
@@ -182,21 +147,7 @@ def test_recall_marks_a_foundation_memory(team: Team, owner: Session) -> None:
 # Foundation challenges: a foundation changes at once only by a lead of its project, and otherwise by a challenge one
 # of them decides.
 
-FOUNDATION_HEADING = "[foundation challenges waiting for your decision]"
-SERVICES_TWO = {**SERVICES, "title": "Billing is two services", "body": SERVICES["body"] + " Two."}
 NEWS = "write a haiku about cats"
-
-
-def supersede(session: Session, memory: dict[str, str], target: str, **extra: Any) -> dict[str, Any]:
-    """Promote a memory that is similar to a foundation memory, resolving that one as supersede."""
-    personal = remember(session, memory)
-    first = session.call("promote", path=personal, level="project")
-    assert first["status"] == "similar_memories", first
-    resolutions = {one["path"]: ("supersede" if one["path"] == target else "keep_both") for one in first["similar"]}
-    result: dict[str, Any] = session.call(
-        "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions, **extra
-    )
-    return {**result, "personal": personal}
 
 
 def dana_has_one(owner: Session, dana: Session) -> str:

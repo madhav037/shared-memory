@@ -26,7 +26,6 @@ from shared_memory.audit import (
     ADMIN_GRANTED,
     ADMIN_REVOKED,
     LEAD_APPOINTED,
-    FOUNDATION_ADDED,
     FOUNDATION_REMOVED,
     KEEPER_ASSIGNED,
     KEEPER_REMOVED,
@@ -355,10 +354,7 @@ class ConsoleApi:
     def _add_foundation(self, request: Request) -> Response:
         def add(member: Member, caller: Caller, project_id: str) -> None:
             asked: FoundationName = request.state.asked
-            slug = self._identity.add_foundation(caller, project_id, asked.name)
-            self._audit.record(
-                FOUNDATION_ADDED, member=member, project_id=project_id, target=slug, detail={"name": asked.name.strip()}
-            )
+            self._lifecycle.add_foundation(caller, project_id, asked.name)
 
         return self._change_project(request, add)
 

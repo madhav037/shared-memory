@@ -28,7 +28,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from shared_memory import hooks, onboarding
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
-from shared_memory.audit import FOUNDATION_ADDED, PROJECT_CREATED, Audit
+from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
@@ -626,10 +626,7 @@ def build_app(
         """
         current = caller(ctx)
         project = current.require_project()
-        slug = identity.add_foundation(current, project.project_id, name, leads_only=True)
-        audit.record(
-            FOUNDATION_ADDED, member=current.member, project_id=project.project_id, target=slug, detail={"name": name.strip()}
-        )
+        slug = lifecycle.add_foundation(current, project.project_id, name, leads_only=True)
         return {"project_id": project.project_id, "foundation": slug, "name": name.strip()}
 
     @server.tool()

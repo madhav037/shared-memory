@@ -90,9 +90,43 @@ function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: 
   useEffect(() => here.current?.focus(), [slip]);
 
   const { decided, challenge, others } = slip;
-  const old = challenge.target.title;
-  const offered = challenge.challenger?.title;
   const adding = challenge.kind === "add";
+  // An "add" has no challenged memory: its target stands for the foundation.
+  const foundation = adding ? challenge.target.title : "";
+  const replaced = challenge.target.title;
+  const offered = challenge.challenger?.title;
+  const rejected = decided.decision === "rejected";
+  const readable = adding ? (challenge.challenger?.path ?? challenge.target.path) : challenge.target.path;
+  const what = () => {
+    if (adding) {
+      return (
+        <>
+          <b>You {rejected ? "rejected" : "accepted"} it.</b> <span className="decided-name">‘{offered}’</span>{" "}
+          {rejected ? "stays out of" : "is now in"} the {foundation} foundation.
+        </>
+      );
+    }
+    if (rejected) {
+      return (
+        <>
+          <b>You rejected it.</b> <span className="decided-name">‘{replaced}’</span> stays as it is.
+        </>
+      );
+    }
+    if (offered) {
+      return (
+        <>
+          <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> now supersedes{" "}
+          <span className="decided-name">‘{replaced}’</span>.
+        </>
+      );
+    }
+    return (
+      <>
+        <b>You accepted it.</b> <span className="decided-name">‘{replaced}’</span> is retired.
+      </>
+    );
+  };
   return (
     <div
       className={decided.in_force ? "decided appear" : "decided retired appear"}
@@ -103,39 +137,14 @@ function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: 
       <p className="decided-what">
         <IconScale size={18} stroke={1.6} aria-hidden />
         <span>
-          {adding ? (
-            decided.decision === "rejected" ? (
-              <>
-                <b>You rejected it.</b> <span className="decided-name">‘{offered}’</span> stays out of the {old}{" "}
-                foundation.
-              </>
-            ) : (
-              <>
-                <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> is now in the {old}{" "}
-                foundation.
-              </>
-            )
-          ) : decided.decision === "rejected" ? (
-            <>
-              <b>You rejected it.</b> <span className="decided-name">‘{old}’</span> stays as it is.
-            </>
-          ) : offered ? (
-            <>
-              <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> now supersedes{" "}
-              <span className="decided-name">‘{old}’</span>.
-            </>
-          ) : (
-            <>
-              <b>You accepted it.</b> <span className="decided-name">‘{old}’</span> is retired.
-            </>
-          )}
+          {what()}
           {decided.decision === "accepted" && others > 0 && (
             <> Every other challenge against it is closed, and whoever raised it is told why.</>
           )}
         </span>
       </p>
       <p className="decided-links">
-        <Link className="quiet-link" to={memoryUrl(decided.in_force ?? (adding ? (challenge.challenger?.path ?? challenge.target.path) : challenge.target.path))} data-testid="decided-read">
+        <Link className="quiet-link" to={memoryUrl(decided.in_force ?? readable)} data-testid="decided-read">
           Read it
         </Link>
         {readsAudit && (
