@@ -443,6 +443,20 @@
   letter-spacing: -0.04em;
   text-wrap: balance;
 }
+.lp-sec.ruled {
+  border-top: 1px solid var(--rule);
+}
+/* The question a buyer would ask, set small above the answer */
+.lp-ask {
+  display: block;
+  margin-bottom: 14px;
+  font: 600 1.0625rem/1.35 var(--sans);
+  letter-spacing: 0;
+  color: var(--accent);
+}
+.lp-sec.night .lp-ask {
+  color: var(--glow);
+}
 .lp-intro {
   max-width: 54ch;
   margin: 0;
@@ -1332,6 +1346,51 @@
   align-self: flex-start;
   margin-top: auto;
 }
+/* ---------- Against a file in the repository ---------- */
+.lp-compare {
+  margin-top: 48px;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+}
+.lp-compare table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+.lp-compare th,
+.lp-compare td {
+  padding: 14px 18px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+.lp-compare tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.lp-compare thead th {
+  font: 600 1rem/1.3 var(--sans);
+  color: var(--ink);
+}
+.lp-compare tbody th {
+  width: 18%;
+  font-weight: 600;
+  color: var(--ink);
+}
+.lp-compare .ours {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.lp-compare thead .ours {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.lp-none {
+  color: var(--ink-3);
+}
+
 .lp-every {
   margin-top: 24px;
   padding: 24px 32px 26px;

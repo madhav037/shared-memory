@@ -16,6 +16,10 @@
 		max_size 1MB
 	}
 
+	# A team's server is kept out of search engines; whoever runs the server where the landing page should be found
+	# sets SHARED_MEMORY_ROBOTS_TAG=all.
+	header X-Robots-Tag {$CADDY_ROBOTS_TAG:noindex}
+
 	handle /api/* {
 		reverse_proxy server:8000
 	}
@@ -28,9 +32,16 @@
 		reverse_proxy server:8000
 	}
 
-	# The console is a single-page app: any address it owns is served by its own page.
+	# The console is a single-page app: any address it owns is served by its own page. Only the console is compressed;
+	# the server's answers above stream, and compressing them would hold them back. Its assets carry a hash in their
+	# names, so they are cached for good; its page is asked for afresh, so a release reaches browsers at once.
 	handle {
 		root * /srv
+		encode zstd gzip
+		@assets path /assets/*
+		@page not path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		header @page Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}
