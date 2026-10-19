@@ -154,3 +154,27 @@ def test_browsing_needs_a_signed_in_member_and_a_project_of_their_team(
     assert signed_out_answer.status_code == 401
     assert stranger_project.status_code == 403
     assert "not a project in your team" in stranger_project.json()["message"]
+
+
+def test_a_projects_foundations_folder_browses_like_any_topic(console: Console, signed_out: ConsoleClient) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-browse-foundations", 321)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    session = owner.in_project(project, "billing-api")
+    personal = session.call(
+        "remember",
+        title="Billing runs as three services",
+        summary="Billing is an API, a ledger worker and a webhook relay.",
+        type="architecture",
+        body="Billing is three services: the API, the ledger worker and the webhook relay.",
+    )["path"]
+    promoted = session.call("promote", path=personal, level="project")["path"]
+
+    shared = ask(signed_out, "/api/files", folder=f"projects/{project}/shared")
+    foundation = ask(signed_out, "/api/files", folder=f"projects/{project}/shared/foundations/architecture")
+
+    assert [(one["name"], one["kind"], one["memories"]) for one in shared["folders"]] == [("Foundations", "type", 1)]
+    assert foundation["kind"] == "topic"
+    assert [(memory["path"], memory["type"], memory["level"]) for memory in foundation["memories"]] == [
+        (promoted, "architecture", "project")
+    ]
+    assert ask(signed_out, "/api/memory", path=promoted)["title"] == "Billing runs as three services"

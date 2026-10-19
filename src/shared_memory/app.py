@@ -733,9 +733,9 @@ def build_app(
 
     @_refusals_as_tool_errors
     def similar_before_promoting(
-        path: str, level: str, ctx: Context, author: str | None, imported_from: str | None
+        path: str, level: str, ctx: Context, author: str | None, imported_from: str | None, foundation: str | None
     ) -> dict[str, Any] | None:
-        return lifecycle.similar_before_promoting(caller(ctx), path, level, author, imported_from)
+        return lifecycle.similar_before_promoting(caller(ctx), path, level, author, imported_from, foundation)
 
     @_refusals_as_tool_errors
     def promoting(
@@ -747,8 +747,11 @@ def build_app(
         reasoning: str | None,
         author: str | None,
         imported_from: str | None,
+        foundation: str | None,
     ) -> dict[str, Any]:
-        return lifecycle.promote(caller(ctx), path, level, reference, resolutions, reasoning, author, imported_from)
+        return lifecycle.promote(
+            caller(ctx), path, level, reference, resolutions, reasoning, author, imported_from, foundation
+        )
 
     @server.tool()
     async def promote(
@@ -760,6 +763,7 @@ def build_app(
         reasoning: str | None = None,
         author: str | None = None,
         imported_from: str | None = None,
+        foundation: str | None = None,
     ) -> dict[str, Any]:
         """Promote your personal memory into project memory or team memory (level: project or team).
 
@@ -773,15 +777,21 @@ def build_app(
         shows one member wrote the passage it was cut from, pass author (their member ID, or their GitHub username
         written @username) and imported_from (the file, as repository:path). That member becomes the author and is
         told; you are recorded as its importer. Leave both out everywhere else.
+
+        foundation puts a project memory into one of the project's foundations (architecture, product, glossary or
+        decisions), the places holding its sources of truth; an architecture or decision memory goes into its own
+        foundation without it. Pass it again on every call of one promotion.
         """
         if reference is None:
             # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
             proposal = await anyio.to_thread.run_sync(
-                similar_before_promoting, path, level, ctx, author, imported_from
+                similar_before_promoting, path, level, ctx, author, imported_from, foundation
             )
             if proposal is not None:
                 return proposal
-        return await saves.run(promoting, path, level, ctx, reference, resolutions, reasoning, author, imported_from)
+        return await saves.run(
+            promoting, path, level, ctx, reference, resolutions, reasoning, author, imported_from, foundation
+        )
 
     @_refusals_as_tool_errors
     def similar_before_saving(

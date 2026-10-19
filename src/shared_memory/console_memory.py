@@ -25,6 +25,7 @@ TYPE_NAMES = {
     "architecture": "Architecture",
     "gotchas": "Gotchas",
     "known-issues": "Known issues",
+    "foundations": "Foundations",
 }
 
 
