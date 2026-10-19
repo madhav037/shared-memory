@@ -165,8 +165,9 @@ MAY_ASK: dict[str, set[str]] = {
         "source",
         "version",
     },
-    # remove_foundation only reads the folder it empties, and changes which foundations a project has.
-    "_lifecycle": {"decide_challenge", "remove_foundation", "retire"},
+    # add_foundation and remove_foundation change which foundations a project has; removing only reads the folder it
+    # empties.
+    "_lifecycle": {"add_foundation", "decide_challenge", "remove_foundation", "retire"},
 }
 
 

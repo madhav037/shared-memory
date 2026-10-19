@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
-from tests.support import Console, ConsoleClient, RunningServer, Session, Team, added_context
-from tests.test_foundation_keepers import Crew
-from tests.test_foundations import CENTS, INVOICE, POSTGRES, SERVICES, promote
+from tests.support import (
+    CENTS,
+    INVOICE,
+    POSTGRES,
+    SERVICES,
+    Console,
+    ConsoleClient,
+    Crew,
+    RunningServer,
+    Session,
+    Team,
+    added_context,
+    promote,
+)
 
 LINE = "Foundations: architecture, product, glossary, decisions. Read the one covering your change first, and follow it."
 

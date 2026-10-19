@@ -13,9 +13,10 @@ from typing import Any
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.memory import CORE_FOUNDATIONS, slugify
+from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
 
-NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+NAME_LIMIT = 64
+NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
 
 # What another module does when a member may have lost a project. It is called inside the transaction making the
 # change, with whoever made it, so its writes commit with the change or not at all; what it gives back is called once
@@ -111,10 +112,14 @@ def restricted_project(project_id: str) -> Refused:
 def check_name(kind: str, value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise Refused(
-            f"{kind} {value!r} is not valid: use 1-64 letters, digits, dots, dashes or underscores, "
+            f"{kind} {value!r} is not valid: use 1-{NAME_LIMIT} letters, digits, dots, dashes or underscores, "
             "starting with a letter or digit."
         )
     return value
+
+
+def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
+    return Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
 
 
 class Identity:
@@ -808,7 +813,7 @@ class Identity:
     @staticmethod
     def _foundations_listed(conn: Conn, project_id: str) -> list[tuple[str, str, bool]]:
         """A project's foundations as (slug, name, whether core): the core four, then its extras in the order added."""
-        listed = [(slug, slug.capitalize(), True) for slug in CORE_FOUNDATIONS]
+        listed = [(slug, foundation_title(slug), True) for slug in CORE_FOUNDATIONS]
         rows = conn.execute(
             "SELECT slug, name FROM project_foundations WHERE project_id = %s ORDER BY added_at, slug", (project_id,)
         ).fetchall()
@@ -818,7 +823,7 @@ class Identity:
         """What a project calls one of its foundations; its slug, capitalised, when it is gone."""
         with self._db.transaction() as conn:
             named = {one: name for one, name, _ in self._foundations_listed(conn, project_id)}
-        return named.get(slug, slug.capitalize())
+        return named.get(slug, foundation_title(slug))
 
     def foundations_of(self, project_id: str) -> list[str]:
         """The slugs of a project's foundations, core and extra."""
@@ -828,7 +833,7 @@ class Identity:
     def _require_foundation(self, conn: Conn, project_id: str, foundation: str) -> None:
         slugs = [slug for slug, _, _ in self._foundations_listed(conn, project_id)]
         if foundation not in slugs:
-            raise Refused(f"This project has no {foundation!r} foundation. Its foundations are {', '.join(slugs)}.")
+            raise unknown_foundation(foundation, slugs)
 
     def add_foundation(self, caller: Caller, project_id: str, name: str, leads_only: bool = False) -> str:
         """Add an extra foundation to a project and answer its slug. A lead can; so can an admin, unless `leads_only`.
@@ -840,8 +845,8 @@ class Identity:
             self._require_lead(caller, project_id)
         if not re.search(r"[a-z0-9]", name.lower()):
             raise Refused("A foundation needs a name with letters or digits in it.")
-        if len(name.strip()) > 64:
-            raise Refused("A foundation's name is at most 64 characters.")
+        if len(name.strip()) > NAME_LIMIT:
+            raise Refused(f"A foundation's name is at most {NAME_LIMIT} characters.")
         slug = slugify(name)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)

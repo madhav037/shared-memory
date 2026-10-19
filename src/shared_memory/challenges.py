@@ -64,8 +64,8 @@ class Challenge:
     promoted_by: str | None
     raised_at: datetime
     reasoning: str | None
-    # The foundation (ADR-0019) a challenge is about: its lead decides it. A kind "add" challenge has no challenged
-    # memory, so its target_path is the foundation's folder.
+    # The foundation (ADR-0019) a challenge is about: a keeper of it or a lead of its project decides it. A kind "add"
+    # challenge has no challenged memory, so its target_path is the foundation's folder.
     foundation: str | None = None
 
     @classmethod

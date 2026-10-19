@@ -4,10 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, Team, create, signed_in_owner
+from tests.support import (
+    BUG,
+    CENTS,
+    SERVICES,
+    Console,
+    ConsoleClient,
+    Crew,
+    Session,
+    Team,
+    create,
+    keepers,
+    promote,
+    remember,
+    signed_in_owner,
+)
 from tests.test_console_projects import signed_in_member
-from tests.test_foundation_keepers import Crew, keepers
-from tests.test_foundations import BUG, CENTS, SERVICES, promote, remember
 
 SECURITY = "Security model"
 
