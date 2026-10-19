@@ -11,7 +11,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
-import { fetchChallenges, fetchStatus, signOut, type SignedInMember, type Status } from "./api/client";
+import { fetchChallenges, fetchStatus, signInUrl, signOut, type SignedInMember, type Status } from "./api/client";
 import { Refusal } from "./components/Bits";
 import { ContentsTree } from "./components/Contents";
 import { ContentsProvider } from "./lib/contents";
@@ -21,7 +21,8 @@ import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
-import { Front, TitlePage } from "./pages/Front";
+import { Front } from "./pages/Front";
+import { Landing } from "./pages/Landing";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
@@ -92,9 +93,20 @@ export function App() {
       <>
         <header className="masthead">
           <Wordmark team={null} />
+          <nav className="nav" aria-label="This page">
+            <a href="#how">How it works</a>
+            <a href="#pricing">Pricing</a>
+          </nav>
+          {status.github_sign_in && (
+            <div className="masthead-end">
+              <a className="quiet-link" href={signInUrl}>
+                Sign in
+              </a>
+            </div>
+          )}
         </header>
         <main id="page">
-          <TitlePage status={status} refused={signInRefused} />
+          <Landing status={status} refused={signInRefused} />
         </main>
       </>
     );

@@ -200,6 +200,32 @@ _Avoid_: Dashboard, admin panel, web UI
 The record of who changed members, roles, access, tokens, memory, cards or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail
 
+**Landing page**:
+What the console shows before anyone signs in: what Shared Memory is, shown working on an example team, and its plans.
+_Avoid_: Title page, home page, marketing site
+
+### Paying for Shared Memory
+
+**Plan**:
+What a team pays for: the most members it may have (5, 10 or 15) on a hosted server or a self-hosted server.
+_Avoid_: Tier, package, seat, subscription level
+
+**Hosted server**:
+A team's server that we run for it, never shared with another team.
+_Avoid_: Cloud instance, tenant, SaaS
+
+**Self-hosted server**:
+A team's server that the team runs itself, under a license.
+_Avoid_: On-prem, private install
+
+**License**:
+The right to run a self-hosted server for a plan's members for twelve months, paid up front.
+_Avoid_: Subscription, key (the license key only proves it)
+
+**Trial**:
+Seven days on a hosted server before the team pays.
+_Avoid_: Free plan, free tier
+
 ### The board
 
 **Board**:
