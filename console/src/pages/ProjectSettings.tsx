@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useParams } from "react-router";
 
 import {
+  addFoundation,
   addRepository,
   appointLead,
   assignKeeper,
   fetchMembers,
   fetchProject,
   grantAccess,
+  removeFoundation,
   removeKeeper,
   removeLead,
   removeRepository,
@@ -26,13 +28,6 @@ import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
-
-const FOUNDATION_NAMES: Record<string, string> = {
-  architecture: "Architecture",
-  product: "Product",
-  glossary: "Glossary",
-  decisions: "Decisions",
-};
 
 /** Who looks after a project, who can reach it, and the repositories that belong to it. */
 export function ProjectSettings({ me }: { me: SignedInMember }) {
@@ -206,13 +201,26 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </h2>
         <p className="section-lede">
           A foundation holds what everyone working on this project should know first. Its keepers decide the challenges
-          to it alongside the project leads, and their own changes to it land at once.
+          to it alongside the project leads, and their own changes to it land at once. Add a foundation of your own beside
+          the four every project has; one comes off once it holds no active memory.
         </p>
         {project.foundations.map((foundation) => (
           <div key={foundation.slug} data-testid={`foundation-${foundation.slug}`} style={{ marginTop: 18 }}>
-            <h3 className="section-heading" style={{ fontSize: "1rem" }}>
-              {FOUNDATION_NAMES[foundation.slug] ?? foundation.slug}
-            </h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+              <h3 className="section-heading" style={{ fontSize: "1rem" }}>
+                {foundation.name}
+              </h3>
+              {!foundation.core && project.you_may_change && (
+                <button
+                  type="button"
+                  className="quiet-link danger"
+                  onClick={() => attempt(() => removeFoundation(project.project_id, foundation.slug))}
+                  data-testid={`remove-foundation-${foundation.slug}`}
+                >
+                  Remove foundation
+                </button>
+              )}
+            </div>
             <ul className="entries" data-testid={`keepers-${foundation.slug}`}>
               {foundation.keepers.length === 0 && (
                 <li className="entry" style={{ color: "var(--ink-3)", fontSize: "0.9375rem" }}>
@@ -246,6 +254,16 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             )}
           </div>
         ))}
+        {project.you_may_change && (
+          <Adding
+            label="Extra foundation"
+            placeholder="e.g. Security model"
+            missing="Enter the foundation’s name."
+            action="Add foundation"
+            testid="foundation"
+            onAdd={(name) => attempt(() => addFoundation(project.project_id, name))}
+          />
+        )}
       </section>
 
       <section aria-labelledby="repositories-heading">

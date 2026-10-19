@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS foundation_keepers (
     PRIMARY KEY (project_id, foundation, member_id)
 );
 
+-- A project's extra foundations (ADR-0019), beside the core four. The slug is the name's, and is the folder's name.
+CREATE TABLE IF NOT EXISTS project_foundations (
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    added_by BIGINT NOT NULL REFERENCES members(id),
+    added_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (project_id, slug)
+);
+
 -- A restricted project keeps its access list when it is unrestricted, so restricting it again is one click.
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS restricted BOOLEAN NOT NULL DEFAULT FALSE;
 

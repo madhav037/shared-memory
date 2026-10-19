@@ -141,6 +141,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/foundations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add an extra foundation to this project, beside the core four. */
+        post: operations["add_foundation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/foundations/{foundation}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove an extra foundation of this project once it holds no active memory. */
+        post: operations["remove_foundation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/foundations/{foundation}/keepers": {
         parameters: {
             query?: never;
@@ -865,11 +899,15 @@ export interface components {
         };
         /**
          * ProjectFoundation
-         * @description One of a project's foundations and the members who keep it.
+         * @description One of a project's foundations, whether it is one of the core four, and the members who keep it.
          */
         ProjectFoundation: {
             /** Slug */
             slug: string;
+            /** Name */
+            name: string;
+            /** Core */
+            core: boolean;
             /** Keepers */
             keepers: components["schemas"]["ProjectMember"][];
         };
@@ -922,6 +960,14 @@ export interface components {
         Appointment: {
             /** Member Id */
             member_id: string;
+        };
+        /**
+         * FoundationName
+         * @description What an extra foundation is called; its folder is the slug of the name.
+         */
+        FoundationName: {
+            /** Name */
+            name: string;
         };
         /**
          * KeeperAssignment
@@ -1437,7 +1483,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -2196,6 +2242,55 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Take a lead off this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    add_foundation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundationName"];
+            };
+        };
+        responses: {
+            /** @description Add an extra foundation to this project, beside the core four. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    remove_foundation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                foundation: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove an extra foundation of this project once it holds no active memory. */
             200: {
                 headers: {
                     [name: string]: unknown;

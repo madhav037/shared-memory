@@ -28,7 +28,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from shared_memory import hooks, onboarding
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
-from shared_memory.audit import PROJECT_CREATED, Audit
+from shared_memory.audit import FOUNDATION_ADDED, PROJECT_CREATED, Audit
 from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
@@ -618,6 +618,22 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    def add_foundation(name: str, ctx: Context) -> dict[str, Any]:
+        """Project leads: add an extra foundation to this project, beside architecture, product, glossary and decisions.
+
+        Its folder is the slug of the name, and it takes any type of memory except a known issue. Promote into it with
+        foundation set to the slug returned here.
+        """
+        current = caller(ctx)
+        project = current.require_project()
+        slug = identity.add_foundation(current, project.project_id, name, leads_only=True)
+        audit.record(
+            FOUNDATION_ADDED, member=current.member, project_id=project.project_id, target=slug, detail={"name": name.strip()}
+        )
+        return {"project_id": project.project_id, "foundation": slug, "name": name.strip()}
+
+    @server.tool()
+    @_refusals_as_tool_errors
     def add_member(
         member_id: str, name: str, ctx: Context, team: str | None = None, github: str | None = None
     ) -> dict[str, Any]:
@@ -780,7 +796,7 @@ def build_app(
         told; you are recorded as its importer. Leave both out everywhere else.
 
         foundation puts a project memory into one of the project's foundations (architecture, product, glossary or
-        decisions), the places holding its sources of truth; an architecture or decision memory goes into its own
+        decisions, or an extra one a project lead added), the places holding its sources of truth; an architecture or decision memory goes into its own
         foundation without it. Pass it again on every call of one promotion.
         """
         if reference is None:

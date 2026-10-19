@@ -229,6 +229,80 @@
         }
       }
     },
+    "/api/projects/{project_id}/foundations": {
+      "post": {
+        "operationId": "add_foundation",
+        "summary": "Add an extra foundation to this project, beside the core four.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundationName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add an extra foundation to this project, beside the core four.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/foundations/{foundation}/remove": {
+      "post": {
+        "operationId": "remove_foundation",
+        "summary": "Remove an extra foundation of this project once it holds no active memory.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "foundation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remove an extra foundation of this project once it holds no active memory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/foundations/{foundation}/keepers": {
       "post": {
         "operationId": "assign_keeper",
@@ -1798,11 +1872,19 @@
         "type": "object"
       },
       "ProjectFoundation": {
-        "description": "One of a project's foundations and the members who keep it.",
+        "description": "One of a project's foundations, whether it is one of the core four, and the members who keep it.",
         "properties": {
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "core": {
+            "title": "Core",
+            "type": "boolean"
           },
           "keepers": {
             "items": {
@@ -1814,6 +1896,8 @@
         },
         "required": [
           "slug",
+          "name",
+          "core",
           "keepers"
         ],
         "title": "ProjectFoundation",
@@ -1933,6 +2017,20 @@
           "member_id"
         ],
         "title": "Appointment",
+        "type": "object"
+      },
+      "FoundationName": {
+        "description": "What an extra foundation is called; its folder is the slug of the name.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FoundationName",
         "type": "object"
       },
       "KeeperAssignment": {
@@ -3160,6 +3258,8 @@
               "lead_removed",
               "keeper_assigned",
               "keeper_removed",
+              "foundation_added",
+              "foundation_removed",
               "repository_added",
               "repository_removed",
               "project_restricted",

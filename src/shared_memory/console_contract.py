@@ -103,9 +103,11 @@ class ProjectRepository(BaseModel):
 
 
 class ProjectFoundation(BaseModel):
-    """One of a project's foundations and the members who keep it."""
+    """One of a project's foundations, whether it is one of the core four, and the members who keep it."""
 
     slug: str
+    name: str
+    core: bool
     keepers: list[ProjectMember]
 
 
@@ -133,6 +135,12 @@ class Appointment(BaseModel):
     """The member being made a lead of this project."""
 
     member_id: str
+
+
+class FoundationName(BaseModel):
+    """What an extra foundation is called; its folder is the slug of the name."""
+
+    name: str
 
 
 class KeeperAssignment(BaseModel):
@@ -740,6 +748,23 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="POST",
         operation_id="remove_lead",
         summary="Take a lead off this project.",
+        answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations",
+        method="POST",
+        operation_id="add_foundation",
+        summary="Add an extra foundation to this project, beside the core four.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=FoundationName,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations/{foundation}/remove",
+        method="POST",
+        operation_id="remove_foundation",
+        summary="Remove an extra foundation of this project once it holds no active memory.",
         answers=ProjectDetail,
         changes=True,
     ),
