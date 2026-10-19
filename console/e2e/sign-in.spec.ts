@@ -6,11 +6,13 @@ test("a member signs in with GitHub, sees who they are, and signs out", async ({
   await signInAs(page, 1, "olive");
 
   await expect(page.getByTestId("who")).toHaveText("Olive Owner");
+  await expect(page).toHaveTitle("Shared Memory");
   await page.getByTestId("member-menu").click();
   await expect(page.getByText("Olive Owner (E1001), owner of acme")).toBeVisible();
   await page.keyboard.press("Escape");
 
   await signOut(page);
+  await expect(page).toHaveTitle(/^Shared Memory: Team Memory for/);
 });
 
 test("a GitHub account nobody has linked is turned away", async ({ page }) => {
