@@ -137,7 +137,7 @@ if __name__ == "__main__":
             {
                 "title": "How Billing is built",
                 "summary": "The stack Billing runs on.",
-                "type": "decision",
+                "type": "gotcha",
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: RabbitMQ",
             },
         )
@@ -146,7 +146,7 @@ if __name__ == "__main__":
             {
                 "title": "How Billing is built now",
                 "summary": "The stack Billing runs on since the queue moved.",
-                "type": "decision",
+                "type": "gotcha",
                 "body": "- Language: Go\n- Database: Postgres\n- Queue: Kafka",
             },
             stack,

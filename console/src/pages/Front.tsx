@@ -1,5 +1,5 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconArrowRight, IconBell, IconBrandGithub, IconScale } from "@tabler/icons-react";
+import { IconBell, IconScale } from "@tabler/icons-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -8,61 +8,13 @@ import {
   fetchChallenges,
   fetchFolder,
   fetchNotices,
-  signInUrl,
   type SignedInMember,
-  type Status,
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
 import { day, folderName, folderUrl, longDay, memoryUrl, moment, noticeMemory, plural, readableNotice } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
-
-/** Before signing in: the title page of the team's memory, and what the console is for. */
-export function TitlePage({ status, refused }: { status: Status; refused: string | null }) {
-  return (
-    <div className="title-page">
-      <div className="title-page-inner">
-        <h1>Shared Memory</h1>
-        <p className="long-title">
-          The memory every coding agent on your team reads and writes, so that what one member’s agent learns
-          reaches every other member’s agent.
-        </p>
-        {refused && (
-          <Refusal testid="sign-in-error">
-            <b>That sign-in didn’t work.</b> {refused}
-          </Refusal>
-        )}
-        {status.github_sign_in ? (
-          <Button
-            component="a"
-            href={signInUrl}
-            size="lg"
-            leftSection={<IconBrandGithub size={20} stroke={1.6} />}
-            rightSection={<IconArrowRight size={18} stroke={2} />}
-            data-testid="sign-in"
-          >
-            Sign in with GitHub
-          </Button>
-        ) : (
-          <p className="fine">Signing in with GitHub isn’t set up on this server yet. Whoever runs it sets the GitHub app’s details.</p>
-        )}
-        <p className="fine" data-testid="status">Connected to the server. Your personal token stays with your coding agent; the console never asks for it.</p>
-        <ul className="title-page-uses">
-          <li>
-            <b>Read it as your agent does.</b> Every memory your team and your projects hold, word for word.
-          </li>
-          <li>
-            <b>See how it came to say that.</b> Every version, who made it and when, with each amendment marked.
-          </li>
-          <li>
-            <b>Decide what stands.</b> Challenges waiting for you, side by side with what is offered in their place.
-          </li>
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 /** The front page: what is waiting for this member, then the contents of everything they can reach. */
 export function Front({ member }: { member: SignedInMember }) {

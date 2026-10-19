@@ -1976,40 +1976,6 @@ div.dotted {
   letter-spacing: -0.04em;
   margin: 0;
 }
-.long-title {
-  font-family: var(--sans);
-  font-size: 1.4375rem;
-  line-height: 1.45;
-  color: var(--ink-2);
-  max-width: 38ch;
-  margin: 24px 0 34px;
-  text-wrap: pretty;
-}
-.title-page .fine {
-  font-size: 0.9375rem;
-  color: var(--ink-3);
-  margin: 18px 0 0;
-}
-.title-page-uses {
-  list-style: none;
-  margin: 56px 0 0;
-  padding: 0;
-  border-top: 2px solid var(--ink);
-}
-.title-page-uses li {
-  display: grid;
-  grid-template-columns: 17rem minmax(0, 1fr);
-  gap: 4px 20px;
-  padding: 13px 0 12px;
-  border-bottom: 1px solid var(--rule);
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-.title-page-uses b {
-  color: var(--ink);
-  font-weight: 700;
-}
 
 /* ---------- Challenges: the memory now, and what is offered in its place ---------- */
 
@@ -2613,9 +2579,6 @@ div.dotted {
   .facing > div + div {
     border-left: 0;
     border-top: 1px solid var(--rule);
-  }
-  .title-page-uses li {
-    grid-template-columns: minmax(0, 1fr);
   }
   /* The heads of a part stop hanging into the margin. */
   .part-head {
