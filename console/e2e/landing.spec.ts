@@ -36,3 +36,18 @@ test("a visitor decides the example challenge and reads a memory as it stood", a
   await history.getByRole("button", { name: "v3 · September" }).click();
   await expect(history).toContainText("In force.");
 });
+
+test("the landing page's address tells search engines and link previews what Shared Memory is before any script runs", async ({
+  request,
+}) => {
+  const html = await (await request.get("/")).text();
+
+  expect(html).toContain("<title>Shared Memory: Team Memory for Claude Code, Cursor &amp; Codex</title>");
+  expect(html).toMatch(/<meta\s+name="description"\s+content="One memory every coding agent on your team reads and writes\./);
+  expect(html).toMatch(/<meta\s+property="og:title"\s+content="What one agent learns, every agent knows\."/);
+  expect(html).toMatch(/<meta\s+name="twitter:card"\s+content="summary"/);
+
+  const described = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  const graph = JSON.parse(described![1]!)["@graph"] as { "@type": string; name: string }[];
+  expect(graph.map((thing) => thing["@type"])).toEqual(["Organization", "SoftwareApplication"]);
+});
