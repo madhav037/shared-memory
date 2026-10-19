@@ -98,6 +98,11 @@ def test_doing_everything_the_console_may_do_to_memory_never_writes_edits_or_pro
     ]
     ask(signed_out, f"/api/projects/{project}/board")
 
+    # Naming the keepers of a foundation (ADR-0019) is governance, not writing.
+    keepers = f"/api/projects/{project}/foundations/architecture/keepers"
+    assert signed_out.post_json(keepers, {"member_id": "emp-governs"}).status_code == 200
+    assert signed_out.post(f"{keepers}/emp-governs/remove").status_code == 200
+
     # And the reading it does all day.
     ask(signed_out, "/api/files")
     ask(signed_out, "/api/memory", path=target)

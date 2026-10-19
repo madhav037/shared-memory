@@ -229,6 +229,96 @@
         }
       }
     },
+    "/api/projects/{project_id}/foundations/{foundation}/keepers": {
+      "post": {
+        "operationId": "assign_keeper",
+        "summary": "Make a member a keeper of one of this project's foundations.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "foundation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeeperAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Make a member a keeper of one of this project's foundations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/foundations/{foundation}/keepers/{member_id}/remove": {
+      "post": {
+        "operationId": "remove_keeper",
+        "summary": "Take a keeper off one of this project's foundations.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "foundation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a keeper off one of this project's foundations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/restrict": {
       "post": {
         "operationId": "restrict_project",
@@ -1707,6 +1797,28 @@
         "title": "ConnectionFile",
         "type": "object"
       },
+      "ProjectFoundation": {
+        "description": "One of a project's foundations and the members who keep it.",
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "keepers": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Keepers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "keepers"
+        ],
+        "title": "ProjectFoundation",
+        "type": "object"
+      },
       "ProjectRepository": {
         "description": "A repository of a project, with the files each coding agent commits to connect it to the project.",
         "properties": {
@@ -1751,6 +1863,13 @@
             "title": "Leads",
             "type": "array"
           },
+          "foundations": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectFoundation"
+            },
+            "title": "Foundations",
+            "type": "array"
+          },
           "access": {
             "items": {
               "$ref": "#/components/schemas/ProjectMember"
@@ -1779,6 +1898,7 @@
           "name",
           "restricted",
           "leads",
+          "foundations",
           "access",
           "repositories",
           "you_lead",
@@ -1813,6 +1933,20 @@
           "member_id"
         ],
         "title": "Appointment",
+        "type": "object"
+      },
+      "KeeperAssignment": {
+        "description": "The member being made a keeper of a foundation.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "KeeperAssignment",
         "type": "object"
       },
       "Restriction": {
@@ -3024,6 +3158,8 @@
               "project_renamed",
               "lead_appointed",
               "lead_removed",
+              "keeper_assigned",
+              "keeper_removed",
               "repository_added",
               "repository_removed",
               "project_restricted",
@@ -3506,6 +3642,7 @@
                 "enum": [
                   "author",
                   "lead",
+                  "keeper",
                   "admin",
                   "fallback",
                   "author_left"
@@ -4004,6 +4141,7 @@
             "enum": [
               "author",
               "lead",
+              "keeper",
               "admin",
               "fallback",
               "author_left"

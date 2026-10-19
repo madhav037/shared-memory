@@ -26,6 +26,8 @@ from shared_memory.audit import (
     ADMIN_GRANTED,
     ADMIN_REVOKED,
     LEAD_APPOINTED,
+    KEEPER_ASSIGNED,
+    KEEPER_REMOVED,
     LEAD_REMOVED,
     MEMBER_ADDED,
     MEMBER_CHANGED,
@@ -47,7 +49,7 @@ from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
-    AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card,
+    AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
@@ -202,6 +204,8 @@ class ConsoleApi:
             "rename_project": self._rename_project,
             "appoint_lead": self._appoint_lead,
             "remove_lead": self._remove_lead,
+            "assign_keeper": self._assign_keeper,
+            "remove_keeper": self._remove_keeper,
             "add_repository": self._add_repository,
             "remove_repository": self._remove_repository,
             "board": self._board_of,
@@ -341,6 +345,32 @@ class ConsoleApi:
             member_id = request.path_params["member_id"]
             self._identity.remove_lead(caller, project_id, member_id)
             self._audit.record(LEAD_REMOVED, member=member, project_id=project_id, target=member_id)
+
+        return self._change_project(request, remove)
+
+    def _assign_keeper(self, request: Request) -> Response:
+        def assign(member: Member, caller: Caller, project_id: str) -> None:
+            asked: KeeperAssignment = request.state.asked
+            foundation = request.path_params["foundation"]
+            self._identity.assign_keeper(caller, project_id, foundation, asked.member_id)
+            self._audit.record(
+                KEEPER_ASSIGNED,
+                member=member,
+                project_id=project_id,
+                target=asked.member_id,
+                detail={"foundation": foundation},
+            )
+
+        return self._change_project(request, assign)
+
+    def _remove_keeper(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, project_id: str) -> None:
+            foundation = request.path_params["foundation"]
+            member_id = request.path_params["member_id"]
+            self._identity.remove_keeper(caller, project_id, foundation, member_id)
+            self._audit.record(
+                KEEPER_REMOVED, member=member, project_id=project_id, target=member_id, detail={"foundation": foundation}
+            )
 
         return self._change_project(request, remove)
 
