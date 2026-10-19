@@ -343,9 +343,9 @@ class Lifecycle:
             raise Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(CORE_FOUNDATIONS)}.")
         if memory.type == KNOWN_ISSUE:
             raise Refused("A known issue is not promoted: it is saved straight into project memory, outside any foundation.")
-        takes = FOUNDATION_TYPE.get(slug)
-        if takes is not None and memory.type != takes:
-            raise Refused(f"The {slug} foundation takes only {takes} memories, and this is a {memory.type} memory.")
+        only = FOUNDATION_TYPE.get(slug)
+        if only is not None and memory.type != only:
+            raise Refused(f"The {slug} foundation takes only {only} memories, and this is a {memory.type} memory.")
         return slug
 
     def _similar(
