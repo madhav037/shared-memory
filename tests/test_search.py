@@ -59,6 +59,7 @@ def test_search_results_carry_path_heading_level_author_and_summary(owner: Sessi
         "type": "convention",
         "author": "owner-1",
         "summary": "Money is integer cents.",
+        "foundation": None,
         "label": "your personal memory",
         "pending": [],
         "possibly_outdated": False,

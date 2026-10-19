@@ -21,7 +21,7 @@ from shared_memory.identity import Caller
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.service import label
 from shared_memory.sessions import Session, Sessions
-from shared_memory.memory import Memory
+from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 from shared_memory.uses import Uses
 
@@ -146,6 +146,9 @@ class Recall:
             is_top = position == 0
             title = memory.title if each.heading == memory.title or not is_top else f"{memory.title}: {each.heading}"
             kind = label(caller, hit.level, hit.member_id)
+            foundation = locate(hit.path).foundation
+            if foundation is not None:
+                kind += f", foundation: {foundation}"
             if memory.exception_to:
                 kind += f", exception to {memory.exception_to}"
             if hit.path in outdated:
