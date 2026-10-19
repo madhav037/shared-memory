@@ -22,7 +22,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PYTHON = ROOT / "src" / "shared_memory"
 ADRS = ROOT / "docs" / "adr"
 
-IDENTITY = ("teams", "members", "tokens", "projects", "repositories", "project_leads", "project_access")
+IDENTITY = (
+    "teams", "members", "tokens", "projects", "repositories", "project_leads", "project_access", "foundation_keepers",
+    "project_foundations",
+)
 BOARD = ("boards", "cards", "card_links", "card_comments")
 
 #: Tables `db.py` creates on another module's behalf.
