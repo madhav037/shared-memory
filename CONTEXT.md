@@ -208,7 +208,7 @@ _Avoid_: Title page, home page, marketing site
 
 **Plan**:
 What a team pays for: the most members it may have (5, 10 or 15) on a hosted server or a self-hosted server.
-_Avoid_: Tier, package, seat, subscription level
+_Avoid_: Tier, seat, subscription level
 
 **Hosted server**:
 A team's server that we run for it, never shared with another team.

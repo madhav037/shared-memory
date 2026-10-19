@@ -9,6 +9,7 @@ import {
   IconScale,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Link, useLocation } from "react-router";
 
 import { signInUrl, type Status } from "../api/client";
 import { Refusal } from "../components/Bits";
@@ -23,10 +24,14 @@ import "./landing.css";
 
 const STROKE = 1.6;
 const AGENTS = ["Claude Code", "Codex", "GitHub Copilot", "Gemini CLI", "Cursor", "Devin Desktop", "Cline"];
-/** Where a plan's action leads until checkout and licensing exist (#354, #355). */
-const PLAN_ACTION_URL = "#pricing";
 
 export function Landing({ status, refused }: { status: Status; refused: string | null }) {
+  // A link to /#pricing from another page arrives here before the section exists, so the page scrolls itself.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [hash]);
+
   return (
     <div className="landing">
       <section className="lp-hero">
@@ -49,7 +54,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
             )}
             <p className="lp-standfirst">
               Shared Memory is one memory every coding agent on your team reads and writes, hosted by us or on your
-              own server. Watch a lesson travel.
+              own server. Watch one finding travel.
             </p>
             <div className="lp-actions">
               <a className="lp-btn go" href="#pricing">
@@ -99,7 +104,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
         <div className="lp-wrap">
           <Heading>Always clear whose word it is.</Heading>
           <p className="lp-intro">
-            Every memory sits at a level, and the levels have a fixed order of weight. One member’s note never passes
+            Every memory sits at a level, and the levels have a fixed order of weight. One member’s memory never passes
             for something the team agreed.
           </p>
           <Levels />
@@ -130,7 +135,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
           <div>
             <Heading>Disagree? Challenge it.</Heading>
             <p className="lp-intro">
-              Nobody overwrites another member’s memory. They raise a challenge with their reasoning, and the author
+              Nobody changes another member’s memory. They raise a challenge with their reasoning, and the author
               decides, with what is offered in its place right beside it. Go on, decide this one.
             </p>
           </div>
@@ -304,7 +309,7 @@ function Heading({ children }: { children: ReactNode }) {
   );
 }
 
-/* ---------- The relay: one lesson reaching every session ---------- */
+/* ---------- The relay: one finding reaching every session ---------- */
 
 interface Wire {
   start: { x: number; y: number };
@@ -501,7 +506,7 @@ const STEPS = [
     where: "During any session",
     who: "Asha · Claude Code",
     lines: [
-      ["invoice numbers must be assigned at send, not at draft. remember that.", { type: true, prefix: PROMPT }],
+      ["invoice numbers are given when an invoice is sent, not when it’s created. remember that.", { type: true, prefix: PROMPT }],
       ['<span class="d">remember →</span> saved as your <span class="b">personal memory</span>'],
       ['<span class="d">decision · Asha Rao · version 1</span>'],
     ] as Line[],
@@ -515,7 +520,7 @@ const STEPS = [
     lines: [
       ["promote it to project billing", { type: true, prefix: PROMPT }],
       ['<span class="d">checking against what billing already holds…</span>', { wait: 600 }],
-      ['<span class="r">Contradiction:</span> “Number invoices when the draft is created”'],
+      ['<span class="r">Contradiction:</span> “Number invoices as soon as they’re created”'],
       ['<span class="d">project · Ben Okafor · v2</span>'],
       ['They can’t both be true. Supersede Ben’s memory? That raises a <span class="ok">challenge</span> for Ben to decide.'],
     ] as Line[],
@@ -528,9 +533,9 @@ const STEPS = [
     who: "Ben · Cursor",
     lines: [
       ['<span class="d">session starts · briefing for</span> <span class="b">billing</span>'],
-      ['<span class="ok">Pinned</span>  Run migrations through the deploy job'],
+      ['<span class="ok">Pinned</span>  Release only through the release job'],
       ['<span class="ok">Pinned</span>  The sandbox gateway drops webhooks over 64 KB'],
-      ['<span class="r">Waiting for you</span>  Asha challenges “Number invoices when the draft is created”'],
+      ['<span class="r">Waiting for you</span>  Asha challenges “Number invoices as soon as they’re created”'],
     ] as Line[],
   },
   {
@@ -540,9 +545,9 @@ const STEPS = [
     where: "As the member works",
     who: "Chen · Codex",
     lines: [
-      ["fix the duplicate invoice numbers bug", { type: true, prefix: PROMPT }],
+      ["two invoices got the same number. why?", { type: true, prefix: PROMPT }],
       ['<span class="d">recalled 2 memories for this prompt</span>'],
-      ['<span class="new">Invoice numbers are assigned at send, not at draft</span>'],
+      ['<span class="new">Invoice numbers are given when an invoice is sent</span>'],
       ['<span class="d">decision · Asha Rao</span>'],
       ['Looking at <span class="b">send_invoice()</span> first, then.'],
     ] as Line[],
@@ -650,7 +655,7 @@ const VERSIONS: { label: string; standing: ReactNode; past: boolean; currency: s
     currency: "Written by Asha Rao, 3 March 2026.",
     text: (
       <>
-        Run <code>migrate up</code> from your laptop, after running it on staging first.
+        Run <code>make release</code> from your laptop, after a dry run on staging.
       </>
     ),
   },
@@ -665,8 +670,8 @@ const VERSIONS: { label: string; standing: ReactNode; past: boolean; currency: s
     currency: "Amended by Asha Rao, 20 May 2026.",
     text: (
       <>
-        Run <code>migrate up</code> <del>from your laptop, after running it on staging first.</del>{" "}
-        <ins>from the deploy job, never from a laptop.</ins>
+        Run <code>make release</code> <del>from your laptop, after a dry run on staging.</del>{" "}
+        <ins>only from the release job, never from a laptop.</ins>
       </>
     ),
   },
@@ -681,8 +686,8 @@ const VERSIONS: { label: string; standing: ReactNode; past: boolean; currency: s
     currency: "Amended by Ben Okafor, 12 September 2026.",
     text: (
       <>
-        Run <code>migrate up</code> from the deploy job, never from a laptop.{" "}
-        <ins>The job takes the database lock first, so two deploys can’t apply the same migration twice.</ins>
+        Run <code>make release</code> only from the release job, never from a laptop.{" "}
+        <ins>The job waits for the release before it to finish, so two releases never overlap.</ins>
       </>
     ),
   },
@@ -715,7 +720,7 @@ function HistoryScene() {
   if (!shown) return null;
   return (
     <article className="lp-doc" ref={ref} data-testid="landing-history">
-      <h3>Run migrations through the deploy job</h3>
+      <h3>Release only through the release job</h3>
       <div className={shown.past ? "status past" : "status"}>
         <IconCircleCheck size={18} stroke={STROKE} aria-hidden />
         <p>{shown.standing}</p>
@@ -952,7 +957,7 @@ function CollisionScene() {
           <div className="opts">
             <span>Wait for it</span>
             <span>Work elsewhere</span>
-            <span>Take the lock over</span>
+            <span>Takeover</span>
           </div>
         </div>
       </div>
@@ -986,10 +991,10 @@ const TOUR: { tab: string; title: string; text: string; panel: ReactNode }[] = [
     text: "Every version, who made it and when. Read a memory as it stood on the day something went wrong.",
     panel: (
       <>
-        <div className="title">Run migrations through the deploy job</div>
+        <div className="title">Release only through the release job</div>
         <ul>
           <li>
-            <b>Version 3</b>, in force from 12 September. Ben added the lock.
+            <b>Version 3</b>, in force from 12 September. Ben made releases wait their turn.
           </li>
           <li>
             <b>Version 2</b>, 20 May to 12 September. Asha dropped the staging step.
@@ -1209,7 +1214,7 @@ function Pricing() {
         </div>
         <p className="lp-hosting-line">
           {hosting === "hosted"
-            ? `We run your team’s own server, never shared with another team, back it up and keep it current. Try it for ${TRIAL_DAYS} days before you pay.`
+            ? `We run a server for your team alone, back it up and keep it current. Try it for ${TRIAL_DAYS} days before you pay.`
             : "Run it on a server you control, with Docker, under a yearly license. Search runs on a model inside the server, so memory never leaves it."}
         </p>
         <div className="lp-plans">
@@ -1235,7 +1240,7 @@ function Pricing() {
           </ul>
         </div>
         <p className="lp-more">
-          More than fifteen members? <a href={PLAN_ACTION_URL}>Talk to us.</a>
+          More than fifteen members? <Link to="/coming-soon?for=contact">Talk to us.</Link>
         </p>
       </div>
     </section>
@@ -1265,9 +1270,10 @@ function Plan({ size, hosting, billing }: { size: PlanSize; hosting: Hosting; bi
         </span>
       </div>
       <p className="lp-terms">{price.terms}</p>
-      <a className="lp-btn go small" href={PLAN_ACTION_URL}>
+      {/* Checkout and licensing don't exist yet (#354, #355), so both actions say what is coming. */}
+      <Link className="lp-btn go small" to={`/coming-soon?for=${hosting === "hosted" ? "trial" : "license"}`}>
         {price.action} <IconArrowRight size={16} stroke={2} />
-      </a>
+      </Link>
     </article>
   );
 }
