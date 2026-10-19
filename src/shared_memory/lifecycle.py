@@ -163,12 +163,13 @@ class Lifecycle:
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
                 challenged = (similar_path, other)
+                self._replacement_foundation(memory_type, similar_location.foundation, into)
             elif other.author == caller.member_id or similar_location.foundation is not None:
                 if supersede is not None:
                     raise Refused("A promotion can supersede only one memory. Retire the others first.")
                 supersede = similar_path
-                if into is None and similar_location.foundation is not None:
-                    into = self._foundation_holding(memory_type, similar_location.foundation)
+                if similar_location.foundation is not None:
+                    into = self._replacement_foundation(memory_type, similar_location.foundation, into)
             else:
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
@@ -391,6 +392,12 @@ class Lifecycle:
             raise Refused(
                 f"The {slug} foundation still holds active memory. Retire or move it first; only an empty foundation can be removed."
             )
+        for one in self._challenges.open_challenges(caller.team):
+            if one.kind == "add" and one.foundation == slug and project_of(one) == project_id:
+                raise Refused(
+                    f"A memory is waiting to join the {slug} foundation on challenge {one.id}. Decide it first; "
+                    "only a foundation nothing waits on can be removed."
+                )
         self._identity.remove_foundation(caller, project_id, slug)
 
     def foundation_lines(self, caller: Caller) -> list[str]:
@@ -403,7 +410,11 @@ class Lifecycle:
         lines = [f"[foundations] Foundations: {', '.join(slugs)}. Read the one covering your change first, and follow it."]
         if not (self._leads(caller, project) or self._identity.keeps_any(caller.member, project.project_id)):
             return lines
-        asked = {one.foundation for one in self._challenges.open_challenges(caller.team) if one.kind == "add"}
+        asked = {
+            one.foundation
+            for one in self._challenges.open_challenges(caller.team)
+            if one.kind == "add" and project_of(one) == project.project_id
+        }
         missing = [
             slug
             for slug in slugs
@@ -461,6 +472,19 @@ class Lifecycle:
             foundation=foundation,
         )
         return self._challenge_raised(challenge_id, folder, caller.member_id, True)
+
+    def _replacement_foundation(self, memory_type: str, slug: str, into: str | None) -> str:
+        """The foundation a memory replacing one in `slug` lands in, which is that one: refused when it takes no
+        memory of this type, or when the promotion asked for another foundation."""
+        if into not in (None, slug):
+            raise Refused(f"This memory replaces one in the {slug} foundation, so it goes there, not into {into}.")
+        if self._foundation_holding(memory_type, slug) is None:
+            only = FOUNDATION_TYPE.get(slug)
+            raise Refused(
+                f"This memory replaces one in the {slug} foundation, which takes only {only} memories, "
+                f"and this is a {memory_type} memory. Promote it without superseding."
+            )
+        return slug
 
     @staticmethod
     def _foundation_holding(memory_type: str, slug: str) -> str | None:
@@ -606,7 +630,8 @@ class Lifecycle:
                 "challenge_id": challenge_id,
                 "challenges": target_path,
                 "author": author,
-                "next": "A lead of the project decides, because it changes a foundation. Until then the foundation "
+                "next": "A keeper of that foundation or a lead of the project decides, because it changes a foundation. "
+                "Until then the foundation "
                 "holds as it is and a memory you proposed stays where it is.",
             }
         return {
