@@ -58,6 +58,7 @@ services:
     environment:
       SHARED_MEMORY_DOMAIN: ${SHARED_MEMORY_DOMAIN}
       CADDY_SITE_ADDRESS: ${SHARED_MEMORY_DOMAIN}
+      CADDY_ROBOTS_TAG: ${SHARED_MEMORY_ROBOTS_TAG:-noindex}
     ports:
       - "80:80"
       - "443:443"

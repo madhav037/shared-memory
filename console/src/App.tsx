@@ -169,6 +169,15 @@ function SignedIn({
   const location = useLocation();
   const readsAudit = member.role === "owner" || member.role === "admin" || member.leads_a_project;
 
+  // The page's own title describes Shared Memory to search engines; a signed-in member's tab just names it.
+  useEffect(() => {
+    const described = document.title;
+    document.title = "Shared Memory";
+    return () => {
+      document.title = described;
+    };
+  }, []);
+
   useEffect(() => {
     const attempt = new AbortController();
     fetchChallenges(attempt.signal)
