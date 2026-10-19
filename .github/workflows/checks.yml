@@ -2,6 +2,11 @@ name: Checks
 
 # Everything that must hold for every change: the server's lint, tests and types, and the console's types, build and journeys.
 # The smoke tests with real Claude Code are separate and run nightly.
+#
+# The server and the console are checked side by side, and a pull request runs only the side its files can affect: a
+# change inside console/ alone can't break the server, while the console's journeys run against the real server, so
+# they run for server changes too. Every push to main runs both. The job named checks says whether everything that ran
+# passed; it is the one check a pull request needs.
 
 on:
   pull_request:
@@ -16,9 +21,80 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ github.event_name == 'push' || steps.filter.outputs.server == 'true' }}
+      console: ${{ github.event_name == 'push' || steps.filter.outputs.console == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Which side the change can affect
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            server:
+              - "**"
+              - "!console/**"
+            console:
+              - "**"
+              - "!docs/**"
+              - "!deploy/**"
+              - "!smoke/**"
+              - "!plugin/**"
+              - "!*.md"
+
+  server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shared_memory
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      - name: Cache the search model
+        uses: actions/cache@v6
+        with:
+          path: .cache/fastembed
+          key: fastembed-${{ hashFiles('uv.lock') }}
+
+      - name: Server lint
+        run: uv run ruff check
+
+      - name: Server tests
+        run: uv run pytest
+
+      - name: Server types
+        run: uv run mypy
+
+  console:
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -50,14 +126,10 @@ jobs:
           path: .cache/fastembed
           key: fastembed-${{ hashFiles('uv.lock') }}
 
-      - name: Server lint
-        run: uv run ruff check
-
-      - name: Server tests
-        run: uv run pytest
-
-      - name: Server types
-        run: uv run mypy
+      # Some server tests read the console's files (its API contract, its words, its journey harness); a change
+      # inside console/ alone skips the server job, so those tests run here, found by what they read.
+      - name: Server tests that read the console
+        run: uv run pytest $(grep -lE 'ROOT / "console"' tests/test_*.py)
 
       - name: Install the console's dependencies
         working-directory: console
@@ -75,9 +147,22 @@ jobs:
         working-directory: console
         run: npm run api:check
 
+      - name: Cache the browser
+        id: browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('console/package-lock.json') }}
+
       - name: Install the browser
+        if: steps.browser.outputs.cache-hit != 'true'
         working-directory: console
         run: npx playwright install --with-deps chromium
+
+      - name: Install the browser's system libraries
+        if: steps.browser.outputs.cache-hit == 'true'
+        working-directory: console
+        run: npx playwright install-deps chromium
 
       - name: Browser journeys
         working-directory: console
@@ -90,3 +175,22 @@ jobs:
           name: playwright-report
           path: console/playwright-report
           retention-days: 7
+
+  checks:
+    needs: [changes, server, console]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Everything that ran passed
+        env:
+          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }}
+        run: |
+          echo "changes, server, console: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) echo "::error::A check ended $result."; exit 1 ;;
+            esac
+          done
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::Couldn't tell what the change affects."; exit 1; }
