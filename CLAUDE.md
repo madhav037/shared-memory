@@ -64,7 +64,9 @@ seam.
 ## Pull requests
 
 - One PR per ticket: one concern, a small diff. Cleanup travels in its own PR.
-- Merge when CI is green.
+- Merge when CI is green: queue it with `gh pr merge --auto --squash` as soon as the PR is open, and
+  GitHub merges it once the `checks` job passes. CI runs only the side a PR can affect (server,
+  console, or both), so don't wait on it.
 - **Stacked PRs:** merge the base with `gh pr merge --squash` and leave its branch in place.
   Deleting the base branch makes GitHub close the stacked PR instead of retargeting it, so
   `--delete-branch` waits until every PR stacked on it has merged. Then move the stacked branch
