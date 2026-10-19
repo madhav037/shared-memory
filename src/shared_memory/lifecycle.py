@@ -346,6 +346,43 @@ class Lifecycle:
         target: Level = "team" if level == "team" else "project"
         return location, target, promoted_by, project, self._foundation_for(memory, target, foundation, project.project_id)
 
+    def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
+        """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
+        foundation, otherwise as a challenge they decide while the memory stays where it is."""
+        project = caller.require_project()
+        caller.require_reach(path)
+        location = locate(path)
+        memory = self._store.read(caller.team, location.path)
+        if location.level == "personal":
+            raise Refused("Personal memory goes into a foundation by promoting it: promote it with foundation.")
+        if location.level == "team":
+            raise Refused("Team memory has no foundations: foundations are a project's.")
+        if location.foundation is not None:
+            raise Refused(f"This memory is already in the {location.foundation} foundation.")
+        if location.project_id != project.project_id:
+            raise Refused("This memory belongs to another project. Add it from a session in that project.")
+        if memory.status != "active":
+            raise Refused(f"This memory is {memory.status}, and only an active memory joins a foundation.")
+        into = self._foundation_for(memory, "project", foundation, project.project_id)
+        if into is None:
+            raise Refused("Name the foundation to add this memory to.")
+        waiting = [
+            one for one in self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)]) if one.kind == "add"
+        ]
+        if waiting:
+            raise Refused(f"This memory is already waiting to join a foundation on challenge {waiting[0].id}.")
+        if not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project)):
+            return self._ask_to_add(caller, location, None, into, reasoning)
+        moved = self._move(caller, location, "project", foundation=into, reason="Add to foundation")
+        self._closed_by_move(caller, location, moved["path"])
+        return {"status": "added", "path": moved["path"]}
+
+    def _closed_by_move(self, caller: Caller, location: Location, new_path: str) -> None:
+        """A project memory that moved leaves its old path behind: challenges against it are closed, their raisers told."""
+        self._challenges.close_all_against(
+            caller.team, str(location.path), caller.member_id, f"the memory moved into a foundation, to {new_path}."
+        )
+
     def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
         """Remove an extra foundation of a project, once it holds no active memory."""
         self._identity.require_extra_foundation(caller, project_id, slug)
@@ -530,7 +567,7 @@ class Lifecycle:
                 "challenges": target_path,
                 "author": author,
                 "next": "A lead of the project decides, because it changes a foundation. Until then the foundation "
-                "holds as it is and a memory you promoted stays personal memory.",
+                "holds as it is and a memory you proposed stays where it is.",
             }
         return {
             "status": "challenge_raised",
@@ -617,7 +654,7 @@ class Lifecycle:
                 caller.team,
                 challenge.raised_by,
                 f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. "
-                "Your memory stays personal memory.",
+                "Your memory stays where it is.",
             )
             return {"status": "rejected", "challenge_id": challenge.id}
 
@@ -684,6 +721,9 @@ class Lifecycle:
         if not self._store.exists(caller.team, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
+        if challenger_location.level == "project" and self._store.read(caller.team, challenger_location.path).status != "active":
+            self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory is no longer active.")
+            raise Refused("The challenging memory is no longer active, so the challenge has been withdrawn.")
         moved = self._move(
             caller,
             challenger_location,
@@ -692,6 +732,8 @@ class Lifecycle:
             promoted_by=challenge.promoted_by,
             reason=f"Accept challenge {challenge.id}",
         )
+        if challenger_location.level == "project":
+            self._closed_by_move(caller, challenger_location, moved["path"])
         outcome = (
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
             f"your memory is now in the {challenge.foundation} foundation at {moved['path']}."

@@ -736,6 +736,19 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    def add_to_foundation(path: str, foundation: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
+        """Bring an existing project memory into one of the project's foundations (architecture, product, glossary,
+        decisions, or an extra one a project lead added). Only an active project memory outside any foundation, of a
+        type that foundation takes, can be added.
+
+        A keeper of that foundation or a lead of the project moves it at once. Anyone else raises a challenge they
+        decide; pass reasoning for why it belongs there. Until it is decided the memory stays readable where it is.
+        """
+        return lifecycle.add_to_foundation(caller(ctx), path, foundation, reasoning)
+
+    @server.tool()
+    @saving
+    @_refusals_as_tool_errors
     def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
         """Accept or reject a challenge against a memory (decision: accept or reject).
 

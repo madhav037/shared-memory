@@ -86,6 +86,8 @@ If the member chooses **supersede** for a memory someone else wrote, it is not s
 
 When project or team memory is simply no longer true and nothing replaces it (the service was shut down, the rule was dropped), `retire` it. A memory the member wrote is retired at once; retiring someone else's memory raises a challenge, decided as any challenge is. Retired memory stays in history but no longer appears in search, recall or the briefing. Personal memory isn't retired: the author deletes it with `delete_memory`.
 
+To bring an existing project memory into a foundation, call `add_to_foundation` with its path and the foundation. A keeper of that foundation or a lead of the project moves it at once; anyone else raises a challenge they decide, and the memory stays where it is until then.
+
 ## The board
 
 The project's work is tracked as cards on its board, in To do, Doing, Blocked and Done. Cards aren't memory: `board` reads them and `search` doesn't find them.
