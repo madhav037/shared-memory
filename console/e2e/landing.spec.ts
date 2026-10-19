@@ -36,3 +36,53 @@ test("a visitor decides the example challenge and reads a memory as it stood", a
   await history.getByRole("button", { name: "v3 · September" }).click();
   await expect(history).toContainText("In force.");
 });
+
+test("the landing page's address tells search engines and link previews what Shared Memory is before any script runs", async ({
+  request,
+}) => {
+  const html = await (await request.get("/")).text();
+
+  expect(html).toContain("<title>Shared Memory: Team Memory for Claude Code, Cursor &amp; Codex</title>");
+  expect(html).toMatch(/<meta\s+name="description"\s+content="One memory every coding agent on your team reads and writes\./);
+  expect(html).toMatch(/<meta\s+property="og:title"\s+content="What one agent learns, every agent knows\."/);
+  expect(html).toMatch(/<meta\s+name="twitter:card"\s+content="summary"/);
+
+  const described = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  const graph = JSON.parse(described![1]!)["@graph"] as { "@type": string; name: string }[];
+  expect(graph.map((thing) => thing["@type"])).toEqual(["Organization", "SoftwareApplication"]);
+});
+
+test("a section's heading wipes into view once the visitor scrolls to it", async ({ page }) => {
+  await page.goto("/");
+
+  const heading = page.locator("#how h2");
+  await heading.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await expect(heading).toHaveClass(/\bin\b/);
+});
+
+test("each section answers the question a buyer asks, and the page compares Shared Memory with a committed file and an agent's own memory", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  for (const question of [
+    "How does memory reach every session?",
+    "Which memory wins when two disagree?",
+    "How is this different from a CLAUDE.md?",
+    "How much does it cost?",
+  ]) {
+    await expect(page.getByRole("heading", { level: 2, name: question })).toBeAttached();
+  }
+
+  const comparison = page.getByRole("table", { name: /Shared Memory compared/ });
+  await expect(comparison.getByRole("columnheader")).toHaveText([
+    "",
+    "Shared Memory",
+    "A committed CLAUDE.md or AGENTS.md",
+    "An agent’s own memory",
+  ]);
+  await expect(comparison.getByRole("row", { name: /When someone disagrees/ })).toContainText("decided by its author");
+  await expect(page.locator("#different")).toContainText("Claude Code, Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop and Cline");
+
+  await expect(page.locator(".lp-foot")).toContainText(/Updated \w+ \d{4}\./);
+});

@@ -215,6 +215,10 @@ The console is served at the domain by the same Caddy that fronts the server, so
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
 
+### Search engines
+
+Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server, its console and its landing page stay out of search results. On the one server whose landing page should be found, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
+
 ## Behind a CDN
 
 The server can sit behind a CDN such as Cloudflare or CloudFront, for DDoS protection and to keep the host's address private. It is suited to it: the MCP endpoint answers plain JSON with no session to keep, hooks and console requests are short, and nothing reads the client's IP. Five things need setting on the CDN.
