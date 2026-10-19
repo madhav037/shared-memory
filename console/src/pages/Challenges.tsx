@@ -230,6 +230,7 @@ function Waiting({
 /** Why a challenge against another member's memory is this member's to decide. */
 const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string> = {
   lead: "yours to decide as a project lead",
+  keeper: "yours to decide as a keeper of the foundation",
   admin: "yours to decide as an admin",
   fallback: "nobody has decided in time, so anyone may",
   author_left: "its author has left the team, so anyone may",

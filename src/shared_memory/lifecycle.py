@@ -117,7 +117,7 @@ class Lifecycle:
         if reference is None:
             proposal = self._similar(caller, path, location, level, project)
             if proposal is None:
-                if into is not None and not self._leads(caller, project):
+                if into is not None and not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project)):
                     return self._ask_to_add(caller, location, promoted_by, into, reasoning)
                 return self._move(caller, location, target, promoted_by=promoted_by, foundation=into)
             return proposal
@@ -156,8 +156,10 @@ class Lifecycle:
                 if exception_to is not None:
                     raise Refused("A project memory can be an exception to only one team memory.")
                 exception_to = similar_path
-            elif similar_location.foundation is not None and not leads:
-                # A foundation memory is changed by its project's leads: anyone else challenges it, even its author.
+            elif similar_location.foundation is not None and not self._changes_at_once(
+                caller, project.project_id, similar_location.foundation, leads
+            ):
+                # A foundation memory is changed by its project's leads and its keepers: anyone else challenges it, even its author.
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
                 challenged = (similar_path, other)
@@ -177,7 +179,7 @@ class Lifecycle:
                 "Challenge first; once it's accepted, promote the rest."
             )
         challenged_foundation = None if challenged is None else locate(challenged[0]).foundation
-        if into is not None and not leads:
+        if into is not None and not self._changes_at_once(caller, project.project_id, into, leads):
             if (challenged is not None and challenged_foundation is None) or supersede is not None or exception_to is not None:
                 raise Refused(
                     "A promotion into a foundation can't also supersede or be an exception to another memory unless "
@@ -346,6 +348,12 @@ class Lifecycle:
 
     def _leads(self, caller: Caller, project: Project) -> bool:
         return project.project_id in self._identity.leads_of(caller.member)
+
+    def _changes_at_once(self, caller: Caller, project_id: str | None, foundation: str | None, leads: bool) -> bool:
+        """Whether this member's own change to a foundation lands at once: they lead its project or keep it."""
+        if leads:
+            return True
+        return foundation is not None and project_id is not None and self._identity.keeps(caller.member, project_id, foundation)
 
     def _ask_to_add(
         self, caller: Caller, location: Location, promoted_by: str | None, foundation: str, reasoning: str | None
@@ -535,8 +543,10 @@ class Lifecycle:
             raise Refused(f"This memory is already {memory.status}.")
         areas = [area for area in [area_of(location.path)] if area is not None]
         in_foundation = location.foundation is not None
-        # A foundation is changed by its project's leads: anyone else challenges the retiring, even its author.
-        leads = in_foundation and location.project_id in self._identity.leads_of(caller.member)
+        # A foundation is changed by its project's leads and its keepers: anyone else challenges the retiring, even its author.
+        leads = in_foundation and self._changes_at_once(
+            caller, location.project_id, location.foundation, location.project_id in self._identity.leads_of(caller.member)
+        )
         if not leads and (in_foundation or memory.author != caller.member_id):
             challenge_id = self._challenges.raise_challenge(
                 caller,

@@ -232,6 +232,7 @@ def build_app(
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
     board = Board(settings, db, identity, audit, clock, challenges.tell, lifecycle.retire_fixed)
     identity.on_access_lost(board.return_cards)
+    identity.on_access_lost(challenges.drop_keepers)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
     sessions = Sessions(settings, db, identity, clock)
