@@ -23,7 +23,8 @@ PYTHON = ROOT / "src" / "shared_memory"
 ADRS = ROOT / "docs" / "adr"
 
 IDENTITY = (
-    "teams", "members", "tokens", "projects", "repositories", "project_leads", "project_access", "foundation_keepers"
+    "teams", "members", "tokens", "projects", "repositories", "project_leads", "project_access", "foundation_keepers",
+    "project_foundations",
 )
 BOARD = ("boards", "cards", "card_links", "card_comments")
 
