@@ -344,7 +344,17 @@ class Lifecycle:
         if waiting:
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
         target: Level = "team" if level == "team" else "project"
-        return location, target, promoted_by, project, self._foundation_for(memory, target, foundation)
+        return location, target, promoted_by, project, self._foundation_for(memory, target, foundation, project.project_id)
+
+    def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Remove an extra foundation of a project, once it holds no active memory."""
+        self._identity.require_extra_foundation(caller, project_id, slug)
+        memories, _ = self._store.list_folder(caller.team, foundation_folder(project_id, slug))
+        if any(memory.status == "active" for _, memory in memories):
+            raise Refused(
+                f"The {slug} foundation still holds active memory. Retire or move it first; only an empty foundation can be removed."
+            )
+        self._identity.remove_foundation(caller, project_id, slug)
 
     def _leads(self, caller: Caller, project: Project) -> bool:
         return project.project_id in self._identity.leads_of(caller.member)
@@ -381,11 +391,10 @@ class Lifecycle:
         only = FOUNDATION_TYPE.get(slug)
         return None if memory_type == KNOWN_ISSUE or (only is not None and memory_type != only) else slug
 
-    @staticmethod
-    def _foundation_for(memory: Memory, target: Level, named: str | None) -> str | None:
+    def _foundation_for(self, memory: Memory, target: Level, named: str | None, project_id: str | None) -> str | None:
         """The foundation a promotion goes into, refusing one that can't take the memory. At project level an
         architecture memory belongs in Architecture and a decision memory in Decisions, named or not; any other type
-        goes into a foundation only when it is named."""
+        goes into a foundation only when it is named, and it names one of the project's, core or extra."""
         slug = None if named is None else named.strip().lower()
         if target == "team":
             if slug is not None:
@@ -400,8 +409,9 @@ class Lifecycle:
         slug = own or slug
         if slug is None:
             return None
-        if slug not in CORE_FOUNDATIONS:
-            raise Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(CORE_FOUNDATIONS)}.")
+        slugs = self._identity.foundations_of(project_id) if project_id is not None else list(CORE_FOUNDATIONS)
+        if slug not in slugs:
+            raise Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
         if memory.type == KNOWN_ISSUE:
             raise Refused("A known issue is not promoted: it is saved straight into project memory, outside any foundation.")
         only = FOUNDATION_TYPE.get(slug)
@@ -655,7 +665,7 @@ class Lifecycle:
             caller,
             challenger_location,
             level,
-            foundation=self._foundation_for(challenger, level, None)
+            foundation=self._foundation_for(challenger, level, None, challenger_location.project_id)
             or (None if challenge.foundation is None else self._foundation_holding(challenger.type, challenge.foundation)),
             supersede=challenge.target_path,
             promoted_by=challenge.promoted_by,

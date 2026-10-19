@@ -703,12 +703,16 @@ class Identity:
             ).fetchall()
             you_lead = self._leads_it(conn, member.pk, project_id)
             keepers = self.keepers_listed(conn, project_id)
+            foundations = self._foundations_listed(conn, project_id)
         return {
             "project_id": project_id,
             "name": project.name,
             "restricted": row["restricted"],
             "leads": leads,
-            "foundations": [{"slug": slug, "keepers": keepers.get(slug, [])} for slug in CORE_FOUNDATIONS],
+            "foundations": [
+                {"slug": slug, "name": name, "core": core, "keepers": keepers.get(slug, [])}
+                for slug, name, core in foundations
+            ],
             "access": [{"member_id": one["member_id"], "name": one["name"]} for one in access],
             "repositories": [row["name"] for row in repositories],
             "you_lead": you_lead,
@@ -794,17 +798,70 @@ class Identity:
         return found is not None
 
     @staticmethod
-    def _require_foundation(foundation: str) -> None:
-        if foundation not in CORE_FOUNDATIONS:
-            raise Refused(f"This project has no {foundation!r} foundation. Its foundations are {', '.join(CORE_FOUNDATIONS)}.")
+    def _foundations_listed(conn: Conn, project_id: str) -> list[tuple[str, str, bool]]:
+        """A project's foundations as (slug, name, whether core): the core four, then its extras in the order added."""
+        listed = [(slug, slug.capitalize(), True) for slug in CORE_FOUNDATIONS]
+        rows = conn.execute(
+            "SELECT slug, name FROM project_foundations WHERE project_id = %s ORDER BY added_at, slug", (project_id,)
+        ).fetchall()
+        return listed + [(row["slug"], row["name"], False) for row in rows]
+
+    def foundations_of(self, project_id: str) -> list[str]:
+        """The slugs of a project's foundations, core and extra."""
+        with self._db.transaction() as conn:
+            return [slug for slug, _, _ in self._foundations_listed(conn, project_id)]
+
+    def _require_foundation(self, conn: Conn, project_id: str, foundation: str) -> None:
+        slugs = [slug for slug, _, _ in self._foundations_listed(conn, project_id)]
+        if foundation not in slugs:
+            raise Refused(f"This project has no {foundation!r} foundation. Its foundations are {', '.join(slugs)}.")
+
+    def add_foundation(self, caller: Caller, project_id: str, name: str, leads_only: bool = False) -> str:
+        """Add an extra foundation to a project and answer its slug. A lead can; so can an admin, unless `leads_only`.
+        Its name can't be empty or stand for a foundation the project already has."""
+        if leads_only:
+            if project_id not in self.leads_of(caller.member):
+                raise Refused("Only this project's leads can add a foundation.")
+        else:
+            self._require_lead(caller, project_id)
+        if not re.search(r"[a-z0-9]", name.lower()):
+            raise Refused("A foundation needs a name with letters or digits in it.")
+        if len(name.strip()) > 64:
+            raise Refused("A foundation's name is at most 64 characters.")
+        slug = slugify(name)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            if slug in [one for one, _, _ in self._foundations_listed(conn, project_id)]:
+                raise Refused(f"This project already has a {slug!r} foundation.")
+            conn.execute(
+                "INSERT INTO project_foundations (project_id, slug, name, added_by, added_at) VALUES (%s, %s, %s, %s, %s)",
+                (project_id, slug, name.strip(), caller.member.pk, self._clock()),
+            )
+        return slug
+
+    def require_extra_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Refuse removing what isn't an extra foundation of this project: a core one, or one it doesn't have."""
+        self._require_lead(caller, project_id)
+        if slug in CORE_FOUNDATIONS:
+            raise Refused(f"The {slug} foundation is one of the core four, and can't be removed.")
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, slug)
+
+    def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Remove an extra foundation, and its keepers with it."""
+        self.require_extra_foundation(caller, project_id, slug)
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM foundation_keepers WHERE project_id = %s AND foundation = %s", (project_id, slug))
+            conn.execute("DELETE FROM project_foundations WHERE project_id = %s AND slug = %s", (project_id, slug))
 
     def assign_keeper(self, caller: Caller, project_id: str, foundation: str, member_id: str) -> None:
         """Make a member a keeper of one of this project's foundations. A lead can; so can an admin. The member must
         be able to reach the project."""
         self._require_lead(caller, project_id)
-        self._require_foundation(foundation)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, foundation)
             pk = self._member_pk(conn, caller, member_id)
             if self.cannot_reach(conn, caller.member.team_pk, [(pk, project_id)]):
                 raise Refused(
@@ -820,9 +877,9 @@ class Identity:
     def remove_keeper(self, caller: Caller, project_id: str, foundation: str, member_id: str) -> None:
         """Take a keeper off a foundation."""
         self._require_lead(caller, project_id)
-        self._require_foundation(foundation)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, foundation)
             pk = self._member_pk(conn, caller, member_id)
             removed = conn.execute(
                 "DELETE FROM foundation_keepers WHERE project_id = %s AND foundation = %s AND member_id = %s"

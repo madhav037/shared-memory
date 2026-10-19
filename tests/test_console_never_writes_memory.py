@@ -102,6 +102,10 @@ def test_doing_everything_the_console_may_do_to_memory_never_writes_edits_or_pro
     keepers = f"/api/projects/{project}/foundations/architecture/keepers"
     assert signed_out.post_json(keepers, {"member_id": "emp-governs"}).status_code == 200
     assert signed_out.post(f"{keepers}/emp-governs/remove").status_code == 200
+    # So is adding and removing an extra foundation.
+    foundations = f"/api/projects/{project}/foundations"
+    assert signed_out.post_json(foundations, {"name": "Security model"}).status_code == 200
+    assert signed_out.post(f"{foundations}/security-model/remove").status_code == 200
 
     # And the reading it does all day.
     ask(signed_out, "/api/files")
@@ -161,7 +165,8 @@ MAY_ASK: dict[str, set[str]] = {
         "source",
         "version",
     },
-    "_lifecycle": {"decide_challenge", "retire"},
+    # remove_foundation only reads the folder it empties, and changes which foundations a project has.
+    "_lifecycle": {"decide_challenge", "remove_foundation", "retire"},
 }
 
 

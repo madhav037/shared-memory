@@ -48,6 +48,8 @@ const WORDS: Record<Kind, string> = {
   project_renamed: "Project renamed",
   lead_appointed: "Project lead appointed",
   lead_removed: "Project lead taken off",
+  foundation_added: "Foundation added",
+  foundation_removed: "Foundation removed",
   keeper_assigned: "Foundation keeper assigned",
   keeper_removed: "Foundation keeper removed",
   repository_added: "Repository added",

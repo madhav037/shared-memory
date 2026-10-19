@@ -39,6 +39,8 @@ Kind = Literal[
     "lead_removed",
     "keeper_assigned",
     "keeper_removed",
+    "foundation_added",
+    "foundation_removed",
     "repository_added",
     "repository_removed",
     "project_restricted",
@@ -82,6 +84,9 @@ LEAD_REMOVED: Kind = "lead_removed"
 # A foundation's keeper; the entry's target is the member. A keeper dropped for losing the project is a removal too.
 KEEPER_ASSIGNED: Kind = "keeper_assigned"
 KEEPER_REMOVED: Kind = "keeper_removed"
+# An extra foundation of a project; the entry's target is its slug.
+FOUNDATION_ADDED: Kind = "foundation_added"
+FOUNDATION_REMOVED: Kind = "foundation_removed"
 REPOSITORY_ADDED: Kind = "repository_added"
 REPOSITORY_REMOVED: Kind = "repository_removed"
 PROJECT_RESTRICTED: Kind = "project_restricted"
