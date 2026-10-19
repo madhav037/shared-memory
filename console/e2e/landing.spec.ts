@@ -59,3 +59,30 @@ test("a section's heading wipes into view once the visitor scrolls to it", async
   await heading.evaluate((element) => element.scrollIntoView({ block: "center" }));
   await expect(heading).toHaveClass(/\bin\b/);
 });
+
+test("each section answers the question a buyer asks, and the page compares Shared Memory with a committed file and an agent's own memory", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  for (const question of [
+    "How does memory reach every session?",
+    "Which memory wins when two disagree?",
+    "How is this different from a CLAUDE.md?",
+    "How much does it cost?",
+  ]) {
+    await expect(page.getByRole("heading", { level: 2, name: question })).toBeAttached();
+  }
+
+  const comparison = page.getByRole("table", { name: /Shared Memory compared/ });
+  await expect(comparison.getByRole("columnheader")).toHaveText([
+    "",
+    "Shared Memory",
+    "A committed CLAUDE.md or AGENTS.md",
+    "An agent’s own memory",
+  ]);
+  await expect(comparison.getByRole("row", { name: /When someone disagrees/ })).toContainText("decided by its author");
+  await expect(page.locator("#different")).toContainText("Claude Code, Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop and Cline");
+
+  await expect(page.locator(".lp-foot")).toContainText(/Updated \w+ \d{4}\./);
+});
