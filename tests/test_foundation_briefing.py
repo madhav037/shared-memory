@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.support import Console, ConsoleClient, RunningServer, Session, added_context
+from tests.support import Console, ConsoleClient, RunningServer, Session, Team, added_context
 from tests.test_foundation_keepers import Crew
 from tests.test_foundations import CENTS, INVOICE, POSTGRES, SERVICES, promote
 
@@ -68,3 +68,12 @@ def test_nothing_to_report_adds_nothing_and_a_member_is_told_only_the_foundation
     member = added_context(crew.bea.start())
     assert LINE in member
     assert "[foundations missing]" not in member and "[foundations outside]" not in member
+
+
+def test_an_add_challenge_in_one_project_does_not_hide_a_missing_foundation_in_another(team: Team, owner: Session, dana: Session) -> None:
+    promote(dana, CENTS, foundation="product")
+    checkout = team.owner().call("create_project", name="Checkout")["project_id"]
+    other = team.owner().in_project(checkout, "checkout")
+
+    assert "No active memory yet in: architecture, glossary, decisions." in added_context(owner.start())
+    assert "No active memory yet in: architecture, product, glossary, decisions." in added_context(other.start())

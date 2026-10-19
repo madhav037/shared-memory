@@ -360,3 +360,30 @@ def test_retiring_an_ordinary_project_memory_is_unchanged(owner: Session, dana: 
     path = promote(dana, CENTS)["path"]
 
     assert dana.call("retire", path=path)["status"] == "retired"
+
+
+def test_a_supersede_the_foundation_cannot_hold_is_refused_when_asked_for(owner: Session, dana: Session) -> None:
+    held = dana_has_one(owner, dana)
+    wrong_type = {**SERVICES_TWO, "type": "convention"}
+
+    by_lead = owner.refusal("promote", **_supersede_call(owner, wrong_type, held))
+    by_member = dana.refusal("promote", **_supersede_call(dana, wrong_type, held))
+
+    assert "architecture foundation, which takes only architecture" in by_lead
+    assert "architecture foundation, which takes only architecture" in by_member
+    assert owner.call("read", path=held)["status"] == "active"
+
+
+def _supersede_call(session: Session, memory: dict[str, str], target: str) -> dict[str, Any]:
+    """The arguments of the second promote call, resolving the foundation memory as supersede."""
+    personal = remember(session, memory)
+    first = session.call("promote", path=personal, level="project")
+    assert first["status"] == "similar_memories", first
+    resolutions = {one["path"]: ("supersede" if one["path"] == target else "keep_both") for one in first["similar"]}
+    return {"path": personal, "level": "project", "reference": first["reference"], "resolutions": resolutions}
+
+
+def test_a_foundation_challenge_says_a_keeper_or_a_lead_decides(owner: Session, dana: Session) -> None:
+    raised = promote(dana, SERVICES)
+
+    assert "keeper of that foundation or a lead of the project decides" in raised["next"]

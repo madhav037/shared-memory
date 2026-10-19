@@ -158,3 +158,17 @@ def test_adding_and_removing_an_extra_is_in_the_audit_log(console: Console, sign
         ("foundation_added", "security-model"),
     ]
     assert log[1]["detail"]["name"] == SECURITY
+
+
+def test_an_extra_with_an_open_add_challenge_is_not_removed(console: Console, signed_out: ConsoleClient) -> None:
+    crew = Crew(console, signed_out, 1908)
+    crew.owner.call("add_foundation", name=SECURITY)
+    raised = promote(crew.rae, CENTS, foundation="security-model")
+    where = f"/api/projects/{crew.project}/foundations/security-model/remove"
+
+    refused = signed_out.post(where)
+
+    assert refused.status_code == 403
+    assert "waiting to join" in refused.json()["message"]
+    crew.owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
+    assert signed_out.post(where).status_code == 200
