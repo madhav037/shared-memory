@@ -150,6 +150,10 @@ jobs:
         working-directory: console
         run: npm run build
 
+      - name: Console lint
+        working-directory: console
+        run: npm run lint
+
       - name: Console units
         working-directory: console
         run: npm run test
