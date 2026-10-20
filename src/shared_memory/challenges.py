@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Any, Literal
 
-from shared_memory.audit import CHALLENGE_RAISED, Audit
+from shared_memory.audit import CHALLENGE_RAISED, KEEPER_REMOVED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import locate
@@ -64,8 +64,8 @@ class Challenge:
     promoted_by: str | None
     raised_at: datetime
     reasoning: str | None
-    # The foundation (ADR-0019) a challenge is about: its lead decides it. A kind "add" challenge has no challenged
-    # memory, so its target_path is the foundation's folder.
+    # The foundation (ADR-0019) a challenge is about: a keeper of it or a lead of its project decides it. A kind "add"
+    # challenge has no challenged memory, so its target_path is the foundation's folder.
     foundation: str | None = None
 
     @classmethod
@@ -87,7 +87,7 @@ class Challenge:
 
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
 # of the team's admins (the owner is one), because the fallback period has passed, or because its author has left.
-DecidesAs = Literal["author", "lead", "admin", "fallback", "author_left"]
+DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left"]
 
 
 @dataclass(frozen=True)
@@ -248,7 +248,7 @@ class Challenges:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation,"
-                " reasoning FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
+                " reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
                 (caller.team, caller.member_id),
             ).fetchall()
         return [
@@ -263,9 +263,28 @@ class Challenges:
                 "decided_at": row["decided_at"],
                 "explanation": row["explanation"],
                 "reasoning": row["reasoning"],
+                "foundation": row["foundation"],
             }
             for row in rows
         ]
+
+    def drop_keepers(self, conn: Conn, caller: Caller) -> Callable[[], None]:
+        """Drop the keepers who can no longer reach their project: removed from the team, or shut out of a restricted
+        project. Identity calls this inside the transaction of any change that may have cost a member a project
+        (`Identity.on_access_lost`). What it gives back notes each drop in the audit log once that has committed."""
+        dropped = self._identity.drop_keepers(conn, caller)
+
+        def committed() -> None:
+            for project_id, foundation, member_id in dropped:
+                self._audit.record(
+                    KEEPER_REMOVED,
+                    member=caller.member,
+                    project_id=project_id,
+                    target=member_id,
+                    detail={"foundation": foundation, "dropped": True},
+                )
+
+        return committed
 
     # Who decides
 
@@ -276,12 +295,17 @@ class Challenges:
         the team's admins, unless they raised the challenge themselves; team memory has no project, so only admins
         stand there. Once the author has left, or after the fallback period, any member may.
 
-        A foundation challenge is the exception: only a lead of the project it is in decides it, and never whoever
-        raised it. No author, admin or fallback standing applies.
+        A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
+        decides it, and never whoever raised it. No author, admin or fallback standing applies.
         """
         if challenge.foundation is not None:
-            if challenge.raised_by != caller.member_id and self._leads_the_challenged(caller, challenge):
+            if challenge.raised_by == caller.member_id:
+                return None
+            if self._leads_the_challenged(caller, challenge):
                 return "lead"
+            project_id = project_in(challenge.target_path)
+            if project_id is not None and self._identity.keeps(caller.member, project_id, challenge.foundation):
+                return "keeper"
             return None
         if challenge.target_author == caller.member_id:
             return "author"
@@ -310,12 +334,12 @@ class Challenges:
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 raise Refused(
-                    f"You raised challenge {challenge.id}, so you can't decide it. A lead of the project decides a "
-                    f"challenge to the {challenge.foundation} foundation."
+                    f"You raised challenge {challenge.id}, so you can't decide it. A lead of the project or a keeper of "
+                    f"the {challenge.foundation} foundation decides a challenge to it."
                 )
             raise Refused(
-                f"Only a lead of the project decides a challenge to the {challenge.foundation} foundation: not its "
-                "author, not an admin who isn't a lead, and not any member however long it has been open."
+                f"Only a lead of the project or a keeper of the {challenge.foundation} foundation decides a challenge to "
+                "it: not its author, not an admin who isn't a lead, and not any member however long it has been open."
             )
         days = self._settings.challenge_fallback_days
         in_project = project_in(challenge.target_path) is not None
@@ -357,6 +381,7 @@ class Challenges:
         return {
             "author": "as its author",
             "lead": "as a project lead",
+            "keeper": "as a keeper of the foundation",
             "admin": "as an admin",
             "author_left": "as any member may once its author has left the team",
         }[decides_as]

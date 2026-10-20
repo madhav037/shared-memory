@@ -4,11 +4,15 @@ import { useState } from "react";
 import { useParams } from "react-router";
 
 import {
+  addFoundation,
   addRepository,
   appointLead,
+  assignKeeper,
   fetchMembers,
   fetchProject,
   grantAccess,
+  removeFoundation,
+  removeKeeper,
   removeLead,
   removeRepository,
   renameProject,
@@ -187,6 +191,77 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
             action="Appoint as lead"
             testid="lead"
             onChosen={(memberId) => attempt(() => appointLead(project.project_id, memberId))}
+          />
+        )}
+      </section>
+
+      <section aria-labelledby="foundations-heading">
+        <h2 className="section-heading" id="foundations-heading">
+          Foundations
+        </h2>
+        <p className="section-lede">
+          A foundation holds what everyone working on this project should know first. Its keepers decide the challenges
+          to it alongside the project leads, and their own changes to it land at once. Add a foundation of your own beside
+          the four every project has; one comes off once it holds no active memory.
+        </p>
+        {project.foundations.map((foundation) => (
+          <div key={foundation.slug} data-testid={`foundation-${foundation.slug}`} style={{ marginTop: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+              <h3 className="section-heading" style={{ fontSize: "1rem" }}>
+                {foundation.name}
+              </h3>
+              {!foundation.core && project.you_may_change && (
+                <button
+                  type="button"
+                  className="quiet-link danger"
+                  onClick={() => attempt(() => removeFoundation(project.project_id, foundation.slug))}
+                  data-testid={`remove-foundation-${foundation.slug}`}
+                >
+                  Remove foundation
+                </button>
+              )}
+            </div>
+            <ul className="entries" data-testid={`keepers-${foundation.slug}`}>
+              {foundation.keepers.length === 0 && (
+                <li className="entry" style={{ color: "var(--ink-3)", fontSize: "0.9375rem" }}>
+                  No keeper: the project’s leads decide.
+                </li>
+              )}
+              {foundation.keepers.map((keeper) => (
+                <li className="entry" key={keeper.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <span>{keeper.name}</span>
+                  {project.you_may_change && (
+                    <button
+                      type="button"
+                      className="quiet-link danger"
+                      onClick={() => attempt(() => removeKeeper(project.project_id, foundation.slug, keeper.member_id))}
+                      data-testid={`remove-keeper-${foundation.slug}-${keeper.member_id}`}
+                    >
+                      Take off
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {project.you_may_change && (
+              <Choosing
+                members={current.filter((one) => !foundation.keepers.some((keeper) => keeper.member_id === one.member_id))}
+                missing="Choose who to assign."
+                action="Assign as keeper"
+                testid={`keeper-${foundation.slug}`}
+                onChosen={(memberId) => attempt(() => assignKeeper(project.project_id, foundation.slug, memberId))}
+              />
+            )}
+          </div>
+        ))}
+        {project.you_may_change && (
+          <Adding
+            label="Extra foundation"
+            placeholder="e.g. Security model"
+            missing="Enter the foundation’s name."
+            action="Add foundation"
+            testid="foundation"
+            onAdd={(name) => attempt(() => addFoundation(project.project_id, name))}
           />
         )}
       </section>

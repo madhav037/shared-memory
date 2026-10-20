@@ -24,6 +24,9 @@ import "./landing.css";
 
 const STROKE = 1.6;
 const AGENTS = ["Claude Code", "Codex", "GitHub Copilot", "Gemini CLI", "Cursor", "Devin Desktop", "Cline"];
+const AGENT_LIST = `${AGENTS.slice(0, -1).join(", ")} and ${AGENTS.at(-1)}`;
+/** When this page's copy last changed, shown in its foot. */
+const UPDATED = "October 2026";
 
 export function Landing({ status, refused }: { status: Status; refused: string | null }) {
   // A link to /#pricing from another page arrives here before the section exists, so the page scrolls itself.
@@ -77,7 +80,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
         </div>
       </section>
 
-      <div className="lp-marquee" aria-label={`Works with ${AGENTS.slice(0, -1).join(", ")} and ${AGENTS.at(-1)}`}>
+      <div className="lp-marquee" aria-label={`Works with ${AGENT_LIST}`}>
         <div className="track" aria-hidden="true">
           {[0, 1].map((copy) => (
             <ul key={copy}>
@@ -91,7 +94,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
 
       <section className="lp-sec" id="how">
         <div className="lp-wrap">
-          <Heading>Learned once. Known everywhere.</Heading>
+          <Heading ask="How does memory reach every session?">Learned once. Known everywhere.</Heading>
           <p className="lp-intro">
             Memory is written where it is learned, in the middle of real work, and reaches every other session without
             anyone copying it anywhere.
@@ -102,10 +105,11 @@ export function Landing({ status, refused }: { status: Status; refused: string |
 
       <section className="lp-sec tinted">
         <div className="lp-wrap">
-          <Heading>Always clear whose word it is.</Heading>
+          <Heading ask="Which memory wins when two disagree?">Always clear whose word it is.</Heading>
           <p className="lp-intro">
-            Every memory sits at a level, and the levels have a fixed order of weight. One member’s memory never passes
-            for something the team agreed.
+            Every memory sits at a level, and the levels have a fixed order of weight: project memory, then team memory,
+            then a member’s personal memory. Local memory stays on one machine. One member’s memory never passes for
+            something the team agreed.
           </p>
           <Levels />
           <div className="lp-types" aria-label="Memory types">
@@ -120,7 +124,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
       <section className="lp-sec">
         <div className="lp-wrap lp-two">
           <div>
-            <Heading>Nothing is ever erased.</Heading>
+            <Heading ask="Can a memory be deleted?">Nothing is ever erased.</Heading>
             <p className="lp-intro">
               Memory is superseded or retired, never deleted, and every version keeps the name of who made it. Drag
               through a memory’s life and read it exactly as your agent read it on any day.
@@ -133,7 +137,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
       <section className="lp-sec tinted">
         <div className="lp-wrap lp-two">
           <div>
-            <Heading>Disagree? Challenge it.</Heading>
+            <Heading ask="Who can change a memory?">Disagree? Challenge it.</Heading>
             <p className="lp-intro">
               Nobody changes another member’s memory. They raise a challenge with their reasoning, and the author
               decides, with what is offered in its place right beside it. Go on, decide this one.
@@ -146,7 +150,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
       <section className="lp-sec night">
         <div className="lp-wrap lp-two">
           <div>
-            <Heading>Sessions see each other.</Heading>
+            <Heading ask="What happens when two sessions edit the same file?">Sessions see each other.</Heading>
             <p className="lp-intro">
               Each session says what it is working on and claims the files it edits. When two reach for the same file,
               both know before the work collides.
@@ -168,7 +172,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
 
       <section className="lp-sec" id="console">
         <div className="lp-wrap">
-          <Heading>A console to read it all.</Heading>
+          <Heading ask="What does the console do?">A console to read it all.</Heading>
           <p className="lp-intro">
             Members sign in with GitHub and see exactly what their agents read, word for word. Whoever runs the team
             runs it from here too.
@@ -183,6 +187,8 @@ export function Landing({ status, refused }: { status: Status; refused: string |
           </p>
         </div>
       </section>
+
+      <Different />
 
       <Pricing />
 
@@ -207,7 +213,9 @@ export function Landing({ status, refused }: { status: Status; refused: string |
         </div>
       </section>
       <footer className="lp-foot">
-        <div className="lp-wrap">Memory kept as Markdown files on its server, every change in a git history.</div>
+        <div className="lp-wrap">
+          Memory kept as Markdown files on its server, every change in a git history. Updated {UPDATED}.
+        </div>
       </footer>
     </div>
   );
@@ -300,11 +308,14 @@ function useCounted(target: number): number {
   return shown;
 }
 
-function Heading({ children }: { children: ReactNode }) {
+/** A section's heading: the question a buyer would ask, then the page's own answer in large type. */
+function Heading({ ask, children }: { ask?: string; children: ReactNode }) {
   const [ref, seen] = useSeen<HTMLHeadingElement>();
   return (
+    // The heading is watched and only its words are clipped: a heading clipped away entirely never counts as seen.
     <h2 ref={ref} className={seen ? "lp-wipe in" : "lp-wipe"}>
-      {children}
+      {ask && <span className="lp-ask">{ask} </span>}
+      <span>{children}</span>
     </h2>
   );
 }
@@ -1170,6 +1181,88 @@ function ConsoleTour() {
   );
 }
 
+/* ---------- Against a file in the repository, and an agent's own memory ---------- */
+
+const NOT_COVERED = <span className="lp-none">Not covered</span>;
+
+const COMPARED: [question: string, shared: ReactNode, file: ReactNode, own: ReactNode][] = [
+  [
+    "Who writes it",
+    "A member’s coding agent, in the middle of the work",
+    "Whoever edits the file by hand",
+    "The agent, for the member using it",
+  ],
+  [
+    "Who it reaches",
+    "Every session in the project or the team, in any of the seven agents",
+    "Sessions in that repository whose agent reads that file",
+    "Only that member, only in that agent",
+  ],
+  [
+    "Before the team relies on it",
+    "Checked against what the team already holds; promotion stops on a contradiction",
+    "Whatever review its pull request gets",
+    "The team never sees it",
+  ],
+  [
+    "When someone disagrees",
+    "A challenge with their reasoning, decided by its author",
+    "Another edit to the file",
+    "Only its member can change it",
+  ],
+  [
+    "History",
+    "Every version with who made it; superseded or retired, never deleted",
+    "The repository’s git history",
+    "Depends on the agent",
+  ],
+  [
+    "When it arrives",
+    "Pinned memory as every session starts; matching memory with the prompt that needs it",
+    "The whole file, as every session starts",
+    "Depends on the agent",
+  ],
+  ["Two sessions on one file", "Both are told before the work collides", NOT_COVERED, NOT_COVERED],
+];
+
+function Different() {
+  return (
+    <section className="lp-sec ruled" id="different">
+      <div className="lp-wrap">
+        <Heading ask="How is this different from a CLAUDE.md?">More than a file in the repository.</Heading>
+        <p className="lp-intro">
+          A CLAUDE.md or AGENTS.md is a good start: one file, edited by hand, read by the agents that look for its name.
+          Shared Memory is written by the agents themselves while they work, and works the same in {AGENT_LIST}.
+        </p>
+        <div className="lp-compare">
+          <table aria-label="Shared Memory compared with a committed CLAUDE.md or AGENTS.md and an agent’s own memory">
+            <thead>
+              <tr>
+                <th scope="col" />
+                <th scope="col" className="ours">
+                  Shared Memory
+                </th>
+                <th scope="col">A committed CLAUDE.md or AGENTS.md</th>
+                <th scope="col">An agent’s own memory</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARED.map(([question, shared, file, own]) => (
+                <tr key={question}>
+                  <th scope="row">{question}</th>
+                  <td className="ours">{shared}</td>
+                  <td>{file}</td>
+                  <td>{own}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Pricing ---------- */
 
 function Pricing() {
@@ -1179,7 +1272,7 @@ function Pricing() {
   return (
     <section className="lp-sec tinted" id="pricing">
       <div className="lp-wrap">
-        <Heading>One price for the whole team.</Heading>
+        <Heading ask="How much does it cost?">One price for the whole team.</Heading>
         <p className="lp-intro">
           Pick your team’s size and who runs the server. Every plan has every feature, for every coding agent your
           members use.

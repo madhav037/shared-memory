@@ -9,6 +9,7 @@ from typing import Any
 
 from shared_memory.audit import (
     CHALLENGE_DECIDED,
+    FOUNDATION_ADDED,
     MEMORY_PROMOTED,
     MEMORY_RETIRED,
     MEMORY_SUPERSEDED,
@@ -19,7 +20,7 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import NAME_PATTERN, Caller, Identity, Project
+from shared_memory.identity import NAME_PATTERN, Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
@@ -61,6 +62,18 @@ CREATE TABLE IF NOT EXISTS imports (
 
 RESOLUTIONS = ("supersede", "keep_both", "cancel")
 SOURCE_LIMIT = 300
+
+
+@dataclass(frozen=True)
+class Promotable:
+    """A promotion that can happen: where the memory is, its new level, who promotes it (when not its author), the
+    project, and the foundation it goes into, if any."""
+
+    location: Location
+    target: Level
+    promoted_by: str | None
+    project: Project
+    foundation: str | None
 
 
 @dataclass(frozen=True)
@@ -111,13 +124,15 @@ class Lifecycle:
         imported_from: str | None = None,
         foundation: str | None = None,
     ) -> dict[str, Any]:
-        location, target, promoted_by, project, into = self._promotable(caller, path, level, foundation)
+        promotable = self._promotable(caller, path, level, foundation)
+        location, target, promoted_by = promotable.location, promotable.target, promotable.promoted_by
+        project, into = promotable.project, promotable.foundation
         memory_type = self._store.read(caller.team, location.path).type
         self._keep_import(caller, location, project, author, imported_from, first_call=reference is None)
         if reference is None:
             proposal = self._similar(caller, path, location, level, project)
             if proposal is None:
-                if into is not None and not self._leads(caller, project):
+                if into is not None and not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project.project_id)):
                     return self._ask_to_add(caller, location, promoted_by, into, reasoning)
                 return self._move(caller, location, target, promoted_by=promoted_by, foundation=into)
             return proposal
@@ -146,7 +161,7 @@ class Lifecycle:
         supersede: str | None = None
         exception_to: str | None = None
         challenged: tuple[str, Memory] | None = None
-        leads = self._leads(caller, project)
+        leads = self._leads(caller, project.project_id)
         for similar_path in sorted(p for p, resolution in chosen.items() if resolution == "supersede"):
             similar_location = locate(similar_path)
             other = self._store.read(caller.team, similar_location.path)
@@ -156,17 +171,20 @@ class Lifecycle:
                 if exception_to is not None:
                     raise Refused("A project memory can be an exception to only one team memory.")
                 exception_to = similar_path
-            elif similar_location.foundation is not None and not leads:
-                # A foundation memory is changed by its project's leads: anyone else challenges it, even its author.
+            elif similar_location.foundation is not None and not self._changes_at_once(
+                caller, project.project_id, similar_location.foundation, leads
+            ):
+                # Anyone but the project's leads and the foundation's keepers challenges it, even its author.
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
                 challenged = (similar_path, other)
+                self._replacement_foundation(memory_type, similar_location.foundation, into)
             elif other.author == caller.member_id or similar_location.foundation is not None:
                 if supersede is not None:
                     raise Refused("A promotion can supersede only one memory. Retire the others first.")
                 supersede = similar_path
-                if into is None and similar_location.foundation is not None:
-                    into = self._foundation_holding(memory_type, similar_location.foundation)
+                if similar_location.foundation is not None:
+                    into = self._replacement_foundation(memory_type, similar_location.foundation, into)
             else:
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
@@ -177,7 +195,7 @@ class Lifecycle:
                 "Challenge first; once it's accepted, promote the rest."
             )
         challenged_foundation = None if challenged is None else locate(challenged[0]).foundation
-        if into is not None and not leads:
+        if into is not None and not self._changes_at_once(caller, project.project_id, into, leads):
             if (challenged is not None and challenged_foundation is None) or supersede is not None or exception_to is not None:
                 raise Refused(
                     "A promotion into a foundation can't also supersede or be an exception to another memory unless "
@@ -231,7 +249,8 @@ class Lifecycle:
         It saves no memory, only a pending promotion, so it need not wait a turn among saves. A caller given None
         promotes with no reference, which searches again and moves the memory in its turn.
         """
-        location, _, _, project, _ = self._promotable(caller, path, level, foundation)
+        promotable = self._promotable(caller, path, level, foundation)
+        location, project = promotable.location, promotable.project
         self._keep_import(caller, location, project, author, imported_from, first_call=True)
         return self._similar(caller, path, location, level, project)
 
@@ -318,9 +337,8 @@ class Lifecycle:
 
     def _promotable(
         self, caller: Caller, path: str, level: str, foundation: str | None = None
-    ) -> tuple[Location, Level, str | None, Project, str | None]:
-        """Refuse a promotion that can't happen; otherwise where the memory is, its new level, who promotes it, the
-        project and the foundation it goes into, if any."""
+    ) -> Promotable:
+        """Refuse a promotion that can't happen."""
         project = caller.require_project()
         if level not in ("project", "team"):
             raise Refused(f"Promote into 'project' or 'team' memory, not {level!r}.")
@@ -342,10 +360,122 @@ class Lifecycle:
         if waiting:
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
         target: Level = "team" if level == "team" else "project"
-        return location, target, promoted_by, project, self._foundation_for(memory, target, foundation)
+        into = self._foundation_for(memory, target, foundation, project.project_id)
+        return Promotable(location, target, promoted_by, project, into)
 
-    def _leads(self, caller: Caller, project: Project) -> bool:
-        return project.project_id in self._identity.leads_of(caller.member)
+    def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
+        """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
+        foundation, otherwise as a challenge they decide while the memory stays where it is."""
+        project = caller.require_project()
+        caller.require_reach(path)
+        location = locate(path)
+        memory = self._store.read(caller.team, location.path)
+        if location.level == "personal":
+            raise Refused("Personal memory goes into a foundation by promoting it: promote it with foundation.")
+        if location.level == "team":
+            raise Refused("Team memory has no foundations: foundations are a project's.")
+        if location.foundation is not None:
+            raise Refused(f"This memory is already in the {location.foundation} foundation.")
+        if location.project_id != project.project_id:
+            raise Refused("This memory belongs to another project. Add it from a session in that project.")
+        if memory.status != "active":
+            raise Refused(f"This memory is {memory.status}, and only an active memory joins a foundation.")
+        into = self._foundation_for(memory, "project", foundation, project.project_id)
+        if into is None:
+            raise Refused("Name the foundation to add this memory to.")
+        waiting = [
+            one for one in self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)]) if one.kind == "add"
+        ]
+        if waiting:
+            raise Refused(f"This memory is already waiting to join a foundation on challenge {waiting[0].id}.")
+        if not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project.project_id)):
+            return self._ask_to_add(caller, location, None, into, reasoning)
+        moved = self._move(caller, location, "project", foundation=into, reason="Add to foundation")
+        self._closed_by_move(caller, location, moved["path"])
+        return {"status": "added", "path": moved["path"]}
+
+    def _closed_by_move(self, caller: Caller, location: Location, new_path: str) -> None:
+        """A project memory that moved leaves its old path behind: challenges against it are closed, their raisers told."""
+        self._challenges.close_all_against(
+            caller.team, str(location.path), caller.member_id, f"the memory moved into a foundation, to {new_path}."
+        )
+
+    def add_foundation(self, caller: Caller, project_id: str, name: str, leads_only: bool = False) -> str:
+        """Add an extra foundation to a project, audited, and answer its slug."""
+        slug = self._identity.add_foundation(caller, project_id, name, leads_only=leads_only)
+        self._audit.record(
+            FOUNDATION_ADDED, member=caller.member, project_id=project_id, target=slug, detail={"name": name.strip()}
+        )
+        return slug
+
+    def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Remove an extra foundation of a project, once it holds no active memory."""
+        self._identity.require_extra_foundation(caller, project_id, slug)
+        memories, _ = self._store.list_folder(caller.team, foundation_folder(project_id, slug))
+        if any(memory.status == "active" for _, memory in memories):
+            raise Refused(
+                f"The {slug} foundation still holds active memory. Retire or move it first; only an empty foundation can be removed."
+            )
+        for one in self._challenges.open_challenges(caller.team):
+            if one.kind == "add" and one.foundation == slug and project_of(one) == project_id:
+                raise Refused(
+                    f"A memory is waiting to join the {slug} foundation on challenge {one.id}. Decide it first; "
+                    "only a foundation nothing waits on can be removed."
+                )
+        self._identity.remove_foundation(caller, project_id, slug)
+
+    def foundation_lines(self, caller: Caller) -> list[str]:
+        """What the briefing says of the project's foundations: every session is told which there are; a lead or a
+        keeper is also told which are missing and how many architecture and decision memories sit outside one."""
+        project = caller.project
+        if project is None or project.project_id in caller.unreachable:
+            return []
+        slugs = self._identity.foundations_of(project.project_id)
+        lines = [f"[foundations] Foundations: {', '.join(slugs)}. Read the one covering your change first, and follow it."]
+        if not (self._leads(caller, project.project_id) or self._identity.keeps_any(caller.member, project.project_id)):
+            return lines
+        asked = {
+            one.foundation
+            for one in self._challenges.open_challenges(caller.team)
+            if one.kind == "add" and project_of(one) == project.project_id
+        }
+        missing = [
+            slug
+            for slug in slugs
+            if slug not in asked
+            and not any(
+                memory.status == "active"
+                for _, memories in self._store.walk(caller.team, foundation_folder(project.project_id, slug))
+                for _, memory in memories
+            )
+        ]
+        if missing:
+            lines.append(
+                f"[foundations missing] No active memory yet in: {', '.join(missing)}. Draft each from the code and "
+                "promote it with foundation."
+            )
+        outside = sum(
+            1
+            for kind in ("architecture", "decision")
+            for _, memories in self._store.walk(caller.team, level_folder("project", kind, project.project_id))
+            for _, memory in memories
+            if memory.status == "active" and memory.type == kind
+        )
+        if outside:
+            lines.append(
+                f"[foundations outside] {outside} architecture and decision memor{'y' if outside == 1 else 'ies'} "
+                "sit outside their foundation: add_to_foundation brings each in."
+            )
+        return lines
+
+    def _leads(self, caller: Caller, project_id: str | None) -> bool:
+        return project_id in self._identity.leads_of(caller.member)
+
+    def _changes_at_once(self, caller: Caller, project_id: str | None, foundation: str | None, leads: bool) -> bool:
+        """Whether this member's own change to a foundation lands at once: they lead its project or keep it."""
+        if leads:
+            return True
+        return foundation is not None and project_id is not None and self._identity.keeps(caller.member, project_id, foundation)
 
     def _ask_to_add(
         self, caller: Caller, location: Location, promoted_by: str | None, foundation: str, reasoning: str | None
@@ -367,17 +497,29 @@ class Lifecycle:
         )
         return self._challenge_raised(challenge_id, folder, caller.member_id, True)
 
+    def _replacement_foundation(self, memory_type: str, slug: str, into: str | None) -> str:
+        """The foundation a memory replacing one in `slug` lands in, which is that one: refused when it takes no
+        memory of this type, or when the promotion asked for another foundation."""
+        if into not in (None, slug):
+            raise Refused(f"This memory replaces one in the {slug} foundation, so it goes there, not into {into}.")
+        if self._foundation_holding(memory_type, slug) is None:
+            only = FOUNDATION_TYPE.get(slug)
+            raise Refused(
+                f"This memory replaces one in the {slug} foundation, which takes only {only} memories, "
+                f"and this is a {memory_type} memory. Promote it without superseding."
+            )
+        return slug
+
     @staticmethod
     def _foundation_holding(memory_type: str, slug: str) -> str | None:
         """The foundation a memory replacing one in it goes into, or None when that foundation doesn't take its type."""
         only = FOUNDATION_TYPE.get(slug)
         return None if memory_type == KNOWN_ISSUE or (only is not None and memory_type != only) else slug
 
-    @staticmethod
-    def _foundation_for(memory: Memory, target: Level, named: str | None) -> str | None:
+    def _foundation_for(self, memory: Memory, target: Level, named: str | None, project_id: str | None) -> str | None:
         """The foundation a promotion goes into, refusing one that can't take the memory. At project level an
         architecture memory belongs in Architecture and a decision memory in Decisions, named or not; any other type
-        goes into a foundation only when it is named."""
+        goes into a foundation only when it is named, and it names one of the project's, core or extra."""
         slug = None if named is None else named.strip().lower()
         if target == "team":
             if slug is not None:
@@ -392,8 +534,9 @@ class Lifecycle:
         slug = own or slug
         if slug is None:
             return None
-        if slug not in CORE_FOUNDATIONS:
-            raise Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(CORE_FOUNDATIONS)}.")
+        slugs = self._identity.foundations_of(project_id) if project_id is not None else list(CORE_FOUNDATIONS)
+        if slug not in slugs:
+            raise unknown_foundation(slug, slugs)
         if memory.type == KNOWN_ISSUE:
             raise Refused("A known issue is not promoted: it is saved straight into project memory, outside any foundation.")
         only = FOUNDATION_TYPE.get(slug)
@@ -511,8 +654,9 @@ class Lifecycle:
                 "challenge_id": challenge_id,
                 "challenges": target_path,
                 "author": author,
-                "next": "A lead of the project decides, because it changes a foundation. Until then the foundation "
-                "holds as it is and a memory you promoted stays personal memory.",
+                "next": "A keeper of that foundation or a lead of the project decides, because it changes a foundation. "
+                "Until then the foundation "
+                "holds as it is and a memory you proposed stays where it is.",
             }
         return {
             "status": "challenge_raised",
@@ -535,9 +679,11 @@ class Lifecycle:
             raise Refused(f"This memory is already {memory.status}.")
         areas = [area for area in [area_of(location.path)] if area is not None]
         in_foundation = location.foundation is not None
-        # A foundation is changed by its project's leads: anyone else challenges the retiring, even its author.
-        leads = in_foundation and location.project_id in self._identity.leads_of(caller.member)
-        if not leads and (in_foundation or memory.author != caller.member_id):
+        # Anyone but the project's leads and the foundation's keepers challenges the retiring, even its author.
+        retires_at_once = in_foundation and self._changes_at_once(
+            caller, location.project_id, location.foundation, self._leads(caller, location.project_id)
+        )
+        if not retires_at_once and (in_foundation or memory.author != caller.member_id):
             challenge_id = self._challenges.raise_challenge(
                 caller,
                 kind="retire",
@@ -597,7 +743,7 @@ class Lifecycle:
                 caller.team,
                 challenge.raised_by,
                 f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. "
-                "Your memory stays personal memory.",
+                "Your memory stays where it is.",
             )
             return {"status": "rejected", "challenge_id": challenge.id}
 
@@ -645,7 +791,7 @@ class Lifecycle:
             caller,
             challenger_location,
             level,
-            foundation=self._foundation_for(challenger, level, None)
+            foundation=self._foundation_for(challenger, level, None, challenger_location.project_id)
             or (None if challenge.foundation is None else self._foundation_holding(challenger.type, challenge.foundation)),
             supersede=challenge.target_path,
             promoted_by=challenge.promoted_by,
@@ -664,6 +810,9 @@ class Lifecycle:
         if not self._store.exists(caller.team, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
+        if challenger_location.level == "project" and self._store.read(caller.team, challenger_location.path).status != "active":
+            self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory is no longer active.")
+            raise Refused("The challenging memory is no longer active, so the challenge has been withdrawn.")
         moved = self._move(
             caller,
             challenger_location,
@@ -672,6 +821,8 @@ class Lifecycle:
             promoted_by=challenge.promoted_by,
             reason=f"Accept challenge {challenge.id}",
         )
+        if challenger_location.level == "project":
+            self._closed_by_move(caller, challenger_location, moved["path"])
         outcome = (
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
             f"your memory is now in the {challenge.foundation} foundation at {moved['path']}."

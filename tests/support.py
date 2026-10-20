@@ -547,3 +547,96 @@ def fetch_project(client: ConsoleClient, project_id: str) -> dict[str, Any]:
     assert response.status_code == 200, response.text
     found: dict[str, Any] = response.json()
     return found
+
+
+# Memory and helpers the foundation tests share.
+SERVICES = {
+    "title": "Billing runs as three services",
+    "summary": "Billing is an API, a ledger worker and a webhook relay.",
+    "type": "architecture",
+    "body": "Billing is three services: the API takes requests, the ledger worker writes entries, and the relay "
+    "delivers webhooks.",
+}
+POSTGRES = {
+    "title": "Postgres is the only database",
+    "summary": "We chose Postgres over Mongo for every service.",
+    "type": "decision",
+    "body": "Every service stores its data in Postgres. We chose it over Mongo because ledgers need transactions.",
+}
+CENTS = {
+    "title": "Money amounts",
+    "summary": "Money is integer cents.",
+    "type": "convention",
+    "body": "All money amounts are stored as integer cents, never floats.",
+}
+INVOICE = {
+    "title": "Invoice",
+    "summary": "An invoice is a request for payment sent to a customer.",
+    "type": "convention",
+    "body": "An invoice is the document asking a customer to pay for what they bought.",
+}
+BUG = {
+    "title": "Refunds hang",
+    "summary": "Refunds over 10k hang in the ledger worker.",
+    "body": "Refunds above 10000 cents hang in the ledger worker.\n\nWorkaround: split the refund in two.",
+}
+
+
+def remember(session: Session, memory: dict[str, str]) -> str:
+    path: str = session.call("remember", **memory)["path"]
+    return path
+
+
+def promote(session: Session, memory: dict[str, str], level: str = "project", **extra: Any) -> dict[str, Any]:
+    """Promote a memory, keeping both of any similar memory it is shown, so a test of where it lands isn't one of
+    contradictions."""
+    personal = remember(session, memory)
+    result: dict[str, Any] = session.call("promote", path=personal, level=level, **extra)
+    if result["status"] == "similar_memories":
+        keep_both = {similar["path"]: "keep_both" for similar in result["similar"]}
+        result = session.call(
+            "promote", path=personal, level=level, reference=result["reference"], resolutions=keep_both, **extra
+        )
+    return {**result, "personal": personal}
+
+
+FOUNDATION_HEADING = "[foundation challenges waiting for your decision]"
+SERVICES_TWO = {**SERVICES, "title": "Billing is two services", "body": SERVICES["body"] + " Two."}
+
+
+def supersede(session: Session, memory: dict[str, str], target: str, **extra: Any) -> dict[str, Any]:
+    """Promote a memory that is similar to a foundation memory, resolving that one as supersede."""
+    personal = remember(session, memory)
+    first = session.call("promote", path=personal, level="project")
+    assert first["status"] == "similar_memories", first
+    resolutions = {one["path"]: ("supersede" if one["path"] == target else "keep_both") for one in first["similar"]}
+    result: dict[str, Any] = session.call(
+        "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions, **extra
+    )
+    return {**result, "personal": personal}
+
+
+class Crew:
+    """A project led by the console's owner, with a keeper-to-be (Kit), a raiser (Rae) and a bystander (Bea)."""
+
+    def __init__(self, console: Console, client: ConsoleClient, account: int) -> None:
+        self.client = client
+        owner = signed_in_owner(console, client, f"olive-keepers-{account}", account)
+        self.project: str = owner.call("create_project", name="Billing")["project_id"]
+        self.owner = owner.in_project(self.project, "billing-api")
+        self.kit = self._add(console, "emp-kit", "Kit Keeper")
+        self.rae = self._add(console, "emp-rae", "Rae Raiser")
+        self.bea = self._add(console, "emp-bea", "Bea Bystander")
+
+    def _add(self, console: Console, member_id: str, name: str) -> Session:
+        token = add(self.client, member_id, name)["personal_token"]
+        return Session(console.server, token, self.project, "billing-api")
+
+    def assign(self, member_id: str, foundation: str = "architecture") -> Any:
+        where = f"/api/projects/{self.project}/foundations/{foundation}/keepers"
+        return self.client.post_json(where, {"member_id": member_id})
+
+
+def keepers(project: dict[str, Any], foundation: str) -> list[str]:
+    (found,) = [one for one in project["foundations"] if one["slug"] == foundation]
+    return [keeper["member_id"] for keeper in found["keepers"]]

@@ -185,7 +185,7 @@ def test_the_briefing_tool_without_a_session_starts_one_and_names_it(owner: Sess
     ((member, identifier),) = active(owner)
     assert member == "owner-1"
     assert identifier in briefing
-    assert "nothing is pinned" in briefing
+    assert "[foundations] Foundations: architecture" in briefing
 
 
 def test_the_briefing_tool_with_a_session_starts_no_other(owner: Session) -> None:

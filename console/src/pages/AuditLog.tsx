@@ -48,6 +48,10 @@ const WORDS: Record<Kind, string> = {
   project_renamed: "Project renamed",
   lead_appointed: "Project lead appointed",
   lead_removed: "Project lead taken off",
+  foundation_added: "Foundation added",
+  foundation_removed: "Foundation removed",
+  keeper_assigned: "Foundation keeper assigned",
+  keeper_removed: "Foundation keeper removed",
   repository_added: "Repository added",
   repository_removed: "Repository forgotten",
   project_restricted: "Project restricted",
@@ -60,6 +64,7 @@ const WORDS: Record<Kind, string> = {
 const DECIDED_AS: Record<string, string> = {
   author: "Decided as its author",
   lead: "Decided as a project lead",
+  keeper: "Decided as a keeper of the foundation",
   admin: "Decided as an admin",
   fallback: "Decided once it had waited long enough for anyone to",
   author_left: "Decided because its author has left the team",

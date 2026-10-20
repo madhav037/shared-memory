@@ -232,6 +232,25 @@ export function removeLead(projectId: string, memberId: string): Promise<Project
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
+export function addFoundation(projectId: string, name: string): Promise<ProjectDetail> {
+  return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/foundations`, { name });
+}
+
+export function removeFoundation(projectId: string, foundation: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/foundations/${encodeURIComponent(foundation)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/remove`);
+}
+
+export function assignKeeper(projectId: string, foundation: string, memberId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/foundations/${encodeURIComponent(foundation)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/keepers`, { member_id: memberId });
+}
+
+export function removeKeeper(projectId: string, foundation: string, memberId: string): Promise<ProjectDetail> {
+  const where = `${encodeURIComponent(projectId)}/foundations/${encodeURIComponent(foundation)}/keepers/${encodeURIComponent(memberId)}`;
+  return change<ProjectDetail>(`/api/projects/${where}/remove`);
+}
+
 /** Close a project to its access list, or open it to the whole team again. */
 export function restrictProject(projectId: string, restricted: boolean): Promise<ProjectDetail> {
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/restrict`, { restricted });

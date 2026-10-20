@@ -232,6 +232,7 @@ def build_app(
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
     board = Board(settings, db, identity, audit, clock, challenges.tell, lifecycle.retire_fixed)
     identity.on_access_lost(board.return_cards)
+    identity.on_access_lost(challenges.drop_keepers)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
     saves = Saves()
     sessions = Sessions(settings, db, identity, clock)
@@ -474,7 +475,7 @@ def build_app(
         work = Work(due, working, known_issues.titles(current))
         return briefing.for_session(
             current,
-            extra=challenges.briefing_notices(current),
+            extra=[*lifecycle.foundation_lines(current), *challenges.briefing_notices(current)],
             work=work,
             followed_by=named,
             sessions=activities.for_briefing(current, session) if with_sessions else None,
@@ -617,6 +618,19 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    def add_foundation(name: str, ctx: Context) -> dict[str, Any]:
+        """Project leads: add an extra foundation to this project, beside architecture, product, glossary and decisions.
+
+        Its folder is the slug of the name, and it takes any type of memory except a known issue. Promote into it with
+        foundation set to the slug returned here.
+        """
+        current = caller(ctx)
+        project = current.require_project()
+        slug = lifecycle.add_foundation(current, project.project_id, name, leads_only=True)
+        return {"project_id": project.project_id, "foundation": slug, "name": name.strip()}
+
+    @server.tool()
+    @_refusals_as_tool_errors
     def add_member(
         member_id: str, name: str, ctx: Context, team: str | None = None, github: str | None = None
     ) -> dict[str, Any]:
@@ -719,6 +733,19 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    def add_to_foundation(path: str, foundation: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
+        """Bring an existing project memory into one of the project's foundations (architecture, product, glossary,
+        decisions, or an extra one a project lead added). Only an active project memory outside any foundation, of a
+        type that foundation takes, can be added.
+
+        A keeper of that foundation or a lead of the project moves it at once. Anyone else raises a challenge they
+        decide; pass reasoning for why it belongs there. Until it is decided the memory stays readable where it is.
+        """
+        return lifecycle.add_to_foundation(caller(ctx), path, foundation, reasoning)
+
+    @server.tool()
+    @saving
+    @_refusals_as_tool_errors
     def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
         """Accept or reject a challenge against a memory (decision: accept or reject).
 
@@ -779,7 +806,7 @@ def build_app(
         told; you are recorded as its importer. Leave both out everywhere else.
 
         foundation puts a project memory into one of the project's foundations (architecture, product, glossary or
-        decisions), the places holding its sources of truth; an architecture or decision memory goes into its own
+        decisions, or an extra one a project lead added), the places holding its sources of truth; an architecture or decision memory goes into its own
         foundation without it. Pass it again on every call of one promotion.
         """
         if reference is None:

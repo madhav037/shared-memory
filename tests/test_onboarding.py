@@ -248,3 +248,14 @@ def test_the_console_names_an_imported_memorys_importer_and_source(
     assert (detail["author"], detail["imported_by"], detail["imported_from"]) == ("emp-2", "E1001", SOURCE)
     plain = signed_out.get(f"/api/memory?path={own}").json()
     assert (plain["imported_by"], plain["imported_from"]) == (None, None)
+
+
+# Onboarding maps repository documents onto foundations
+
+
+def test_the_steps_map_documents_onto_foundations_and_ask_before_replacing_a_file_with_a_pointer(owner: Session) -> None:
+    steps = owner.call("onboard")
+    assert "foundation" in steps
+    assert "Ask the member first" in steps
+    assert steps.index("Map repository documents onto foundations") < steps.index("Promote what the member approved")
+    assert steps.index("Promote what the member approved") < steps.index("Replace imported files with pointers")

@@ -4,7 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
+from tests.support import (
+    INVOICE,
+    SERVICES,
+    SERVICES_TWO,
+    Console,
+    ConsoleClient,
+    Crew,
+    Session,
+    add,
+    ask,
+    promote,
+    signed_in_owner,
+    supersede,
+)
 
 
 def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
@@ -573,3 +586,96 @@ def test_a_folder_counts_the_open_challenges_against_each_memory_in_it(
 
     assert counted(mine) == 2
     assert counted(danas) == 0
+
+
+def test_a_foundation_challenge_is_marked_with_its_foundation_and_offers_the_memory_to_add(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 2950)
+    raised = promote(crew.rae, SERVICES, reasoning="Billing belongs in architecture.")
+
+    (waiting,) = challenges(signed_out)["waiting"]
+
+    assert waiting["challenge_id"] == raised["challenge_id"]
+    assert (waiting["kind"], waiting["foundation"], waiting["foundation_name"]) == ("add", "architecture", "Architecture")
+    assert waiting["target"]["title"] == "Architecture"
+    assert waiting["target"]["status"] != "gone"
+    assert waiting["challenger"]["title"] == SERVICES["title"]
+    assert waiting["reasoning"] == "Billing belongs in architecture."
+    assert waiting["decides_as"] == "lead"
+
+
+def test_a_foundation_challenge_to_a_memory_names_both_the_memory_and_its_foundation(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 2951)
+    held = promote(crew.owner, SERVICES)["path"]
+    supersede(crew.rae, SERVICES_TWO, held)
+
+    (waiting,) = challenges(signed_out)["waiting"]
+
+    assert (waiting["kind"], waiting["foundation"]) == ("supersede", "architecture")
+    assert (waiting["target"]["path"], waiting["target"]["status"]) == (held, "active")
+
+
+def test_an_ordinary_challenge_has_no_foundation(console: Console, signed_out: ConsoleClient) -> None:
+    dana_console, _, _ = danas_challenge(console, signed_out, "dana-no-foundation", 2960)
+
+    (waiting,) = challenges(signed_out)["waiting"]
+    (raised,) = challenges(dana_console)["raised"]
+
+    assert (waiting["foundation"], waiting["foundation_name"]) == (None, None)
+    assert raised["foundation"] is None
+    dana_console.close()
+
+
+def in_the_console(console: Console, crew: Crew, member_id: str, name: str, github: str, account: int) -> ConsoleClient:
+    """A member of the crew, who works from a coding agent, signed in to the console too."""
+    crew.client.post_json(f"/api/members/{member_id}/change", {"name": name, "github": github})
+    client = console.client()
+    console.github.as_(account, github)
+    client.sign_in()
+    return client
+
+
+def test_a_keeper_is_shown_only_their_foundations_challenges(console: Console, signed_out: ConsoleClient) -> None:
+    crew = Crew(console, signed_out, 2954)
+    crew.assign("emp-kit", "architecture")
+    mine = promote(crew.rae, SERVICES)["challenge_id"]
+    promote(crew.rae, INVOICE, foundation="glossary")
+    kit = in_the_console(console, crew, "emp-kit", "Kit Keeper", "kit-keeper-2954", 2955)
+
+    shown = challenges(kit)["waiting"]
+
+    assert [(one["challenge_id"], one["decides_as"]) for one in shown] == [(mine, "keeper")]
+    assert [one["foundation"] for one in challenges(signed_out)["waiting"]] == ["architecture", "glossary"]
+    kit.close()
+
+
+def test_a_keeper_accepting_a_foundation_challenge_puts_the_memory_in_the_foundation(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 2956)
+    crew.assign("emp-kit", "architecture")
+    raised = promote(crew.rae, SERVICES)
+    kit = in_the_console(console, crew, "emp-kit", "Kit Keeper", "kit-keeper-2956", 2957)
+
+    answered = decide(kit, raised["challenge_id"], "accept").json()
+
+    assert answered["waiting"] == []
+    assert "/foundations/architecture/" in answered["decided"]["in_force"]
+    assert crew.rae.call("read", path=answered["decided"]["in_force"])["foundation"] == "architecture"
+    kit.close()
+
+
+def test_a_foundation_challenge_a_member_raised_says_which_foundation(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 2958)
+    promote(crew.rae, SERVICES)
+    rae = in_the_console(console, crew, "emp-rae", "Rae Raiser", "rae-raiser-2958", 2959)
+
+    (raised,) = challenges(rae)["raised"]
+
+    assert (raised["kind"], raised["foundation"], raised["target_title"]) == ("add", "architecture", "Architecture")
+    rae.close()

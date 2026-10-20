@@ -141,6 +141,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/foundations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add an extra foundation to this project, beside the core four. */
+        post: operations["add_foundation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/foundations/{foundation}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove an extra foundation of this project once it holds no active memory. */
+        post: operations["remove_foundation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/foundations/{foundation}/keepers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a member a keeper of one of this project's foundations. */
+        post: operations["assign_keeper"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/foundations/{foundation}/keepers/{member_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a keeper off one of this project's foundations. */
+        post: operations["remove_keeper"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/restrict": {
         parameters: {
             query?: never;
@@ -830,6 +898,20 @@ export interface components {
             kept_in: "repository" | "machine";
         };
         /**
+         * ProjectFoundation
+         * @description One of a project's foundations, whether it is one of the core four, and the members who keep it.
+         */
+        ProjectFoundation: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Core */
+            core: boolean;
+            /** Keepers */
+            keepers: components["schemas"]["ProjectMember"][];
+        };
+        /**
          * ProjectRepository
          * @description A repository of a project, with the files each coding agent commits to connect it to the project.
          */
@@ -852,6 +934,8 @@ export interface components {
             restricted: boolean;
             /** Leads */
             leads: components["schemas"]["ProjectMember"][];
+            /** Foundations */
+            foundations: components["schemas"]["ProjectFoundation"][];
             /** Access */
             access: components["schemas"]["ProjectMember"][];
             /** Repositories */
@@ -874,6 +958,22 @@ export interface components {
          * @description The member being made a lead of this project.
          */
         Appointment: {
+            /** Member Id */
+            member_id: string;
+        };
+        /**
+         * FoundationName
+         * @description What an extra foundation is called; its folder is the slug of the name.
+         */
+        FoundationName: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * KeeperAssignment
+         * @description The member being made a keeper of a foundation.
+         */
+        KeeperAssignment: {
             /** Member Id */
             member_id: string;
         };
@@ -1383,7 +1483,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -1558,7 +1658,7 @@ export interface components {
             /** May Decide */
             may_decide: boolean;
             /** Decides As */
-            decides_as: ("author" | "lead" | "admin" | "fallback" | "author_left") | null;
+            decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left") | null;
         };
         /**
          * PendingChallenge
@@ -1736,7 +1836,11 @@ export interface components {
              * Decides As
              * @enum {string}
              */
-            decides_as: "author" | "lead" | "admin" | "fallback" | "author_left";
+            decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left";
+            /** Foundation */
+            foundation: string | null;
+            /** Foundation Name */
+            foundation_name: string | null;
             target: components["schemas"]["ChallengedMemory"];
             challenger: components["schemas"]["ChallengedMemory"] | null;
             /** Reasoning */
@@ -1779,6 +1883,8 @@ export interface components {
             target_title: string;
             /** Challenger Path */
             challenger_path: string | null;
+            /** Foundation */
+            foundation: string | null;
             /**
              * Raised At
              * Format: date-time
@@ -2142,6 +2248,106 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Take a lead off this project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    add_foundation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundationName"];
+            };
+        };
+        responses: {
+            /** @description Add an extra foundation to this project, beside the core four. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    remove_foundation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                foundation: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove an extra foundation of this project once it holds no active memory. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    assign_keeper: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                foundation: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeeperAssignment"];
+            };
+        };
+        responses: {
+            /** @description Make a member a keeper of one of this project's foundations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    remove_keeper: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                foundation: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a keeper off one of this project's foundations. */
             200: {
                 headers: {
                     [name: string]: unknown;

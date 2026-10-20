@@ -15,7 +15,7 @@ from typing import Any
 from shared_memory.challenges import Challenges
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
-from shared_memory.memory import FOUNDATIONS_FOLDER, Memory, locate
+from shared_memory.memory import FOUNDATIONS_FOLDER, Memory, foundation_title, locate
 from shared_memory.store import MemoryStore
 from shared_memory.uses import Uses
 
@@ -54,7 +54,7 @@ def folder_name(folder: PurePosixPath, projects: dict[str, str], people: dict[st
     kind = folder_kind(folder)
     last = folder.name
     if kind == "topic" and folder.parent.name == FOUNDATIONS_FOLDER:
-        return last.replace("-", " ").capitalize()
+        return foundation_title(last)
     return {
         "team": "Team memory",
         "projects": "Projects",

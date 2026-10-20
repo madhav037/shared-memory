@@ -52,8 +52,8 @@ export function Challenges({
     <div className="medium">
       <h1 className="page-title wide">Challenges</h1>
       <p className="standfirst">
-        A challenge asks for a memory to be superseded or retired. You decide the ones waiting here as their author, or for
-        the reason each one gives.
+        A challenge asks for a memory to be superseded or retired, or for one to join a foundation. You decide the ones
+        waiting here as their author, or for the reason each one gives.
       </p>
 
       {refused && <Refusal>{refused}</Refusal>}
@@ -90,8 +90,43 @@ function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: 
   useEffect(() => here.current?.focus(), [slip]);
 
   const { decided, challenge, others } = slip;
-  const old = challenge.target.title;
+  const adding = challenge.kind === "add";
+  // An "add" has no challenged memory: its target stands for the foundation.
+  const foundation = adding ? challenge.target.title : "";
+  const replaced = challenge.target.title;
   const offered = challenge.challenger?.title;
+  const rejected = decided.decision === "rejected";
+  const readable = adding ? (challenge.challenger?.path ?? challenge.target.path) : challenge.target.path;
+  const what = () => {
+    if (adding) {
+      return (
+        <>
+          <b>You {rejected ? "rejected" : "accepted"} it.</b> <span className="decided-name">‘{offered}’</span>{" "}
+          {rejected ? "stays out of" : "is now in"} the {foundation} foundation.
+        </>
+      );
+    }
+    if (rejected) {
+      return (
+        <>
+          <b>You rejected it.</b> <span className="decided-name">‘{replaced}’</span> stays as it is.
+        </>
+      );
+    }
+    if (offered) {
+      return (
+        <>
+          <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> now supersedes{" "}
+          <span className="decided-name">‘{replaced}’</span>.
+        </>
+      );
+    }
+    return (
+      <>
+        <b>You accepted it.</b> <span className="decided-name">‘{replaced}’</span> is retired.
+      </>
+    );
+  };
   return (
     <div
       className={decided.in_force ? "decided appear" : "decided retired appear"}
@@ -102,27 +137,14 @@ function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: 
       <p className="decided-what">
         <IconScale size={18} stroke={1.6} aria-hidden />
         <span>
-          {decided.decision === "rejected" ? (
-            <>
-              <b>You rejected it.</b> <span className="decided-name">‘{old}’</span> stays as it is.
-            </>
-          ) : offered ? (
-            <>
-              <b>You accepted it.</b> <span className="decided-name">‘{offered}’</span> now supersedes{" "}
-              <span className="decided-name">‘{old}’</span>.
-            </>
-          ) : (
-            <>
-              <b>You accepted it.</b> <span className="decided-name">‘{old}’</span> is retired.
-            </>
-          )}
+          {what()}
           {decided.decision === "accepted" && others > 0 && (
             <> Every other challenge against it is closed, and whoever raised it is told why.</>
           )}
         </span>
       </p>
       <p className="decided-links">
-        <Link className="quiet-link" to={memoryUrl(decided.in_force ?? challenge.target.path)} data-testid="decided-read">
+        <Link className="quiet-link" to={memoryUrl(decided.in_force ?? readable)} data-testid="decided-read">
           Read it
         </Link>
         {readsAudit && (
@@ -173,63 +195,99 @@ function Waiting({
     }
   };
 
+  // Challenges to a foundation are shown apart: a keeper or project lead decides them, not a memory's author.
+  const ordinary = waiting.filter((one) => one.foundation === null);
+  const foundations = waiting.filter((one) => one.foundation !== null);
   // Several challenges can be against one memory; they are decided together, so they are shown together.
   const memories = new Map<string, ChallengeDetail[]>();
-  for (const one of waiting) memories.set(one.target.path, [...(memories.get(one.target.path) ?? []), one]);
+  for (const one of ordinary) memories.set(one.target.path, [...(memories.get(one.target.path) ?? []), one]);
+
+  const proposal = (challenge: ChallengeDetail, others: number) => (
+    <Proposal
+      key={challenge.challenge_id}
+      challenge={challenge}
+      who={who}
+      view={view}
+      marked={marked}
+      deciding={deciding}
+      refused={refused?.challengeId === challenge.challenge_id ? refused.message : null}
+      onDecide={(decision) => decide(challenge, decision, others)}
+    />
+  );
 
   return (
-    <div className="waiting" data-testid="waiting">
-      <ViewSwitch view={view} onChange={setView} />
-      <div className="waiting-marks">
-        {view === "text" && (
-          <Checkbox
-            radius={0}
-            size="xs"
-            label="Show what each offer takes out and puts in"
-            checked={marked}
-            onChange={(event) => setMarked(event.currentTarget.checked)}
-          />
-        )}
+    <>
+    {ordinary.length > 0 && (
+      <div className="waiting" data-testid="waiting">
+        <ViewSwitch view={view} onChange={setView} />
+        <div className="waiting-marks">
+          {view === "text" && (
+            <Checkbox
+              radius={0}
+              size="xs"
+              label="Show what each offer takes out and puts in"
+              checked={marked}
+              onChange={(event) => setMarked(event.currentTarget.checked)}
+            />
+          )}
+        </div>
+        {[...memories].map(([path, against]) => {
+          const first = against[0];
+          if (!first) return null;
+          return (
+            <section className="dispute" key={path} aria-label={`Challenges against ${first.target.title}`}>
+              <div className="dispute-head">
+                <h3>
+                  <Link to={memoryUrl(first.target.path)}>{first.target.title}</Link>
+                </h3>
+                <Rank level={first.target.level} />
+                {against.length > 1 && <span className="mark alert">{against.length} challenges</span>}
+              </div>
+              {against.length > 1 && (
+                <p className="dispute-note">
+                  Accept at most one: accepting it closes the others, and whoever raised them is told why.
+                </p>
+              )}
+              {against.map((challenge) => proposal(challenge, against.length - 1))}
+            </section>
+          );
+        })}
       </div>
-      {[...memories].map(([path, against]) => {
-        const first = against[0];
-        if (!first) return null;
-        return (
-          <section className="dispute" key={path} aria-label={`Challenges against ${first.target.title}`}>
-            <div className="dispute-head">
-              <h3>
-                <Link to={memoryUrl(first.target.path)}>{first.target.title}</Link>
-              </h3>
-              <Rank level={first.target.level} />
-              {against.length > 1 && <span className="mark alert">{against.length} challenges</span>}
-            </div>
-            {against.length > 1 && (
-              <p className="dispute-note">
-                Accept at most one: accepting it closes the others, and whoever raised them is told why.
-              </p>
-            )}
-            {against.map((challenge) => (
-              <Proposal
+    )}
+    {foundations.length > 0 && (
+      <>
+        <h2 className="section-heading">Foundation challenges</h2>
+        {ordinary.length === 0 && <ViewSwitch view={view} onChange={setView} />}
+        <div className="waiting" data-testid="foundation-challenges">
+          {foundations.map((challenge) => {
+            const shown = challenge.kind === "add" ? challenge.challenger : challenge.target;
+            return (
+              <section
+                className="dispute"
                 key={challenge.challenge_id}
-                challenge={challenge}
-                who={who}
-                view={view}
-                marked={marked}
-                deciding={deciding}
-                refused={refused?.challengeId === challenge.challenge_id ? refused.message : null}
-                onDecide={(decision) => decide(challenge, decision, against.length - 1)}
-              />
-            ))}
-          </section>
-        );
-      })}
-    </div>
+                aria-label={`Foundation challenge to the ${challenge.foundation_name} foundation`}
+              >
+                <div className="dispute-head">
+                  <h3>{shown && <Link to={memoryUrl(shown.path)}>{shown.title}</Link>}</h3>
+                  <span className="mark strong" data-testid="foundation-mark">
+                    {challenge.foundation_name} foundation
+                  </span>
+                </div>
+                {proposal(challenge, 0)}
+              </section>
+            );
+          })}
+        </div>
+      </>
+    )}
+    </>
   );
 }
 
 /** Why a challenge against another member's memory is this member's to decide. */
 const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string> = {
   lead: "yours to decide as a project lead",
+  keeper: "yours to decide as a keeper of the foundation",
   admin: "yours to decide as an admin",
   fallback: "nobody has decided in time, so anyone may",
   author_left: "its author has left the team, so anyone may",
@@ -260,13 +318,21 @@ function Proposal({
   // Busy, not disabled: a disabled button drops the focus it holds, and the guard in decide refuses a second send.
   const busy = deciding ? { "data-disabled": true, "aria-disabled": true } : {};
   const offered = challenge.challenger;
-  const pieces = offered && marked ? offerDiff(challenge.target.body, offered.body) : null;
-  const changes = offered ? whatChanges(challenge.target.body, offered.body) : null;
+  // An "add" brings a memory into a foundation: there is nothing in it to compare the memory with.
+  const adding = challenge.kind === "add";
+  const pieces = offered && marked && !adding ? offerDiff(challenge.target.body, offered.body) : null;
+  const changes = offered && !adding ? whatChanges(challenge.target.body, offered.body) : null;
   return (
     <div className="proposal">
       <p className="proposal-by">
         <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
-        <b>{who(challenge.raised_by)}</b> wants to {challenge.kind === "retire" ? "retire it" : "supersede it"} ·{" "}
+        <b>{who(challenge.raised_by)}</b> wants to{" "}
+        {adding
+          ? `add it to the ${challenge.foundation_name} foundation`
+          : challenge.kind === "retire"
+            ? "retire it"
+            : "supersede it"}{" "}
+        ·{" "}
         {moment(challenge.raised_at)}
         {challenge.decides_as !== "author" && (
           <span data-testid="decides-as"> · {WHY_YOURS[challenge.decides_as]}</span>
@@ -309,26 +375,35 @@ function Proposal({
         </div>
       )}
       <div className="facing" data-testid="facing">
-        <div>
-          <Link className="title" to={memoryUrl(challenge.target.path)}>
-            {challenge.target.title}
-          </Link>
-          <p className="by">As it stands now, by {who(challenge.target.author)}</p>
-          <div className="body">
-            {view === "source" ? (
-              <Source text={challenge.target.body} testid="facing-source" />
-            ) : (
-              <Prose testid="facing-text">{challenge.target.body}</Prose>
-            )}
+        {adding ? (
+          <div>
+            <span className="title">{challenge.target.title} foundation</span>
+            <p className="by">Where it would be added</p>
           </div>
-        </div>
+        ) : (
+          <div>
+            <Link className="title" to={memoryUrl(challenge.target.path)}>
+              {challenge.target.title}
+            </Link>
+            <p className="by">As it stands now, by {who(challenge.target.author)}</p>
+            <div className="body">
+              {view === "source" ? (
+                <Source text={challenge.target.body} testid="facing-source" />
+              ) : (
+                <Prose testid="facing-text">{challenge.target.body}</Prose>
+              )}
+            </div>
+          </div>
+        )}
         <div>
           {offered ? (
             <>
               <Link className="title" to={memoryUrl(offered.path)}>
                 {offered.title}
               </Link>
-              <p className="by">Offered in its place by {who(offered.author)}</p>
+              <p className="by">
+                {adding ? "Offered for the foundation" : "Offered in its place"} by {who(offered.author)}
+              </p>
               <div className="body">
                 {view === "source" ? (
                   <Source text={offered.body} testid="facing-source" />
@@ -352,7 +427,13 @@ function Proposal({
       </div>
       <div className="decide" aria-busy={deciding?.challengeId === challenge.challenge_id || undefined}>
         <Button size="sm" {...busy} onClick={() => onDecide("accept")} data-testid={`accept-${challenge.challenge_id}`}>
-          {pressed("accept") ? "Deciding…" : offered ? "Accept: supersede it" : "Accept: retire it"}
+          {pressed("accept")
+            ? "Deciding…"
+            : adding
+              ? "Accept: add it to the foundation"
+              : offered
+                ? "Accept: supersede it"
+                : "Accept: retire it"}
         </Button>
         <Button
           size="sm"
@@ -361,7 +442,7 @@ function Proposal({
           onClick={() => onDecide("reject")}
           data-testid={`reject-${challenge.challenge_id}`}
         >
-          {pressed("reject") ? "Deciding…" : "Reject: keep it as it is"}
+          {pressed("reject") ? "Deciding…" : adding ? "Reject: keep it out" : "Reject: keep it as it is"}
         </Button>
       </div>
       {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
@@ -402,12 +483,16 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                 <tr key={one.challenge_id}>
                   <td className="aside" style={{ whiteSpace: "nowrap" }}>{day(one.raised_at)}</td>
                   <td className="primary">
-                    <Link to={memoryUrl(one.target_path)} style={{ color: "inherit" }}>
-                      {one.target_title}
-                    </Link>
+                    {one.kind === "add" ? (
+                      <>{one.target_title} foundation</>
+                    ) : (
+                      <Link to={memoryUrl(one.target_path)} style={{ color: "inherit" }}>
+                        {one.target_title}
+                      </Link>
+                    )}
                   </td>
                   <td>
-                    {one.kind === "retire" ? "to retire it" : "to supersede it"}
+                    {one.kind === "add" ? "to add a memory" : one.kind === "retire" ? "to retire it" : "to supersede it"}
                     {one.reasoning && (
                       <div className="raised-reasoning" data-testid="raised-reasoning">
                         {one.reasoning}

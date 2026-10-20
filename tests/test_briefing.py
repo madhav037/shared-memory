@@ -132,8 +132,11 @@ def test_a_session_outside_any_project_is_told_how_to_connect_instead_of_briefed
     assert "create_project" in told
 
 
-def test_an_empty_briefing_says_so(owner: Session) -> None:
-    assert "nothing is pinned" in owner.call("briefing")
+def test_a_briefing_with_nothing_pinned_holds_only_the_foundations(owner: Session) -> None:
+    briefing = owner.call("briefing")
+
+    assert "[foundations] Foundations: architecture" in briefing
+    assert "[project memory]" not in briefing
 
 
 def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Session) -> None:

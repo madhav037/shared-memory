@@ -26,6 +26,9 @@ from shared_memory.audit import (
     ADMIN_GRANTED,
     ADMIN_REVOKED,
     LEAD_APPOINTED,
+    FOUNDATION_REMOVED,
+    KEEPER_ASSIGNED,
+    KEEPER_REMOVED,
     LEAD_REMOVED,
     MEMBER_ADDED,
     MEMBER_CHANGED,
@@ -42,12 +45,12 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenges, Waiting, project_of
+from shared_memory.challenges import Challenge, Challenges, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, ConsoleSessions
 from shared_memory.console_contract import (
-    AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, AuditPage, BoardArchive, BoardColumn, Card,
+    AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
@@ -202,6 +205,10 @@ class ConsoleApi:
             "rename_project": self._rename_project,
             "appoint_lead": self._appoint_lead,
             "remove_lead": self._remove_lead,
+            "add_foundation": self._add_foundation,
+            "remove_foundation": self._remove_foundation,
+            "assign_keeper": self._assign_keeper,
+            "remove_keeper": self._remove_keeper,
             "add_repository": self._add_repository,
             "remove_repository": self._remove_repository,
             "board": self._board_of,
@@ -341,6 +348,47 @@ class ConsoleApi:
             member_id = request.path_params["member_id"]
             self._identity.remove_lead(caller, project_id, member_id)
             self._audit.record(LEAD_REMOVED, member=member, project_id=project_id, target=member_id)
+
+        return self._change_project(request, remove)
+
+    def _add_foundation(self, request: Request) -> Response:
+        def add(member: Member, caller: Caller, project_id: str) -> None:
+            asked: FoundationName = request.state.asked
+            self._lifecycle.add_foundation(caller, project_id, asked.name)
+
+        return self._change_project(request, add)
+
+    def _remove_foundation(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, project_id: str) -> None:
+            slug = request.path_params["foundation"]
+            self._lifecycle.remove_foundation(caller, project_id, slug)
+            self._audit.record(FOUNDATION_REMOVED, member=member, project_id=project_id, target=slug)
+
+        return self._change_project(request, remove)
+
+    def _assign_keeper(self, request: Request) -> Response:
+        def assign(member: Member, caller: Caller, project_id: str) -> None:
+            asked: KeeperAssignment = request.state.asked
+            foundation = request.path_params["foundation"]
+            self._identity.assign_keeper(caller, project_id, foundation, asked.member_id)
+            self._audit.record(
+                KEEPER_ASSIGNED,
+                member=member,
+                project_id=project_id,
+                target=asked.member_id,
+                detail={"foundation": foundation},
+            )
+
+        return self._change_project(request, assign)
+
+    def _remove_keeper(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller, project_id: str) -> None:
+            foundation = request.path_params["foundation"]
+            member_id = request.path_params["member_id"]
+            self._identity.remove_keeper(caller, project_id, foundation, member_id)
+            self._audit.record(
+                KEEPER_REMOVED, member=member, project_id=project_id, target=member_id, detail={"foundation": foundation}
+            )
 
         return self._change_project(request, remove)
 
@@ -762,7 +810,7 @@ class ConsoleApi:
     def _challenge_list(self, caller: Caller) -> ChallengeList:
         waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
         raised = [
-            RaisedChallenge(**one, target_title=self._side(caller, one["target_path"]).title)
+            RaisedChallenge(**one, target_title=self._target(caller, one["kind"], one["foundation"], one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
         return ChallengeList(waiting=waiting, raised=raised)
@@ -777,9 +825,27 @@ class ConsoleApi:
             raised_at=challenge.raised_at,
             yours=waiting.decides_as == "author",
             decides_as=waiting.decides_as,
-            target=self._side(caller, challenge.target_path),
+            foundation=challenge.foundation,
+            foundation_name=self._foundation_named(challenge),
+            target=self._target(caller, challenge.kind, challenge.foundation, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,
+        )
+
+    def _foundation_named(self, challenge: Challenge) -> str | None:
+        project_id = project_of(challenge)
+        if challenge.foundation is None or project_id is None:
+            return challenge.foundation
+        return self._identity.foundation_name(project_id, challenge.foundation)
+
+    def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:
+        """What a challenge is against: a memory, or for an "add" the foundation whose folder the path is."""
+        if kind != "add" or foundation is None:
+            return self._side(caller, path)
+        parts = path.split("/")
+        name = self._identity.foundation_name(parts[1], foundation) if parts[0] == "projects" else foundation
+        return ChallengedMemory(
+            path=path, title=name, summary="", body="", level="project", type="", author="", status="foundation"
         )
 
     def _side(self, caller: Caller, path: str) -> ChallengedMemory:

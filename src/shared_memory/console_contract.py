@@ -102,6 +102,15 @@ class ProjectRepository(BaseModel):
     files: list[ConnectionFile]
 
 
+class ProjectFoundation(BaseModel):
+    """One of a project's foundations, whether it is one of the core four, and the members who keep it."""
+
+    slug: str
+    name: str
+    core: bool
+    keepers: list[ProjectMember]
+
+
 class ProjectDetail(BaseModel):
     """One project: who leads it, who is allowed in, which repositories belong to it, and what may be changed."""
 
@@ -109,6 +118,7 @@ class ProjectDetail(BaseModel):
     name: str
     restricted: bool
     leads: list[ProjectMember]
+    foundations: list[ProjectFoundation]
     access: list[ProjectMember]
     repositories: list[ProjectRepository]
     you_lead: bool
@@ -123,6 +133,18 @@ class ProjectName(BaseModel):
 
 class Appointment(BaseModel):
     """The member being made a lead of this project."""
+
+    member_id: str
+
+
+class FoundationName(BaseModel):
+    """What an extra foundation is called; its folder is the slug of the name."""
+
+    name: str
+
+
+class KeeperAssignment(BaseModel):
+    """The member being made a keeper of a foundation."""
 
     member_id: str
 
@@ -223,6 +245,10 @@ class ChallengeDetail(BaseModel):
     # Whether the challenged memory is this member's own, and in what capacity the challenge is theirs to decide.
     yours: bool
     decides_as: DecidesAs
+    # The foundation (slug and name) the challenge is about, when it is one. An "add" challenge has no challenged
+    # memory: its target stands for the foundation, and the challenger is the memory to add.
+    foundation: str | None
+    foundation_name: str | None
     target: ChallengedMemory
     challenger: ChallengedMemory | None
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
@@ -237,6 +263,7 @@ class RaisedChallenge(BaseModel):
     target_path: str
     target_title: str
     challenger_path: str | None
+    foundation: str | None
     raised_at: datetime
     state: str
     decided_by: str | None
@@ -726,6 +753,40 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="POST",
         operation_id="remove_lead",
         summary="Take a lead off this project.",
+        answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations",
+        method="POST",
+        operation_id="add_foundation",
+        summary="Add an extra foundation to this project, beside the core four.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=FoundationName,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations/{foundation}/remove",
+        method="POST",
+        operation_id="remove_foundation",
+        summary="Remove an extra foundation of this project once it holds no active memory.",
+        answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations/{foundation}/keepers",
+        method="POST",
+        operation_id="assign_keeper",
+        summary="Make a member a keeper of one of this project's foundations.",
+        answers=ProjectDetail,
+        changes=True,
+        accepts=KeeperAssignment,
+    ),
+    Declaration(
+        path="/projects/{project_id}/foundations/{foundation}/keepers/{member_id}/remove",
+        method="POST",
+        operation_id="remove_keeper",
+        summary="Take a keeper off one of this project's foundations.",
         answers=ProjectDetail,
         changes=True,
     ),

@@ -31,3 +31,50 @@ test("a member who leads nothing reads a project's settings and can change none 
   await expect(page.getByTestId("project-new-name")).toHaveCount(0);
   await expect(page.getByTestId("rename-project")).toHaveCount(0);
 });
+
+test("a lead adds an extra foundation in project settings, and removes it again", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+
+  await page.getByTestId("to-contents").click();
+  await page.getByTestId("new-project-name").fill("Borealis");
+  await page.getByTestId("create-project").click();
+  await expect(page.getByTestId("project-name")).toHaveText("Borealis");
+
+  await expect(page.getByTestId("remove-foundation-architecture")).toHaveCount(0);
+  await page.getByTestId("new-foundation").fill("Security model");
+  await page.getByTestId("add-foundation").click();
+
+  await expect(page.getByTestId("foundation-security-model")).toContainText("Security model");
+  await expect(page.getByTestId("keepers-security-model")).toContainText("No keeper");
+
+  await page.getByTestId("remove-foundation-security-model").click();
+  await expect(page.getByTestId("foundation-security-model")).toHaveCount(0);
+});
+
+test("a lead assigns a keeper to a foundation in project settings, and the keeper is shown there", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+
+  // A member and a project of this journey's own, so no other journey's foundations change.
+  await page.getByTestId("to-team").click();
+  await page.getByTestId("new-member-id").fill("emp-keeper");
+  await page.getByTestId("new-name").fill("Kit Keeper");
+  await page.getByTestId("new-github").fill("kit-keeper");
+  await page.getByTestId("add-member").click();
+  await expect(page.getByTestId("members")).toContainText("Kit Keeper");
+
+  await page.getByTestId("to-contents").click();
+  await page.getByTestId("new-project-name").fill("Atlas");
+  await page.getByTestId("create-project").click();
+  await expect(page.getByTestId("project-name")).toHaveText("Atlas");
+
+  await expect(page.getByTestId("keepers-architecture")).toContainText("No keeper");
+  await page.getByTestId("new-keeper-architecture").fill("Kit");
+  await page.getByRole("option", { name: /Kit Keeper/ }).click();
+  await page.getByTestId("add-keeper-architecture").click();
+
+  await expect(page.getByTestId("keepers-architecture")).toContainText("Kit Keeper");
+  await expect(page.getByTestId("keepers-decisions")).toContainText("No keeper");
+
+  await page.getByTestId("remove-keeper-architecture-emp-keeper").click();
+  await expect(page.getByTestId("keepers-architecture")).toContainText("No keeper");
+});

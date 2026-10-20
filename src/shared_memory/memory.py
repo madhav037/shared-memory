@@ -174,6 +174,11 @@ def type_folder(kind: str) -> str:
     return TYPE_FOLDERS[kind]
 
 
+def foundation_title(slug: str) -> str:
+    """A foundation's name as a member would say it: a core one's, or an extra's that is gone."""
+    return slug.replace("-", " ").capitalize()
+
+
 def slugify(title: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:60].strip("-") or "memory"

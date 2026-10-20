@@ -13,9 +13,10 @@ from typing import Any
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.memory import slugify
+from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
 
-NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+NAME_LIMIT = 64
+NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
 
 # What another module does when a member may have lost a project. It is called inside the transaction making the
 # change, with whoever made it, so its writes commit with the change or not at all; what it gives back is called once
@@ -111,10 +112,14 @@ def restricted_project(project_id: str) -> Refused:
 def check_name(kind: str, value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise Refused(
-            f"{kind} {value!r} is not valid: use 1-64 letters, digits, dots, dashes or underscores, "
+            f"{kind} {value!r} is not valid: use 1-{NAME_LIMIT} letters, digits, dots, dashes or underscores, "
             "starting with a letter or digit."
         )
     return value
+
+
+def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
+    return Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
 
 
 class Identity:
@@ -702,11 +707,17 @@ class Identity:
                 (project_id,),
             ).fetchall()
             you_lead = self._leads_it(conn, member.pk, project_id)
+            keepers = self.keepers_listed(conn, project_id)
+            foundations = self._foundations_listed(conn, project_id)
         return {
             "project_id": project_id,
             "name": project.name,
             "restricted": row["restricted"],
             "leads": leads,
+            "foundations": [
+                {"slug": slug, "name": name, "core": core, "keepers": keepers.get(slug, [])}
+                for slug, name, core in foundations
+            ],
             "access": [{"member_id": one["member_id"], "name": one["name"]} for one in access],
             "repositories": [row["name"] for row in repositories],
             "you_lead": you_lead,
@@ -780,6 +791,154 @@ class Identity:
                 raise Refused(f"{member_id!r} does not lead this project.")
             committed = self._lost_access(conn, caller)
         committed()
+
+    def keeps(self, member: Member, project_id: str, foundation: str) -> bool:
+        """Whether this member keeps this foundation of the project. A keeper who can no longer reach the project has
+        been dropped, so a row is all it takes."""
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT 1 FROM foundation_keepers WHERE project_id = %s AND foundation = %s AND member_id = %s",
+                (project_id, foundation, member.pk),
+            ).fetchone()
+        return found is not None
+
+    def keeps_any(self, member: Member, project_id: str) -> bool:
+        """Whether this member keeps at least one foundation of the project."""
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT 1 FROM foundation_keepers WHERE project_id = %s AND member_id = %s LIMIT 1", (project_id, member.pk)
+            ).fetchone()
+        return found is not None
+
+    @staticmethod
+    def _foundations_listed(conn: Conn, project_id: str) -> list[tuple[str, str, bool]]:
+        """A project's foundations as (slug, name, whether core): the core four, then its extras in the order added."""
+        listed = [(slug, foundation_title(slug), True) for slug in CORE_FOUNDATIONS]
+        rows = conn.execute(
+            "SELECT slug, name FROM project_foundations WHERE project_id = %s ORDER BY added_at, slug", (project_id,)
+        ).fetchall()
+        return listed + [(row["slug"], row["name"], False) for row in rows]
+
+    def foundation_name(self, project_id: str, slug: str) -> str:
+        """What a project calls one of its foundations; its slug, capitalised, when it is gone."""
+        with self._db.transaction() as conn:
+            named = {one: name for one, name, _ in self._foundations_listed(conn, project_id)}
+        return named.get(slug, foundation_title(slug))
+
+    def foundations_of(self, project_id: str) -> list[str]:
+        """The slugs of a project's foundations, core and extra."""
+        with self._db.transaction() as conn:
+            return [slug for slug, _, _ in self._foundations_listed(conn, project_id)]
+
+    def _require_foundation(self, conn: Conn, project_id: str, foundation: str) -> None:
+        slugs = [slug for slug, _, _ in self._foundations_listed(conn, project_id)]
+        if foundation not in slugs:
+            raise unknown_foundation(foundation, slugs)
+
+    def add_foundation(self, caller: Caller, project_id: str, name: str, leads_only: bool = False) -> str:
+        """Add an extra foundation to a project and answer its slug. A lead can; so can an admin, unless `leads_only`.
+        Its name can't be empty or stand for a foundation the project already has."""
+        if leads_only:
+            if project_id not in self.leads_of(caller.member):
+                raise Refused("Only this project's leads can add a foundation.")
+        else:
+            self._require_lead(caller, project_id)
+        if not re.search(r"[a-z0-9]", name.lower()):
+            raise Refused("A foundation needs a name with letters or digits in it.")
+        if len(name.strip()) > NAME_LIMIT:
+            raise Refused(f"A foundation's name is at most {NAME_LIMIT} characters.")
+        slug = slugify(name)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            if slug in [one for one, _, _ in self._foundations_listed(conn, project_id)]:
+                raise Refused(f"This project already has a {slug!r} foundation.")
+            conn.execute(
+                "INSERT INTO project_foundations (project_id, slug, name, added_by, added_at) VALUES (%s, %s, %s, %s, %s)",
+                (project_id, slug, name.strip(), caller.member.pk, self._clock()),
+            )
+        return slug
+
+    def require_extra_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Refuse removing what isn't an extra foundation of this project: a core one, or one it doesn't have."""
+        self._require_lead(caller, project_id)
+        if slug in CORE_FOUNDATIONS:
+            raise Refused(f"The {slug} foundation is one of the core four, and can't be removed.")
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, slug)
+
+    def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
+        """Remove an extra foundation, and its keepers with it."""
+        self.require_extra_foundation(caller, project_id, slug)
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM foundation_keepers WHERE project_id = %s AND foundation = %s", (project_id, slug))
+            conn.execute("DELETE FROM project_foundations WHERE project_id = %s AND slug = %s", (project_id, slug))
+
+    def assign_keeper(self, caller: Caller, project_id: str, foundation: str, member_id: str) -> None:
+        """Make a member a keeper of one of this project's foundations. A lead can; so can an admin. The member must
+        be able to reach the project."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, foundation)
+            pk = self._member_pk(conn, caller, member_id)
+            if self.cannot_reach(conn, caller.member.team_pk, [(pk, project_id)]):
+                raise Refused(
+                    f"{member_id!r} can't reach project {project_id!r}: it is restricted and they aren't on its "
+                    "access list."
+                )
+            conn.execute(
+                "INSERT INTO foundation_keepers (project_id, foundation, member_id, assigned_by, assigned_at)"
+                " VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                (project_id, foundation, pk, caller.member.pk, self._clock()),
+            )
+
+    def remove_keeper(self, caller: Caller, project_id: str, foundation: str, member_id: str) -> None:
+        """Take a keeper off a foundation."""
+        self._require_lead(caller, project_id)
+        with self._db.transaction() as conn:
+            self._project_name(conn, caller.member, project_id)
+            self._require_foundation(conn, project_id, foundation)
+            pk = self._member_pk(conn, caller, member_id)
+            removed = conn.execute(
+                "DELETE FROM foundation_keepers WHERE project_id = %s AND foundation = %s AND member_id = %s"
+                " RETURNING member_id",
+                (project_id, foundation, pk),
+            ).fetchone()
+        if removed is None:
+            raise Refused(f"{member_id!r} does not keep the {foundation} foundation.")
+
+    def drop_keepers(self, conn: Conn, caller: Caller) -> list[tuple[str, str, str]]:
+        """Drop the keeper assignments of members who can no longer reach their project, as (project ID, foundation,
+        member ID). Asked inside the transaction of the change that cost them it."""
+        team_pk = caller.member.team_pk
+        held = conn.execute(
+            "SELECT DISTINCT member_id, project_id FROM foundation_keepers WHERE project_id = ANY(%s)",
+            (self.team_projects(conn, team_pk),),
+        ).fetchall()
+        lost = self.cannot_reach(conn, team_pk, [(row["member_id"], row["project_id"]) for row in held])
+        if not lost:
+            return []
+        dropped = conn.execute(
+            "DELETE FROM foundation_keepers k USING unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id),"
+            " members m WHERE k.member_id = x.member_id AND k.project_id = x.project_id AND m.id = k.member_id"
+            " RETURNING k.project_id, k.foundation, m.member_id",
+            ([pk for pk, _ in lost], [project_id for _, project_id in lost]),
+        ).fetchall()
+        return sorted((row["project_id"], row["foundation"], row["member_id"]) for row in dropped)
+
+    @staticmethod
+    def keepers_listed(conn: Conn, project_id: str) -> dict[str, list[dict[str, str]]]:
+        """The keepers of each foundation of one project that has any, by slug."""
+        rows = conn.execute(
+            "SELECT k.foundation, m.member_id, m.name FROM foundation_keepers k JOIN members m ON m.id = k.member_id"
+            " WHERE k.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
+            (project_id,),
+        ).fetchall()
+        listed: dict[str, list[dict[str, str]]] = {}
+        for row in rows:
+            listed.setdefault(row["foundation"], []).append({"member_id": row["member_id"], "name": row["name"]})
+        return listed
 
     def add_repository(self, caller: Caller, project_id: str, repository: str) -> None:
         """Note a repository of this project, so its settings can be shown before anyone works in it."""
