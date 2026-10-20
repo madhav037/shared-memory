@@ -1,22 +1,21 @@
 ---
 name: architecture-diagram
-description: "Bring the architecture diagram up to date after a feature lands, then republish it. Run at every spec's retro."
+description: "Bring the architecture diagram up to date after a feature lands. Run at every spec's retro."
 disable-model-invocation: true
 ---
 
-`docs/architecture.html` is the one-page map of Shared Memory and the source of truth for the diagram. The published copy at https://claude.ai/artifact/1p6pwHEtP6meg3cX8WrZwW is built from it. This skill makes the page match `main` again after work lands. Every spec's retro runs it (#375), so the page is never more than one feature behind.
+`docs/architecture.html` is the one-page map of Shared Memory: a standalone HTML document, opened straight from the repository in a browser. Keep its `<!doctype html>`, `<head>` and `<body>` intact. This skill makes the page match `dev` again after work lands. Every spec's retro runs it (#375), so the page is never more than one feature behind.
 
 The page is how the repository's human understands the system without reading diffs. Accuracy is the whole point: read the code for every box, arrow, step and table row you change. Never draw from memory or from the spec. Where you can't confirm something from the code, mark it on the page as unverified.
 
 ## Steps
 
-1. **Find the drift.** The page's eyebrow names the commit it was drawn at. List everything since then with `git log --oneline <that commit>..main`, plus any issue or PR the user named, and `gh issue list --state open` for the status line. Done when every commit since the eyebrow's is on a list you can check off.
+1. **Find the drift.** The page's eyebrow names the commit it was drawn at. List everything since then with `git log --oneline <that commit>..origin/dev`, plus any issue or PR the user named, and `gh issue list --state open` for the status line. Done when every commit since the eyebrow's is on a list you can check off.
 2. **Map each change to the page** using the section table below. A change that alters nothing a reader of the page would see (a refactor, a test, a rename inside a module) is skipped, and says why. Done when each listed commit is either assigned to a section or skipped with a reason.
-3. **Edit the page.** Follow the drawing rules below. Move the eyebrow to the new `main` commit and today's date.
+3. **Edit the page.** Follow the drawing rules below. Move the eyebrow to the new `dev` commit and today's date.
 4. **Check the script parses:** copy the text between `<script>` and `</script>` to a scratch `.js` file and run `node --check` on it. Done when it exits 0.
-5. **Republish** with the Artifact tool, passing `file_path: docs/architecture.html` and `url` set to the link above. In a new conversation, read that URL first (`action: "read"`). The tool refuses the publish until you do.
-6. **Commit** `docs/architecture.html` alone on its own branch and open a PR into `dev`. It is one concern, per `CLAUDE.md`.
-7. **Report**: what was drawn, what was skipped and why, anything marked unverified, and the link.
+5. **Commit** `docs/architecture.html` alone on its own branch and open a PR into `dev`. It is one concern, per `CLAUDE.md`.
+6. **Report**: what was drawn, what was skipped and why, anything marked unverified, and the PR link.
 
 ## Section table
 
