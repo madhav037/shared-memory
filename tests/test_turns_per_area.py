@@ -103,7 +103,7 @@ def test_saves_in_different_projects_overlap(
     owner = team.owner()
     projects = [owner.call("create_project", name=f"Overlap {n}")["project_id"] for n in range(5)]
     sessions = split([owner.in_project(project) for project in projects], elsewhere)
-    for n, session in enumerate(sessions):
+    for session in sessions:
         # Each project's folders already exist, so no promotion creates or empties one the projects share.
         promote_now(session, note("Deploy windows", "Deploys happen on Tuesday mornings only.", type="decision"))
         session.call("remember", **note("Local ports", "The dev database listens on port 6543.", type="decision"))
@@ -114,7 +114,7 @@ def test_saves_in_different_projects_overlap(
     slow_turns()
 
     results, took = all_at_once(
-        [(session, "promote", {"path": saved["path"], "level": "project"}) for session, saved in zip(sessions, personal)]
+        [(session, "promote", {"path": saved["path"], "level": "project"}) for session, saved in zip(sessions, personal, strict=True)]
     )
 
 
@@ -129,12 +129,12 @@ def test_saves_into_the_same_project_memory_still_take_turns(
     subjects = ["Kafka topic naming", "Terraform state locking", "Pixel density of icons"]
     personal = [
         session.call("remember", **note(subject, f"{subject} is settled: {word()}.", type="convention"))
-        for session, subject in zip(sessions, subjects)
+        for session, subject in zip(sessions, subjects, strict=True)
     ]
     slow_turns()
 
     results, took = all_at_once(
-        [(session, "promote", {"path": saved["path"], "level": "project"}) for session, saved in zip(sessions, personal)]
+        [(session, "promote", {"path": saved["path"], "level": "project"}) for session, saved in zip(sessions, personal, strict=True)]
     )
 
     assert [result["status"] for result in results] == ["promoted"] * len(sessions)
@@ -254,7 +254,7 @@ def test_many_members_saving_at_once_leave_one_commit_each_authored_by_them(
     commits = [line.split("|", 1) for line in git(team, "log", f"-{len(saves)}", "--format=%an|%s").splitlines()]
     assert sorted(subject for _, subject in commits) == sorted(authors)
     assert all(author == authors[subject] for author, subject in commits)
-    for (session, _, arguments), result in zip(saves, results):
+    for (session, _, arguments), result in zip(saves, results, strict=True):
         assert session.call("read", path=result["path"])["title"] == arguments["title"]
         assert indexed(team, arguments["body"].split()[-1].rstrip(".")) == [result["path"]]
     for folder in (f"projects/{project}/people", f"projects/{other}/people", "projects"):

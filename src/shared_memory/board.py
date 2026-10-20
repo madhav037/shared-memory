@@ -472,14 +472,14 @@ class Board:
             if edits:
                 assignments = ", ".join(f"{name} = %s" for name in edits)
                 conn.execute(
-                    f"UPDATE cards SET {assignments}, updated_at = %s WHERE id = %s", (*edits.values(), now, card_id)
+                    f"UPDATE cards SET {assignments}, updated_at = %s WHERE id = %s", (*edits.values(), now, card_id)  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 )
             self._link(conn, card_id, links)
             if to_column is not None or position is not None:
                 self._place(conn, project_id, card_id, from_column, lands, position, now)
             if blocking:
                 assignments = ", ".join(f"{name} = %s" for name in blocking)
-                conn.execute(f"UPDATE cards SET {assignments} WHERE id = %s", (*blocking.values(), card_id))
+                conn.execute(f"UPDATE cards SET {assignments} WHERE id = %s", (*blocking.values(), card_id))  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
             card = self._card(conn, card_id)
             notices = self._moved_notices(conn, caller, project_id, found, card)
         changed = [name.removesuffix("_id") for name in edits] + [

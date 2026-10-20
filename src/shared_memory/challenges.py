@@ -178,7 +178,7 @@ class Challenges:
             params.append(list(challenger_paths))
         with self._db.transaction() as conn:
             rows = conn.execute(
-                f"SELECT * FROM challenges WHERE {' AND '.join(conditions)} ORDER BY target_path, id", params
+                f"SELECT * FROM challenges WHERE {' AND '.join(conditions)} ORDER BY target_path, id", params  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
             ).fetchall()
         return [Challenge.from_row(row) for row in rows]
 

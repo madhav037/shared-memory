@@ -48,8 +48,8 @@ def test_two_edits_of_different_fields_both_land(owner: Session, elsewhere: Else
         path = remember(owner, "Edited twice")
 
         outcomes = at_once(
-            lambda: owner.call("edit_memory", path=path, summary=f"summary {trial}"),
-            lambda: elsewhere(owner).call("edit_memory", path=path, body=f"body {trial}"),
+            lambda: owner.call("edit_memory", path=path, summary=f"summary {trial}"),  # noqa: B023  # at_once joins both calls before the loop moves on
+            lambda: elsewhere(owner).call("edit_memory", path=path, body=f"body {trial}"),  # noqa: B023  # at_once joins both calls before the loop moves on
         )
         memory = owner.call("read", path=path)
 
@@ -62,8 +62,8 @@ def test_an_edit_racing_a_delete_never_brings_the_memory_back(owner: Session, el
         path = remember(owner, "Deleted while edited", type="gotcha")
 
         deleted, edited = at_once(
-            lambda: owner.call("delete_memory", path=path),
-            lambda: elsewhere(owner).call("edit_memory", path=path, body="edited"),
+            lambda: owner.call("delete_memory", path=path),  # noqa: B023  # at_once joins both calls before the loop moves on
+            lambda: elsewhere(owner).call("edit_memory", path=path, body="edited"),  # noqa: B023  # at_once joins both calls before the loop moves on
         )
 
         assert deleted == {"deleted": path}
