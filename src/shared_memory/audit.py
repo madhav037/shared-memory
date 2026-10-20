@@ -70,7 +70,7 @@ Kind = Literal[
 
 SIGNED_IN: Kind = "signed_in"
 SIGN_IN_REFUSED: Kind = "sign_in_refused"
-TOKEN_ISSUED: Kind = "token_issued"
+TOKEN_ISSUED: Kind = "token_issued"  # noqa: S105  # a name, not a secret
 MEMBER_ADDED: Kind = "member_added"
 MEMBER_REMOVED: Kind = "member_removed"
 MEMBER_CHANGED: Kind = "member_changed"
@@ -246,7 +246,7 @@ class Audit:
                 wheres.append("(e.actor_id = %s OR (e.actor_id IS NULL AND e.actor = %s))")
                 values += [found[0] if found else None, member_id]
             rows = conn.execute(
-                "SELECT e.id, e.at, e.actor, e.actor_id, e.kind, e.project_id, e.target, e.detail FROM audit_events e"
+                "SELECT e.id, e.at, e.actor, e.actor_id, e.kind, e.project_id, e.target, e.detail FROM audit_events e"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 f" WHERE {' AND '.join(wheres)} ORDER BY e.id DESC LIMIT %s",
                 (*values, limit + 1),
             ).fetchall()
