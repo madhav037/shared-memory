@@ -84,6 +84,12 @@ jobs:
       - name: Server lint
         run: uv run ruff check
 
+      # Every locked server dependency ships in the image, so all of them are audited.
+      - name: Server dependencies have no known vulnerabilities
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt --quiet -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 --disable-pip -r "$RUNNER_TEMP/requirements.txt"
+
       - name: Server tests
         run: uv run pytest
 
@@ -134,6 +140,11 @@ jobs:
       - name: Install the console's dependencies
         working-directory: console
         run: npm ci
+
+      # Only what reaches a browser gates a merge; build tools' advisories arrive as Dependabot updates instead.
+      - name: The console's shipped dependencies have no high-severity vulnerabilities
+        working-directory: console
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Console types and build
         working-directory: console
