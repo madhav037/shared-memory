@@ -16,3 +16,6 @@ backup_key
 
 # A local compose override, for a server run on one machine
 compose.override.yaml
+
+# Personal tokens saved to a file by a demo seed or a local run
+*token*.txt

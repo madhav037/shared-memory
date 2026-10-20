@@ -31,12 +31,21 @@ grill-me → domain-modeling → to-spec → to-tickets → implement-spec → c
 - **domain-modeling** — only when the vocabulary is unsettled: new terms, or terms the glossary
   and the code disagree about. Settled vocabulary skips straight to `to-spec`.
 - **to-spec** — publish the spec as a GitHub issue.
-- **to-tickets** — split the spec into tracer-bullet tickets with their blocking edges.
+- **to-tickets** — split the spec into tracer-bullet tickets with their blocking edges. This is
+  the human's gate (ADR-0012): run it with them present, and make every acceptance criterion
+  specific enough to become a test name. Once it closes, the criteria are final.
 - **implement-spec** — one PR per ticket, test-first.
 - **code-review** — review the branch against the repo's standards and the originating issue.
-- **retro** — what the session learned, written down.
+- **retro** — what the session learned, written down. A spec closes only after two more steps.
+  First, run `.claude/skills/architecture-diagram` so `docs/architecture.html` matches the code.
+  Second, comment on the spec issue with a table of acceptance criterion → the test that proves
+  it → any deviation from the plan.
 
 `triage` keeps the issue list healthy between features.
+
+**The fast lane** skips the spine: a bug fix, a copy change, a refactor or a dependency bump
+goes issue → test-first PR. Anything that adds behaviour, or touches an ADR or a glossary term,
+takes the spine.
 
 **A feature request arriving mid-session is filed, not built.** Run
 `gh issue create --label needs-triage`, then carry on with the work in hand. It enters the spine
