@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- the terminal animation writes HTML built only from this file's constants */
 import {
   IconArrowRight,
   IconBrandGithub,

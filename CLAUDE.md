@@ -53,6 +53,7 @@ Run the seam you're touching while iterating, and the whole table once before ea
 | Python types | `uv run mypy` |
 | Console build and types | `cd console && npm run build` |
 | Console units | `cd console && npm run test` |
+| Console lint | `cd console && npm run lint` |
 | Console JSON API contract | `cd console && npm run api:check` |
 | Console journeys | `cd console && npx playwright test` |
 
