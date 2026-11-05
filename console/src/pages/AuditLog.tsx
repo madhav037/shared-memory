@@ -187,9 +187,15 @@ export function AuditLog({ member }: { member: SignedInMember }) {
   const [limit] = useState(() => (window.matchMedia("(max-width: 600px)").matches ? PHONE_PAGE : undefined));
   const filtered = Object.values(filters).some(Boolean);
 
+  // A new filter clears the list at once, so the old changes never show under it.
+  const [loadedFor, setLoadedFor] = useState(filters);
+  if (loadedFor !== filters) {
+    setLoadedFor(filters);
+    setEvents(null);
+  }
+
   useEffect(() => {
     const attempt = new AbortController();
-    setEvents(null);
     fetchAudit({ ...filters, limit }, attempt.signal)
       .then((page) => {
         setEvents(page.events);

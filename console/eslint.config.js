@@ -23,8 +23,8 @@ export default defineConfig(
         { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: RAW_HTML },
         { selector: "AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/]", message: RAW_HTML },
       ],
-      // A warning until the effects that set state are reworked (#383); then an error.
-      "react-hooks/set-state-in-effect": "warn",
+      // An effect that sets state in its body renders twice for one change; derive the value or reset it in render.
+      "react-hooks/set-state-in-effect": "error",
     },
   },
 );

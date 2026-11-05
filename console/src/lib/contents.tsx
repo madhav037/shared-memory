@@ -55,9 +55,15 @@ export function ContentsProvider({ children }: { children: React.ReactNode }) {
   const nameOf = useCallback((memberId: string) => names.get(memberId) ?? memberId, [names]);
 
   // Follow the page: every folder above what is open is opened too.
-  useEffect(() => {
+  const followKey = `${location.pathname}${location.search}`;
+  const [followed, setFollowed] = useState<string | null>(null);
+  if (followed !== followKey) {
+    setFollowed(followKey);
     const here = currentPath(location.pathname, location.search);
-    if (!here) return;
+    if (here) followPage(here);
+  }
+
+  function followPage(here: string) {
     const parts = here.split("/");
     const above: string[] = [];
     for (let depth = 1; depth < parts.length + (here.endsWith(".md") ? 0 : 1); depth += 1) {
@@ -70,7 +76,7 @@ export function ContentsProvider({ children }: { children: React.ReactNode }) {
       above.forEach((path) => next.add(path));
       return next;
     });
-  }, [location.pathname, location.search]);
+  }
 
   const toggle = useCallback((path: string) => {
     setExpanded((open) => {
