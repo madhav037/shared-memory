@@ -32,7 +32,7 @@ grill-me → domain-modeling → to-spec → to-tickets → implement-spec → c
   and the code disagree about. Settled vocabulary skips straight to `to-spec`.
 - **to-spec** — publish the spec as a GitHub issue.
 - **to-tickets** — split the spec into tracer-bullet tickets with their blocking edges. This is
-  the human's gate (ADR-0012): run it with them present, and make every acceptance criterion
+  the human's gate (ADR-0020): run it with them present, and make every acceptance criterion
   specific enough to become a test name. Once it closes, the criteria are final.
 - **implement-spec** — one PR per ticket, test-first.
 - **code-review** — review the branch against the repo's standards and the originating issue.
