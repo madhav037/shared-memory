@@ -496,7 +496,7 @@ class Locks:
             # Two sessions taking a free file both insert; Postgres lets one row in, and the other waits for it and
             # then finds a holder that isn't itself.
             mine = conn.execute(
-                "INSERT INTO locks (project_id, repository, path, session_id, taken_at, last_used_at)"
+                "INSERT INTO locks (project_id, repository, path, session_id, taken_at, last_used_at)"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 " VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (project_id, repository, path)"
                 " DO UPDATE SET last_used_at = EXCLUDED.last_used_at WHERE locks.session_id = EXCLUDED.session_id"
                 # A row just inserted has no xmax; one that was there, and only had its last use moved, has.
@@ -521,7 +521,7 @@ class Locks:
             if held:
                 self._tell(conn, kept, session, activity, now)
             moved = conn.execute(
-                "UPDATE locks SET session_id = %s, taken_at = %s, last_used_at = %s"
+                "UPDATE locks SET session_id = %s, taken_at = %s, last_used_at = %s"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 f" WHERE project_id = %s AND repository = %s AND path = %s RETURNING {_COLUMNS}, TRUE AS taken_now",
                 (session.id, now, now, *file),
             ).fetchone()

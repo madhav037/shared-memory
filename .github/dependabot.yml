@@ -1,0 +1,31 @@
+# Weekly update pull requests for every lockfile, opened against dev like any other change. Each ecosystem's updates
+# arrive grouped in one pull request, so a week's bumps are one review, not a dozen.
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      server:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /console
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      console:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

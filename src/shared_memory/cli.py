@@ -39,7 +39,7 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     commands.add_parser("openapi", help="Print the console API's description, which the console builds its types from.")
 
     serve = commands.add_parser("serve", help="Run the server.")
-    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--host", default="0.0.0.0")  # noqa: S104  # the image must listen on every interface; the threat model (#377) settles the default
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--workers", type=int, help="How many server processes to run (default: SHARED_MEMORY_WORKERS).")
 

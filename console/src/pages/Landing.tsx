@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- the terminal animation writes HTML built only from this file's constants */
 import {
   IconArrowRight,
   IconBrandGithub,
@@ -289,7 +290,6 @@ function useCounted(target: number): number {
   useEffect(() => {
     if (reduced()) {
       current.current = target;
-      setShown(target);
       return;
     }
     const from = current.current;
@@ -305,7 +305,7 @@ function useCounted(target: number): number {
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
   }, [target]);
-  return shown;
+  return reduced() ? target : shown;
 }
 
 /** A section's heading: the question a buyer would ask, then the page's own answer in large type. */

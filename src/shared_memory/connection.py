@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from shared_memory.hooks import AGENT_HEADER, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI
 
-TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"
+TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"  # noqa: S105  # a name, not a secret
 GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
 EVERY_AGENT = "Every agent"
 SECTION_START = "<!-- shared-memory:start -->"
