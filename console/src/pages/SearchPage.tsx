@@ -1,6 +1,6 @@
 import { Button, TextInput } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconSearch } from "@tabler/icons-react";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { searchEverywhere, type SearchHit } from "../api/client";
@@ -44,10 +44,13 @@ export function SearchPage() {
   const [more, setMore] = useState(Boolean(type));
   const typeFilter = useId();
 
-  useEffect(() => setTyped(query), [query]);
-  useEffect(() => {
-    if (type) setMore(true);
-  }, [type]);
+  // The box follows the address when the address changes under it (back, forward, a link).
+  const [typedFor, setTypedFor] = useState(query);
+  if (typedFor !== query) {
+    setTypedFor(query);
+    setTyped(query);
+  }
+  if (type && !more) setMore(true);
 
   const set = (name: string, value: string) => {
     const next = new URLSearchParams(asked);
