@@ -75,7 +75,7 @@ function useOutOfSight(board: HTMLDivElement | null, names: string[]): string[] 
   const [out, setOut] = useState<string[]>([]);
   const key = names.join("\n");
   useEffect(() => {
-    if (!board) return setOut([]);
+    if (!board) return;
     const look = () => {
       const edge = board.getBoundingClientRect();
       const hidden = Array.from(board.children).flatMap((column, place) => {
@@ -93,7 +93,7 @@ function useOutOfSight(board: HTMLDivElement | null, names: string[]): string[] 
       resized.disconnect();
     };
   }, [board, key]);
-  return out;
+  return board ? out : [];
 }
 
 /**
@@ -639,10 +639,13 @@ function CardPanel({
     seen.current = changes;
     reload();
   }, [changes, reload]);
-  useEffect(() => {
+  // Another card opens as itself, not in the middle of the last one's edit or delete.
+  const [shownNumber, setShownNumber] = useState(number);
+  if (shownNumber !== number) {
+    setShownNumber(number);
     setEditing(false);
     setDeleting(false);
-  }, [number]);
+  }
 
   if (refused)
     return (

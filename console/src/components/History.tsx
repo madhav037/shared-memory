@@ -43,10 +43,13 @@ export function useHistory(path: string): History | null {
   const [marked, setMarked] = useState(true);
   const [texts, setTexts] = useState<Map<string, string>>(new Map());
 
-  useEffect(() => {
+  // Another memory starts again from its latest version.
+  const [shownPath, setShownPath] = useState(path);
+  if (shownPath !== path) {
+    setShownPath(path);
     setAt(null);
     setTexts(new Map());
-  }, [path]);
+  }
 
   const position = at ?? versions.length - 1;
   const version = versions[position];
