@@ -340,7 +340,7 @@ class SearchIndex:
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_CANDIDATES))
             by_meaning = conn.execute(
-                f"WITH nearest AS MATERIALIZED (SELECT {columns} FROM sections WHERE {where}"
+                f"WITH nearest AS MATERIALIZED (SELECT {columns} FROM sections WHERE {where}"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 f" ORDER BY embedding <=> %(query)s LIMIT {_CANDIDATES})"
                 " SELECT * FROM nearest ORDER BY similarity DESC",
                 params,
@@ -378,7 +378,7 @@ class SearchIndex:
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             rows = conn.execute(
-                "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("
+                "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 " SELECT n.path, 1 - (n.embedding <=> s.embedding) AS similarity FROM sections n"
                 " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
                 " AND (n.level = 'team' OR (n.level = 'project' AND n.project_id = %(project)s))"
@@ -409,7 +409,7 @@ class SearchIndex:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             for vector in {digest: found[digest] for digest in hashes.values()}.values():
                 rows = conn.execute(
-                    "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"
+                    "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                     " WHERE team = %(team)s AND status = 'active' AND level = 'project' AND project_id = %(project)s"
                     f" ORDER BY embedding <=> %(vector)s LIMIT {_SIMILAR_CANDIDATES}",
                     {"team": team, "project": project_id, "vector": Vector(vector)},
@@ -422,7 +422,7 @@ class SearchIndex:
     @staticmethod
     def _keyword(conn: Conn, columns: str, where: str, params: dict[str, object]) -> list[dict[str, Any]]:
         return conn.execute(
-            f"SELECT {columns}, ts_rank(tokens, q.tq) AS rank FROM sections,"
+            f"SELECT {columns}, ts_rank(tokens, q.tq) AS rank FROM sections,"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
             " (SELECT websearch_to_tsquery('simple', %(text)s) || websearch_to_tsquery('english', %(text)s) AS tq) q"
             f" WHERE {where} AND tokens @@ q.tq ORDER BY rank DESC LIMIT {_CANDIDATES}",
             params,

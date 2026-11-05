@@ -42,8 +42,8 @@ class MemoryHistory:
         self._root = memory_folder(root)
 
     def _git(self, *args: str) -> str:
-        result = subprocess.run(
-            ["git", "-C", ordinary(self._root), *args], env=dict(os.environ), capture_output=True, text=True, check=False
+        result = subprocess.run(  # noqa: S603  # an argument list, never a shell; commits are checked hex and paths start with the team
+            ["git", "-C", ordinary(self._root), *args], env=dict(os.environ), capture_output=True, text=True, check=False  # noqa: S607  # git from the PATH the image installs it on
         )
         if result.returncode != 0:
             raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")

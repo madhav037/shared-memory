@@ -60,8 +60,10 @@ Run the seam you're touching while iterating, and the whole table once before ea
 | Python lint | `uv run ruff check` |
 | Python tests | `uv run pytest` |
 | Python types | `uv run mypy` |
+| Dependency audit | `uv export --frozen --no-emit-project -o req.txt && uvx pip-audit --disable-pip -r req.txt`; `cd console && npm audit --omit=dev --audit-level=high` |
 | Console build and types | `cd console && npm run build` |
 | Console units | `cd console && npm run test` |
+| Console lint | `cd console && npm run lint` |
 | Console JSON API contract | `cd console && npm run api:check` |
 | Console journeys | `cd console && npx playwright test` |
 

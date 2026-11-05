@@ -52,9 +52,20 @@ ignore_missing_imports = true
 line-length = 120
 
 [tool.ruff.lint]
-# Syntax errors, pyflakes and pycodestyle: the families the code already passes. Nothing here reformats.
-select = ["E", "W", "F"]
-ignore = ["E501"]
+# Syntax errors, pyflakes and pycodestyle, bugbear's common bug patterns, and bandit's security rules. Nothing here
+# reformats. A security rule silenced on one line says why on that line.
+select = ["E", "W", "F", "B", "S"]
+ignore = [
+    "E501",
+    # Asserts here narrow types for mypy (`row is not None`) and guard no permission, so `python -O` stripping them
+    # would turn a None into a crash, never into a way past a check.
+    "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and the smoke and stress runs assert, start git and the CLI as subprocesses, and use made-up tokens.
+"tests/**" = ["S"]
+"smoke/**" = ["S"]
 
 [dependency-groups]
 dev = [

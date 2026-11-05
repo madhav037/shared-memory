@@ -818,7 +818,7 @@ class MemoryStore:
             for path, text in before.items():
                 file = self._file(team, path)
                 if text is None:
-                    _settled(lambda: file.unlink(missing_ok=True))
+                    _settled(lambda: file.unlink(missing_ok=True))  # noqa: B023  # runs at once, inside the loop
                 else:
                     write_whole(file, text)
             transaction.unmark()
@@ -863,7 +863,7 @@ class MemoryStore:
                         log.warning("Putting back %s: main holds no memory there to index", path)
                         deletes.add(path)
             else:
-                _settled(lambda: file.unlink(missing_ok=True))
+                _settled(lambda: file.unlink(missing_ok=True))  # noqa: B023  # runs at once, inside the loop
                 if path.name != INDEX_NAME:
                     deletes.add(path)
         self._prune(team, [PurePosixPath(name) for name in paths], ours)
@@ -930,7 +930,7 @@ class MemoryStore:
                 write_whole(self._file(team, path), memory.to_text())
             for path in change.deletes:
                 file = self._file(team, path)
-                _settled(lambda: file.unlink(missing_ok=True))
+                _settled(lambda: file.unlink(missing_ok=True))  # noqa: B023  # runs at once, inside the loop
             # A folder's index lists its memories and its subfolders' names, so a parent's listing changes only
             # when a folder under it appeared or disappeared.
             pending = {path.parent for path in memories}
@@ -1065,13 +1065,13 @@ class MemoryStore:
         for path, text in before.items():
             file = self._file(team, path)
             if text is None:
-                attempt(f"remove {path}", lambda: _settled(lambda: file.unlink(missing_ok=True)))
+                attempt(f"remove {path}", lambda: _settled(lambda: file.unlink(missing_ok=True)))  # noqa: B023  # runs at once, inside the loop
             else:
-                attempt(f"restore {path}", lambda: write_whole(file, text))
+                attempt(f"restore {path}", lambda: write_whole(file, text))  # noqa: B023  # runs at once, inside the loop
         for folder in created:  # deepest first
             directory = self._file(team, folder)
             if directory.is_dir() and not any(directory.iterdir()):
-                attempt(f"remove {folder}", lambda: _settled(directory.rmdir))
+                attempt(f"remove {folder}", lambda: _settled(directory.rmdir))  # noqa: B023  # runs at once, inside the loop
         attempt("clear its markers", transaction.unmark)
 
     def subscribe(self, listener: ChangeListener) -> None:
