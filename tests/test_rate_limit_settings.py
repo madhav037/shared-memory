@@ -85,7 +85,7 @@ def test_an_admin_changes_the_limits_and_the_audit_log_says_who(console: Console
             "you_may_change": True,
         }
         changed = audit(signed_out, "rate_limits_changed")[0]
-        assert changed["actor"] == "Olive Owner"
+        assert changed["actor"] == "E1001"
         assert changed["detail"]["now"]["token_per_minute"] == 240
         assert changed["detail"]["before"]["token_per_minute"] == 120
 
@@ -120,7 +120,7 @@ def test_the_first_time_in_an_hour_a_personal_token_is_limited_the_audit_log_nam
         for _ in range(burst + 5):
             prompt(console, token)
         limited = audit(signed_out, "token_limited")
-        assert [(event["actor"], event["target"]) for event in limited] == [("Olive Owner", "E1001")]
+        assert [(event["actor"], event["target"]) for event in limited] == [("E1001", "E1001")]
         assert limited[0]["detail"] == {"per_minute": 8}
 
         # An hour later the token is limited again, and that is noted again.
