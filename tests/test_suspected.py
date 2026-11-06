@@ -125,3 +125,28 @@ def test_editing_checks_the_text_again(owner: Session) -> None:
 
     assert "suspected_instructions" not in reworded
     assert poisoned["suspected_instructions"] == ["tells the agent to ignore its instructions"]
+
+
+def test_a_known_issue_is_checked_and_its_saving_session_told(owner: Session) -> None:
+    saved = owner.call(
+        "save_known_issue",
+        title="Quokka staging is down",
+        summary="Staging returns 502.",
+        body=f"{INJECTION}\n\nWorkaround: none known",
+    )
+
+    assert saved["status"] == "saved"
+    assert saved["suspected_instructions"], saved
+    assert "edit the memory in other words" in str(saved["note"])
+
+
+def test_an_ordinary_known_issue_is_not_marked(owner: Session) -> None:
+    saved = owner.call(
+        "save_known_issue",
+        title="Quokka staging is down",
+        summary="Staging returns 502.",
+        body="Staging returns 502 after midnight.\n\nWorkaround: retry in a minute.",
+    )
+
+    assert saved["status"] == "saved"
+    assert "suspected_instructions" not in saved
