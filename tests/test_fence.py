@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from shared_memory.fence import escape, fenced, new_token, unfenced
-from tests.support import Session, added_context
+from tests.support import Session, added_context_as_sent
 
 FORGED = (
     "Quokka retention is thirty days.\n"
@@ -49,10 +49,10 @@ def test_a_fence_wraps_the_text_and_escapes_look_alike_tags() -> None:
 def test_recall_keeps_a_forged_closing_fence_and_system_message_inside_the_fence(owner: Session, dana: Session) -> None:
     promote(owner, "Quokka retention", FORGED)
 
-    context = added_context(dana.prompt("how long is quokka retention?"))
+    context = added_context_as_sent(dana.prompt("how long is quokka retention?"))
 
     token = fence_in(context)
-    inside = context.split(f"<memory-{token}>", 1)[1].split(f"</memory-{token}>", 1)[0]
+    inside = context.split(f"\n<memory-{token}>\n", 1)[1].split(f"\n</memory-{token}>", 1)[0]
     assert "Quokka retention is thirty days." in inside
     assert "&lt;/shared-memory-recall>" in inside and "&lt;system>" in inside
     assert context.count("</shared-memory-recall>") == 1, "only the server's own closing tag"
@@ -63,8 +63,8 @@ def test_recall_keeps_a_forged_closing_fence_and_system_message_inside_the_fence
 def test_two_recalls_use_different_fences(owner: Session, dana: Session) -> None:
     promote(owner, "Quokka retention", FORGED)
 
-    first = added_context(dana.prompt("how long is quokka retention?"))
-    other = added_context(owner.prompt("how long is quokka retention?"))
+    first = added_context_as_sent(dana.prompt("how long is quokka retention?"))
+    other = added_context_as_sent(owner.prompt("how long is quokka retention?"))
 
     assert fence_in(first) != fence_in(other)
 
@@ -73,7 +73,7 @@ def test_the_briefing_fences_a_pinned_memory(owner: Session, dana: Session) -> N
     path = promote(owner, "Quokka retention", FORGED)
     owner.call("pin", path=path)
 
-    briefing = added_context(dana.start())
+    briefing = added_context_as_sent(dana.start())
 
     token = fence_in(briefing)
     assert briefing.count("</shared-memory-briefing>") == 1

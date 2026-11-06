@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -273,10 +274,15 @@ class Session:
         return sessions.active(self.project)
 
 
+def same_fence(text: str) -> str:
+    """The text with each call's random fence value replaced by TOKEN, so two calls' prompts can be compared."""
+    return re.sub(r"(</?memory-)[0-9a-f]{16}", r"\1TOKEN", text)
+
+
 def unfenced_in(value: Any) -> Any:
     """A tool's result with every fenced text (a memory's summary or body) given back as the member wrote it."""
     if isinstance(value, str):
-        return unfenced(value)
+        return same_fence(unfenced(value))
     if isinstance(value, list):
         return [unfenced_in(each) for each in value]
     if isinstance(value, dict):
@@ -294,10 +300,16 @@ def edit_tool(file_path: str) -> dict[str, Any]:
     }
 
 
-def added_context(hook_output: dict[str, Any]) -> str:
+def added_context_as_sent(hook_output: dict[str, Any]) -> str:
+    """What a hook adds to the prompt, with each memory's fence value as it was sent."""
     specific = hook_output.get("hookSpecificOutput") or {}
     context: str = specific.get("additionalContext", "")
     return context
+
+
+def added_context(hook_output: dict[str, Any]) -> str:
+    """What a hook adds to the prompt, the fence value of each call replaced by TOKEN so two can be compared."""
+    return same_fence(added_context_as_sent(hook_output))
 
 
 @dataclass

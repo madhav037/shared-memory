@@ -52,8 +52,7 @@ jobs:
               - "!plugin/**"
               - "!*.md"
             edge:
-              - "deploy/**"
-              - "console/**"
+              - "{deploy,console}/**"
 
   server:
     needs: changes
