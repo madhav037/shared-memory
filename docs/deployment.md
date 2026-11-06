@@ -192,6 +192,14 @@ Each personal token may make `SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE` calls a
 several tools at once, is allowed. The count lives in Postgres, so every worker shares one allowance. Set
 `SHARED_MEMORY_RATE_LIMIT=off` to switch the limit off, for instance to rule it out while investigating a problem.
 
+Caddy applies a coarser version of the same limits at the edge, before a worker is woken: per personal token (default
+240 a minute) and per client address for `/mcp` and `/hooks` calls without one (60), and per client address for the
+console's `/api` (1200, room for a whole office). Set them with `SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`,
+`SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep them at
+or above the server's own. This needs the console image's Caddy, which is built with the
+[caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
+has the equivalent `limit_req`.
+
 A call over the limit is refused with HTTP 429 and `Retry-After` in seconds. A tool call gets a tool error naming the
 wait. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
 does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the

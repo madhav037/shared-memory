@@ -8,7 +8,13 @@ RUN npm ci
 COPY console/ ./
 RUN npm run build
 
+# Caddy with the rate-limit module, which the stock image lacks (the edge's coarse limit, see the Caddyfile).
+FROM caddy:2-builder AS caddy
+RUN xcaddy build --with github.com/mholt/caddy-ratelimit
+
 FROM caddy:2
+
+COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
 
 COPY --from=build /console/dist /srv
 COPY deploy/Caddyfile /etc/caddy/Caddyfile

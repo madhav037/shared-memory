@@ -9,6 +9,31 @@
 	}
 }
 
+# The edge's rate limit is coarse: it refuses floods before they wake a worker, with ceilings at or above the server's own
+# (which count precisely, in Postgres). Calls carrying a personal token are counted per personal token, the rest per
+# client address (as trusted_proxies resolves it). Console calls come from browsers, so /api is counted per address with
+# room for a whole office. Set the ceilings in .env.
+(agent_limits) {
+	rate_limit {
+		zone by_token {
+			match {
+				header Authorization Bearer*
+			}
+			key {http.request.header.Authorization}
+			window 1m
+			events {$CADDY_RATE_TOKEN_PER_MINUTE:240}
+		}
+		zone by_address {
+			match {
+				not header Authorization Bearer*
+			}
+			key {client_ip}
+			window 1m
+			events {$CADDY_RATE_ADDRESS_PER_MINUTE:60}
+		}
+	}
+}
+
 {$CADDY_SITE_ADDRESS} {
 	# No request the server is passed carries more than a megabyte: a hook is a prompt plus metadata, a memory is at
 	# most 600 words, and a console request is smaller still. A bigger body is refused here, before the server sees it.
@@ -33,14 +58,23 @@
 	}
 
 	handle /api/* {
+		rate_limit {
+			zone console_by_address {
+				key {client_ip}
+				window 1m
+				events {$CADDY_RATE_CONSOLE_PER_MINUTE:1200}
+			}
+		}
 		reverse_proxy server:8000
 	}
 
 	handle /mcp* {
+		import agent_limits
 		reverse_proxy server:8000
 	}
 
 	handle /hooks/* {
+		import agent_limits
 		reverse_proxy server:8000
 	}
 
