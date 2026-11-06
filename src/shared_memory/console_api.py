@@ -58,12 +58,14 @@ from shared_memory.console_contract import (
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
     Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
-    RaisedChallenge,
+    RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Member
+from shared_memory.ratelimit import Limits
+from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
 from shared_memory.memory import locate
@@ -177,8 +179,10 @@ class ConsoleApi:
         activities: Activities,
         locks: Locks,
         uses: Uses,
+        rate_limits: RateLimiter,
     ) -> None:
         self._settings = settings
+        self._rate_limits_of = rate_limits
         self._uses = uses
         self._board = board
         self._activities = activities
@@ -236,6 +240,8 @@ class ConsoleApi:
             "challenges": self._challenges,
             "notices": self._notices,
             "decide_challenge": self._decide_challenge,
+            "rate_limits": self._rate_limits,
+            "change_rate_limits": self._change_rate_limits,
             "members": self._members,
             "add_member": self._add_member,
             "remove_member": self._remove_member,
@@ -924,6 +930,35 @@ class ConsoleApi:
             )
 
         return self._run_on_member(request, change)
+
+    def _rate_limits(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return JSONResponse(self._rate_limits_answer(member).model_dump(mode="json"))
+
+    def _change_rate_limits(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked: RateLimitChange = request.state.asked
+        try:
+            self._rate_limits_of.change(
+                member, Limits(asked.on, asked.token_per_minute, asked.console_per_minute, asked.address_per_minute)
+            )
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return JSONResponse(self._rate_limits_answer(member).model_dump(mode="json"))
+
+    def _rate_limits_answer(self, member: Member) -> RateLimits:
+        limits = self._rate_limits_of.limits()
+        return RateLimits(
+            on=limits.on,
+            token_per_minute=limits.token_per_minute,
+            console_per_minute=limits.console_per_minute,
+            address_per_minute=limits.address_per_minute,
+            you_may_change=member.is_owner or member.is_admin,
+        )
 
     def _set_admin(self, request: Request) -> Response:
         def change(member: Member, caller: Caller, member_id: str) -> None:

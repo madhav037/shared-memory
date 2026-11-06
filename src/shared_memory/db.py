@@ -198,6 +198,18 @@ CREATE TABLE IF NOT EXISTS rate_buckets (
     tokens DOUBLE PRECISION NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
 );
+
+-- When a personal token being limited was last written to the audit log, so it is written at most once an hour.
+ALTER TABLE rate_buckets ADD COLUMN IF NOT EXISTS limited_audited_at TIMESTAMPTZ;
+
+-- The rate limit as an admin set it, server-wide. No row means the environment's numbers stand.
+CREATE TABLE IF NOT EXISTS rate_limit_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled BOOLEAN NOT NULL,
+    token_per_minute INTEGER NOT NULL,
+    console_per_minute INTEGER NOT NULL,
+    address_per_minute INTEGER NOT NULL
+);
 """
 
 

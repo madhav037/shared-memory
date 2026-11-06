@@ -1120,6 +1120,7 @@ def build_app(
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
     console_sessions = ConsoleSessions(settings, db, identity, audit, clock)
+    rate_limits = RateLimits(settings, db, identity, console_sessions, audit, clock)
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(
         ConsoleApi(
@@ -1137,9 +1138,9 @@ def build_app(
             activities,
             locks,
             uses,
+            rate_limits,
         ).routes()
     )
-    rate_limits = RateLimits(settings, db, identity, console_sessions, clock)
     # Added first, so inside NeverCached: a refusal is never cached either.
     app.add_middleware(
         RateLimited, limits=rate_limits, paths=PRIVATE_PATHS, bearer=_bearer, cookie=CONSOLE_COOKIE

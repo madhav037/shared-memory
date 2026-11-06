@@ -669,6 +669,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rate-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The server's rate limit, and whether the signed-in member may change it. */
+        get: operations["rate_limits"];
+        put?: never;
+        /** Change the server's rate limit, or switch it off. */
+        post: operations["change_rate_limits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/members": {
         parameters: {
             query?: never;
@@ -1483,7 +1501,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "token_limited";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -1976,6 +1994,36 @@ export interface components {
              * @enum {string}
              */
             decision: "accept" | "reject";
+        };
+        /**
+         * RateLimits
+         * @description The server's rate limit: whether it is on, and how many calls a minute each kind of caller may make.
+         */
+        RateLimits: {
+            /** On */
+            on: boolean;
+            /** Token Per Minute */
+            token_per_minute: number;
+            /** Console Per Minute */
+            console_per_minute: number;
+            /** Address Per Minute */
+            address_per_minute: number;
+            /** You May Change */
+            you_may_change: boolean;
+        };
+        /**
+         * RateLimitChange
+         * @description What an admin sets the rate limit to.
+         */
+        RateLimitChange: {
+            /** On */
+            on: boolean;
+            /** Token Per Minute */
+            token_per_minute: number;
+            /** Console Per Minute */
+            console_per_minute: number;
+            /** Address Per Minute */
+            address_per_minute: number;
         };
         /**
          * MemberSummary
@@ -3031,6 +3079,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecidedChallenges"];
+                };
+            };
+        };
+    };
+    rate_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The server's rate limit, and whether the signed-in member may change it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateLimits"];
+                };
+            };
+        };
+    };
+    change_rate_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateLimitChange"];
+            };
+        };
+        responses: {
+            /** @description Change the server's rate limit, or switch it off. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateLimits"];
                 };
             };
         };

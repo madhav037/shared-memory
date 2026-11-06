@@ -36,6 +36,7 @@ OWNERS = {
     "console_sign_ins": "console_sessions.py",
     "audit_events": "audit.py",
     "rate_buckets": "ratelimit.py",
+    "rate_limit_settings": "ratelimit.py",
 }
 
 #: Reads of another module's table from before the rule was checked. #256 moved the last of them behind Identity.

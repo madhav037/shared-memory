@@ -205,6 +205,21 @@ class Identity:
             found = conn.execute("SELECT id FROM tokens WHERE token_hash = %s", (_hash(token),)).fetchone()
         return found["id"] if found else None
 
+    def token_member(self, token_id: int) -> Member | None:
+        """The member a personal token belongs to, by the number the server keeps it under."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin"
+                " FROM tokens k JOIN members m ON m.id = k.member_id JOIN teams t ON t.id = m.team_id"
+                " WHERE k.id = %s",
+                (token_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return Member(
+            row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"], row["is_admin"]
+        )
+
     def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
 

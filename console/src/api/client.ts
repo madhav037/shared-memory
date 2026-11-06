@@ -37,6 +37,8 @@ export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
+export type RateLimits = components["schemas"]["RateLimits"];
+export type RateLimitChange = components["schemas"]["RateLimitChange"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
 export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
@@ -196,6 +198,16 @@ function change<T>(path: string, body?: unknown): Promise<T> {
     headers: { ...fromConsole, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+/** The server's rate limit, and whether this member may change it. */
+export function fetchRateLimits(signal?: AbortSignal): Promise<RateLimits> {
+  return ask<RateLimits>("/api/rate-limits", { signal });
+}
+
+/** Change the rate limit, or switch it off. Admins only. */
+export function changeRateLimits(asked: RateLimitChange): Promise<RateLimits> {
+  return change<RateLimits>("/api/rate-limits", asked);
 }
 
 /** Everyone in the team, with their role and GitHub account. */

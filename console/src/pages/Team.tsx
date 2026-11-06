@@ -1,17 +1,20 @@
-import { Button, CopyButton, Menu, TextInput, UnstyledButton } from "@mantine/core";
+import { Button, CopyButton, Menu, NumberInput, Switch, TextInput, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconCopy, IconDots, IconUserPlus } from "@tabler/icons-react";
 import { useState } from "react";
 
 import {
   addMember,
   changeMember,
+  changeRateLimits,
   fetchMembers,
+  fetchRateLimits,
   handOverOwnership,
   reissueToken,
   removeMember,
   setAdmin,
   type IssuedToken,
   type MemberSummary,
+  type RateLimits,
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
@@ -138,7 +141,105 @@ export function Team({ me }: { me: SignedInMember }) {
           </tbody>
         </table>
       </div>
+
+      <RateLimitSection onRefused={setRefused} />
     </div>
+  );
+}
+
+const LIMIT_FIELDS = [
+  { key: "token_per_minute", label: "Each personal token", word: "token" },
+  { key: "console_per_minute", label: "Each member’s console", word: "console" },
+  { key: "address_per_minute", label: "Each address with no personal token", word: "address" },
+] as const;
+
+/** How many calls a minute the server lets each kind of caller make: shown to every member, changed by admins. */
+function RateLimitSection({ onRefused }: { onRefused: (message: string) => void }) {
+  const { answer, setAnswer } = useAsked((signal) => fetchRateLimits(signal), []);
+  const [draft, setDraft] = useState<RateLimits | null>(null);
+  const [saved, setSaved] = useState(false);
+  if (!answer) return null;
+  const shown = draft ?? answer;
+
+  const save = async () => {
+    try {
+      const after = await changeRateLimits(shown);
+      setAnswer(after);
+      setDraft(null);
+      setSaved(true);
+      onRefused("");
+    } catch (problem) {
+      setSaved(false);
+      onRefused((problem as Error).message);
+    }
+  };
+
+  return (
+    <section aria-labelledby="limits-heading" data-testid="rate-limits">
+      <h2 className="section-heading" id="limits-heading">
+        Rate limits
+      </h2>
+      <p className="section-lede">
+        {answer.on
+          ? "A caller that makes more calls a minute than this is told to wait, so one runaway coding agent can’t slow the server for everyone."
+          : "Rate limits are switched off, so nothing is refused for making too many calls."}
+      </p>
+      <div className="scroll-x">
+        <table className="register">
+          <tbody>
+            {LIMIT_FIELDS.map((field) => (
+              <tr key={field.key}>
+                <th scope="row">{field.label}</th>
+                <td data-testid={`limit-${field.word}`}>{answer[field.key].toLocaleString("en")} calls a minute</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {answer.you_may_change && (
+        <form
+          className="form-line"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <Switch
+            label="Rate limits on"
+            checked={shown.on}
+            onChange={(event) => {
+              setSaved(false);
+              setDraft({ ...shown, on: event.currentTarget.checked });
+            }}
+            data-testid="rate-limit-on"
+          />
+          {LIMIT_FIELDS.map((field) => (
+            <NumberInput
+              key={field.key}
+              label={field.label}
+              min={1}
+              allowDecimal={false}
+              allowNegative={false}
+              value={shown[field.key]}
+              onChange={(value) => {
+                setSaved(false);
+                setDraft({ ...shown, [field.key]: typeof value === "number" ? value : 0 });
+              }}
+              data-testid={`rate-limit-${field.word}`}
+              style={{ flex: "1 1 130px" }}
+            />
+          ))}
+          <Button type="submit" data-testid="save-rate-limits">
+            Save
+          </Button>
+          {saved && (
+            <span role="status" data-testid="rate-limits-saved">
+              Saved.
+            </span>
+          )}
+        </form>
+      )}
+    </section>
   );
 }
 
