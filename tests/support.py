@@ -33,6 +33,7 @@ from starlette.routing import Route
 
 from shared_memory import cli
 from shared_memory.config import Settings
+from shared_memory.fence import unfenced
 from shared_memory.sessions import Session as KnownSession
 from shared_memory.sessions import Sessions
 
@@ -161,7 +162,12 @@ class Session:
         return Client(transport, client_info=info)
 
     def call(self, tool: str, **arguments: Any) -> Any:
-        """Call an MCP tool; return its structured result or raise ToolRefused with its message."""
+        """Call an MCP tool; return its structured result or raise ToolRefused with its message. Memory text comes
+        back without its fence, as the member wrote it; `call_as_sent` keeps the fence a coding agent's prompt gets."""
+        return unfenced_in(self.call_as_sent(tool, **arguments))
+
+    def call_as_sent(self, tool: str, **arguments: Any) -> Any:
+        """Call an MCP tool; return what a coding agent receives, memory text still inside its fence."""
         return self.server.portal.call(self._call, tool, arguments)
 
     def call_soon(self, tool: str, **arguments: Any) -> Future[Any]:
@@ -265,6 +271,17 @@ class Session:
         assert self.project is not None
         sessions: Sessions = self.server.app.state.sessions
         return sessions.active(self.project)
+
+
+def unfenced_in(value: Any) -> Any:
+    """A tool's result with every fenced text (a memory's summary or body) given back as the member wrote it."""
+    if isinstance(value, str):
+        return unfenced(value)
+    if isinstance(value, list):
+        return [unfenced_in(each) for each in value]
+    if isinstance(value, dict):
+        return {key: unfenced_in(each) for key, each in value.items()}
+    return value
 
 
 def edit_tool(file_path: str) -> dict[str, Any]:

@@ -33,6 +33,7 @@ from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_memory import ConsoleMemory
+from shared_memory.fence import escape, fenced, new_token
 from shared_memory.console_sessions import COOKIE as CONSOLE_COOKIE
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
@@ -699,7 +700,13 @@ def build_app(
         a long time: check it still holds before relying on it. level is team, project or personal; type is
         convention, decision, architecture, gotcha or known_issue.
         """
-        return service.search(caller(ctx), query, level, type, limit)
+        found = service.search(caller(ctx), query, level, type, limit)
+        token = new_token()
+        for result in found["results"]:
+            result["title"] = escape(result["title"])
+            result["heading"] = escape(result["heading"])
+            result["summary"] = fenced(result["summary"], token, inline=True)
+        return found
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -719,7 +726,13 @@ def build_app(
         current = caller(ctx)
         memory = service.read(current, path)
         uses.used(current.team, [memory["path"]])
-        return memory
+        token = new_token()
+        return {
+            **memory,
+            "title": escape(memory["title"]),
+            "summary": fenced(memory["summary"], token, inline=True),
+            "body": fenced(memory["body"], token),
+        }
 
     @server.tool()
     @saving
