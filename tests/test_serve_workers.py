@@ -178,7 +178,16 @@ def test_serve_sets_up_once_then_starts_the_configured_workers_from_the_factory(
     assert kwargs["factory"] is True
     assert kwargs["workers"] == 3
     assert kwargs["port"] == 9000
-    assert kwargs["host"] == "0.0.0.0"
+    assert kwargs["host"] == "127.0.0.1", "a run on a laptop listens on loopback unless asked otherwise"
+
+
+def test_serve_listens_on_the_host_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    started = Started(monkeypatch)
+
+    serve("--host", "0.0.0.0")  # noqa: S104  # what the image's command asks for
+
+    [(_, kwargs)] = started.runs
+    assert kwargs["host"] == "0.0.0.0"  # noqa: S104
 
 
 def test_serve_workers_overrides_the_setting_and_reaches_the_workers(monkeypatch: pytest.MonkeyPatch) -> None:
