@@ -20,6 +20,7 @@ from mcp.server.session import ServerSession
 from mcp_types import ListPromptsResult, ListToolsResult, PaginatedRequestParams
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
 from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
@@ -417,6 +418,21 @@ def build_app(
         if not context:
             return JSONResponse({})
         return JSONResponse(answer(answer_format, named_event, context))
+
+    @server.custom_route("/health", methods=["GET"])  # type: ignore[untyped-decorator]
+    async def health(request: Request) -> Response:
+        """Whether this server can do its job, which is to reach Postgres. Open to anyone, outside PRIVATE_PATHS so
+        never rate limited, and saying nothing else, so an outside uptime check can tell a dead server from the
+        console's page."""
+        def reach_postgres() -> None:
+            with db.transaction() as conn:
+                conn.execute("SELECT 1")
+
+        try:
+            await run_in_threadpool(reach_postgres)
+        except Exception:
+            return JSONResponse({"status": "unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:

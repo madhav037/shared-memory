@@ -39,6 +39,22 @@ def test_the_consoles_hashed_assets_are_cached_for_good_and_its_page_never_is() 
     assert 'header @page Cache-Control "no-cache"' in block, "a release would reach browsers only when a cache expired"
 
 
+def test_the_health_check_is_proxied_to_the_server_and_never_limited_or_answered_by_the_console() -> None:
+    found = re.search(r"^\thandle /health \{\n(.*?)^\t\}", CADDYFILE, re.MULTILINE | re.DOTALL)
+
+    assert found, "/health would fall through to the console's page and answer 200 html while the server is dead"
+    assert "reverse_proxy server:8000" in found.group(1)
+    assert "rate_limit" not in found.group(1) and "agent_limits" not in found.group(1)
+    assert CADDYFILE.index("handle /health") < CADDYFILE.index("try_files"), "the console's fallback comes last"
+
+
+def test_the_nginx_example_leaves_the_health_check_unlimited() -> None:
+    nginx = (DEPLOY / "nginx-site.conf.example").read_text(encoding="utf-8")
+    found = re.search(r"location = /health \{(.*?)\}", nginx, re.DOTALL)
+
+    assert found and "proxy_pass" in found.group(1) and "limit_req" not in found.group(1)
+
+
 def test_search_engines_are_kept_out_unless_whoever_runs_the_server_lets_them_in() -> None:
     assert "header X-Robots-Tag {$CADDY_ROBOTS_TAG:noindex}" in CADDYFILE
     assert "CADDY_ROBOTS_TAG: ${SHARED_MEMORY_ROBOTS_TAG:-noindex}" in COMPOSE

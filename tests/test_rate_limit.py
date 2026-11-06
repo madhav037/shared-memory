@@ -193,7 +193,31 @@ def test_the_health_check_is_never_limited(limited: RunningServer) -> None:
     token = a_token(limited)
     used_up(limited, token)
 
-    assert httpx.get(f"{limited.url}/health", headers={"Authorization": f"Bearer {token}"}).status_code != 429
+    for _ in range(3):
+        answer = httpx.get(f"{limited.url}/health", headers={"Authorization": f"Bearer {token}"})
+        assert answer.status_code == 200
+        assert answer.json() == {"status": "ok"}
+
+
+def test_the_health_check_needs_no_token_and_reveals_only_its_status(limited: RunningServer) -> None:
+    answer = httpx.get(f"{limited.url}/health")
+
+    assert answer.status_code == 200
+    assert answer.headers["content-type"].startswith("application/json")
+    assert answer.json() == {"status": "ok"}
+
+
+def test_the_health_check_says_unavailable_when_the_database_cannot_be_reached(
+    limited: RunningServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unreachable(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("the database is down")
+
+    monkeypatch.setattr(limited.app.state.database, "transaction", unreachable)
+    answer = httpx.get(f"{limited.url}/health")
+
+    assert answer.status_code == 503
+    assert answer.json() == {"status": "unavailable"}
 
 
 def test_two_workers_share_one_allowance(limited: RunningServer, another_worker: RunningServer) -> None:
