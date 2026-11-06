@@ -1,0 +1,51 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.madhav037/shared-memory",
+  "title": "Shared Memory",
+  "description": "A memory server every member's coding agent reads and writes, with a console to govern it.",
+  "version": "0.1.1",
+  "websiteUrl": "https://github.com/madhav037/shared-memory",
+  "repository": {
+    "url": "https://github.com/madhav037/shared-memory",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{server_host}/mcp",
+      "variables": {
+        "server_host": {
+          "description": "Host name of your team's own Shared Memory server, without https://.",
+          "placeholder": "memory.example.com",
+          "isRequired": true
+        }
+      },
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Your personal token, from your team's owner or the console's Connect your agent page.",
+          "value": "Bearer {personal_token}",
+          "isRequired": true,
+          "isSecret": true,
+          "variables": {
+            "personal_token": {
+              "description": "Your personal token.",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        },
+        {
+          "name": "X-Shared-Memory-Project",
+          "description": "The project ID the console shows for your repository's project. Leave empty outside a project.",
+          "isRequired": false
+        },
+        {
+          "name": "X-Shared-Memory-Repository",
+          "description": "The repository's name within that project.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
