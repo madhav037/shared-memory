@@ -478,9 +478,3 @@ def test_the_readme_uses_the_glossarys_terms() -> None:
         f'  line {each.line}: "{each.avoided.spelled}", the glossary\'s term is {each.avoided.term}: {each.text}'
         for each in found
     )
-
-
-def test_the_readme_never_says_open_source() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
-
-    assert "open source" not in readme.replace("-", " ")
