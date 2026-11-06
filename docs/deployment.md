@@ -186,14 +186,25 @@ deleted. Every memory that exists when a server first keeps last use counts as u
 
 ## The rate limit
 
-One bad caller must not take the server down for everyone: a leaked personal token, a coding agent stuck in a loop.
-Each personal token may make `SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE` calls a minute (default 120, optional in
-`.env`), with a burst of a quarter of that (30 at the default) so a busy moment, such as a session start firing
-several tools at once, is allowed. The count lives in Postgres, so every worker shares one allowance. Set
+One bad caller must not take the server down for everyone: a leaked personal token, a coding agent stuck in a loop,
+an anonymous flood. Calls are counted by what they carry, each with a burst of a quarter of its limit (30 at the
+default 120) so a busy moment, such as a session start firing several tools at once, is allowed:
+
+| Counted per | Default a minute | Optional in `.env` |
+| --- | --- | --- |
+| Personal token | 120 | `SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE` |
+| Member's console session | 300 | `SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE` |
+| Address, for calls with no personal token or a wrong one | 30 | `SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE` |
+
+A member's console calls are counted apart from their coding agents', so browsing the console never uses up the
+agents' allowance. Calls with no personal token or a wrong one can only be counted by the address they come from: the
+forwarded address the server already trusts behind Caddy. Two members behind one office address are counted by their
+personal tokens, so one never limits the other. The counts live in Postgres, so every worker shares one allowance. Set
 `SHARED_MEMORY_RATE_LIMIT=off` to switch the limit off, for instance to rule it out while investigating a problem.
 
 A call over the limit is refused with HTTP 429 and `Retry-After` in seconds. A tool call gets a tool error naming the
-wait. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
+wait, and the console's JSON API a body with a `message` and `retry_after_seconds`, which the console shows as a
+notification. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
 does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the
 counter can't be read or written, the call is allowed and the failure is logged.
 

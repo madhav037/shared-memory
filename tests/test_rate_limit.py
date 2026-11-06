@@ -9,20 +9,33 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 from anyio.from_thread import start_blocking_portal
+from starlette.testclient import TestClient
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
 from shared_memory.ratelimit import burst_of
-from tests.support import REPO_ROOT, RunningServer, TestClock, fresh_database, new_team
+from tests.support import (
+    REPO_ROOT,
+    Console,
+    FakeGitHub,
+    RunningServer,
+    TestClock,
+    fresh_database,
+    new_team,
+    signed_in_owner,
+)
 
 PER_MINUTE = 80
 BURST = burst_of(PER_MINUTE)
+CONSOLE_PER_MINUTE = 100
+ADDRESS_PER_MINUTE = 40
 
 MCP_HEADERS = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
 
@@ -34,6 +47,7 @@ def limited(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]
         memory_root=tmp_path_factory.mktemp("rate-limit-memory"),
         model_cache=REPO_ROOT / ".cache" / "fastembed",
         rate_limit_token_per_minute=PER_MINUTE,
+        rate_limit_address_per_minute=ADDRESS_PER_MINUTE,
     )
     clock = TestClock()
     with start_blocking_portal() as portal:
@@ -89,7 +103,7 @@ def used_up(server: RunningServer, token: str) -> httpx.Response:
     raise AssertionError("the token was never limited")
 
 
-def wait_of(response: httpx.Response) -> int:
+def wait_of(response: Any) -> int:
     header = response.headers["Retry-After"]
     assert header.isdigit() and int(header) >= 1, header
     return int(header)
@@ -224,6 +238,8 @@ def test_the_defaults_are_120_calls_a_minute_with_a_burst_of_30() -> None:
     assert settings.rate_limit_on is True
     assert settings.rate_limit_token_per_minute == 120
     assert burst_of(settings.rate_limit_token_per_minute) == 30
+    assert settings.rate_limit_console_per_minute == 300
+    assert settings.rate_limit_address_per_minute == 30
 
 
 def test_the_limit_reads_its_environment_variables() -> None:
@@ -234,3 +250,139 @@ def test_the_limit_reads_its_environment_variables() -> None:
     assert settings.rate_limit_on is False
     assert settings.rate_limit_token_per_minute == 240
 
+
+# --- calls with no personal token, and the console's own allowance (#411) ---
+
+ADDRESS_BURST = burst_of(ADDRESS_PER_MINUTE)
+CONSOLE_BURST = burst_of(CONSOLE_PER_MINUTE)
+
+
+def from_address(server: RunningServer, address: str) -> TestClient:
+    """A caller whose address, as the server sees it, is this one: the address Caddy forwards."""
+    return TestClient(server.app, client=(address, 50000))
+
+
+def tokenless(caller: TestClient, token: str | None = None) -> Any:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    return caller.post("/hooks/prompt-submitted", json={"session_id": "s", "prompt": "hello"}, headers=headers)
+
+
+def flood(caller: TestClient, token: str | None = None) -> Any:
+    """Call until the address is limited; return the refusal. The calls before it were all answered."""
+    for answered in range(ADDRESS_BURST + 5):
+        response = tokenless(caller, token)
+        if response.status_code == 429:
+            assert answered == ADDRESS_BURST, f"limited after {answered} calls, not the burst of {ADDRESS_BURST}"
+            return response
+        assert response.status_code == 200, response.text
+    raise AssertionError("the address was never limited")
+
+
+def test_calls_with_no_personal_token_are_limited_per_address(limited: RunningServer) -> None:
+    limited.clock.now = TestClock().now
+
+    refused = flood(from_address(limited, "203.0.113.7"))
+
+    assert wait_of(refused) >= 1
+    assert refused.json() == {}
+    assert tokenless(from_address(limited, "203.0.113.8")).status_code == 200  # another address is its own count
+
+
+def test_calls_with_a_wrong_personal_token_are_counted_with_the_address_and_cannot_dodge_it(
+    limited: RunningServer,
+) -> None:
+    limited.clock.now = TestClock().now
+    caller = from_address(limited, "203.0.113.20")
+
+    # A new made-up token every time would be a new count every time, were tokens what they were counted by.
+    for attempt in range(ADDRESS_BURST):
+        assert tokenless(caller, f"smt_made-up-{attempt}").status_code == 200
+
+    assert tokenless(caller, "smt_one-more").status_code == 429
+
+
+def test_two_personal_tokens_behind_one_address_are_counted_separately(limited: RunningServer) -> None:
+    limited.clock.now = TestClock().now
+    first, second = new_team(limited).owner_token, new_team(limited).owner_token
+    office = from_address(limited, "203.0.113.30")
+
+    for _ in range(BURST):
+        assert tokenless(office, first).status_code == 200
+    assert tokenless(office, first).status_code == 429
+
+    assert tokenless(office, second).status_code == 200  # the first token's calls never counted against it
+    assert tokenless(office, None).status_code == 200  # nor against the office's address
+
+
+def test_a_tokenless_mcp_call_over_the_limit_gets_a_tool_error_too(limited: RunningServer) -> None:
+    limited.clock.now = TestClock().now
+    caller = from_address(limited, "203.0.113.40")
+    flood(caller)
+    body = {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "tree", "arguments": {}}}
+
+    refused = caller.post("/mcp", json=body, headers=MCP_HEADERS)
+
+    assert refused.status_code == 429
+    assert refused.json()["result"]["isError"] is True
+
+
+@pytest.fixture(scope="module")
+def console_limited(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
+    with start_blocking_portal() as portal:
+        memory = tmp_path_factory.mktemp("rate-limit-console-memory")
+        sign_in = FakeGitHub(portal, Settings("", Path(memory), Path(memory)))
+        clock = TestClock()
+        settings = Settings(
+            database_url=fresh_database("shared_memory_rate_limit_console"),
+            memory_root=memory,
+            model_cache=REPO_ROOT / ".cache" / "fastembed",
+            github_client_id="client-id",
+            github_client_secret="client-secret",
+            github_sign_in_url=sign_in.url,
+            github_api_url=sign_in.url,
+            rate_limit_token_per_minute=PER_MINUTE,
+            rate_limit_console_per_minute=CONSOLE_PER_MINUTE,
+            rate_limit_address_per_minute=ADDRESS_PER_MINUTE,
+        )
+        server = RunningServer(
+            build_app(settings, clock=clock, embedder=LazyEmbedder(settings.model_cache)), settings, clock, portal
+        )
+        try:
+            yield Console(server, sign_in, clock)
+        finally:
+            server.stop()
+            sign_in.stop()
+
+
+def test_console_calls_are_limited_apart_from_the_members_coding_agents(console_limited: Console) -> None:
+    console_limited.clock.now = TestClock().now
+    client = console_limited.client()
+    agent = signed_in_owner(console_limited, client, "olive", 1)
+
+    answered = 0
+    while (refused := client.get("/api/status")).status_code == 200:
+        answered += 1
+        assert answered <= CONSOLE_BURST, "the console was never limited"
+
+    assert answered == CONSOLE_BURST
+    wait = wait_of(refused)
+    body = refused.json()
+    assert body["retry_after_seconds"] == wait
+    assert f"try again in {wait} second" in body["message"]
+    # The member's coding agent still has its whole allowance.
+    assert prompt(console_limited.server, agent.token or "").status_code == 200
+    # And after the wait, the console is back.
+    console_limited.clock.advance(seconds=wait)
+    assert client.get("/api/status").status_code == 200
+    client.close()
+
+
+def test_a_coding_agents_calls_never_use_up_the_members_console_allowance(console_limited: Console) -> None:
+    console_limited.clock.now = TestClock().now
+    client = console_limited.client()
+    agent = signed_in_owner(console_limited, client, "olive", 1)
+
+    used_up(console_limited.server, agent.token or "")
+
+    assert client.get("/api/status").status_code == 200
+    client.close()

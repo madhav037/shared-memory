@@ -42,6 +42,8 @@ services:
       SHARED_MEMORY_OUTDATED_AFTER_DAYS: ${SHARED_MEMORY_OUTDATED_AFTER_DAYS:-60}
       SHARED_MEMORY_RATE_LIMIT: ${SHARED_MEMORY_RATE_LIMIT:-on}
       SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE: ${SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE:-120}
+      SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE: ${SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE:-300}
+      SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE: ${SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE:-30}
       # Only Caddy reaches the server, which publishes no port, so the scheme and host Caddy forwards are believed:
       # the addresses the server hands out (a project's connection files, the console's) then say https.
       FORWARDED_ALLOW_IPS: "*"

@@ -1,6 +1,11 @@
 """The rate limit: a ceiling on how many calls one caller can make a minute, so one bad caller can't take the server
 down for everyone (CONTEXT.md).
 
+A caller is counted by what it carries: a personal token it carries is counted per personal token; a console session's
+cookie, per member and apart from their coding agents, so browsing the console never uses up their allowance; and a
+call with neither, or with ones the server doesn't know, per address, because there is nothing else to count it by.
+The address is the one the server already trusts behind Caddy.
+
 Each caller has a bucket in Postgres holding the calls it may still make. A call takes one; the bucket refills at the
 limit's pace, up to a burst of a quarter of a minute's allowance. The buckets are rows that every worker reads and
 writes, as saves' turns are (ADR-0013), so running more workers never multiplies the allowance. The clock is the
@@ -16,15 +21,18 @@ import json
 import logging
 import math
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from typing import Any
 
 import anyio.to_thread
 from starlette.datastructures import Headers
+from starlette.requests import cookie_parser
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
+from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.db import Database
 from shared_memory.identity import Identity
 
@@ -42,31 +50,52 @@ def burst_of(per_minute: int) -> int:
     return max(1, per_minute // BURST_DIVISOR)
 
 
+# A bucket idle for this long has long since refilled, so a row that old is the same as none and is deleted. Each
+# worker looks every this often.
+IDLE_BUCKETS = timedelta(hours=1)
+PRUNE_EVERY = timedelta(minutes=10)
+
+
 def told_to_wait(seconds: int) -> str:
     """What a caller over the limit is told, in the words of a tool error."""
     unit = "second" if seconds == 1 else "seconds"
-    return f"Rate limit: too many calls from this personal token. Slow down and try again in {seconds} {unit}."
+    return f"Rate limit: too many calls. Slow down and try again in {seconds} {unit}."
 
 
 class RateLimits:
     """Counts calls against the limits and says how long a caller over one must wait."""
 
-    def __init__(self, settings: Settings, db: Database, identity: Identity, clock: Clock) -> None:
+    def __init__(
+        self, settings: Settings, db: Database, identity: Identity, console_sessions: ConsoleSessions, clock: Clock
+    ) -> None:
         self._settings = settings
         self._db = db
         self._identity = identity
+        self._console_sessions = console_sessions
         self._clock = clock
+        self._pruned_at: datetime | None = None
 
-    def check(self, token: str | None) -> int | None:
-        """Count one call carrying this personal token. None lets it through; otherwise the whole seconds the caller
-        must wait before a call is allowed again. Calls with no personal token, or one the server doesn't know, are
-        not counted here."""
-        if not self._settings.rate_limit_on or not token:
+    def check(self, token: str | None, session: str | None, address: str | None) -> int | None:
+        """Count one call, carrying this personal token and console session's cookie, if it carries them, from this
+        address. None lets it through; otherwise the whole seconds the caller must wait before a call is allowed
+        again."""
+        if not self._settings.rate_limit_on:
             return None
-        token_id = self._identity.token_id(token)
-        if token_id is None:
-            return None
-        return self._count_call(f"token:{token_id}", self._settings.rate_limit_token_per_minute)
+        if token and (token_id := self._identity.token_id(token)) is not None:
+            return self._count_call(f"token:{token_id}", self._settings.rate_limit_token_per_minute)
+        if session and (member := self._console_sessions.member_pk_of(session)) is not None:
+            return self._count_call(f"console:{member}", self._settings.rate_limit_console_per_minute)
+        self._prune_if_due()
+        return self._count_call(f"address:{address or 'unknown'}", self._settings.rate_limit_address_per_minute)
+
+    def _prune_if_due(self) -> None:
+        """Delete the buckets nobody has used for an hour, which address buckets are the ones to leave behind."""
+        now = self._clock()
+        if self._pruned_at is not None and now - self._pruned_at < PRUNE_EVERY:
+            return
+        self._pruned_at = now
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM rate_buckets WHERE updated_at < %s", (now - IDLE_BUCKETS,))
 
     def _count_call(self, key: str, per_minute: int) -> int | None:
         """Count one call against the bucket under this key, which starts full."""
@@ -98,20 +127,31 @@ class RateLimited:
     a 429 and the seconds to wait in `Retry-After`. What the refusal says is in the shape each caller can read."""
 
     def __init__(
-        self, app: ASGIApp, limits: RateLimits, paths: tuple[str, ...], bearer: Callable[[str | None], str | None]
+        self,
+        app: ASGIApp,
+        limits: RateLimits,
+        paths: tuple[str, ...],
+        bearer: Callable[[str | None], str | None],
+        cookie: str,
     ) -> None:
+        """bearer reads a personal token from an Authorization header; cookie is the console session's cookie name."""
         self.app = app
         self._limits = limits
         self._paths = paths
         self._bearer = bearer
+        self._cookie = cookie
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not scope["path"].startswith(self._paths):
             await self.app(scope, receive, send)
             return
-        token = self._bearer(Headers(scope=scope).get("authorization"))
+        headers = Headers(scope=scope)
+        token = self._bearer(headers.get("authorization"))
+        session = cookie_parser(headers.get("cookie", "")).get(self._cookie)
+        peer = scope.get("client")
+        address = peer[0] if peer else None
         try:
-            wait = await anyio.to_thread.run_sync(self._limits.check, token)
+            wait = await anyio.to_thread.run_sync(self._limits.check, token, session, address)
         except Exception:
             log.exception("The rate limit could not be checked; the call was allowed")
             wait = None
@@ -131,7 +171,8 @@ class RateLimited:
             # Nothing to add: a coding agent that reads the answer finds none, and one that stops at the status is
             # as it is when the server is unreachable.
             return JSONResponse({}, status_code=429, headers=headers)
-        return JSONResponse({"error": message, "retry_after_seconds": wait}, status_code=429, headers=headers)
+        # What the console reads: its usual refusal, `message`, and how long the wait is.
+        return JSONResponse({"message": message, "retry_after_seconds": wait}, status_code=429, headers=headers)
 
 
 async def _tool_error(receive: Receive, message: str) -> dict[str, Any]:
