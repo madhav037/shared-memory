@@ -184,6 +184,19 @@ A memory no coding agent has recalled or read for `SHARED_MEMORY_OUTDATED_AFTER_
 is labelled *possibly outdated* where agents and the console show it. It is only a label: nothing is retired or
 deleted. Every memory that exists when a server first keeps last use counts as used that day.
 
+## The rate limit
+
+One bad caller must not take the server down for everyone: a leaked personal token, a coding agent stuck in a loop.
+Each personal token may make `SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE` calls a minute (default 120, optional in
+`.env`), with a burst of a quarter of that (30 at the default) so a busy moment, such as a session start firing
+several tools at once, is allowed. The count lives in Postgres, so every worker shares one allowance. Set
+`SHARED_MEMORY_RATE_LIMIT=off` to switch the limit off, for instance to rule it out while investigating a problem.
+
+A call over the limit is refused with HTTP 429 and `Retry-After` in seconds. A tool call gets a tool error naming the
+wait. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
+does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the
+counter can't be read or written, the call is allowed and the failure is logged.
+
 ## How alike two activities must be for a collision warning
 
 A session is warned on its next prompt when another active session in its project has an activity that means nearly

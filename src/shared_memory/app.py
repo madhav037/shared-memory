@@ -49,6 +49,7 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
+from shared_memory.ratelimit import RateLimited, RateLimits
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -1136,7 +1137,11 @@ def build_app(
             uses,
         ).routes()
     )
+    rate_limits = RateLimits(settings, db, identity, clock)
+    # Added first, so inside NeverCached: a refusal is never cached either.
+    app.add_middleware(RateLimited, limits=rate_limits, paths=PRIVATE_PATHS, bearer=_bearer)
     app.add_middleware(NeverCached)
+    app.state.rate_limits = rate_limits
     app.state.database = db
     app.state.sessions = sessions
     app.state.locks = locks

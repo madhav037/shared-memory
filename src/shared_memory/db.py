@@ -190,6 +190,14 @@ CREATE TABLE IF NOT EXISTS save_markers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (turn, save_id)
 );
+
+-- One caller's rate limit (ratelimit.py): how many calls it may still make, as of when it last made one. Every worker
+-- reads and writes the same row, so running more workers never multiplies the allowance.
+CREATE TABLE IF NOT EXISTS rate_buckets (
+    key TEXT PRIMARY KEY,
+    tokens DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
 """
 
 

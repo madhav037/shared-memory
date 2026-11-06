@@ -47,6 +47,9 @@ class Settings:
     collision_threshold: float = 0.75
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
+    # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
+    rate_limit_on: bool = True
+    rate_limit_token_per_minute: int = 120
 
     @property
     def github_sign_in(self) -> bool:
@@ -85,4 +88,6 @@ class Settings:
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
+            rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
+            rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
         )
