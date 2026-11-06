@@ -89,6 +89,8 @@ services:
       PGDATABASE: shared_memory
       BACKUP_REMOTE: ${BACKUP_REMOTE:?set BACKUP_REMOTE in .env}
       BACKUP_TIME: ${BACKUP_TIME:-02:00}
+      # An age public key: set, the backup is encrypted to it before it leaves the server (docs/deployment.md).
+      BACKUP_AGE_RECIPIENT: ${SHARED_MEMORY_BACKUP_AGE_RECIPIENT:-}
       TZ: ${TZ:-UTC}
     volumes:
       - memory-data:/data

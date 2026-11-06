@@ -280,6 +280,34 @@ Every night at `BACKUP_TIME`, the backup container pushes two branches to the ba
 
 The database is dumped before the memory history is pushed, so the backup never refers to a memory it doesn't contain. A failed server loses at most the changes since the last backup.
 
+### Encrypting the backup
+
+By default the backup repository holds your data readable by whoever can read that repository, GitHub included. To encrypt it with [age](https://github.com/FiloSottile/age) before it leaves the server:
+
+1. On your own machine (not the server), make a key pair and keep the identity file safe, offline and apart from the server. Without it an encrypted backup cannot be restored.
+
+   ```bash
+   age-keygen -o age_identity.txt   # prints the public key: age1...
+   ```
+
+2. Set the **public key** in `.env` and recreate the backup container:
+
+   ```
+   SHARED_MEMORY_BACKUP_AGE_RECIPIENT=age1...
+   ```
+
+   ```bash
+   docker compose up -d backup
+   docker compose exec backup backup now
+   docker compose logs backup   # "Backups are encrypted with age before they leave the server"
+   ```
+
+   The server never holds the identity, so a stolen server or backup repository does not reveal past backups. With the variable unset, backups behave as before and each one logs that it is unencrypted.
+
+Encrypted, the `database` branch holds two files in one commit per night, `shared_memory.sql.age` and `memory.bundle.age` (the memory folder's git history as a git bundle), and there is no `main` branch. Each night's bundle is the whole history, so the repository grows faster than an unencrypted one.
+
+**Turning encryption on for an existing backup repository:** earlier commits on `database`, and the `main` branch, are still plaintext. Delete the `main` branch, and delete and recreate the repository if the old history must go too. The next backup continues from the old `database` branch unless you do.
+
 **Checking on it:**
 
 - `docker compose logs backup` shows each backup starting and finishing, or `Backup FAILED` with the reason.
@@ -313,6 +341,14 @@ Use this on a fresh host, or on the same host after its volumes are lost. The re
    docker compose up -d --build
    docker compose exec server shared-memory reindex
    ```
+
+**An encrypted backup** (the `database` branch holds `.age` files) is restored the same way, with the identity file from [Encrypting the backup](#encrypting-the-backup) mounted for the one command. Copy it to the new host, and run the restore as:
+
+```bash
+docker compose run --rm -v "$PWD/age_identity.txt:/run/secrets/age_identity:ro" backup restore
+```
+
+Without the identity the restore stops before changing anything and says so; with the wrong one it stops at decrypting. Delete the identity file from the host afterwards.
 
 Everything in the last backup comes back: memories with their history, members and their personal tokens (members don't need new ones), projects, pins and open challenges. The next nightly backup continues the backup repository's history.
 
