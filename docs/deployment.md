@@ -222,6 +222,13 @@ notification. A hook gets an empty answer: a limited prompt hook adds no memory,
 does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the
 counter can't be read or written, the call is allowed and the failure is logged.
 
+## The member cap
+
+A server can limit how many members it has at once. Set `SHARED_MEMORY_MEMBER_CAP` in `.env` to a whole number; unset
+means no cap. Adding a member past it, from a coding agent or from the console, is refused with an answer naming the
+cap. Removed members hold no place, so removing one frees it. Memory, MCP tools and hooks are never affected. The
+Team page shows how many places are used.
+
 ## How alike two activities must be for a collision warning
 
 A session is warned on its next prompt when another active session in its project has an activity that means nearly

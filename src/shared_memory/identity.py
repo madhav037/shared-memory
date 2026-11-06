@@ -126,7 +126,10 @@ def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
 
 
 class Identity:
-    def __init__(self, db: Database, clock: Clock) -> None:
+    def __init__(self, db: Database, clock: Clock, member_cap: Callable[[], int | None] = lambda: None) -> None:
+        # The member cap (CONTEXT.md): how many members the server may have at once, or None for no cap. A function,
+        # so the cap can come from somewhere that changes while the server runs.
+        self.member_cap = member_cap
         # Called when a member may have lost a project: removed from the team, taken off an access list or a lead, no
         # longer an admin, or a project restricted.
         self._access_lost: list[AccessLost] = []
@@ -309,6 +312,12 @@ class Identity:
             ).fetchone()
             if existing is not None:
                 raise Refused(f"Member ID {member_id!r} is already a member of your team, or was one.")
+            cap = self.member_cap()
+            if cap is not None and self._members_in_use(conn) >= cap:
+                raise Refused(
+                    f"This server's member cap is {cap} and all {cap} places are taken, so no one more can be added. "
+                    "Remove a member to free a place, or raise the cap by setting SHARED_MEMORY_MEMBER_CAP."
+                )
             login = _github_login(github)
             if login is not None:
                 self._github_free(conn, caller.member.team_pk, login, None)
@@ -319,6 +328,17 @@ class Identity:
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
+
+    def _members_in_use(self, conn: Conn) -> int:
+        """The members the server has now, in every team. A removed member holds no place."""
+        row = conn.execute("SELECT count(*) AS n FROM members WHERE removed_at IS NULL").fetchone()
+        assert row is not None
+        used: int = row["n"]
+        return used
+
+    def members_in_use(self) -> int:
+        with self._db.transaction() as conn:
+            return self._members_in_use(conn)
 
     def remove_member(self, caller: Caller, member_id: str) -> None:
         self._require_admin(caller)

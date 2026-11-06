@@ -33,6 +33,7 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   await page.getByTestId("remove-emp-7").click();
   await page.getByTestId("remove-confirm-emp-7").click();
   await expect(members.getByRole("row", { name: /^Dana Dev/ })).toContainText("removed");
+  await expect(page.getByTestId("member-places")).toContainText(/places used|no member cap/);
 });
 
 test("an admin downloads all of the team's data as one zip, and the audit log records it", async ({ page }) => {
