@@ -1435,6 +1435,50 @@
         }
       }
     },
+    "/api/rate-limits": {
+      "get": {
+        "operationId": "rate_limits",
+        "summary": "The server's rate limit, and whether the signed-in member may change it.",
+        "responses": {
+          "200": {
+            "description": "The server's rate limit, and whether the signed-in member may change it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimits"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "change_rate_limits",
+        "summary": "Change the server's rate limit, or switch it off.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateLimitChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change the server's rate limit, or switch it off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimits"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/members": {
       "get": {
         "operationId": "members",
@@ -3284,7 +3328,9 @@
               "card_deleted",
               "card_returned",
               "never_lock_pattern_added",
-              "never_lock_pattern_removed"
+              "never_lock_pattern_removed",
+              "rate_limits_changed",
+              "token_limited"
             ],
             "title": "Kind",
             "type": "string"
@@ -4646,6 +4692,75 @@
           "decision"
         ],
         "title": "Decision",
+        "type": "object"
+      },
+      "RateLimits": {
+        "description": "The server's rate limit: whether it is on, and how many calls a minute each kind of caller may make.",
+        "properties": {
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "token_per_minute": {
+            "title": "Token Per Minute",
+            "type": "integer"
+          },
+          "console_per_minute": {
+            "title": "Console Per Minute",
+            "type": "integer"
+          },
+          "address_per_minute": {
+            "title": "Address Per Minute",
+            "type": "integer"
+          },
+          "you_may_change": {
+            "title": "You May Change",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "token_per_minute",
+          "console_per_minute",
+          "address_per_minute",
+          "you_may_change"
+        ],
+        "title": "RateLimits",
+        "type": "object"
+      },
+      "RateLimitChange": {
+        "description": "What an admin sets the rate limit to.",
+        "properties": {
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "token_per_minute": {
+            "maximum": 100000,
+            "minimum": 1,
+            "title": "Token Per Minute",
+            "type": "integer"
+          },
+          "console_per_minute": {
+            "maximum": 100000,
+            "minimum": 1,
+            "title": "Console Per Minute",
+            "type": "integer"
+          },
+          "address_per_minute": {
+            "maximum": 100000,
+            "minimum": 1,
+            "title": "Address Per Minute",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "on",
+          "token_per_minute",
+          "console_per_minute",
+          "address_per_minute"
+        ],
+        "title": "RateLimitChange",
         "type": "object"
       },
       "MemberSummary": {

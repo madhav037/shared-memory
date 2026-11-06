@@ -210,6 +210,12 @@ or above the server's own. This needs the console image's Caddy, which is built 
 [caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
 has the equivalent `limit_req`.
 
+The numbers above are the defaults. The team's owner and its admins see and change them, or switch the limit off, on
+the console's Team page (every other member sees them read-only); a change is kept in the database, so it holds across
+restarts and replaces the `.env` numbers until it is changed again. Every change is in the audit log with who made it,
+and so is the first time in an hour that a personal token is limited, naming its member, which is how a leaked token or
+a runaway coding agent shows up.
+
 A call over the limit is refused with HTTP 429 and `Retry-After` in seconds. A tool call gets a tool error naming the
 wait, and the console's JSON API a body with a `message` and `retry_after_seconds`, which the console shows as a
 notification. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it

@@ -17,10 +17,12 @@ and the failure logged.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -30,11 +32,13 @@ from starlette.requests import cookie_parser
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from shared_memory.audit import RATE_LIMITS_CHANGED, TOKEN_LIMITED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.db import Database
-from shared_memory.identity import Identity
+from shared_memory.errors import Refused
+from shared_memory.identity import Identity, Member
 
 log = logging.getLogger("shared_memory")
 
@@ -56,6 +60,28 @@ IDLE_BUCKETS = timedelta(hours=1)
 PRUNE_EVERY = timedelta(minutes=10)
 
 
+# What an admin may set a limit to, a minute.
+MIN_PER_MINUTE = 1
+MAX_PER_MINUTE = 100_000
+
+# How long what the limits are is remembered before a worker asks Postgres again, so a change an admin makes on another
+# worker is in force here within this long.
+LIMITS_CACHED = timedelta(seconds=5)
+
+# A personal token being limited is written to the audit log at most this often.
+AUDITED_EVERY = timedelta(hours=1)
+
+
+@dataclass(frozen=True)
+class Limits:
+    """The rate limit in force: whether it is on, and how many calls a minute each kind of caller may make."""
+
+    on: bool
+    token_per_minute: int
+    console_per_minute: int
+    address_per_minute: int
+
+
 def told_to_wait(seconds: int) -> str:
     """What a caller over the limit is told, in the words of a tool error."""
     unit = "second" if seconds == 1 else "seconds"
@@ -66,27 +92,103 @@ class RateLimits:
     """Counts calls against the limits and says how long a caller over one must wait."""
 
     def __init__(
-        self, settings: Settings, db: Database, identity: Identity, console_sessions: ConsoleSessions, clock: Clock
+        self,
+        settings: Settings,
+        db: Database,
+        identity: Identity,
+        console_sessions: ConsoleSessions,
+        audit: Audit,
+        clock: Clock,
     ) -> None:
         self._settings = settings
         self._db = db
         self._identity = identity
         self._console_sessions = console_sessions
+        self._audit = audit
         self._clock = clock
         self._pruned_at: datetime | None = None
+        self._known: tuple[datetime, Limits] | None = None
+
+    def limits(self) -> Limits:
+        """The limits in force: what an admin set, or else the environment's numbers. Remembered for a few seconds."""
+        now = self._clock()
+        if self._known is not None and now - self._known[0] < LIMITS_CACHED:
+            return self._known[1]
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT enabled, token_per_minute, console_per_minute, address_per_minute FROM rate_limit_settings"
+            ).fetchone()
+        if row is None:
+            limits = Limits(
+                self._settings.rate_limit_on,
+                self._settings.rate_limit_token_per_minute,
+                self._settings.rate_limit_console_per_minute,
+                self._settings.rate_limit_address_per_minute,
+            )
+        else:
+            limits = Limits(
+                row["enabled"], row["token_per_minute"], row["console_per_minute"], row["address_per_minute"]
+            )
+        self._known = (now, limits)
+        return limits
+
+    def change(self, admin: Member, limits: Limits) -> Limits:
+        """Set the limits server-wide, as an owner or an admin, and record who did it."""
+        if not (admin.is_owner or admin.is_admin):
+            raise Refused("Only the team's owner and its admins can change the rate limits.")
+        for number in (limits.token_per_minute, limits.console_per_minute, limits.address_per_minute):
+            if not MIN_PER_MINUTE <= number <= MAX_PER_MINUTE:
+                raise Refused(f"A rate limit is from {MIN_PER_MINUTE} to {MAX_PER_MINUTE:,} calls a minute.")
+        before = self.limits()
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO rate_limit_settings (id, enabled, token_per_minute, console_per_minute, address_per_minute)"
+                " VALUES (1, %s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET enabled = EXCLUDED.enabled,"
+                " token_per_minute = EXCLUDED.token_per_minute, console_per_minute = EXCLUDED.console_per_minute,"
+                " address_per_minute = EXCLUDED.address_per_minute",
+                (limits.on, limits.token_per_minute, limits.console_per_minute, limits.address_per_minute),
+            )
+        self._known = None
+        self._audit.record(
+            RATE_LIMITS_CHANGED,
+            member=admin,
+            detail={"now": dataclasses.asdict(limits), "before": dataclasses.asdict(before)},
+        )
+        return limits
 
     def check(self, token: str | None, session: str | None, address: str | None) -> int | None:
         """Count one call, carrying this personal token and console session's cookie, if it carries them, from this
         address. None lets it through; otherwise the whole seconds the caller must wait before a call is allowed
         again."""
-        if not self._settings.rate_limit_on:
+        limits = self.limits()
+        if not limits.on:
             return None
         if token and (token_id := self._identity.token_id(token)) is not None:
-            return self._count_call(f"token:{token_id}", self._settings.rate_limit_token_per_minute)
+            wait = self._count_call(f"token:{token_id}", limits.token_per_minute)
+            if wait is not None:
+                self._audit_limited(token_id, limits.token_per_minute)
+            return wait
         if session and (member := self._console_sessions.member_pk_of(session)) is not None:
-            return self._count_call(f"console:{member}", self._settings.rate_limit_console_per_minute)
+            return self._count_call(f"console:{member}", limits.console_per_minute)
         self._prune_if_due()
-        return self._count_call(f"address:{address or 'unknown'}", self._settings.rate_limit_address_per_minute)
+        return self._count_call(f"address:{address or 'unknown'}", limits.address_per_minute)
+
+    def _audit_limited(self, token_id: int, per_minute: int) -> None:
+        """Write to the audit log that this personal token was limited, unless that was written within the hour, so
+        the log shows a leaked token or a runaway agent without a flood of entries. A fault here is logged only."""
+        now = self._clock()
+        try:
+            with self._db.transaction() as conn:
+                first = conn.execute(
+                    "UPDATE rate_buckets SET limited_audited_at = %s WHERE key = %s"
+                    " AND (limited_audited_at IS NULL OR limited_audited_at < %s) RETURNING key",
+                    (now, f"token:{token_id}", now - AUDITED_EVERY),
+                ).fetchone()
+            who = self._identity.token_member(token_id) if first else None
+            if who is not None:
+                self._audit.record(TOKEN_LIMITED, member=who, target=who.member_id, detail={"per_minute": per_minute})
+        except Exception:
+            log.exception("A limited personal token could not be written to the audit log")
 
     def _prune_if_due(self) -> None:
         """Delete the buckets nobody has used for an hour, which address buckets are the ones to leave behind."""
