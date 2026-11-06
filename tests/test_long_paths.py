@@ -75,6 +75,7 @@ def deep(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
             github_client_secret="client-secret",
             github_sign_in_url=github.url,
             github_api_url=github.url,
+            rate_limit_on=False,
         )
         server = RunningServer(build_app(settings, clock=clock), settings, clock, portal)
         try:
