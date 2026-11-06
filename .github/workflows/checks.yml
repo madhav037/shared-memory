@@ -30,6 +30,7 @@ jobs:
     outputs:
       server: ${{ github.event_name == 'push' || steps.filter.outputs.server == 'true' }}
       console: ${{ github.event_name == 'push' || steps.filter.outputs.console == 'true' }}
+      edge: ${{ github.event_name == 'push' || steps.filter.outputs.edge == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -50,6 +51,9 @@ jobs:
               - "!smoke/**"
               - "!plugin/**"
               - "!*.md"
+            edge:
+              - "deploy/**"
+              - "console/**"
 
   server:
     needs: changes
@@ -191,17 +195,41 @@ jobs:
           path: console/playwright-report
           retention-days: 7
 
+  # The live site is built from deploy/console/Dockerfile and served by deploy/Caddyfile. A Caddyfile Caddy refuses, or a
+  # module that no longer builds, would take it down on the next deploy, so the image is built here and Caddy is run
+  # against the file with the environment the example gives it.
+  edge:
+    needs: changes
+    if: needs.changes.outputs.edge == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the console image
+        run: docker build -f deploy/console/Dockerfile -t console-edge .
+
+      - name: Caddy has the rate-limit module
+        run: docker run --rm console-edge caddy list-modules | grep -x 'http.handlers.rate_limit'
+
+      - name: Caddy accepts the Caddyfile
+        run: |
+          set -a
+          . deploy/.env.example
+          set +a
+          docker run --rm             -e CADDY_SITE_ADDRESS="${SHARED_MEMORY_DOMAIN:-memory.example.com}"             -e CADDY_ROBOTS_TAG="${SHARED_MEMORY_ROBOTS_TAG:-noindex}"             console-edge caddy validate --config /etc/caddy/Caddyfile
+
   checks:
-    needs: [changes, server, console]
+    needs: [changes, server, console, edge]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Everything that ran passed
         env:
-          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }}
+          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }} ${{ needs.edge.result }}
         run: |
-          echo "changes, server, console: $RESULTS"
+          echo "changes, server, console, edge: $RESULTS"
           for result in $RESULTS; do
             case "$result" in
               success | skipped) ;;
