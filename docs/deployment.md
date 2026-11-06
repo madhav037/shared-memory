@@ -131,7 +131,11 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 
 When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
 
-The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`.
+**What a deploy sends.** Only the layers the host lacks. The workflow first asks the script's `layers`, which prints the layers of the release images the host holds and changes nothing, and leaves those layers out of what it sends ([`deploy/upload.py`](../deploy/upload.py)); `docker load` on the host finds them already there. The server image is built in two parts for this ([`Dockerfile`](../Dockerfile)): a base with the system packages, the locked dependencies and the search model, named by a hash of exactly what goes into it, and the server's code on top. The images the three Dockerfiles start from are pinned by digest. So a release that changes only the server's code or the console sends a few megabytes, and the log says how many bytes went and how long they took.
+
+A release that changes a base (`uv.lock`, the dependencies in `pyproject.toml`, the Dockerfile above its release stage, or a pinned image) sends that image whole, some hundreds of megabytes. Over a slow link that takes longer than the deploy's hour: run that deploy from **Actions → Deploy → Run workflow** with a longer `minutes`. A host whose script predates `layers` is sent every layer, as before.
+
+The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`, and so can `layers`.
 
 ## Sizing
 

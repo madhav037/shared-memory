@@ -3,7 +3,9 @@ name: Deploy
 # Puts main on the server once Checks pass on it (docs/deployment.md, "Deploying from GitHub"). The images are built
 # here and handed to the server over SSH, never pushed to a registry, so the host only loads them: no build runs on a
 # machine shared with other people's work. On the server, deploy/deploy.sh backs up, switches, checks health through
-# the host's nginx, and puts the running release back if the new one isn't healthy.
+# the host's nginx, and puts the running release back if the new one isn't healthy. The server is asked first which
+# layers it already has (deploy.sh layers), and those are left out of what is sent (deploy/upload.py), so a release
+# that changed only the server's code sends megabytes, not the dependencies, the search model and the base images.
 #
 # Needs the production environment's DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS secrets and its DEPLOY_HOST variable;
 # without them the run is skipped with a warning.
@@ -23,6 +25,10 @@ on:
       commit:
         description: "Commit on main to deploy (empty: main's latest)"
         required: false
+      minutes:
+        description: "Time limit in minutes: longer only for a deploy that sends a whole image over a slow link"
+        type: number
+        default: 60
 
 permissions:
   contents: read
@@ -38,7 +44,10 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Raised from 40 only for room: building and a code-only upload take minutes, and the link to the server has run
+    # at 41 KB/s (2026-11-06). A release that changes a base sends that image whole, hundreds of MB, which no modest
+    # limit covers at that speed; run that one by hand with a longer `minutes` rather than raise the limit for every run.
+    timeout-minutes: ${{ inputs.minutes || 60 }}
     environment: production
     env:
       ACTION: ${{ inputs.action || 'deploy' }}
@@ -93,14 +102,35 @@ jobs:
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
 
+      # The base holds what changes rarely, named by a hash of exactly what goes into it, and its build cache is kept
+      # under that hash: while the hash holds, no run rebuilds it, and every run gets the layers the server has.
+      - name: Name the server's base image
+        if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
+        run: echo "BASE=$(python3 deploy/server_base.py tag)" >> "$GITHUB_ENV"
+
+      - name: Build the server's base image, unless its hash is cached
+        if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: base
+          tags: shared-memory-base:${{ env.BASE }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=server-base-${{ env.BASE }}
+          cache-to: type=gha,scope=server-base-${{ env.BASE }},mode=max
+
+      # Each image is loaded uncompressed, so `docker save` names each layer's blob by its diff ID, the name the server
+      # gives its layers by.
       - name: Build the server image
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          load: true
+          outputs: type=docker,compression=uncompressed,force-compression=true
           tags: shared-memory-server:${{ env.COMMIT }}
-          cache-from: type=gha,scope=server
+          cache-from: |
+            type=gha,scope=server-base-${{ env.BASE }}
+            type=gha,scope=server
           cache-to: type=gha,scope=server,mode=max
 
       - name: Build the Caddy image, with the console in it
@@ -109,7 +139,7 @@ jobs:
         with:
           context: .
           file: deploy/console/Dockerfile
-          load: true
+          outputs: type=docker,compression=uncompressed,force-compression=true
           tags: shared-memory-caddy:${{ env.COMMIT }}
           cache-from: type=gha,scope=caddy
           cache-to: type=gha,scope=caddy,mode=max
@@ -119,16 +149,44 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: deploy/backup
-          load: true
+          outputs: type=docker,compression=uncompressed,force-compression=true
           tags: shared-memory-backup:${{ env.COMMIT }}
           cache-from: type=gha,scope=backup
           cache-to: type=gha,scope=backup,mode=max
 
-      - name: Hand the images to the server and switch to them
+      # A server whose deploy command predates `layers` refuses it, and is sent every layer, as before.
+      - name: Ask the server which layers it has
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
         run: |
-          docker save "shared-memory-server:$COMMIT" "shared-memory-caddy:$COMMIT" "shared-memory-backup:$COMMIT" \
-            | gzip -1 | ssh server deploy "$COMMIT"
+          if ssh server layers < /dev/null > "$RUNNER_TEMP/held"; then
+            head -n 1 "$RUNNER_TEMP/held"
+            echo "The server holds $(grep -vc '^#' "$RUNNER_TEMP/held" || true) release images."
+          else
+            echo "::warning::The server didn't say which layers it has, so every layer is sent. Install the current deploy/deploy.sh there (docs/deployment.md, Deploying from GitHub)."
+            : > "$RUNNER_TEMP/held"
+          fi
+
+      - name: Leave out the layers the server has
+        if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
+        shell: bash
+        run: |
+          docker save -o "$RUNNER_TEMP/release.tar" \
+            "shared-memory-server:$COMMIT" "shared-memory-caddy:$COMMIT" "shared-memory-backup:$COMMIT"
+          python3 deploy/upload.py "$RUNNER_TEMP/held" "$RUNNER_TEMP/release.tar" | gzip -1 > "$RUNNER_TEMP/upload.tar.gz"
+          rm "$RUNNER_TEMP/release.tar"
+          echo "To send: $(stat -c %s "$RUNNER_TEMP/upload.tar.gz") bytes, gzipped."
+
+      - name: Hand the images to the server and switch to them
+        if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
+        shell: bash
+        run: |
+          bytes=$(stat -c %s "$RUNNER_TEMP/upload.tar.gz")
+          started=$(date +%s)
+          # Timed to the last byte going into ssh, so the server's backup and health checks aren't counted.
+          { cat "$RUNNER_TEMP/upload.tar.gz"
+            seconds=$(( $(date +%s) - started ))
+            echo "::notice::Sent $bytes bytes in ${seconds}s, $(( bytes / 1024 / (seconds > 0 ? seconds : 1) )) KB/s." >&2
+          } | ssh server deploy "$COMMIT"
 
       - name: Run the release before this one, then come back
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'drill'

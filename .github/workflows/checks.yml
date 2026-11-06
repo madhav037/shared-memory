@@ -31,6 +31,7 @@ jobs:
       server: ${{ github.event_name == 'push' || steps.filter.outputs.server == 'true' }}
       console: ${{ github.event_name == 'push' || steps.filter.outputs.console == 'true' }}
       edge: ${{ github.event_name == 'push' || steps.filter.outputs.edge == 'true' }}
+      images: ${{ github.event_name == 'push' || steps.filter.outputs.images == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -53,6 +54,8 @@ jobs:
               - "!*.md"
             edge:
               - "{deploy,console}/**"
+            images:
+              - "{Dockerfile,.dockerignore,pyproject.toml,uv.lock,deploy/**,.github/workflows/checks.yml,.github/workflows/deploy.yml}"
 
   server:
     needs: changes
@@ -222,17 +225,125 @@ jobs:
           set +a
           docker run --rm             -e CADDY_SITE_ADDRESS="${SHARED_MEMORY_DOMAIN:-memory.example.com}"             -e CADDY_ROBOTS_TAG="${SHARED_MEMORY_ROBOTS_TAG:-noindex}"             console-edge caddy validate --config /etc/caddy/Caddyfile
 
+  # A deploy sends the server only the layers it lacks (deploy/upload.py). This builds the release twice, the second time
+  # with only the server's code changed, and hands both to real Docker the way a deploy hands them to the server: the
+  # first whole, then the second less what the daemon reports it holds (deploy.sh layers). The second must be small,
+  # load, and run once the first is gone. The daemons are the server's Docker, 29.9 rootless with the containerd image
+  # store, and the classic store; a third holds the first release as compressed layers, as a server loaded before this.
+  transfer:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Name the server's base image
+        run: echo "BASE=$(python3 deploy/server_base.py tag)" >> "$GITHUB_ENV"
+
+      - name: Build a release, as a deploy builds it
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          outputs: type=docker,compression=uncompressed,force-compression=true
+          tags: shared-memory-server:one
+          cache-from: |
+            type=gha,scope=server-base-${{ env.BASE }}
+            type=gha,scope=server
+          cache-to: type=gha,scope=server-base-${{ env.BASE }},mode=max
+
+      - name: Save the same release with compressed layers
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          outputs: type=docker,compression=gzip,force-compression=true,dest=${{ runner.temp }}/one-gzip.tar
+          cache-from: type=gha,scope=server-base-${{ env.BASE }}
+
+      - name: Change only the server's code
+        run: echo "# Changed between the two builds." >> src/shared_memory/__init__.py
+
+      - name: Build the next release
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          outputs: type=docker,compression=uncompressed,force-compression=true
+          tags: shared-memory-server:two
+          cache-from: type=gha,scope=server-base-${{ env.BASE }}
+
+      - name: Only the release layers differ
+        shell: bash
+        run: |
+          read -ra one <<< "$(docker image inspect -f '{{join .RootFS.Layers " "}}' shared-memory-server:one)"
+          read -ra two <<< "$(docker image inspect -f '{{join .RootFS.Layers " "}}' shared-memory-server:two)"
+          common=0
+          while [ "$common" -lt "${#two[@]}" ] && [ "${one[$common]}" = "${two[$common]}" ]; do common=$((common + 1)); done
+          echo "The two releases share their bottom $common of ${#two[@]} layers."
+          [ $(( ${#two[@]} - common )) -le 3 ] || { echo "::error::More than the release layers changed."; exit 1; }
+
+      - name: Start Docker daemons like the server's
+        run: |
+          docker version -f 'The runner: Docker {{.Server.Version}}'
+          docker info -f 'The runner stores images with {{.Driver}}'
+          # Rootless Docker inside a container makes its own user namespace, which Ubuntu 24.04 restricts by default.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          echo '{"features": {"containerd-snapshotter": false}}' > "$RUNNER_TEMP/classic.json"
+          docker run -d --privileged --name server-like -p 127.0.0.1:2375:2375 -e DOCKER_TLS_CERTDIR= docker:29.9.1-dind-rootless
+          docker run -d --privileged --name classic -p 127.0.0.1:2376:2375 -e DOCKER_TLS_CERTDIR= \
+            -v "$RUNNER_TEMP/classic.json:/etc/docker/daemon.json:ro" docker:29.9.1-dind
+          docker run -d --privileged --name loaded-compressed -p 127.0.0.1:2377:2375 -e DOCKER_TLS_CERTDIR= docker:29.9.1-dind-rootless
+          for port in 2375 2376 2377; do
+            for _ in $(seq 90); do DOCKER_HOST=tcp://127.0.0.1:$port docker info > /dev/null 2>&1 && break; sleep 1; done
+            DOCKER_HOST=tcp://127.0.0.1:$port docker info -f "$port: Docker {{.ServerVersion}}, storage {{.Driver}}, {{.SecurityOptions}}" \
+              || { docker logs "$(docker ps -q --filter publish=$port)"; exit 1; }
+          done
+
+      - name: The next release goes over in megabytes, loads on top of the first, and runs without it
+        shell: bash
+        run: |
+          docker save -o "$RUNNER_TEMP/one.tar" shared-memory-server:one
+          docker save -o "$RUNNER_TEMP/two.tar" shared-memory-server:two
+          whole=$(gzip -1 < "$RUNNER_TEMP/two.tar" | wc -c)
+          for port in 2375 2376 2377; do
+            export DOCKER_HOST=tcp://127.0.0.1:$port
+            first="$RUNNER_TEMP/one.tar"
+            [ "$port" != 2377 ] || first="$RUNNER_TEMP/one-gzip.tar"
+            docker load -q -i "$first"
+            SSH_ORIGINAL_COMMAND=layers bash deploy/deploy.sh > "$RUNNER_TEMP/held"
+            cat "$RUNNER_TEMP/held"
+            python3 deploy/upload.py "$RUNNER_TEMP/held" "$RUNNER_TEMP/two.tar" | gzip -1 > "$RUNNER_TEMP/upload.tar.gz"
+            sent=$(stat -c %s "$RUNNER_TEMP/upload.tar.gz")
+            echo "::notice::$port ($(docker info -f '{{.Driver}}')): a code-only release sends $sent bytes gzipped, of $whole for the whole image."
+            [ "$sent" -lt 50000000 ] || { echo "::error::$sent bytes is no small transfer."; exit 1; }
+            # As deploy.sh loads it, then removes the release before, so only what the second release brought is left.
+            gunzip < "$RUNNER_TEMP/upload.tar.gz" | docker load -q
+            docker image rm shared-memory-server:one
+            docker image prune -f
+            docker image ls
+            docker run --rm --network none shared-memory-server:two sh -ec '
+              grep -q "Changed between the two builds" src/shared_memory/__init__.py
+              shared-memory --help > /dev/null
+              python -c "
+          from pathlib import Path
+          from shared_memory.embeddings import DIMENSIONS, FastEmbedEmbedder
+          assert len(FastEmbedEmbedder(Path(\"/opt/models\")).query(\"where are the deploy notes\")) == DIMENSIONS
+          print(\"The release runs, and finds its search model with no network.\")"'
+            docker system df
+            unset DOCKER_HOST
+          done
+
   checks:
-    needs: [changes, server, console, edge]
+    needs: [changes, server, console, edge, transfer]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Everything that ran passed
         env:
-          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }} ${{ needs.edge.result }}
+          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }} ${{ needs.edge.result }} ${{ needs.transfer.result }}
         run: |
-          echo "changes, server, console, edge: $RESULTS"
+          echo "changes, server, console, edge, transfer: $RESULTS"
           for result in $RESULTS; do
             case "$result" in
               success | skipped) ;;

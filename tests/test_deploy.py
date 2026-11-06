@@ -2,7 +2,8 @@
 
 The script runs on a host shared with someone else's sites, so what is checked here is what keeps them and the running
 release safe: a release that isn't healthy is replaced by the one it replaced, nothing switches when the backup fails
-or the host's web server is in trouble, and the key can ask for nothing but a check or a deploy of a commit on main.
+or the host's web server is in trouble, a release sent without the layers the host has still deploys, `layers` only
+reads, and the key can ask for nothing but a check, its layers, a deploy of a commit on main or a drill.
 Docker, nginx and the network are stand-ins that write down what they were asked; git is real.
 """
 
@@ -24,20 +25,54 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="deploy.sh runs 
 SCRIPT = REPO_ROOT / "deploy" / "deploy.sh"
 IMAGES = ("shared-memory-server", "shared-memory-caddy", "shared-memory-backup")
 
-# Images are files named for their tag, holding the release they were built from; `docker tag` copies one.
+# Images are files named for their tag, holding the release they were built from; `docker tag` copies one. An image's
+# layers, bottom up, are in .layers/ under the same name. An upload is a line per image, its name and its layers, and a
+# `blob` line for each layer it carries. As Docker does, loading skips a layer whose chain (it and every layer beneath
+# it) an image here already starts with, and fails on any other layer the upload doesn't carry.
 DOCKER = r"""#!/usr/bin/env bash
 echo "docker $*" >> "$STUB_LOG"
 images="$STUB_IMAGES"
+held() {
+    local image
+    for image in "$images"/.layers/*; do
+        [ -e "$image" ] || continue
+        case "$(cat "$image") " in "$1 "*) return 0 ;; esac
+    done
+    return 1
+}
 case "$1" in
-    info) echo "[name=seccomp,profile=builtin name=rootless name=cgroupns]" ;;
-    load) while read -r line; do echo "$line" > "$images/$line"; done ;;
+    version) echo "29.9.1" ;;
+    info) case "$3" in *Driver*) echo overlayfs ;; *) echo "[name=seccomp,profile=builtin name=rootless name=cgroupns]" ;; esac ;;
+    load)
+        blobs=" "; uploaded=()
+        while read -r name layers; do
+            if [ "$name" = blob ]; then blobs+="$layers "; else uploaded+=("$name $layers"); fi
+        done
+        for line in "${uploaded[@]}"; do
+            read -r name layers <<< "$line"; chain=""
+            for layer in $layers; do
+                chain="${chain:+$chain }$layer"
+                held "$chain" || case "$blobs" in *" $layer "*) ;; *) echo "no layer $layer for $name" >&2; exit 1 ;; esac
+            done
+        done
+        for line in "${uploaded[@]}"; do
+            read -r name layers <<< "$line"
+            echo "$name" > "$images/$name"
+            [ -z "$layers" ] || echo "$layers" > "$images/.layers/$name"
+        done ;;
     image)
         case "$2" in
-            inspect) if [ "$3" = -f ]; then cat "$images/$5"; else [ -e "$images/$3" ]; fi ;;
-            rm) rm -f "$images/$4" ;;
+            ls) for f in "$images/$5":*; do [ -e "$f" ] && echo "${f##*/}"; done; true ;;
+            inspect)
+                case "$3 $4" in
+                    *RootFS.Layers*) cat "$images/.layers/$5" ;;
+                    -f*) cat "$images/$5" ;;
+                    *) [ -e "$images/$3" ] ;;
+                esac ;;
+            rm) rm -f "$images/$4" "$images/.layers/$4" ;;
             prune) ;;
         esac ;;
-    tag) cp "$images/$2" "$images/$3" ;;
+    tag) cp "$images/$2" "$images/$3"; [ ! -e "$images/.layers/$2" ] || cp "$images/.layers/$2" "$images/.layers/$3" ;;
     images) for f in "$images/$2":*; do [ -e "$f" ] && echo "${f##*:}"; done; true ;;
     compose)
         shift
@@ -118,8 +153,10 @@ class Host:
         git("clone", "-q", str(origin), str(self.repo), cwd=root)
         git("checkout", "-q", "--detach", self.running, cwd=self.repo)
         (self.repo / "deploy" / ".env").write_text("SHARED_MEMORY_DOMAIN=memory.test\n", encoding="utf-8")
+        (self.images / ".layers").mkdir()
         for image in IMAGES:
             (self.images / f"{image}:latest").write_text(f"{image}@running\n", encoding="utf-8")
+            (self.images / ".layers" / f"{image}:latest").write_text(f"{image}-base {image}@running\n", "utf-8")
 
         self.env = {
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
@@ -141,6 +178,13 @@ class Host:
     def release(self, commit: str) -> str:
         """What `docker save` of a release's three images carries, in the stand-ins' terms."""
         return "".join(f"{image}:{commit}\n" for image in IMAGES)
+
+    def layered_release(self, commit: str, *, carrying_base: bool) -> str:
+        """A release whose images each sit on the base the running ones have, with or without that base's layers."""
+        lines = [f"{image}:{commit} {image}-base {image}@{commit}\n" for image in IMAGES]
+        lines += [f"blob {image}@{commit}\n" for image in IMAGES]
+        lines += [f"blob {image}-base\n" for image in IMAGES] if carrying_base else []
+        return "".join(lines)
 
     def serving(self) -> str:
         """The release the server image tagged latest was built from."""
@@ -228,9 +272,9 @@ def test_only_a_commit_on_main_deploys(host: Host) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["bash -c id", "deploy $(id)", "deploy main", "check; id", "deploy {commit} drill", "drill now", ""],
+    ["bash -c id", "deploy $(id)", "deploy main", "check; id", "deploy {commit} drill", "drill now", "layers all", ""],
 )
-def test_the_key_can_ask_for_nothing_but_a_check_a_deploy_or_a_drill(host: Host, command: str) -> None:
+def test_the_key_can_ask_for_nothing_but_a_check_its_layers_a_deploy_or_a_drill(host: Host, command: str) -> None:
     done = host.ssh(command.format(commit=host.newer))
 
     assert done.returncode == 1
@@ -245,6 +289,52 @@ def test_a_check_changes_nothing(host: Host) -> None:
     assert host.running.encode() in done.stdout
     for change in ("docker load", "docker tag", "compose up", "backup now"):
         assert change not in host.calls()
+
+
+def test_layers_says_what_each_release_image_is_made_of_and_changes_nothing(host: Host) -> None:
+    done = host.ssh("layers")
+
+    assert done.returncode == 0, done.stderr.decode()
+    first, *held = done.stdout.decode().splitlines()
+    assert first == "# Docker 29.9.1, storage overlayfs"
+    assert held == sorted(f"{image}-base {image}@running" for image in IMAGES)
+    for call in host.calls().splitlines():
+        assert call.startswith(("docker version", "docker info", "docker image ls", "docker image inspect")), call
+    assert host.head() == host.running
+
+
+def test_a_release_sent_without_the_layers_the_host_has_deploys(host: Host) -> None:
+    done = host.ssh(f"deploy {host.newer}", host.layered_release(host.newer, carrying_base=False))
+
+    assert done.returncode == 0, done.stderr.decode()
+    assert host.serving() == f"shared-memory-server:{host.newer}"
+    assert (host.images / ".layers" / "shared-memory-server:latest").read_text().split() == [
+        "shared-memory-server-base",
+        f"shared-memory-server@{host.newer}",
+    ]
+
+
+def test_a_release_missing_a_layer_the_host_lacks_switches_nothing(host: Host) -> None:
+    for image in IMAGES:
+        (host.images / ".layers" / f"{image}:latest").write_text(f"{image}-older-base {image}@running\n", "utf-8")
+
+    done = host.ssh(f"deploy {host.newer}", host.layered_release(host.newer, carrying_base=False))
+
+    assert done.returncode == 1
+    assert b"The images didn't load. Nothing was switched." in done.stderr
+    assert "backup now" not in host.calls()
+    assert "compose up" not in host.calls()
+    assert host.serving() == "shared-memory-server@running"
+
+
+def test_a_release_carrying_every_layer_deploys_onto_a_host_that_has_none_of_them(host: Host) -> None:
+    for image in IMAGES:
+        (host.images / ".layers" / f"{image}:latest").unlink()
+
+    done = host.ssh(f"deploy {host.newer}", host.layered_release(host.newer, carrying_base=True))
+
+    assert done.returncode == 0, done.stderr.decode()
+    assert host.serving() == f"shared-memory-server:{host.newer}"
 
 
 def deployed(host: Host) -> Host:
