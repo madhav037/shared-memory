@@ -2,7 +2,7 @@
 
 A checklist for the developer. Nothing here is submitted for you: every step below needs your own GitHub login or an account on the directory. Words in **bold** are defined in [`CONTEXT.md`](../CONTEXT.md).
 
-Every listing points at the GitHub repository, <https://github.com/madhav037/shared-memory>, and its docs ([`setup.md`](./setup.md), [`deployment.md`](./deployment.md)). There is no product website to link. The code is source-available under FSL-1.1-ALv2, never "open source": say so in any form that asks for a license.
+Every listing points at the GitHub repository, <https://github.com/madhav037/shared-memory>, and its docs ([`setup.md`](./setup.md), [`deployment.md`](./deployment.md)). There is no product website to link. The code is source-available under FSL-1.1-ALv2. Say so in any form that asks for a license, and in no listing call it by any other name.
 
 ## Before you submit anything
 
