@@ -160,6 +160,12 @@ ALLOWED: tuple[Allow, ...] = (
     ),
     Allow("callback", "GitHub's OAuth callback address, not a hook", text="callback"),
     Allow(
+        "draft",
+        "the legal pages' banner, awaiting a lawyer's review; avoided only for a personal memory",
+        (PAGES + "Legal.tsx",),
+        "pending legal review",
+    ),
+    Allow(
         "client", "GitHub's OAuth client ID and secret, not a coding agent", (SERVER + "config.py",), "github client"
     ),
     Allow("user", "GitHub's /user address, which is theirs to name", (SERVER + "console_sessions.py",), "/user"),
