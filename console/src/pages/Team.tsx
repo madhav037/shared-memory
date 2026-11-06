@@ -151,7 +151,7 @@ export function Team({ me }: { me: SignedInMember }) {
         </table>
       </div>
 
-      <LicenseSection onRefused={setRefused} />
+      <LicenseSection onRefused={setRefused} onInstalled={() => fetchMembers().then(setAnswer).catch(() => undefined)} />
 
       <RateLimitSection onRefused={setRefused} />
 
@@ -193,7 +193,13 @@ export function licenseSentence(license: LicenseState): string {
 }
 
 /** The server's license key: shown to every member, installed by admins. */
-function LicenseSection({ onRefused }: { onRefused: (message: string) => void }) {
+function LicenseSection({
+  onRefused,
+  onInstalled,
+}: {
+  onRefused: (message: string) => void;
+  onInstalled: () => void;
+}) {
   const { answer, setAnswer } = useAsked((signal) => fetchLicense(signal), []);
   const [key, setKey] = useState("");
   const [installing, setInstalling] = useState(false);
@@ -205,6 +211,7 @@ function LicenseSection({ onRefused }: { onRefused: (message: string) => void })
     try {
       setAnswer(await installLicense(key.trim()));
       window.dispatchEvent(new Event(LICENSE_CHANGED));
+      onInstalled();
       setKey("");
       onRefused("");
     } catch (problem) {
