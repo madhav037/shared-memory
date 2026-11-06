@@ -10,7 +10,8 @@ RUN npm run build
 
 # Caddy with the rate-limit module, which the stock image lacks (the edge's coarse limit, see the Caddyfile).
 FROM caddy:2-builder AS caddy
-RUN xcaddy build --with github.com/mholt/caddy-ratelimit
+# Pinned to a commit: an unpinned module is whatever its master is on build day, and the live site is built from this.
+RUN xcaddy build --with github.com/mholt/caddy-ratelimit@5625512f24f6f59d6f64fb3aafe5eecff0b286db
 
 FROM caddy:2
 
