@@ -1,4 +1,4 @@
-import { Drawer, Menu, TextInput, UnstyledButton, useMantineColorScheme } from "@mantine/core";
+import { Drawer, Menu, Notification, TextInput, UnstyledButton, useMantineColorScheme } from "@mantine/core";
 import {
   IconCheck,
   IconChevronDown,
@@ -11,7 +11,15 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
-import { fetchChallenges, fetchStatus, signInUrl, signOut, type SignedInMember, type Status } from "./api/client";
+import {
+  fetchChallenges,
+  fetchStatus,
+  onRateLimited,
+  signInUrl,
+  signOut,
+  type SignedInMember,
+  type Status,
+} from "./api/client";
 import { Refusal } from "./components/Bits";
 import { ContentsTree } from "./components/Contents";
 import { ContentsProvider } from "./lib/contents";
@@ -166,6 +174,7 @@ function SignedIn({
 }) {
   const [contentsOpen, setContentsOpen] = useState(false);
   const [waiting, setWaiting] = useState(0);
+  const [limited, setLimited] = useState<string | null>(null);
   const location = useLocation();
   const readsAudit = member.role === "owner" || member.role === "admin" || member.leads_a_project;
 
@@ -177,6 +186,14 @@ function SignedIn({
       document.title = described;
     };
   }, []);
+
+  // The server limits how fast calls may come; say so, so a refused page isn't taken for a broken console.
+  useEffect(() => onRateLimited(setLimited), []);
+  useEffect(() => {
+    if (limited === null) return;
+    const closing = window.setTimeout(() => setLimited(null), 10_000);
+    return () => window.clearTimeout(closing);
+  }, [limited]);
 
   useEffect(() => {
     const attempt = new AbortController();
@@ -239,6 +256,18 @@ function SignedIn({
       >
         <ContentsTree onOpen={() => setContentsOpen(false)} heading={false} />
       </Drawer>
+
+      {limited && (
+        <Notification
+          title="Slow down"
+          color="yellow"
+          onClose={() => setLimited(null)}
+          data-testid="rate-limited"
+          style={{ position: "fixed", top: 16, right: 16, zIndex: 400, maxWidth: "calc(100vw - 32px)" }}
+        >
+          {limited}
+        </Notification>
+      )}
 
       <div className="frame">
         <aside className="contents-column docked">

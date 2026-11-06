@@ -50,6 +50,10 @@ class Settings:
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
     rate_limit_on: bool = True
     rate_limit_token_per_minute: int = 120
+    # A member's console calls, counted apart from their coding agents' (about 300 a minute), and calls with no personal
+    # token or a wrong one, counted per address (30 a minute).
+    rate_limit_console_per_minute: int = 300
+    rate_limit_address_per_minute: int = 30
 
     @property
     def github_sign_in(self) -> bool:
@@ -90,4 +94,6 @@ class Settings:
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
+            rate_limit_console_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE", "300")),
+            rate_limit_address_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE", "30")),
         )

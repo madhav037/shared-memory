@@ -191,7 +191,7 @@ Where a coding agent calls the server by itself and takes the answer into the se
 _Avoid_: Callback, trigger, event handler
 
 **Rate limit**:
-A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
+A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token, a member's console calls apart from their coding agents', and calls with no personal token or a wrong one per address. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
 _Avoid_: Throttle, quota
 
 ### The console

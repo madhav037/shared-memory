@@ -64,11 +64,21 @@ function withQuery(path: string, asked: Record<string, string | number | undefin
   return written ? `${path}?${written}` : path;
 }
 
+const whenLimited = new Set<(message: string) => void>();
+
+/** Hear of every call the server limits (a 429), whichever page made it, with what the server said. Returns how to stop. */
+export function onRateLimited(listener: (message: string) => void): () => void {
+  whenLimited.add(listener);
+  return () => void whenLimited.delete(listener);
+}
+
 async function ask<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, headers: { Accept: "application/json", ...options.headers } });
   if (!response.ok) {
     const said = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new ApiError(said?.message ?? `The server answered ${response.status}.`, response.status);
+    const message = said?.message ?? `The server answered ${response.status}.`;
+    if (response.status === 429) whenLimited.forEach((listener) => listener(message));
+    throw new ApiError(message, response.status);
   }
   return (await response.json()) as T;
 }

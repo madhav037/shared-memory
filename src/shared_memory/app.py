@@ -33,6 +33,7 @@ from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_memory import ConsoleMemory
+from shared_memory.console_sessions import COOKIE as CONSOLE_COOKIE
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
@@ -1118,11 +1119,12 @@ def build_app(
         security = TransportSecuritySettings(
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
+    console_sessions = ConsoleSessions(settings, db, identity, audit, clock)
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(
         ConsoleApi(
             settings,
-            ConsoleSessions(settings, db, identity, audit, clock),
+            console_sessions,
             audit,
             identity,
             service,
@@ -1137,9 +1139,11 @@ def build_app(
             uses,
         ).routes()
     )
-    rate_limits = RateLimits(settings, db, identity, clock)
+    rate_limits = RateLimits(settings, db, identity, console_sessions, clock)
     # Added first, so inside NeverCached: a refusal is never cached either.
-    app.add_middleware(RateLimited, limits=rate_limits, paths=PRIVATE_PATHS, bearer=_bearer)
+    app.add_middleware(
+        RateLimited, limits=rate_limits, paths=PRIVATE_PATHS, bearer=_bearer, cookie=CONSOLE_COOKIE
+    )
     app.add_middleware(NeverCached)
     app.state.rate_limits = rate_limits
     app.state.database = db
