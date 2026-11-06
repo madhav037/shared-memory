@@ -4853,10 +4853,27 @@
             },
             "title": "Members",
             "type": "array"
+          },
+          "member_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Cap"
+          },
+          "members_used": {
+            "title": "Members Used",
+            "type": "integer"
           }
         },
         "required": [
-          "members"
+          "members",
+          "member_cap",
+          "members_used"
         ],
         "title": "Members",
         "type": "object"

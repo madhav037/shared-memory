@@ -994,7 +994,11 @@ class ConsoleApi:
         return self._team(member)
 
     def _team(self, member: Member) -> Response:
-        everyone = Members(members=[MemberSummary(**one) for one in self._identity.members(member)])
+        everyone = Members(
+            members=[MemberSummary(**one) for one in self._identity.members(member)],
+            member_cap=self._identity.member_cap(),
+            members_used=self._identity.members_in_use(),
+        )
         return JSONResponse(everyone.model_dump(mode="json"))
 
     def _reissue_my_token(self, request: Request) -> Response:

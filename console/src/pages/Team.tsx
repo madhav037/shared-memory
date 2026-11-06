@@ -14,6 +14,7 @@ import {
   setAdmin,
   type IssuedToken,
   type MemberSummary,
+  type Members,
   type RateLimits,
   type SignedInMember,
 } from "../api/client";
@@ -35,7 +36,7 @@ export function Team({ me }: { me: SignedInMember }) {
   const [editing, setEditing] = useState<Editing>(null);
   const runs = me.role === "owner" || me.role === "admin";
 
-  const attempt = async (what: () => Promise<{ members: MemberSummary[] }>) => {
+  const attempt = async (what: () => Promise<Members>) => {
     try {
       const after = await what();
       setAnswer(after);
@@ -103,13 +104,18 @@ export function Team({ me }: { me: SignedInMember }) {
         <AddMember
           onAdded={(token, everyone) => {
             setIssued(token);
-            setAnswer({ members: everyone });
+            setAnswer(everyone);
           }}
           onRefused={setRefused}
         />
       )}
 
       <h2 className="section-heading">Members</h2>
+      <p className="standfirst" data-testid="member-places">
+        {answer.member_cap === null
+          ? `${answer.members_used} members; this server has no member cap.`
+          : `${answer.members_used} of ${answer.member_cap} places used.`}
+      </p>
       <div className="scroll-x">
         <table className="register" data-testid="members">
           <thead>
@@ -272,7 +278,7 @@ function MemberRow({
   runs: boolean;
   editing: Editing;
   setEditing: (editing: Editing) => void;
-  attempt: (what: () => Promise<{ members: MemberSummary[] }>) => Promise<void>;
+  attempt: (what: () => Promise<Members>) => Promise<void>;
   issue: (memberId: string) => Promise<void>;
 }) {
   const id = member.member_id;
@@ -442,7 +448,7 @@ function AddMember({
   onAdded,
   onRefused,
 }: {
-  onAdded: (token: IssuedToken, everyone: MemberSummary[]) => void;
+  onAdded: (token: IssuedToken, everyone: Members) => void;
   onRefused: (message: string) => void;
 }) {
   const [memberId, setMemberId] = useState("");
@@ -456,7 +462,7 @@ function AddMember({
     try {
       const token = await addMember({ member_id: memberId.trim(), name: name.trim(), github: github.trim() || undefined });
       const everyone = await fetchMembers();
-      onAdded(token, everyone.members);
+      onAdded(token, everyone);
       setMemberId("");
       setName("");
       setGithub("");

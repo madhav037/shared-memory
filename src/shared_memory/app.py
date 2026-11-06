@@ -220,7 +220,7 @@ def build_app(
         saving_connections=settings.saving_connections,
         sets_up=setup,
     )
-    identity = Identity(db, clock)
+    identity = Identity(db, clock, member_cap=lambda: settings.member_cap)
     audit = Audit(db, clock, identity)
     # The model loads here, before the server takes its first request.
     counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
@@ -1190,6 +1190,7 @@ def build_app(
     )
     app.add_middleware(NeverCached)
     app.state.rate_limits = rate_limits
+    app.state.identity = identity
     app.state.database = db
     app.state.sessions = sessions
     app.state.locks = locks

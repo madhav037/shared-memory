@@ -460,6 +460,9 @@ class MemberSummary(BaseModel):
 
 class Members(BaseModel):
     members: list[MemberSummary]
+    # The server's member cap and how many places are taken (removed members hold none); no cap: null.
+    member_cap: int | None
+    members_used: int
 
 
 class NewMember(BaseModel):

@@ -2069,6 +2069,10 @@ export interface components {
         Members: {
             /** Members */
             members: components["schemas"]["MemberSummary"][];
+            /** Member Cap */
+            member_cap: number | null;
+            /** Members Used */
+            members_used: number;
         };
         /**
          * IssuedToken

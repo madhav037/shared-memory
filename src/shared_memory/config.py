@@ -10,6 +10,12 @@ from pathlib import Path
 MIN_POOL_CONNECTIONS = 4
 
 
+def _optional_int(text: str) -> int | None:
+    """A whole number from the environment, or None when the variable is unset or blank."""
+    text = text.strip()
+    return int(text) if text else None
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -54,6 +60,8 @@ class Settings:
     # token or a wrong one, counted per address (30 a minute).
     rate_limit_console_per_minute: int = 300
     rate_limit_address_per_minute: int = 30
+    # The member cap (CONTEXT.md): how many members the server may have at once. None: no cap.
+    member_cap: int | None = None
     # Where server errors are reported, with private data removed (monitoring.py). Empty: nothing is ever sent.
     sentry_dsn: str = ""
 
@@ -98,5 +106,6 @@ class Settings:
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
             rate_limit_console_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE", "300")),
             rate_limit_address_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE", "30")),
+            member_cap=_optional_int(env.get("SHARED_MEMORY_MEMBER_CAP", "")),
             sentry_dsn=env.get("SHARED_MEMORY_SENTRY_DSN", "").strip(),
         )
