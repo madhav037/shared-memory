@@ -79,6 +79,7 @@ def server(tmp_path_factory: pytest.TempPathFactory, embedder: ChosenSimilarity)
         database_url=fresh_database("shared_memory_collisions"),
         memory_root=tmp_path_factory.mktemp("collisions-memory"),
         model_cache=REPO_ROOT / ".cache" / "fastembed",
+        rate_limit_on=False,
     )
     clock = TestClock()
     with start_blocking_portal() as portal:

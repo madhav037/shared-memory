@@ -37,6 +37,8 @@ export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
+export type RateLimits = components["schemas"]["RateLimits"];
+export type RateLimitChange = components["schemas"]["RateLimitChange"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
 export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
@@ -64,11 +66,21 @@ function withQuery(path: string, asked: Record<string, string | number | undefin
   return written ? `${path}?${written}` : path;
 }
 
+const whenLimited = new Set<(message: string) => void>();
+
+/** Hear of every call the server limits (a 429), whichever page made it, with what the server said. Returns how to stop. */
+export function onRateLimited(listener: (message: string) => void): () => void {
+  whenLimited.add(listener);
+  return () => void whenLimited.delete(listener);
+}
+
 async function ask<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, headers: { Accept: "application/json", ...options.headers } });
   if (!response.ok) {
     const said = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new ApiError(said?.message ?? `The server answered ${response.status}.`, response.status);
+    const message = said?.message ?? `The server answered ${response.status}.`;
+    if (response.status === 429) whenLimited.forEach((listener) => listener(message));
+    throw new ApiError(message, response.status);
   }
   return (await response.json()) as T;
 }
@@ -186,6 +198,16 @@ function change<T>(path: string, body?: unknown): Promise<T> {
     headers: { ...fromConsole, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+/** The server's rate limit, and whether this member may change it. */
+export function fetchRateLimits(signal?: AbortSignal): Promise<RateLimits> {
+  return ask<RateLimits>("/api/rate-limits", { signal });
+}
+
+/** Change the rate limit, or switch it off. Admins only. */
+export function changeRateLimits(asked: RateLimitChange): Promise<RateLimits> {
+  return change<RateLimits>("/api/rate-limits", asked);
 }
 
 /** Everyone in the team, with their role and GitHub account. */

@@ -163,6 +163,16 @@ export function OutdatedMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/** The text reads like orders to a coding agent. Only a label: it is shown with a warning, never hidden. */
+export function SuspectedMark({ reasons }: { reasons: string[] }) {
+  return (
+    <span className="mark" title={reasons.join("; ")} data-testid="suspected-mark">
+      <IconAlertTriangle size={14} stroke={STROKE} aria-hidden />
+      Suspected instructions
+    </span>
+  );
+}
+
 export function RestrictedMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="mark" title="Restricted to its access list">

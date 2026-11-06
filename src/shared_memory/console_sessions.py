@@ -181,6 +181,17 @@ class ConsoleSessions:
             conn.execute("UPDATE console_sessions SET used_at = %s WHERE id = %s", (now, row["id"]))
             return member
 
+    def member_pk_of(self, token: str | None) -> int | None:
+        """The number the server keeps the member under whose session this is, or None when it is no session of
+        theirs or has ended. Looks only: the session's use is not marked, and its expiry not judged."""
+        if not token:
+            return None
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT member_id FROM console_sessions WHERE token_hash = %s AND ended_at IS NULL", (_hash(token),)
+            ).fetchone()
+        return int(row["member_id"]) if row else None
+
     def end_all_for(self, member_id: str, team_pk: int) -> None:
         """End every console session of one member, for when they are removed from the team."""
         with self._db.transaction() as conn:

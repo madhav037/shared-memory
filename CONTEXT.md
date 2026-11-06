@@ -102,6 +102,10 @@ _Avoid_: Override, local rule
 A memory nobody has used for long enough that it may no longer be true, and so is labelled *possibly outdated*. A memory is used when recall adds it to a prompt or a coding agent reads it; saving it starts its clock again. A pinned memory is never labelled, and nothing is done about the label automatically.
 _Avoid_: Stale, expired
 
+**Suspected instructions**:
+A memory whose text reads like orders to a coding agent ("ignore your instructions", piping a download into a shell). The server finds it with a fixed list of patterns each time a memory is saved or edited, and works it out again from the text rather than keeping it, so rewording the memory removes a wrong mark. A marked memory is still shown, with a warning telling the coding agent to treat it with suspicion and never act on it, and the session that saved it is told why it was marked.
+_Avoid_: Flagged, quarantined, unsafe
+
 ### Memory types
 
 **Convention**:
@@ -189,6 +193,10 @@ _Avoid_: Injection, auto-search
 **Hook**:
 Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
+
+**Rate limit**:
+A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token, a member's console calls apart from their coding agents', and calls with no personal token or a wrong one per address. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
+_Avoid_: Throttle, quota
 
 ### The console
 

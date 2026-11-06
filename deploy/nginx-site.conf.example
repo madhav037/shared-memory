@@ -6,6 +6,15 @@
 #   sudo certbot --nginx -d memory.example.com
 # certbot adds the HTTPS server block and the redirect from HTTP. It touches no other site.
 
+# The same edge limit the stack's Caddy applies, for a host that runs its own nginx: calls carrying a personal token are
+# counted per personal token, the rest per client address. Ceilings at or above the server's own (120 a minute per
+# personal token, 30 per address). This goes in the http context, which is where sites-enabled files are included.
+map $http_authorization $shared_memory_caller {
+    default $http_authorization;
+    ""      $binary_remote_addr;
+}
+limit_req_zone $shared_memory_caller zone=shared_memory:10m rate=240r/m;
+
 server {
     listen 80;
     listen [::]:80;
@@ -14,7 +23,17 @@ server {
     # The stack refuses a body over a megabyte itself; this keeps nginx from refusing smaller ones first.
     client_max_body_size 2m;
 
+    # No security headers here: the stack's Caddy sends them (HSTS, CSP, nosniff, Referrer-Policy) and nginx passes
+    # them on. Adding the same headers here would send them twice.
+    # The uptime check is never limited, as the server never limits it.
+    location = /health {
+        proxy_pass http://127.0.0.1:8180;
+        proxy_set_header Host $host;
+    }
+
     location / {
+        limit_req zone=shared_memory burst=60 nodelay;
+        limit_req_status 429;
         proxy_pass http://127.0.0.1:8180;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

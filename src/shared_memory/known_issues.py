@@ -23,6 +23,7 @@ from shared_memory.index import SearchIndex
 from shared_memory.memory import KNOWN_ISSUE, Area, Memory, level_folder
 from shared_memory.service import committer, describe
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.validation import validate
 
 SCHEMA = """
@@ -221,7 +222,7 @@ class KnownIssues:
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type, level="project"))
             change.also(lambda: tracking.append(self._track(caller, memory, str(path), card)))
         (card,) = tracking
-        return {
+        saved: dict[str, Any] = {
             "status": "saved",
             "path": str(path),
             "level": "project",
@@ -229,3 +230,6 @@ class KnownIssues:
             "next": f"Every member's agent is warned of it now, and card {card} on the board tracks the fix: tell the "
             "member. Retire the known issue once it is fixed.",
         }
+        if reasons := reasons_for(memory):
+            saved.update(answer_for(reasons))
+        return saved

@@ -26,7 +26,7 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 | **I** | Secrets leaking through memory, or token theft from the database | Text that looks like a secret is refused on save; Postgres holds only token hashes. | `sm/validation.py:60`; `sm/identity.py:90` |
 | **I** | Listing tools without a token | Accepted: listing is presentation only, the schemas are public in the repository, and calling a tool needs a token. | `sm/listing.py` |
 | **D** | Huge bodies | Caddy refuses bodies over 1 MB; a hook authenticates before reading its body, then reads at most the limit. | `deploy/Caddyfile:15-17`; `sm/app.py:388`, `:184`, `:400` |
-| **D** | Floods of calls, from a leaked token or anyone | **Gap:** no rate limit anywhere. | #387 |
+| **D** | Floods of calls, from a leaked token or anyone | Mitigated: a rate limit per personal token, per address for calls without one, in Postgres across workers, and a coarser one in Caddy keyed on the personal token, falling back to the address. | `sm/ratelimit.py`; `deploy/Caddyfile`; #387, #405 |
 | **E** | A member doing what only a lead, admin or owner may | Role checks in the module that does the work. | `sm/identity.py:212`, `:216`, `:250` |
 | **E** | One member's memory steering another member's coding agent (B7) | Words only: the agent is told memory is information, not instructions, and personal memory is labelled. **Gap:** nothing bounds a memory's text in the prompt. | `sm/recall.py:29`; `sm/app.py:61`; `sm/service.py:82`; #389 |
 | **E** | Rebinding a browser to a server that has no allowed hosts | Host header checked when `SHARED_MEMORY_ALLOWED_HOSTS` is set; production requires it. | `sm/app.py:1116`; `deploy/compose.yaml:32` |
@@ -41,7 +41,7 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 | **T** | The console writing memory | Never: it pins, unpins, decides challenges and retires (ADR-0009). Saving, editing and promoting exist only as MCP tools. | `sm/console_api.py:79` |
 | **R** | A member denies a governance change | Sign-ins, refused sign-ins, project, lead, repository, access, member, admin and token changes are all audited. | `sm/console_sessions.py:95`, `:98`; `sm/console_api.py:321-433`, `:904-975` |
 | **I** | Reading another team's or a restricted project's data | The same identity checks as MCP run beneath every call. | `sm/identity.py:604`, `:476` |
-| **D** | Floods of calls | **Gap:** no rate limit (same as MCP). | #387 |
+| **D** | Floods of calls | Mitigated by the same rate limit: a member's console calls are counted apart from their coding agents', and calls with no session per address. | `sm/ratelimit.py`; #387, #405 |
 | **E** | A member managing members, tokens or ownership | Admin and owner checks. | `sm/identity.py:212`, `:216` |
 
 ## 3. Deploy path: GitHub Actions to the host
@@ -60,7 +60,7 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 
 | Candidate | Verdict | Reason |
 | --- | --- | --- |
-| No rate limiting | **Filed #387** | A leaked token or a runaway agent can hold the workers; recall and search embed on the server. |
+| No rate limiting | **Mitigated (#387, spec #405)** | A leaked token or a runaway agent could hold the workers; recall and search embed on the server. Each personal token, console session and address now has a rate limit, enforced by the server and, coarsely, by Caddy. |
 | Personal tokens never expire | Accepted | 256-bit, stored hashed, revoked on reissue and on removal (`sm/identity.py:307`, `:316`, `:377`); expiry would stop unattended coding agents without closing a real hole. |
 | Image runs as root | **Filed #388** | Rootless Docker protects the live host only; a self-hosted server on ordinary Docker gets a root process. |
 | Prompt injection through memory | **Filed #389** | The main content risk: one session's memory reaches every member's prompt, and nothing bounds its text. |

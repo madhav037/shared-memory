@@ -15,8 +15,10 @@ from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
 from shared_memory.memory import FOLDER_TYPES, Memory, locate
-from shared_memory.recall import FRAMING
+from shared_memory.fence import escape, fenced, new_token
+from shared_memory.recall import framing
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import label_for, reasons_for
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pins (
@@ -156,7 +158,8 @@ class Briefing:
         cap = self._settings.briefing_cap_tokens
         for project_id in projects or [None]:
             pinned = self._pinned(caller.team, project_id)
-            total = estimate_tokens(FRAMING) + sum(tokens for _, tokens in pinned) + estimate_tokens(rendered)
+            framed = estimate_tokens(framing(new_token()))
+            total = framed + sum(tokens for _, tokens in pinned) + estimate_tokens(rendered)
             if total > cap:
                 listing = "; ".join(f"{pin_path} (about {tokens} tokens)" for pin_path, tokens in pinned) or "nothing"
                 raise Refused(
@@ -270,10 +273,11 @@ class Briefing:
         but takes its room out of what is left for the work."""
         if caller.project is None:
             return None
-        budget = self._settings.briefing_cap_tokens - estimate_tokens(FRAMING)
+        token = new_token()
+        budget = self._settings.briefing_cap_tokens - estimate_tokens(framing(token))
         sections: list[str] = []
         left_out: list[str] = []
-        for path, text in self._pinned_texts(caller.team, caller.project.project_id):
+        for path, text in self._pinned_texts(caller.team, caller.project.project_id, token):
             if estimate_tokens(text) <= budget:
                 sections.append(text)
                 budget -= estimate_tokens(text)
@@ -293,7 +297,7 @@ class Briefing:
         sections.extend(_work_sections(work or Work(), sessions or [], budget))
         if not sections:
             return None
-        return "<shared-memory-briefing>\n" + FRAMING + "\n\n" + "\n\n".join(sections) + "\n</shared-memory-briefing>"
+        return "<shared-memory-briefing>\n" + framing(token) + "\n\n" + "\n\n".join(sections) + "\n</shared-memory-briefing>"
 
     def _rows(self, team: str, project_id: str | None) -> list[PinTarget]:
         with self._db.transaction() as conn:
@@ -304,20 +308,21 @@ class Briefing:
             ).fetchall()
         return [PinTarget(row["path"], row["kind"], row["level"], row["project_id"]) for row in rows]
 
-    def _pinned_texts(self, team: str, project_id: str | None) -> list[tuple[str, str]]:
+    def _pinned_texts(self, team: str, project_id: str | None, token: str) -> list[tuple[str, str]]:
         """(path, rendered text) for each pin visible from a project, oldest first."""
         texts = []
         for target in self._rows(team, project_id):
-            rendered = self._render(team, target)
+            rendered = self._render(team, target, token)
             if rendered is not None:
                 texts.append((target.path, rendered))
         return texts
 
     def _pinned(self, team: str, project_id: str | None) -> list[tuple[str, int]]:
         """(path, approximate tokens) for each pin visible from a project."""
-        return [(path, estimate_tokens(text)) for path, text in self._pinned_texts(team, project_id)]
+        return [(path, estimate_tokens(text)) for path, text in self._pinned_texts(team, project_id, new_token())]
 
-    def _render(self, team: str, target: PinTarget) -> str | None:
+    def _render(self, team: str, target: PinTarget, token: str | None = None) -> str | None:
+        token = token or new_token()
         if target.kind == "memory":
             try:
                 memory = self._store.read(team, PurePosixPath(target.path))
@@ -325,9 +330,15 @@ class Briefing:
                 return None
             if memory.status != "active":
                 return None
-            return f"[{target.level} memory] {memory.title} ({target.path})\n{memory.body}"
+            warning = f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else ""
+            return f"[{target.level} memory] {escape(memory.title)} ({target.path}){warning}\n{fenced(memory.body, token)}"
         memories, _ = self._store.list_folder(team, PurePosixPath(target.path))
-        lines = [f"- {memory.title}: {memory.summary}" for _, memory in memories if memory.status == "active"]
+        lines = [
+            f"- {escape(memory.title)}: {fenced(memory.summary, token, inline=True)}"
+            + (f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else "")
+            for _, memory in memories
+            if memory.status == "active"
+        ]
         if not lines:
             return None
         name = PurePosixPath(target.path).name

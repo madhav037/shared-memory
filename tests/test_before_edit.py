@@ -583,6 +583,7 @@ def test_a_server_error_is_allowed(tmp_path_factory: pytest.TempPathFactory) -> 
         database_url=fresh_database("shared_memory_broken_locks"),
         memory_root=tmp_path_factory.mktemp("broken-locks-memory"),
         model_cache=REPO_ROOT / ".cache" / "fastembed",
+        rate_limit_on=False,
     )
     clock = TestClock()
     with start_blocking_portal() as portal:

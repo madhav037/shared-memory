@@ -30,13 +30,14 @@ jobs:
     outputs:
       server: ${{ github.event_name == 'push' || steps.filter.outputs.server == 'true' }}
       console: ${{ github.event_name == 'push' || steps.filter.outputs.console == 'true' }}
+      edge: ${{ github.event_name == 'push' || steps.filter.outputs.edge == 'true' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Which side the change can affect
         id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         with:
           predicate-quantifier: every
           filters: |
@@ -50,6 +51,8 @@ jobs:
               - "!smoke/**"
               - "!plugin/**"
               - "!*.md"
+            edge:
+              - "{deploy,console}/**"
 
   server:
     needs: changes
@@ -71,12 +74,12 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
       - name: Cache the search model
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .cache/fastembed
           key: fastembed-${{ hashFiles('uv.lock') }}
@@ -89,6 +92,10 @@ jobs:
         run: |
           uv export --frozen --no-emit-project --format requirements-txt --quiet -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.1 --disable-pip -r "$RUNNER_TEMP/requirements.txt"
+
+      # tests/test_backup.py runs the real backup script, whose encrypted form needs age (the backup image has it).
+      - name: Install age
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends age
 
       - name: Server tests
         run: uv run pytest
@@ -116,18 +123,18 @@ jobs:
           --health-timeout 3s
           --health-retries 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: console/package-lock.json
 
       - name: Cache the search model
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .cache/fastembed
           key: fastembed-${{ hashFiles('uv.lock') }}
@@ -164,7 +171,7 @@ jobs:
 
       - name: Cache the browser
         id: browser
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('console/package-lock.json') }}
@@ -185,23 +192,47 @@ jobs:
 
       - name: Keep the failed journeys' traces
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: playwright-report
           path: console/playwright-report
           retention-days: 7
 
+  # The live site is built from deploy/console/Dockerfile and served by deploy/Caddyfile. A Caddyfile Caddy refuses, or a
+  # module that no longer builds, would take it down on the next deploy, so the image is built here and Caddy is run
+  # against the file with the environment the example gives it.
+  edge:
+    needs: changes
+    if: needs.changes.outputs.edge == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Build the console image
+        run: docker build -f deploy/console/Dockerfile -t console-edge .
+
+      - name: Caddy has the rate-limit module
+        run: docker run --rm console-edge caddy list-modules | grep -x 'http.handlers.rate_limit'
+
+      - name: Caddy accepts the Caddyfile
+        run: |
+          set -a
+          . deploy/.env.example
+          set +a
+          docker run --rm             -e CADDY_SITE_ADDRESS="${SHARED_MEMORY_DOMAIN:-memory.example.com}"             -e CADDY_ROBOTS_TAG="${SHARED_MEMORY_ROBOTS_TAG:-noindex}"             console-edge caddy validate --config /etc/caddy/Caddyfile
+
   checks:
-    needs: [changes, server, console]
+    needs: [changes, server, console, edge]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Everything that ran passed
         env:
-          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }}
+          RESULTS: ${{ needs.changes.result }} ${{ needs.server.result }} ${{ needs.console.result }} ${{ needs.edge.result }}
         run: |
-          echo "changes, server, console: $RESULTS"
+          echo "changes, server, console, edge: $RESULTS"
           for result in $RESULTS; do
             case "$result" in
               success | skipped) ;;

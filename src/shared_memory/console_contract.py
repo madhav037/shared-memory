@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
 from shared_memory.challenges import DecidesAs
+from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
 
@@ -61,6 +62,26 @@ class AuditPage(BaseModel):
 
     events: list[AuditEvent]
     next: int | None
+
+
+class RateLimits(BaseModel):
+    """The server's rate limit: whether it is on, and how many calls a minute each kind of caller may make."""
+
+    on: bool
+    token_per_minute: int
+    console_per_minute: int
+    address_per_minute: int
+    # Whether the signed-in member may change them: the team's owner and its admins.
+    you_may_change: bool
+
+
+class RateLimitChange(BaseModel):
+    """What an admin sets the rate limit to."""
+
+    on: bool
+    token_per_minute: int = Field(ge=MIN_PER_MINUTE, le=MAX_PER_MINUTE)
+    console_per_minute: int = Field(ge=MIN_PER_MINUTE, le=MAX_PER_MINUTE)
+    address_per_minute: int = Field(ge=MIN_PER_MINUTE, le=MAX_PER_MINUTE)
 
 
 class ProjectMember(BaseModel):
@@ -338,6 +359,9 @@ class MemoryDetail(BaseModel):
     # memory). last_used is when one last did, or when it was last saved; null for a memory the server has no use of.
     possibly_outdated: bool
     last_used: datetime | None
+    # Why the text reads like orders to a coding agent (CONTEXT.md: Suspected instructions); empty when it doesn't.
+    # Worked out from the text each time, so the console only shows it: it never clears or writes it (ADR-0009).
+    suspected_instructions: list[str]
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
 
@@ -388,6 +412,7 @@ class FileEntry(BaseModel):
     challenged: int
     waiting: bool
     possibly_outdated: bool
+    suspected_instructions: list[str]
 
 
 class FolderSection(BaseModel):
@@ -1021,6 +1046,22 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=DecidedChallenges,
         changes=True,
         accepts=Decision,
+    ),
+    Declaration(
+        path="/rate-limits",
+        method="GET",
+        operation_id="rate_limits",
+        summary="The server's rate limit, and whether the signed-in member may change it.",
+        answers=RateLimits,
+    ),
+    Declaration(
+        path="/rate-limits",
+        method="POST",
+        operation_id="change_rate_limits",
+        summary="Change the server's rate limit, or switch it off.",
+        answers=RateLimits,
+        changes=True,
+        accepts=RateLimitChange,
     ),
     Declaration(
         path="/members",

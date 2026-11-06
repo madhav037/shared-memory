@@ -66,6 +66,8 @@ Kind = Literal[
     "card_returned",
     "never_lock_pattern_added",
     "never_lock_pattern_removed",
+    "rate_limits_changed",
+    "token_limited",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -114,6 +116,10 @@ CARD_RETURNED: Kind = "card_returned"
 # A project's own never-lock pattern; the entry's target is the pattern.
 NEVER_LOCK_PATTERN_ADDED: Kind = "never_lock_pattern_added"
 NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
+# An admin changed the server's rate limit; the entry's detail holds the limits now and the limits before.
+RATE_LIMITS_CHANGED: Kind = "rate_limits_changed"
+# A personal token was limited, at most once an hour; the entry's target is its member.
+TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
 
 
 @dataclass(frozen=True)

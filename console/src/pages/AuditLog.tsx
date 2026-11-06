@@ -33,6 +33,8 @@ const WORDS: Record<Kind, string> = {
   card_commented: "Card commented on",
   card_deleted: "Card deleted",
   card_returned: "Card returned to To do",
+  rate_limits_changed: "Rate limits changed",
+  token_limited: "Personal token limited",
   never_lock_pattern_added: "Never-lock pattern added",
   never_lock_pattern_removed: "Never-lock pattern removed",
   signed_in: "Signed in",
@@ -118,6 +120,20 @@ function Details({
   detail: Record<string, unknown>;
   nameOf: (memberId: string) => string;
 }) {
+  if (kind === "rate_limits_changed") {
+    const now = detail.now as { on: boolean; token_per_minute: number; console_per_minute: number; address_per_minute: number };
+    return (
+      <DetailLine
+        said={[
+          now.on ? "Switched on" : "Switched off",
+          `${now.token_per_minute} a minute per personal token`,
+          `${now.console_per_minute} for a member’s console`,
+          `${now.address_per_minute} per address`,
+        ]}
+      />
+    );
+  }
+  if (kind === "token_limited") return <DetailLine said={[`Over ${String(detail.per_minute)} calls a minute`]} />;
   if (kind.startsWith("card_")) {
     const said = cardChange(detail, nameOf);
     if (typeof detail.agent === "string" && agentLabel(detail.agent)) said.unshift(agentLabel(detail.agent));

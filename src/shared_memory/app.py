@@ -20,6 +20,7 @@ from mcp.server.session import ServerSession
 from mcp_types import ListPromptsResult, ListToolsResult, PaginatedRequestParams
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
 from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
@@ -33,6 +34,9 @@ from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_memory import ConsoleMemory
+from shared_memory.fence import escape, fenced, new_token
+from shared_memory.monitoring import start_reporting
+from shared_memory.console_sessions import COOKIE as CONSOLE_COOKIE
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
@@ -49,6 +53,7 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
+from shared_memory.ratelimit import RateLimited, RateLimits
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -414,6 +419,21 @@ def build_app(
             return JSONResponse({})
         return JSONResponse(answer(answer_format, named_event, context))
 
+    @server.custom_route("/health", methods=["GET"])  # type: ignore[untyped-decorator]
+    async def health(request: Request) -> Response:
+        """Whether this server can do its job, which is to reach Postgres. Open to anyone, outside PRIVATE_PATHS so
+        never rate limited, and saying nothing else, so an outside uptime check can tell a dead server from the
+        console's page."""
+        def reach_postgres() -> None:
+            with db.transaction() as conn:
+                conn.execute("SELECT 1")
+
+        try:
+            await run_in_threadpool(reach_postgres)
+        except Exception:
+            return JSONResponse({"status": "unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
+
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
         def notices(current: Caller, payload: dict[str, Any]) -> str | None:
@@ -682,7 +702,12 @@ def build_app(
     @_refusals_as_tool_errors
     def list_folder(folder: str, ctx: Context) -> dict[str, Any]:
         """List the memories in a folder, with their summaries, and its subfolders."""
-        return service.list_folder(caller(ctx), folder)
+        listed = service.list_folder(caller(ctx), folder)
+        token = new_token()
+        for each in listed["memories"]:
+            each["title"] = escape(each["title"])
+            each["summary"] = fenced(each["summary"], token, inline=True)
+        return listed
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -697,7 +722,13 @@ def build_app(
         a long time: check it still holds before relying on it. level is team, project or personal; type is
         convention, decision, architecture, gotcha or known_issue.
         """
-        return service.search(caller(ctx), query, level, type, limit)
+        found = service.search(caller(ctx), query, level, type, limit)
+        token = new_token()
+        for result in found["results"]:
+            result["title"] = escape(result["title"])
+            result["heading"] = escape(result["heading"])
+            result["summary"] = fenced(result["summary"], token, inline=True)
+        return found
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -706,7 +737,13 @@ def build_app(
 
         level is team, project or personal; leave it out to see everything in this project.
         """
-        return service.tree(caller(ctx), level)
+        shown = service.tree(caller(ctx), level)
+        token = new_token()
+        for entry in shown["folders"]:
+            for each in entry["memories"]:
+                each["title"] = escape(each["title"])
+                each["summary"] = fenced(each["summary"], token, inline=True)
+        return shown
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -717,7 +754,13 @@ def build_app(
         current = caller(ctx)
         memory = service.read(current, path)
         uses.used(current.team, [memory["path"]])
-        return memory
+        token = new_token()
+        return {
+            **memory,
+            "title": escape(memory["title"]),
+            "summary": fenced(memory["summary"], token, inline=True),
+            "body": fenced(memory["body"], token),
+        }
 
     @server.tool()
     @saving
@@ -1117,11 +1160,13 @@ def build_app(
         security = TransportSecuritySettings(
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
+    console_sessions = ConsoleSessions(settings, db, identity, audit, clock)
+    rate_limits = RateLimits(settings, db, identity, console_sessions, audit, clock)
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(
         ConsoleApi(
             settings,
-            ConsoleSessions(settings, db, identity, audit, clock),
+            console_sessions,
             audit,
             identity,
             service,
@@ -1134,9 +1179,15 @@ def build_app(
             activities,
             locks,
             uses,
+            rate_limits,
         ).routes()
     )
+    # Added first, so inside NeverCached: a refusal is never cached either.
+    app.add_middleware(
+        RateLimited, limits=rate_limits, paths=PRIVATE_PATHS, bearer=_bearer, cookie=CONSOLE_COOKIE
+    )
     app.add_middleware(NeverCached)
+    app.state.rate_limits = rate_limits
     app.state.database = db
     app.state.sessions = sessions
     app.state.locks = locks
@@ -1155,7 +1206,9 @@ def worker_app() -> Starlette:
     """The app a worker process serves (`uvicorn ... factory=True`). Its settings come from the environment, which
     every worker inherits from `serve`; setup is not repeated."""
     show_log()
-    return build_app(Settings.from_env(), setup=False)
+    settings = Settings.from_env()
+    start_reporting(settings)
+    return build_app(settings, setup=False)
 
 
 def show_log() -> None:

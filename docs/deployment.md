@@ -184,6 +184,44 @@ A memory no coding agent has recalled or read for `SHARED_MEMORY_OUTDATED_AFTER_
 is labelled *possibly outdated* where agents and the console show it. It is only a label: nothing is retired or
 deleted. Every memory that exists when a server first keeps last use counts as used that day.
 
+## The rate limit
+
+One bad caller must not take the server down for everyone: a leaked personal token, a coding agent stuck in a loop,
+an anonymous flood. Calls are counted by what they carry, each with a burst of a quarter of its limit (30 at the
+default 120) so a busy moment, such as a session start firing several tools at once, is allowed:
+
+| Counted per | Default a minute | Optional in `.env` |
+| --- | --- | --- |
+| Personal token | 120 | `SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE` |
+| Member's console session | 300 | `SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE` |
+| Address, for calls with no personal token or a wrong one | 30 | `SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE` |
+
+A member's console calls are counted apart from their coding agents', so browsing the console never uses up the
+agents' allowance. Calls with no personal token or a wrong one can only be counted by the address they come from: the
+forwarded address the server already trusts behind Caddy. Two members behind one office address are counted by their
+personal tokens, so one never limits the other. The counts live in Postgres, so every worker shares one allowance. Set
+`SHARED_MEMORY_RATE_LIMIT=off` to switch the limit off, for instance to rule it out while investigating a problem.
+
+Caddy applies a coarser version of the same limits at the edge, before a worker is woken: per personal token (default
+240 a minute) and per client address for `/mcp` and `/hooks` calls without one (60), and per client address for the
+console's `/api` (1200, room for a whole office). Set them with `SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`,
+`SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep them at
+or above the server's own. This needs the console image's Caddy, which is built with the
+[caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
+has the equivalent `limit_req`.
+
+The numbers above are the defaults. The team's owner and its admins see and change them, or switch the limit off, on
+the console's Team page (every other member sees them read-only); a change is kept in the database, so it holds across
+restarts and replaces the `.env` numbers until it is changed again. Every change is in the audit log with who made it,
+and so is the first time in an hour that a personal token is limited, naming its member, which is how a leaked token or
+a runaway coding agent shows up.
+
+A call over the limit is refused with HTTP 429 and `Retry-After` in seconds. A tool call gets a tool error naming the
+wait, and the console's JSON API a body with a `message` and `retry_after_seconds`, which the console shows as a
+notification. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
+does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the
+counter can't be read or written, the call is allowed and the failure is logged.
+
 ## How alike two activities must be for a collision warning
 
 A session is warned on its next prompt when another active session in its project has an activity that means nearly
@@ -242,10 +280,52 @@ Every night at `BACKUP_TIME`, the backup container pushes two branches to the ba
 
 The database is dumped before the memory history is pushed, so the backup never refers to a memory it doesn't contain. A failed server loses at most the changes since the last backup.
 
+### Encrypting the backup
+
+By default the backup repository holds your data readable by whoever can read that repository, GitHub included. To encrypt it with [age](https://github.com/FiloSottile/age) before it leaves the server:
+
+1. On your own machine (not the server), make a key pair and keep the identity file safe, offline and apart from the server. Without it an encrypted backup cannot be restored.
+
+   ```bash
+   age-keygen -o age_identity.txt   # prints the public key: age1...
+   ```
+
+2. Set the **public key** in `.env` and recreate the backup container:
+
+   ```
+   SHARED_MEMORY_BACKUP_AGE_RECIPIENT=age1...
+   ```
+
+   ```bash
+   docker compose up -d backup
+   docker compose exec backup backup now
+   docker compose logs backup   # "Backups are encrypted with age before they leave the server"
+   ```
+
+   The server never holds the identity, so a stolen server or backup repository does not reveal past backups. With the variable unset, backups behave as before and each one logs that it is unencrypted.
+
+Encrypted, the `database` branch holds two files in one commit per night, `shared_memory.sql.age` and `memory.bundle.age` (the memory folder's git history as a git bundle), and there is no `main` branch. Each night's bundle is the whole history, so the repository grows faster than an unencrypted one.
+
+**Turning encryption on for an existing backup repository:** earlier commits on `database`, and the `main` branch, are still plaintext. Delete the `main` branch, and delete and recreate the repository if the old history must go too. The next backup continues from the old `database` branch unless you do.
+
 **Checking on it:**
 
 - `docker compose logs backup` shows each backup starting and finishing, or `Backup FAILED` with the reason.
 - `docker compose ps` shows the backup container as `unhealthy` when no backup has succeeded for more than 26 hours.
+
+## Watching the server
+
+A server nobody watches is found broken by a member. Two things watch it from outside, and neither is on by default.
+
+### Server errors in Sentry
+
+Set `SHARED_MEMORY_SENTRY_DSN` in `.env` to a [Sentry](https://sentry.io) project's address, then `docker compose up -d`. Left empty, the server sends nothing to anyone.
+
+Every error passes through one scrubber (`src/shared_memory/monitoring.py`) before it leaves the server. It drops request bodies, query strings, headers (the `Authorization` header, cookies and the personal token header), local variables, the text of the exception, breadcrumbs that carry data, and every member identifier and GitHub login. What reaches Sentry is the kind of error, the stack of file names and line numbers, the route and the release. Performance tracing is off. In Sentry, add an alert rule for 5 or more issues in 5 minutes, and send it to email.
+
+### An outside uptime check
+
+Point an outside check at the server's address so you hear of an outage before a member does. [Grafana Cloud](https://grafana.com/products/cloud/)'s free Synthetic Monitoring can check `https://<your domain>/health` every minute. The server answers `200` with `{"status": "ok"}` while it can reach its database, and `503` with `{"status": "unavailable"}` when it can't; it needs no personal token and is never rate limited. Make the check expect that JSON body, not only a 200, so a check that gets the console's page (HTML) fails. Alert when two checks in a row fail, with email as one contact point and the Grafana mobile app as another, so the alert reaches your phone.
 
 ## Restore
 
@@ -261,6 +341,14 @@ Use this on a fresh host, or on the same host after its volumes are lost. The re
    docker compose up -d --build
    docker compose exec server shared-memory reindex
    ```
+
+**An encrypted backup** (the `database` branch holds `.age` files) is restored the same way, with the identity file from [Encrypting the backup](#encrypting-the-backup) mounted for the one command. Copy it to the new host, and run the restore as:
+
+```bash
+docker compose run --rm -v "$PWD/age_identity.txt:/run/secrets/age_identity:ro" backup restore
+```
+
+Without the identity the restore stops before changing anything and says so; with the wrong one it stops at decrypting. Delete the identity file from the host afterwards.
 
 Everything in the last backup comes back: memories with their history, members and their personal tokens (members don't need new ones), projects, pins and open challenges. The next nightly backup continues the backup repository's history.
 

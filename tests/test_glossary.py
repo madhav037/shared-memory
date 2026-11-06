@@ -152,7 +152,7 @@ ALLOWED: tuple[Allow, ...] = (
         "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
         (SERVER + "collisions.py",),
     ),
-    Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py",)),
+    Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
     Allow(
         "context",
         "MCP's request context and the context a hook adds to a prompt",

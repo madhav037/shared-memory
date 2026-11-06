@@ -10,12 +10,15 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
+from psycopg.errors import UniqueViolation
+
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
 
 NAME_LIMIT = 64
+PROJECT_ID_ATTEMPTS = 5
 NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
 
 # What another module does when a member may have lost a project. It is called inside the transaction making the
@@ -194,6 +197,28 @@ class Identity:
                         (project.project_id, repository),
                     )
             return Caller(member, project, repository or None, self._unreachable(conn, member))
+
+    def token_id(self, token: str) -> int | None:
+        """Which personal token this is, by the number the server keeps it under, or None when it is not one the
+        server issued. Revoked tokens and those of removed members are still known: a call is counted against them."""
+        with self._db.transaction() as conn:
+            found = conn.execute("SELECT id FROM tokens WHERE token_hash = %s", (_hash(token),)).fetchone()
+        return found["id"] if found else None
+
+    def token_member(self, token_id: int) -> Member | None:
+        """The member a personal token belongs to, by the number the server keeps it under."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin"
+                " FROM tokens k JOIN members m ON m.id = k.member_id JOIN teams t ON t.id = m.team_id"
+                " WHERE k.id = %s",
+                (token_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return Member(
+            row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"], row["is_admin"]
+        )
 
     def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
@@ -613,18 +638,27 @@ class Identity:
         """Create a project. Whoever creates it is its first project lead."""
         if not name.strip():
             raise Refused("A project needs a name.")
-        project_id = f"{slugify(name)[:40].strip('-')}-{secrets.token_hex(3)}"
         now = self._clock()
-        with self._db.transaction() as conn:
-            conn.execute(
-                "INSERT INTO projects (project_id, team_id, name, created_at) VALUES (%s, %s, %s, %s)",
-                (project_id, caller.member.team_pk, name.strip(), now),
-            )
-            conn.execute(
-                "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)",
-                (project_id, caller.member.pk, now),
-            )
-        return Project(project_id, name.strip())
+        # Project IDs are unique across every team and the suffix is random, so two projects with a common name can
+        # draw the same suffix: draw again rather than fail the member.
+        for attempt in range(PROJECT_ID_ATTEMPTS):
+            project_id = f"{slugify(name)[:40].strip('-')}-{secrets.token_hex(4)}"
+            try:
+                with self._db.transaction() as conn:
+                    conn.execute(
+                        "INSERT INTO projects (project_id, team_id, name, created_at) VALUES (%s, %s, %s, %s)",
+                        (project_id, caller.member.team_pk, name.strip(), now),
+                    )
+                    conn.execute(
+                        "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)",
+                        (project_id, caller.member.pk, now),
+                    )
+            except UniqueViolation:
+                if attempt == PROJECT_ID_ATTEMPTS - 1:
+                    raise
+                continue
+            return Project(project_id, name.strip())
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def rename_project(self, caller: Caller, project_id: str, name: str) -> None:
         """Change a project's name. Its project ID never changes: repositories are committed with it."""
@@ -806,7 +840,8 @@ class Identity:
         """Whether this member keeps at least one foundation of the project."""
         with self._db.transaction() as conn:
             found = conn.execute(
-                "SELECT 1 FROM foundation_keepers WHERE project_id = %s AND member_id = %s LIMIT 1", (project_id, member.pk)
+                "SELECT 1 FROM foundation_keepers WHERE project_id = %s AND member_id = %s LIMIT 1",
+                (project_id, member.pk),
             ).fetchone()
         return found is not None
 

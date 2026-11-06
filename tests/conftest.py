@@ -31,6 +31,7 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
         database_url=fresh_database("shared_memory_test"),
         memory_root=tmp_path_factory.mktemp("memory"),
         model_cache=REPO_ROOT / ".cache" / "fastembed",
+        rate_limit_on=False,  # the clock is frozen, so a bucket would never refill: test_rate_limit.py has its own
     )
     clock = TestClock()
     app = build_app(settings, clock=clock, embedder=FastEmbedEmbedder(settings.model_cache))
@@ -85,6 +86,7 @@ def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
             github_client_secret="client-secret",
             github_sign_in_url=github.url,
             github_api_url=github.url,
+            rate_limit_on=False,
         )
         server = RunningServer(build_app(settings, clock=clock), settings, clock, portal)
         try:
