@@ -16,6 +16,7 @@ from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
+from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.uses import Uses
 from shared_memory.validation import validate
@@ -170,7 +171,10 @@ class MemoryService:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type))
-        return {"path": str(path), "level": "personal", "next": _promoting(str(path))}
+        saved: dict[str, Any] = {"path": str(path), "level": "personal", "next": _promoting(str(path))}
+        if reasons := reasons_for(memory):
+            saved.update(answer_for(reasons))
+        return saved
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
@@ -427,7 +431,10 @@ class MemoryService:
             change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)
             change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
-        return describe(location.path, edited)
+        described = describe(location.path, edited)
+        if reasons := reasons_for(edited):
+            described.update(answer_for(reasons))
+        return described
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
         with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:

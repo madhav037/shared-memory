@@ -13,9 +13,9 @@ from tests.support import Session, Team, added_context, promote_keeping_both
 
 # The budgets, in tokens, each with the figure measured on 2026-10-18 once #303 to #309 had landed.
 BUDGETS = {
-    "member start": 6100,  # measured: 6052
-    "admin start": 6450,  # measured: 6422
-    "one recall": 250,  # measured: 218
+    "member start": 6800,  # measured: 6754 after #427 fenced the briefing; was 6052 on 2026-10-18
+    "admin start": 7200,  # measured: 7160 after #427; was 6422
+    "one recall": 350,  # estimated after #427 (a fence value and the sentence naming it); was 218
 }
 MARGIN = 1.10
 

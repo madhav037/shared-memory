@@ -209,7 +209,7 @@ def test_active_sessions_come_last_in_the_briefing(owner: Session, dana: Session
 
 
 def test_past_the_cap_the_sessions_that_do_not_fit_are_counted(owner: Session, dana: Session) -> None:
-    long_body = " ".join(["Billing charges are retried with exponential backoff."] * 80)
+    long_body = " ".join(["Billing charges are retried with exponential backoff."] * 65)
     owner.call("pin", path=promote(owner, "Retry policy", long_body))
     for number in range(1, 4):
         card(owner, f"Retry failed webhooks from the payment provider, batch {number}")

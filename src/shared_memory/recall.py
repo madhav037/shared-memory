@@ -17,12 +17,14 @@ from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
+from shared_memory.fence import escape, fenced, framing_of_fence, new_token
 from shared_memory.identity import Caller
 from shared_memory.index import Hit, SearchIndex, split_sections
 from shared_memory.service import label
 from shared_memory.sessions import Session, Sessions
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import label_for, reasons_for
 from shared_memory.uses import Uses
 
 FRAMING = (
@@ -31,6 +33,13 @@ FRAMING = (
     "team memory over personal memory, and personal memory over local memory. "
     "An entry of one line is a memory you can `read` in full if it matters."
 )
+
+
+
+def framing(token: str) -> str:
+    """The framing sentence, naming the fence this call's memories sit in."""
+    return f"{FRAMING} {framing_of_fence(token)}"
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recall_told (
@@ -140,11 +149,14 @@ class Recall:
             self._tell(session, found)
         # The label from before this use, which this use then clears.
         outdated = self._uses.possibly_outdated(caller.team, {each.hit.path: each.memory.status for each in found})
+        token = new_token()
         entries = []
         for position, each in enumerate(found):
             hit, memory = each.hit, each.memory
             is_top = position == 0
-            title = memory.title if each.heading == memory.title or not is_top else f"{memory.title}: {each.heading}"
+            title = escape(
+                memory.title if each.heading == memory.title or not is_top else f"{memory.title}: {each.heading}"
+            )
             kind = label(caller, hit.level, hit.member_id)
             foundation = locate(hit.path).foundation
             if foundation is not None:
@@ -153,12 +165,16 @@ class Recall:
                 kind += f", exception to {memory.exception_to}"
             if hit.path in outdated:
                 kind += ", possibly outdated"
+            if reasons := reasons_for(memory):
+                kind += f", {label_for(reasons)}"
             # The strongest hit comes in full; the rest are entries of one line.
             if is_top:
-                entries.append(f"[{kind}] {title} ({hit.path})\n{each.text}")
+                entries.append(f"[{kind}] {title} ({hit.path})\n{fenced(each.text, token)}")
             else:
-                entries.append(f"[{kind}] {title} ({hit.path}): {' '.join(memory.summary.split())}")
+                summary = fenced(" ".join(memory.summary.split()), token, inline=True)
+                entries.append(f"[{kind}] {title} ({hit.path}): {summary}")
         # Recalled is used: each memory added to the prompt starts its clock again.
         self._uses.used(caller.team, [each.hit.path for each in found])
-        framing = f"{FRAMING} {self._uses.check_any()}" if outdated else FRAMING
-        return "<shared-memory-recall>\n" + framing + "\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"
+        told = framing(token)
+        told = f"{told} {self._uses.check_any()}" if outdated else told
+        return "<shared-memory-recall>\n" + told +"\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"
