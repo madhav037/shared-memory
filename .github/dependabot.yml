@@ -29,3 +29,14 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # The images the three Dockerfiles start from are pinned by digest, so a deploy sends a server only the layers a
+  # release changed. A bump changes an image's lowest layers, so the deploy that ships it sends that image whole.
+  - package-ecosystem: docker
+    directories: ["/", "/deploy/console", "/deploy/backup"]
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ["*"]

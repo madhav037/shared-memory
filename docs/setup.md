@@ -12,7 +12,7 @@ Requirements: Docker with Compose.
 docker compose up -d db server
 ```
 
-This starts Postgres (with pgvector) on port 5433 and the server on port 8000. The memory folder and the search model live in the `memory-data` volume.
+This starts Postgres (with pgvector) on port 5433 and the server on port 8000. The memory folder lives in the `memory-data` volume; the search model ships in the image.
 
 Server settings, as environment variables on the `server` service:
 
@@ -20,7 +20,7 @@ Server settings, as environment variables on the `server` service:
 |---|---|---|
 | `SHARED_MEMORY_DATABASE_URL` | Postgres connection | set in `compose.yaml` |
 | `SHARED_MEMORY_ROOT` | Memory folder (a git repository) | `/data/memory` |
-| `SHARED_MEMORY_MODEL_CACHE` | Where the local embedding model is stored | `/data/models` |
+| `SHARED_MEMORY_MODEL_CACHE` | Where the local embedding model is stored | `/opt/models`, where the image carries it |
 | `SHARED_MEMORY_ALLOWED_HOSTS` | Host names the server answers to, comma separated (for example `memory.example.com`). Leave empty for localhost only. | empty |
 | `SHARED_MEMORY_PLUGIN_MARKETPLACE` | GitHub `owner/repo` that hosts the plugin marketplace | `madhav037/shared-memory` |
 

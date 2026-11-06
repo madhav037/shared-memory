@@ -2,8 +2,10 @@
 # Puts a release of Shared Memory on this host. GitHub Actions runs it over SSH (.github/workflows/deploy.yml).
 #
 #   check            check the host and print the running release; changes nothing
-#   deploy <commit>  read the release's images from stdin (docker save, gzipped), back up, switch to them, and put the
-#                    running release back if the new one isn't healthy
+#   layers           print what this host's release images are made of, so a deploy sends only the layers missing
+#                    here; changes nothing
+#   deploy <commit>  read the release's images from stdin (docker save, gzipped, less the layers `layers` said are
+#                    here), back up, switch to them, and put the running release back if the new one isn't healthy
 #   drill            rehearse putting a release back: back up, run the release before this one, check it's healthy, and
 #                    come back. Refused when that release is the same images, since nothing would really swap.
 #
@@ -27,7 +29,7 @@ SERVICES="backup caddy db server"
 
 log()  { echo "$(date -u +%H:%M:%S) $*"; }
 fail() { echo "$(date -u +%H:%M:%S) ✗ $*" >&2; exit 1; }
-usage() { fail "usage: check | deploy <commit> | drill"; }
+usage() { fail "usage: check | layers | deploy <commit> | drill"; }
 
 compose() { (cd "$REPO/deploy" && docker compose "$@"); }
 listening() { ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN; }
@@ -84,6 +86,21 @@ check() {
     room
     log "Running $(git -C "$REPO" rev-parse HEAD)"
     compose ps --format '{{.Service}} {{.Status}}'
+}
+
+# One line per image held here: its layers' diff IDs from the bottom up. deploy/upload.py leaves out of the upload
+# every layer whose chain, the layer and those beneath it, starts one of these lines, since `docker load` skips them.
+# Only reads.
+layers() {
+    local version driver image name
+    version=$(docker version -f '{{.Server.Version}}' 2>/dev/null) || version=unknown
+    driver=$(docker info -f '{{.Driver}}' 2>/dev/null) || driver=unknown
+    echo "# Docker $version, storage $driver"
+    for image in "${IMAGES[@]}"; do
+        for name in $(docker image ls --format '{{.Repository}}:{{.Tag}}' "$image"); do
+            [ "${name##*:}" = "<none>" ] || docker image inspect -f '{{join .RootFS.Layers " "}}' "$name"
+        done
+    done | sort -u
 }
 
 deploy() {
@@ -184,6 +201,7 @@ main() {
     if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then read -r -a args <<< "$SSH_ORIGINAL_COMMAND"; else args=("$@"); fi
     case "${args[0]:-}" in
         check)  [ "${#args[@]}" -eq 1 ] || usage; check ;;
+        layers) [ "${#args[@]}" -eq 1 ] || usage; layers ;;
         deploy) [ "${#args[@]}" -eq 2 ] || usage; deploy "${args[1]}" ;;
         drill)  [ "${#args[@]}" -eq 1 ] || usage; drill ;;
         *) usage ;;
