@@ -7,6 +7,7 @@ import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMe
 import {
   ChallengedMark,
   OutdatedMark,
+  SuspectedMark,
   PinnedMark,
   Placeholder,
   ProjectLinks,
@@ -186,11 +187,12 @@ function Line({ memory, me }: { memory: FileEntry; me: SignedInMember }) {
           )}
           {memory.title}
         </Link>
-        {(memory.pinned || memory.challenged > 0 || memory.possibly_outdated) && (
+        {(memory.pinned || memory.challenged > 0 || memory.possibly_outdated || memory.suspected_instructions.length > 0) && (
           <span className="line-marks">
             {memory.pinned && <PinnedMark />}
             {memory.challenged > 0 && <ChallengedMark count={memory.challenged} />}
             {memory.possibly_outdated && <OutdatedMark />}
+            {memory.suspected_instructions.length > 0 && <SuspectedMark reasons={memory.suspected_instructions} />}
           </span>
         )}
         <span className="leader" aria-hidden />

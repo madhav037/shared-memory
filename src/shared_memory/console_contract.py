@@ -359,6 +359,9 @@ class MemoryDetail(BaseModel):
     # memory). last_used is when one last did, or when it was last saved; null for a memory the server has no use of.
     possibly_outdated: bool
     last_used: datetime | None
+    # Why the text reads like orders to a coding agent (CONTEXT.md: Suspected instructions); empty when it doesn't.
+    # Worked out from the text each time, so the console only shows it: it never clears or writes it (ADR-0009).
+    suspected_instructions: list[str]
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
 
@@ -409,6 +412,7 @@ class FileEntry(BaseModel):
     challenged: int
     waiting: bool
     possibly_outdated: bool
+    suspected_instructions: list[str]
 
 
 class FolderSection(BaseModel):

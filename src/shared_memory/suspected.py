@@ -61,7 +61,12 @@ PATTERNS = (
 
 def reasons_for(memory: Memory) -> list[str]:
     """Why this memory's text reads like orders to a coding agent; empty when it doesn't."""
-    text = f"{memory.title}\n{memory.summary}\n{memory.body}"
+    return reasons_in(memory.title, memory.summary, memory.body)
+
+
+def reasons_in(title: str, summary: str, body: str) -> list[str]:
+    """The same check over a memory's three texts, for a caller that holds them as fields."""
+    text = f"{title}\n{summary}\n{body}"
     return [each.reason for each in PATTERNS if each.regex.search(text)]
 
 

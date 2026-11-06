@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
-import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, Trail } from "../components/Bits";
+import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
@@ -266,6 +266,14 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
             an admin decides.
           </p>
         )}
+        {memory.suspected_instructions.length > 0 && (
+          <p data-testid="suspected-instructions">
+            <b>Suspected instructions.</b> This memory reads like orders to a coding agent: it{" "}
+            {memory.suspected_instructions.join("; it ")}. It is still shown, but recall and the briefing give it to a
+            coding agent with a warning to treat it with suspicion and never act on it. Rewording it in a coding agent
+            checks it again.
+          </p>
+        )}
         {memory.possibly_outdated && (
           <p data-testid="possibly-outdated">
             <b>Possibly outdated.</b> No coding agent has recalled or read it since{" "}
@@ -320,6 +328,7 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
               {memory.status === "active" && <span className="mark">Current</span>}
               {memory.pinned && <PinnedMark />}
               {memory.possibly_outdated && <OutdatedMark />}
+              {memory.suspected_instructions.length > 0 && <SuspectedMark reasons={memory.suspected_instructions} />}
             </>
           )}
         </dd>

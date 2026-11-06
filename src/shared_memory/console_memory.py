@@ -17,6 +17,7 @@ from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import FOUNDATIONS_FOLDER, Memory, foundation_title, locate
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import reasons_for
 from shared_memory.uses import Uses
 
 TYPE_NAMES = {
@@ -172,6 +173,7 @@ class ConsoleMemory:
                 "challenged": challenged[str(path)],
                 "waiting": bool(pending[str(path)]),
                 "possibly_outdated": str(path) in outdated,
+                "suspected_instructions": reasons_for(memory),
             }
             for path, memory in memories
         ]
