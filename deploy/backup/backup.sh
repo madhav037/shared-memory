@@ -10,11 +10,13 @@
 # database (one commit per night). The dump leaves out the search index: `shared-memory reindex` rebuilds it.
 set -euo pipefail
 
-MEMORY=/data/memory
-DATABASE_WORK=/backups/database
-LAST_SUCCESS=/backups/last-success
+# The defaults are the container's paths; the tests point them at a temporary directory.
+MEMORY=${MEMORY:-/data/memory}
+BACKUPS=${BACKUPS:-/backups}
+DATABASE_WORK=$BACKUPS/database
+LAST_SUCCESS=$BACKUPS/last-success
 STARTED=/tmp/started
-KEY=/run/secrets/backup_key
+KEY=${BACKUP_KEY:-/run/secrets/backup_key}
 
 log() { echo "$(date -Is) $*"; }
 
@@ -25,7 +27,7 @@ use_git() {
     if [ -f "$KEY" ] && [ -s "$KEY" ]; then
         # ssh refuses a key readable by others, which a mounted file often is.
         install -m 600 "$KEY" /tmp/backup_key
-        export GIT_SSH_COMMAND="ssh -i /tmp/backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/backups/known_hosts"
+        export GIT_SSH_COMMAND="ssh -i /tmp/backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$BACKUPS/known_hosts"
     fi
 }
 
@@ -47,10 +49,11 @@ backup_now() {
         git -C "$DATABASE_WORK" commit -q -m "Database backup $(date -Is)"
     fi
     git -C "$DATABASE_WORK" push -q "$BACKUP_REMOTE" HEAD:database
-    if [ -d "$MEMORY/.git" ]; then
+    # The server creates the repository at start, but main has no commit until the first memory is saved.
+    if git -C "$MEMORY" rev-parse --verify -q main >/dev/null 2>&1; then
         git -C "$MEMORY" push -q "$BACKUP_REMOTE" main
     else
-        log "The memory folder has no history yet: nothing to push"
+        log "The memory folder has no saved memory yet: nothing to push"
     fi
     touch "$LAST_SUCCESS"
     log "Backup finished"
