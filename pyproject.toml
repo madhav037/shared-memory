@@ -5,6 +5,8 @@ description = "Shared memory for a team's Claude Code sessions"
 authors = [
     { name = "madhav037", email = "madhavlehru@gmail.com" }
 ]
+license = "FSL-1.1-ALv2"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "anyio>=4.15.1",
