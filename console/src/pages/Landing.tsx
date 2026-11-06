@@ -15,6 +15,7 @@ import { Link, useLocation } from "react-router";
 import { signInUrl, type Status } from "../api/client";
 import { Refusal } from "../components/Bits";
 import { type Billing, type Hosting, money, PLAN_SIZES, planPrice, type PlanSize, TRIAL_DAYS } from "../lib/plans";
+import { LegalLinks } from "./Legal";
 import "./landing.css";
 
 /*
@@ -74,6 +75,10 @@ export function Landing({ status, refused }: { status: Status; refused: string |
               {status.github_sign_in
                 ? "Connected to the server. Your personal token stays with your coding agent; the console never asks for it."
                 : "Connected to the server. Signing in with GitHub isn’t set up on this server yet: whoever runs it sets the GitHub app’s details."}
+            </p>
+            <p className="lp-fine sign-in-notice" data-testid="sign-in-notice">
+              By signing in you agree to the <Link to="/terms">Terms</Link> and accept the{" "}
+              <Link to="/privacy">Privacy Policy</Link>.
             </p>
           </div>
           <Relay />
@@ -216,6 +221,7 @@ export function Landing({ status, refused }: { status: Status; refused: string |
       <footer className="lp-foot">
         <div className="lp-wrap">
           Memory kept as Markdown files on its server, every change in a git history. Updated {UPDATED}.
+          <LegalLinks />
         </div>
       </footer>
     </div>

@@ -1,6 +1,7 @@
 import { IconArrowRight, IconSearch } from "@tabler/icons-react";
 import { Link, useLocation, useSearchParams } from "react-router";
 
+import { LegalLinks } from "./Legal";
 import "./landing.css";
 import "./elsewhere.css";
 
@@ -55,6 +56,7 @@ export function ComingSoon({ inConsole = false }: { inConsole?: boolean }) {
             </Link>
           )}
         </div>
+        <LegalLinks />
       </div>
     </div>
   );
@@ -85,6 +87,7 @@ export function NotFound({ inConsole = false }: { inConsole?: boolean }) {
             </Link>
           )}
         </div>
+        <LegalLinks />
       </div>
     </div>
   );

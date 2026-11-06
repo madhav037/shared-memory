@@ -32,6 +32,7 @@ import { FolderPage } from "./pages/FolderPage";
 import { ComingSoon, NotFound } from "./pages/Elsewhere";
 import { Front } from "./pages/Front";
 import { Landing } from "./pages/Landing";
+import { LegalLinks, Privacy, Terms } from "./pages/Legal";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
@@ -134,6 +135,8 @@ export function App() {
         <main id="page">
           <Routes>
             <Route path="/coming-soon" element={<ComingSoon />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             {CONSOLE_ADDRESSES.map((path) => (
               <Route key={path} path={path} element={<Landing status={status} refused={signInRefused} />} />
             ))}
@@ -294,10 +297,15 @@ function SignedIn({
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
             <Route path="/coming-soon" element={<ComingSoon inConsole />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="*" element={<NotFound inConsole />} />
           </Routes>
         </main>
       </div>
+      <footer className="legal-foot">
+        <LegalLinks />
+      </footer>
     </>
   );
 }
