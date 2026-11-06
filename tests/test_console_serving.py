@@ -123,8 +123,8 @@ def test_the_edge_ceilings_are_at_or_above_the_servers_and_set_in_the_environmen
     server = Settings("", Path("."), Path("."))
     ceilings = {
         "CADDY_RATE_TOKEN_PER_MINUTE": server.rate_limit_token_per_minute,
-        "CADDY_RATE_ADDRESS_PER_MINUTE": 30,  # the server's per-address default, added by #411
-        "CADDY_RATE_CONSOLE_PER_MINUTE": 300,  # the server's per-member console default, added by #411
+        "CADDY_RATE_ADDRESS_PER_MINUTE": server.rate_limit_address_per_minute,
+        "CADDY_RATE_CONSOLE_PER_MINUTE": server.rate_limit_console_per_minute,
     }
     for name, serves in ceilings.items():
         default = re.search(r"\{\$%s:(\d+)\}" % name, CADDYFILE)
