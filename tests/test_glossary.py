@@ -203,6 +203,9 @@ ALLOWED: tuple[Allow, ...] = (
         "what promote offers when it finds a similar memory; no challenge is raised",
         (SERVER + "app.py", SERVER + "known_issues.py", SERVER + "lifecycle.py"),
     ),
+    Allow("owner", "the team's Owner, as the README names the person who sets the team up", ("README.md",)),
+    Allow("password", "Postgres's own password, not a personal token", ("README.md",), "database password"),
+    Allow("collision", "two sessions on the same work, the glossary's Collision", ("README.md",), "avoid collisions"),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
@@ -345,6 +348,26 @@ def search(glossary: Glossary) -> Iterator[Found]:
                 yield Found(where, line, kind, text, entry)
 
 
+FENCED_BLOCK = re.compile(r"```.*?```", re.S)
+CODE_OR_LINK = re.compile(r"`[^`\n]*`|\]\([^)\n]*\)|https?://\S+")
+
+
+def prose_of(markdown: str) -> Iterator[tuple[int, str]]:
+    """The sentences a reader reads: code blocks, code spans and link addresses are left out."""
+    markdown = FENCED_BLOCK.sub(lambda match: re.sub(r"[^\n]", " ", match[0]), markdown)
+    for number, line in enumerate(markdown.splitlines(), start=1):
+        text = CODE_OR_LINK.sub(" ", line)
+        if text.strip():
+            yield number, text
+
+
+def search_prose(glossary: Glossary, path: pathlib.Path) -> Iterator[Found]:
+    where = path.relative_to(ROOT).as_posix()
+    for line, text in prose_of(path.read_text(encoding="utf-8")):
+        for entry in breaches(text, glossary):
+            yield Found(where, line, "prose", text.strip(), entry)
+
+
 def allowed(found: Found) -> Allow | None:
     words = words_of(found.text)
     for allow in ALLOWED:
@@ -444,3 +467,20 @@ def test_avoided_synonyms_stay_out_of_the_code() -> None:
         "The paths (files, or folders ending in /) and the text (words the name or string contains) keep the "
         "exemption as narrow as the use."
     )
+
+
+def test_the_readme_uses_the_glossarys_terms() -> None:
+    glossary = read_glossary(GLOSSARY.read_text(encoding="utf-8"))
+
+    found = [each for each in search_prose(glossary, ROOT / "README.md") if not allowed(each)]
+
+    assert not found, "README.md uses a word CONTEXT.md's glossary avoids:\n" + "\n".join(
+        f'  line {each.line}: "{each.avoided.spelled}", the glossary\'s term is {each.avoided.term}: {each.text}'
+        for each in found
+    )
+
+
+def test_the_readme_never_says_open_source() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+
+    assert "open source" not in readme.replace("-", " ")
