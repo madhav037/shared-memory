@@ -54,7 +54,8 @@ def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
 def capped_at_places_left(console: Console, places: int) -> None:
     """Set the cap so that this many more members fit on the server, whoever is already on it."""
     identity = console.server.app.state.identity
-    identity.member_cap = lambda: identity.members_in_use() + places
+    cap = identity.members_in_use() + places
+    identity.member_cap = lambda: cap
 
 
 def team_page(client: ConsoleClient) -> dict[str, Any]:
