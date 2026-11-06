@@ -102,6 +102,10 @@ _Avoid_: Override, local rule
 A memory nobody has used for long enough that it may no longer be true, and so is labelled *possibly outdated*. A memory is used when recall adds it to a prompt or a coding agent reads it; saving it starts its clock again. A pinned memory is never labelled, and nothing is done about the label automatically.
 _Avoid_: Stale, expired
 
+**Suspected instructions**:
+A memory whose text reads like orders to a coding agent ("ignore your instructions", piping a download into a shell). The server finds it with a fixed list of patterns each time a memory is saved or edited, and works it out again from the text rather than keeping it, so rewording the memory removes a wrong mark. A marked memory is still shown, with a warning telling the coding agent to treat it with suspicion and never act on it, and the session that saved it is told why it was marked.
+_Avoid_: Flagged, quarantined, unsafe
+
 ### Memory types
 
 **Convention**:

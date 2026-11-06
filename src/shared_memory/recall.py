@@ -24,6 +24,7 @@ from shared_memory.service import label
 from shared_memory.sessions import Session, Sessions
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import label_for, reasons_for
 from shared_memory.uses import Uses
 
 FRAMING = (
@@ -164,6 +165,8 @@ class Recall:
                 kind += f", exception to {memory.exception_to}"
             if hit.path in outdated:
                 kind += ", possibly outdated"
+            if reasons := reasons_for(memory):
+                kind += f", {label_for(reasons)}"
             # The strongest hit comes in full; the rest are entries of one line.
             if is_top:
                 entries.append(f"[{kind}] {title} ({hit.path})\n{each.text}")
