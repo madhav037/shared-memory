@@ -686,7 +686,12 @@ def build_app(
     @_refusals_as_tool_errors
     def list_folder(folder: str, ctx: Context) -> dict[str, Any]:
         """List the memories in a folder, with their summaries, and its subfolders."""
-        return service.list_folder(caller(ctx), folder)
+        listed = service.list_folder(caller(ctx), folder)
+        token = new_token()
+        for each in listed["memories"]:
+            each["title"] = escape(each["title"])
+            each["summary"] = fenced(each["summary"], token, inline=True)
+        return listed
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -716,7 +721,13 @@ def build_app(
 
         level is team, project or personal; leave it out to see everything in this project.
         """
-        return service.tree(caller(ctx), level)
+        shown = service.tree(caller(ctx), level)
+        token = new_token()
+        for entry in shown["folders"]:
+            for each in entry["memories"]:
+                each["title"] = escape(each["title"])
+                each["summary"] = fenced(each["summary"], token, inline=True)
+        return shown
 
     @server.tool()
     @_refusals_as_tool_errors
