@@ -93,6 +93,10 @@ jobs:
           uv export --frozen --no-emit-project --format requirements-txt --quiet -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.1 --disable-pip -r "$RUNNER_TEMP/requirements.txt"
 
+      # tests/test_backup.py runs the real backup script, whose encrypted form needs age (the backup image has it).
+      - name: Install age
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends age
+
       - name: Server tests
         run: uv run pytest
 
