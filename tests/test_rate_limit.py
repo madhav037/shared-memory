@@ -200,7 +200,7 @@ def test_a_fault_in_the_counter_never_stops_a_call(limited: RunningServer, monke
     def broken(key: str, per_minute: int) -> int | None:
         raise RuntimeError("the counter is down")
 
-    monkeypatch.setattr(limited.app.state.rate_limits, "_take", broken)
+    monkeypatch.setattr(limited.app.state.rate_limits, "_count_call", broken)
 
     assert all(prompt(limited, token).status_code == 200 for _ in range(BURST * 2))
     assert tool_call(limited, token).status_code != 429

@@ -30,8 +30,8 @@ from shared_memory.identity import Identity
 
 log = logging.getLogger("shared_memory")
 
-# A burst is this share of a minute's allowance: 30 calls at the default 120 a minute.
-BURST_SHARE = 4
+# A burst is a minute's allowance divided by this: 30 calls at the default 120 a minute.
+BURST_DIVISOR = 4
 
 # The most of a refused MCP call's body that is read, to answer it in its own JSON-RPC shape.
 REFUSED_BODY_LIMIT = 64_000
@@ -39,7 +39,7 @@ REFUSED_BODY_LIMIT = 64_000
 
 def burst_of(per_minute: int) -> int:
     """How many calls a caller may make at once, from a full bucket."""
-    return max(1, per_minute // BURST_SHARE)
+    return max(1, per_minute // BURST_DIVISOR)
 
 
 def told_to_wait(seconds: int) -> str:
@@ -66,10 +66,10 @@ class RateLimits:
         token_id = self._identity.token_id(token)
         if token_id is None:
             return None
-        return self._take(f"token:{token_id}", self._settings.rate_limit_token_per_minute)
+        return self._count_call(f"token:{token_id}", self._settings.rate_limit_token_per_minute)
 
-    def _take(self, key: str, per_minute: int) -> int | None:
-        """Take one call from the bucket under this key, which starts full."""
+    def _count_call(self, key: str, per_minute: int) -> int | None:
+        """Count one call against the bucket under this key, which starts full."""
         pace = per_minute / 60
         capacity = float(burst_of(per_minute))
         now = self._clock()
