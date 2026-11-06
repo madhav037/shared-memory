@@ -25,6 +25,12 @@ server {
 
     # No security headers here: the stack's Caddy sends them (HSTS, CSP, nosniff, Referrer-Policy) and nginx passes
     # them on. Adding the same headers here would send them twice.
+    # The uptime check is never limited, as the server never limits it.
+    location = /health {
+        proxy_pass http://127.0.0.1:8180;
+        proxy_set_header Host $host;
+    }
+
     location / {
         limit_req zone=shared_memory burst=60 nodelay;
         limit_req_status 429;

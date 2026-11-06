@@ -68,6 +68,12 @@
 		reverse_proxy server:8000
 	}
 
+	# The uptime check: the server answers JSON when it can reach Postgres. Proxied before the single-page fallback, or
+	# it would answer 200 with the console's page while the server is dead. Never limited, as the server never limits it.
+	handle /health {
+		reverse_proxy server:8000
+	}
+
 	handle /mcp* {
 		import agent_limits
 		reverse_proxy server:8000

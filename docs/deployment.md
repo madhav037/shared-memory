@@ -297,7 +297,7 @@ Every error passes through one scrubber (`src/shared_memory/monitoring.py`) befo
 
 ### An outside uptime check
 
-Point an outside check at the server's address so you hear of an outage before a member does. [Grafana Cloud](https://grafana.com/products/cloud/)'s free Synthetic Monitoring can check `https://<your domain>/health` every minute. Alert when two checks in a row fail, with email as one contact point and the Grafana mobile app as another, so the alert reaches your phone.
+Point an outside check at the server's address so you hear of an outage before a member does. [Grafana Cloud](https://grafana.com/products/cloud/)'s free Synthetic Monitoring can check `https://<your domain>/health` every minute. The server answers `200` with `{"status": "ok"}` while it can reach its database, and `503` with `{"status": "unavailable"}` when it can't; it needs no personal token and is never rate limited. Make the check expect that JSON body, not only a 200, so a check that gets the console's page (HTML) fails. Alert when two checks in a row fail, with email as one contact point and the Grafana mobile app as another, so the alert reaches your phone.
 
 ## Restore
 
