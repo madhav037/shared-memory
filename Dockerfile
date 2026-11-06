@@ -42,7 +42,7 @@ FROM base AS release
 
 # The project installs editable and without compiling: compiling would rewrite every dependency's bytecode, and the
 # release layer would carry all of it again.
-COPY pyproject.toml ./
+COPY pyproject.toml LICENSE ./
 COPY src ./src
 RUN UV_COMPILE_BYTECODE=0 uv sync --frozen --no-dev
 
