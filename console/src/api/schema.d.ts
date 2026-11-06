@@ -1599,6 +1599,8 @@ export interface components {
             waiting: boolean;
             /** Possibly Outdated */
             possibly_outdated: boolean;
+            /** Suspected Instructions */
+            suspected_instructions: string[];
         };
         /**
          * FolderEntry
@@ -1737,6 +1739,8 @@ export interface components {
             possibly_outdated: boolean;
             /** Last Used */
             last_used: string | null;
+            /** Suspected Instructions */
+            suspected_instructions: string[];
             /** Pending */
             pending: components["schemas"]["PendingChallenge"][];
             /** Open Challenges */

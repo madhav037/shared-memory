@@ -71,6 +71,7 @@ from shared_memory.locks import Locks
 from shared_memory.memory import locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
+from shared_memory.suspected import reasons_in
 from shared_memory.uses import Uses
 
 CONSOLE_HEADER = "x-shared-memory-console"
@@ -474,6 +475,7 @@ class ConsoleApi:
         memory["last_used"] = self._uses.last_used(caller.team, memory["path"])
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
+        memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:

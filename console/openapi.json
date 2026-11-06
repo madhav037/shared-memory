@@ -3569,6 +3569,13 @@
           "possibly_outdated": {
             "title": "Possibly Outdated",
             "type": "boolean"
+          },
+          "suspected_instructions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suspected Instructions",
+            "type": "array"
           }
         },
         "required": [
@@ -3584,7 +3591,8 @@
           "pinned",
           "challenged",
           "waiting",
-          "possibly_outdated"
+          "possibly_outdated",
+          "suspected_instructions"
         ],
         "title": "FileEntry",
         "type": "object"
@@ -3991,6 +3999,13 @@
             ],
             "title": "Last Used"
           },
+          "suspected_instructions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suspected Instructions",
+            "type": "array"
+          },
           "pending": {
             "items": {
               "$ref": "#/components/schemas/PendingChallenge"
@@ -4028,6 +4043,7 @@
           "pinned",
           "possibly_outdated",
           "last_used",
+          "suspected_instructions",
           "pending",
           "open_challenges"
         ],
