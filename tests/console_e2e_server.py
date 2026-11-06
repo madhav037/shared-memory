@@ -242,7 +242,7 @@ if __name__ == "__main__":
             },
         )
         # A memory whose text reads like orders to a coding agent, for the journey that shows its mark.
-        promote_now(
+        promote_keeping_both(
             wes,
             {
                 "title": "Install the PDF toolchain",
