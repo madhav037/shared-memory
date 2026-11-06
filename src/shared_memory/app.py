@@ -5,7 +5,7 @@ import dataclasses
 import functools
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import timedelta
 from typing import Any, TypeVar
 
@@ -54,6 +54,8 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
+from shared_memory.license import PUBLIC_KEYS
+from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import RateLimited, RateLimits
 from shared_memory.recall import Recall
 from shared_memory.saves import Saves
@@ -209,7 +211,11 @@ async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
 
 
 def build_app(
-    settings: Settings, clock: Clock = system_clock, embedder: Embedder | None = None, setup: bool = True
+    settings: Settings,
+    clock: Clock = system_clock,
+    embedder: Embedder | None = None,
+    setup: bool = True,
+    license_keys: Mapping[int, bytes] = PUBLIC_KEYS,
 ) -> Starlette:
     """The server's ASGI app. With `setup` it first makes what the server keeps (the schema, the memory folder and its
     repository); a worker started by `serve` passes False, because `serve` set up once before starting any worker."""
@@ -222,6 +228,8 @@ def build_app(
     )
     identity = Identity(db, clock, member_cap=lambda: settings.member_cap)
     audit = Audit(db, clock, identity)
+    licenses = Licenses(settings, db, audit, clock, license_keys)
+    identity.member_cap = licenses.member_cap
     # The model loads here, before the server takes its first request.
     counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
     model = embedder or FastEmbedEmbedder(settings.model_cache)
@@ -1181,6 +1189,7 @@ def build_app(
             locks,
             uses,
             rate_limits,
+            licenses,
             TeamExport(settings, identity, board, audit),
         ).routes()
     )
@@ -1191,6 +1200,7 @@ def build_app(
     app.add_middleware(NeverCached)
     app.state.rate_limits = rate_limits
     app.state.identity = identity
+    app.state.licenses = licenses
     app.state.database = db
     app.state.sessions = sessions
     app.state.locks = locks

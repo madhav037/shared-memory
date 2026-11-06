@@ -84,6 +84,31 @@ class RateLimitChange(BaseModel):
     address_per_minute: int = Field(ge=MIN_PER_MINUTE, le=MAX_PER_MINUTE)
 
 
+class LicenseState(BaseModel):
+    """The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
+    can't be trusted), and what a trusted key says. Nothing here ever includes the key itself."""
+
+    status: Literal["licensed", "expiring", "lapsed", "unlicensed", "invalid"]
+    team: str | None
+    member_cap: int | None
+    issued: str | None
+    expires: str | None
+    key_id: str | None
+    days_left: int | None
+    # Why there is no trusted key, in words an admin can act on.
+    reason: str | None
+    # Where the key came from: installed in the console, or set in the server's environment.
+    source: Literal["console", "environment"] | None
+    # Whether the signed-in member may install a key: the team's owner and its admins.
+    you_may_change: bool
+
+
+class LicenseKeyText(BaseModel):
+    """A license key being installed."""
+
+    key: str = Field(max_length=4000)
+
+
 class ProjectMember(BaseModel):
     """A member named on a project."""
 
@@ -1075,6 +1100,22 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=RateLimits,
         changes=True,
         accepts=RateLimitChange,
+    ),
+    Declaration(
+        path="/license",
+        method="GET",
+        operation_id="license_state",
+        summary="The server's license key: its status, team, member cap and expiry.",
+        answers=LicenseState,
+    ),
+    Declaration(
+        path="/license",
+        method="POST",
+        operation_id="install_license",
+        summary="Install a license key on the server. Admins only.",
+        answers=LicenseState,
+        changes=True,
+        accepts=LicenseKeyText,
     ),
     Declaration(
         path="/members",

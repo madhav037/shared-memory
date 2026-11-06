@@ -704,6 +704,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The server's license key: its status, team, member cap and expiry. */
+        get: operations["license_state"];
+        put?: never;
+        /** Install a license key on the server. Admins only. */
+        post: operations["install_license"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/members": {
         parameters: {
             query?: never;
@@ -1518,7 +1536,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "token_limited" | "team_exported";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -2045,6 +2063,44 @@ export interface components {
             console_per_minute: number;
             /** Address Per Minute */
             address_per_minute: number;
+        };
+        /**
+         * LicenseState
+         * @description The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
+         *     can't be trusted), and what a trusted key says. Nothing here ever includes the key itself.
+         */
+        LicenseState: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "licensed" | "expiring" | "lapsed" | "unlicensed" | "invalid";
+            /** Team */
+            team: string | null;
+            /** Member Cap */
+            member_cap: number | null;
+            /** Issued */
+            issued: string | null;
+            /** Expires */
+            expires: string | null;
+            /** Key Id */
+            key_id: string | null;
+            /** Days Left */
+            days_left: number | null;
+            /** Reason */
+            reason: string | null;
+            /** Source */
+            source: ("console" | "environment") | null;
+            /** You May Change */
+            you_may_change: boolean;
+        };
+        /**
+         * LicenseKeyText
+         * @description A license key being installed.
+         */
+        LicenseKeyText: {
+            /** Key */
+            key: string;
         };
         /**
          * MemberSummary
@@ -3168,6 +3224,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RateLimits"];
+                };
+            };
+        };
+    };
+    license_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The server's license key: its status, team, member cap and expiry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicenseState"];
+                };
+            };
+        };
+    };
+    install_license: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LicenseKeyText"];
+            };
+        };
+        responses: {
+            /** @description Install a license key on the server. Admins only. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicenseState"];
                 };
             };
         };

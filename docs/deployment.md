@@ -229,6 +229,41 @@ means no cap. Adding a member past it, from a coding agent or from the console, 
 cap. Removed members hold no place, so removing one frees it. Memory, MCP tools and hooks are never affected. The
 Team page shows how many places are used.
 
+## License keys
+
+A self-hosted team runs under a license key: a small document signed with Ed25519 that names the team, its member
+cap, when it was issued and when it expires. Set it as `SHARED_MEMORY_LICENSE_KEY` in `.env`, or paste it into the
+console's Team page (owner and admins; the install is in the audit log, and a key installed there replaces the one in
+`.env`). A valid key sets the member cap, so `SHARED_MEMORY_MEMBER_CAP` is then ignored.
+
+The server checks the key against a public key built into it and makes no network call to do so. With no key, an
+invalid one or a lapsed one, admins see a banner on the console, from 30 days before expiry it says the key is
+expiring, and a lapsed key still keeps its cap. Memory, MCP tools and hooks are never affected, and an unlicensed
+server works fully for evaluation.
+
+### Generating the production key pair (the developer, once)
+
+The public key in `src/shared_memory/license.py` (`PUBLIC_KEYS`) is a placeholder whose private half nobody holds. Make
+the real pair on an offline machine, keep the private file outside this repository, and never commit it:
+
+```
+uv run python scripts/sign-license.py --generate --private-key-file ~/secrets/shared-memory-license.key
+```
+
+It prints the public key; replace the placeholder with it. To rotate the signing key later, add the new public key as
+version 2 beside version 1 and sign new keys with `--key-version 2`; keys signed by version 1 keep working until they
+expire.
+
+### Signing a key when someone pays
+
+```
+uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory-license.key \
+    --team "Acme" --member-cap 10 --expires 2027-11-06
+```
+
+It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
+the old one.
+
 ## How alike two activities must be for a collision warning
 
 A session is warned on its next prompt when another active session in its project has an activity that means nearly

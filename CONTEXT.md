@@ -202,6 +202,10 @@ _Avoid_: Throttle, quota
 How many members one server may have at once, set by `SHARED_MEMORY_MEMBER_CAP` or by a license key; unset means no cap. Members who have been removed hold no place. Adding a member past the cap is refused with a plain answer; memory, MCP tools and hooks are never affected.
 _Avoid_: Seat limit, user limit
 
+**License key**:
+A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. Memory, MCP tools and hooks never depend on it.
+_Avoid_: Serial, activation code
+
 ### The console
 
 **Console**:

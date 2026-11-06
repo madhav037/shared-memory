@@ -13,10 +13,12 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, usePa
 
 import {
   fetchChallenges,
+  fetchLicense,
   fetchStatus,
   onRateLimited,
   signInUrl,
   signOut,
+  type LicenseState,
   type SignedInMember,
   type Status,
 } from "./api/client";
@@ -37,7 +39,7 @@ import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
-import { Team } from "./pages/Team";
+import { licenseSentence, Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -180,6 +182,7 @@ function SignedIn({
   const [limited, setLimited] = useState<string | null>(null);
   const location = useLocation();
   const readsAudit = member.role === "owner" || member.role === "admin" || member.leads_a_project;
+  const manages = member.role === "owner" || member.role === "admin";
 
   // The page's own title describes Shared Memory to search engines; a signed-in member's tab just names it.
   useEffect(() => {
@@ -278,6 +281,7 @@ function SignedIn({
         </aside>
         <main className="page" id="page" tabIndex={-1}>
           {refused && <Refusal testid="sign-in-error">{refused}</Refusal>}
+          {manages && <LicenseBanner />}
           <Routes>
             <Route path="/" element={<Front member={member} />} />
             <Route path="/files" element={<FolderPage member={member} />} />
@@ -307,6 +311,24 @@ function SignedIn({
         <LegalLinks />
       </footer>
     </>
+  );
+}
+
+/** Tells admins when the server has no usable license key, or its key is about to expire or has. Never blocks. */
+function LicenseBanner() {
+  const [license, setLicense] = useState<LicenseState | null>(null);
+  useEffect(() => {
+    const attempt = new AbortController();
+    fetchLicense(attempt.signal)
+      .then(setLicense)
+      .catch(() => undefined);
+    return () => attempt.abort();
+  }, []);
+  if (!license || license.status === "licensed") return null;
+  return (
+    <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
+      {licenseSentence(license)} <Link to="/team">Team</Link>
+    </p>
   );
 }
 
