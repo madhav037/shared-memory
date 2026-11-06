@@ -259,6 +259,7 @@ jobs:
         with:
           context: .
           outputs: type=docker,compression=gzip,force-compression=true,dest=${{ runner.temp }}/one-gzip.tar
+          tags: shared-memory-server:one
           cache-from: type=gha,scope=server-base-${{ env.BASE }}
 
       - name: Change only the server's code
