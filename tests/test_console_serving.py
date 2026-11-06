@@ -48,3 +48,40 @@ def test_robots_txt_is_a_real_file_that_keeps_crawlers_off_the_servers_own_addre
     assert robots.startswith("User-agent: *\n")
     for address in ("/api/", "/mcp", "/hooks/"):
         assert f"Disallow: {address}\n" in robots
+
+
+def header_value(name: str) -> str:
+    """The value the Caddyfile gives a response header at the site level, for every answer it sends."""
+    found = re.search(rf'^\t\t{re.escape(name)} "?(.*?)"?$', CADDYFILE, re.MULTILINE)
+    assert found, f"the Caddyfile does not send {name}"
+    return found.group(1)
+
+
+def test_every_answer_tells_browsers_to_stay_on_https_and_not_to_guess_or_leak() -> None:
+    assert re.search(r"^\theader \{$", CADDYFILE, re.MULTILINE), "security headers go in one site-level header block"
+    assert header_value("Strict-Transport-Security").startswith("max-age=")
+    assert header_value("X-Content-Type-Options") == "nosniff"
+    assert header_value("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+def test_the_console_cannot_be_framed_and_loads_only_from_its_own_origin() -> None:
+    policy = {
+        directive.split()[0]: directive.split()[1:]
+        for directive in header_value("Content-Security-Policy").split(";")
+        if directive.strip()
+    }
+
+    assert policy["frame-ancestors"] == ["'none'"], "a framed console invites clickjacking on pin, retire and decide"
+    assert policy["default-src"] == ["'self'"]
+    assert policy["script-src"] == ["'self'"], "the console's bundle is a same-origin module; nothing runs inline"
+    assert "'unsafe-inline'" in policy["style-src"], "Mantine injects style tags and style attributes"
+    assert policy["font-src"] == ["'self'", "data:"]
+    assert policy["connect-src"] == ["'self'"]
+    assert policy["object-src"] == ["'none'"]
+
+
+def test_the_console_page_runs_no_inline_script_the_policy_would_block() -> None:
+    page = (REPO_ROOT / "console" / "index.html").read_text(encoding="utf-8")
+
+    for tag in re.findall(r"<script\b[^>]*>", page):
+        assert "src=" in tag or "application/ld+json" in tag, f"an inline script the policy blocks: {tag}"

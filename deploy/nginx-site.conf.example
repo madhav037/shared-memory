@@ -14,6 +14,8 @@ server {
     # The stack refuses a body over a megabyte itself; this keeps nginx from refusing smaller ones first.
     client_max_body_size 2m;
 
+    # No security headers here: the stack's Caddy sends them (HSTS, CSP, nosniff, Referrer-Policy) and nginx passes
+    # them on. Adding the same headers here would send them twice.
     location / {
         proxy_pass http://127.0.0.1:8180;
         proxy_http_version 1.1;
