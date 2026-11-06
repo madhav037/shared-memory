@@ -51,7 +51,7 @@ def test_an_admin_downloads_the_memory_with_its_history_and_the_teams_records(
     ]
     projects = json.loads(archive.read("projects.json"))
     assert [(one["project_id"], one["name"], one["repositories"]) for one in projects] == [
-        (project, "Billing", ["billing-api"])
+        (project, "Billing", ["app", "billing-api"])
     ]
     cards = json.loads(archive.read("cards.json"))
     assert [card["title"] for card in cards[project]["columns"]["to_do"]] == ["Retry failed webhooks"]
