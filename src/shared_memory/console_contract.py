@@ -708,6 +708,8 @@ class Declaration:
     changes: bool = False
     query: tuple[str, ...] = ()
     accepts: type[BaseModel] | None = None
+    # The media type of a file the call streams instead of JSON; such a call answers `None`.
+    download: str | None = None
 
 
 DECLARATIONS: tuple[Declaration, ...] = (
@@ -950,6 +952,14 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
     Declaration(
+        path="/export",
+        method="GET",
+        operation_id="export",
+        summary="All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        answers=None,
+        download="application/zip",
+    ),
+    Declaration(
         path="/projects/{project_id}/pins",
         method="GET",
         operation_id="pins",
@@ -1146,7 +1156,14 @@ def description() -> dict[str, Any]:
     schemas: dict[str, Any] = {}
     for declaration in DECLARATIONS:
         responses: dict[str, Any]
-        if declaration.answers is None:
+        if declaration.download is not None:
+            responses = {
+                "200": {
+                    "description": declaration.summary,
+                    "content": {declaration.download: {"schema": {"type": "string", "format": "binary"}}},
+                }
+            }
+        elif declaration.answers is None:
             responses = {"302": {"description": declaration.summary}}
         else:
             schema = declaration.answers.model_json_schema(ref_template="#/components/schemas/{model}")

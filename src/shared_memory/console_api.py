@@ -40,6 +40,7 @@ from shared_memory.audit import (
     PROJECT_RESTRICTED,
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
+    TEAM_EXPORTED,
     TOKEN_ISSUED,
     Audit,
 )
@@ -63,6 +64,7 @@ from shared_memory.console_contract import (
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
 )
 from shared_memory.errors import Refused
+from shared_memory.export import TeamExport
 from shared_memory.identity import Caller, Identity, Member
 from shared_memory.ratelimit import Limits
 from shared_memory.ratelimit import RateLimits as RateLimiter
@@ -181,7 +183,9 @@ class ConsoleApi:
         locks: Locks,
         uses: Uses,
         rate_limits: RateLimiter,
+        export: TeamExport,
     ) -> None:
+        self._export_of = export
         self._settings = settings
         self._rate_limits_of = rate_limits
         self._uses = uses
@@ -204,6 +208,7 @@ class ConsoleApi:
             "sign_in": self._sign_in,
             "sign_in_callback": self._sign_in_callback,
             "audit": self._audit_log,
+            "export": self._export,
             "projects": self._projects,
             "create_project": self._create_project,
             "project": self._project,
@@ -1048,6 +1053,20 @@ class ConsoleApi:
             next=page.next,
         )
         return JSONResponse(answer.model_dump(mode="json"))
+
+    def _export(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            package = self._export_of.build(member)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        self._audit.record(TEAM_EXPORTED, member=member, detail={"bytes": len(package)})
+        name = f"{member.team_code}-shared-memory-export.zip"
+        return Response(
+            package, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'}
+        )
 
     def _sign_out(self, request: Request) -> Response:
         self._sessions.end(request.cookies.get(COOKIE))

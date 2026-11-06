@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { signInAs } from "./helpers";
@@ -31,4 +33,20 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   await page.getByTestId("remove-emp-7").click();
   await page.getByTestId("remove-confirm-emp-7").click();
   await expect(members.getByRole("row", { name: /^Dana Dev/ })).toContainText("removed");
+});
+
+test("an admin downloads all of the team's data as one zip, and the audit log records it", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("to-team").click();
+
+  const downloading = page.waitForEvent("download");
+  await page.getByTestId("download-export").click();
+  const file = await downloading;
+
+  expect(file.suggestedFilename()).toMatch(/shared-memory-export\.zip$/);
+  const saved = await file.path();
+  expect(readFileSync(saved).subarray(0, 2).toString()).toBe("PK");
+
+  await page.getByTestId("to-audit").click();
+  await expect(page.getByText("Team data downloaded").first()).toBeVisible();
 });

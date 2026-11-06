@@ -143,6 +143,21 @@ export function Team({ me }: { me: SignedInMember }) {
       </div>
 
       <RateLimitSection onRefused={setRefused} />
+
+      {runs && (
+        <section aria-labelledby="export-heading" data-testid="export">
+          <h2 className="section-heading" id="export-heading">
+            Take your data with you
+          </h2>
+          <p className="standfirst">
+            One zip with the memory and its full history, the members, the projects and their cards, and the audit log.
+            Downloading it is recorded in the audit log.
+          </p>
+          <Button component="a" href="/api/export" download data-testid="download-export">
+            Download all team data
+          </Button>
+        </section>
+      )}
     </div>
   );
 }
