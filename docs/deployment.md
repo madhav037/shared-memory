@@ -285,6 +285,20 @@ The database is dumped before the memory history is pushed, so the backup never 
 - `docker compose logs backup` shows each backup starting and finishing, or `Backup FAILED` with the reason.
 - `docker compose ps` shows the backup container as `unhealthy` when no backup has succeeded for more than 26 hours.
 
+## Watching the server
+
+A server nobody watches is found broken by a member. Two things watch it from outside, and neither is on by default.
+
+### Server errors in Sentry
+
+Set `SHARED_MEMORY_SENTRY_DSN` in `.env` to a [Sentry](https://sentry.io) project's address, then `docker compose up -d`. Left empty, the server sends nothing to anyone.
+
+Every error passes through one scrubber (`src/shared_memory/monitoring.py`) before it leaves the server. It drops request bodies, query strings, headers (the `Authorization` header, cookies and the personal token header), local variables, the text of the exception, breadcrumbs that carry data, and every member identifier and GitHub login. What reaches Sentry is the kind of error, the stack of file names and line numbers, the route and the release. Performance tracing is off. In Sentry, add an alert rule for 5 or more issues in 5 minutes, and send it to email.
+
+### An outside uptime check
+
+Point an outside check at the server's address so you hear of an outage before a member does. [Grafana Cloud](https://grafana.com/products/cloud/)'s free Synthetic Monitoring can check `https://<your domain>/health` every minute. Alert when two checks in a row fail, with email as one contact point and the Grafana mobile app as another, so the alert reaches your phone.
+
 ## Restore
 
 Use this on a fresh host, or on the same host after its volumes are lost. The restore refuses to run over a memory folder or database that already holds memory.
