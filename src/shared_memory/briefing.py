@@ -330,7 +330,8 @@ class Briefing:
                 return None
             if memory.status != "active":
                 return None
-            return f"[{target.level} memory] {memory.title} ({target.path})\n{memory.body}"
+            warning = f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else ""
+            return f"[{target.level} memory] {escape(memory.title)} ({target.path}){warning}\n{fenced(memory.body, token)}"
         memories, _ = self._store.list_folder(team, PurePosixPath(target.path))
         lines = [
             f"- {escape(memory.title)}: {fenced(memory.summary, token, inline=True)}"

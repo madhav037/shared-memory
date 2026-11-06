@@ -169,11 +169,12 @@ class Recall:
                 kind += f", {label_for(reasons)}"
             # The strongest hit comes in full; the rest are entries of one line.
             if is_top:
-                entries.append(f"[{kind}] {title} ({hit.path})\n{each.text}")
+                entries.append(f"[{kind}] {title} ({hit.path})\n{fenced(each.text, token)}")
             else:
                 summary = fenced(" ".join(memory.summary.split()), token, inline=True)
                 entries.append(f"[{kind}] {title} ({hit.path}): {summary}")
         # Recalled is used: each memory added to the prompt starts its clock again.
         self._uses.used(caller.team, [each.hit.path for each in found])
-        framing = f"{FRAMING} {self._uses.check_any()}" if outdated else FRAMING
-        return "<shared-memory-recall>\n" + framing + "\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"
+        told = framing(token)
+        told = f"{told} {self._uses.check_any()}" if outdated else told
+        return "<shared-memory-recall>\n" + told +"\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"

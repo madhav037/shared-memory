@@ -64,8 +64,8 @@ def test_pinning_a_topic_briefs_only_its_index(owner: Session) -> None:
     briefing = added_context(owner.start())
 
     assert f"[project memory topic] api-errors ({topic})" in briefing
-    assert "- Retries: Retries." in briefing
-    assert "- Status codes: Status codes." in briefing
+    assert "- Retries: <memory-TOKEN>Retries.</memory-TOKEN>" in briefing
+    assert "- Status codes: <memory-TOKEN>Status codes.</memory-TOKEN>" in briefing
     assert "Retry twice with backoff." not in briefing
 
 
