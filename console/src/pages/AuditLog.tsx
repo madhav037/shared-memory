@@ -35,6 +35,7 @@ const WORDS: Record<Kind, string> = {
   card_returned: "Card returned to To do",
   rate_limits_changed: "Rate limits changed",
   token_limited: "Personal token limited",
+  team_exported: "Team data downloaded",
   never_lock_pattern_added: "Never-lock pattern added",
   never_lock_pattern_removed: "Never-lock pattern removed",
   signed_in: "Signed in",

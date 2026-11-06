@@ -68,6 +68,7 @@ Kind = Literal[
     "never_lock_pattern_removed",
     "rate_limits_changed",
     "token_limited",
+    "team_exported",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -120,6 +121,8 @@ NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
 RATE_LIMITS_CHANGED: Kind = "rate_limits_changed"
 # A personal token was limited, at most once an hour; the entry's target is its member.
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
+# An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.
+TEAM_EXPORTED: Kind = "team_exported"
 
 
 @dataclass(frozen=True)

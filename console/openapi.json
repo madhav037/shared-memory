@@ -1069,6 +1069,25 @@
         }
       }
     },
+    "/api/export": {
+      "get": {
+        "operationId": "export",
+        "summary": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        "responses": {
+          "200": {
+            "description": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/pins": {
       "get": {
         "operationId": "pins",
@@ -3330,7 +3349,8 @@
               "never_lock_pattern_added",
               "never_lock_pattern_removed",
               "rate_limits_changed",
-              "token_limited"
+              "token_limited",
+              "team_exported"
             ],
             "title": "Kind",
             "type": "string"
