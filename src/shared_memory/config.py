@@ -54,6 +54,8 @@ class Settings:
     # token or a wrong one, counted per address (30 a minute).
     rate_limit_console_per_minute: int = 300
     rate_limit_address_per_minute: int = 30
+    # Where server errors are reported, with private data removed (monitoring.py). Empty: nothing is ever sent.
+    sentry_dsn: str = ""
 
     @property
     def github_sign_in(self) -> bool:
@@ -96,4 +98,5 @@ class Settings:
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
             rate_limit_console_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE", "300")),
             rate_limit_address_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE", "30")),
+            sentry_dsn=env.get("SHARED_MEMORY_SENTRY_DSN", "").strip(),
         )

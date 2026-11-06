@@ -34,6 +34,7 @@ from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.fence import escape, fenced, new_token
+from shared_memory.monitoring import start_reporting
 from shared_memory.console_sessions import COOKIE as CONSOLE_COOKIE
 from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
@@ -1178,7 +1179,9 @@ def worker_app() -> Starlette:
     """The app a worker process serves (`uvicorn ... factory=True`). Its settings come from the environment, which
     every worker inherits from `serve`; setup is not repeated."""
     show_log()
-    return build_app(Settings.from_env(), setup=False)
+    settings = Settings.from_env()
+    start_reporting(settings)
+    return build_app(settings, setup=False)
 
 
 def show_log() -> None:
