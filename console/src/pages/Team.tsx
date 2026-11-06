@@ -173,6 +173,9 @@ export function Team({ me }: { me: SignedInMember }) {
   );
 }
 
+/** Sent on the window when a license key is installed, so the banner above every page can ask again. */
+export const LICENSE_CHANGED = "shared-memory:license-changed";
+
 /** The words for where a license stands, shared by the Team page and the banner. */
 export function licenseSentence(license: LicenseState): string {
   switch (license.status) {
@@ -201,6 +204,7 @@ function LicenseSection({ onRefused }: { onRefused: (message: string) => void })
     setInstalling(true);
     try {
       setAnswer(await installLicense(key.trim()));
+      window.dispatchEvent(new Event(LICENSE_CHANGED));
       setKey("");
       onRefused("");
     } catch (problem) {

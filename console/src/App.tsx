@@ -39,7 +39,7 @@ import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
-import { licenseSentence, Team } from "./pages/Team";
+import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -317,13 +317,20 @@ function SignedIn({
 /** Tells admins when the server has no usable license key, or its key is about to expire or has. Never blocks. */
 function LicenseBanner() {
   const [license, setLicense] = useState<LicenseState | null>(null);
+  const [installed, setInstalled] = useState(0);
+  // The Team page says when it installs a key, so the banner follows without a reload.
+  useEffect(() => {
+    const again = () => setInstalled((count) => count + 1);
+    window.addEventListener(LICENSE_CHANGED, again);
+    return () => window.removeEventListener(LICENSE_CHANGED, again);
+  }, []);
   useEffect(() => {
     const attempt = new AbortController();
     fetchLicense(attempt.signal)
       .then(setLicense)
       .catch(() => undefined);
     return () => attempt.abort();
-  }, []);
+  }, [installed]);
   if (!license || license.status === "licensed") return null;
   return (
     <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
