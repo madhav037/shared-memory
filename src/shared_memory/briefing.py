@@ -18,6 +18,7 @@ from shared_memory.memory import FOLDER_TYPES, Memory, locate
 from shared_memory.fence import escape, fenced, new_token
 from shared_memory.recall import framing
 from shared_memory.store import MemoryStore
+from shared_memory.suspected import label_for, reasons_for
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pins (
@@ -333,6 +334,7 @@ class Briefing:
         memories, _ = self._store.list_folder(team, PurePosixPath(target.path))
         lines = [
             f"- {escape(memory.title)}: {fenced(memory.summary, token, inline=True)}"
+            + (f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else "")
             for _, memory in memories
             if memory.status == "active"
         ]
