@@ -34,6 +34,7 @@ const WORDS: Record<Kind, string> = {
   card_deleted: "Card deleted",
   card_returned: "Card returned to To do",
   rate_limits_changed: "Rate limits changed",
+  license_installed: "License key installed",
   token_limited: "Personal token limited",
   team_exported: "Team data downloaded",
   never_lock_pattern_added: "Never-lock pattern added",
@@ -121,6 +122,17 @@ function Details({
   detail: Record<string, unknown>;
   nameOf: (memberId: string) => string;
 }) {
+  if (kind === "license_installed") {
+    return (
+      <DetailLine
+        said={[
+          String(detail.team),
+          `${String(detail.member_cap)} members`,
+          `expires ${String(detail.expires)}`,
+        ]}
+      />
+    );
+  }
   if (kind === "rate_limits_changed") {
     const now = detail.now as { on: boolean; token_per_minute: number; console_per_minute: number; address_per_minute: number };
     return (

@@ -6,13 +6,16 @@ import {
   addMember,
   changeMember,
   changeRateLimits,
+  fetchLicense,
   fetchMembers,
   fetchRateLimits,
   handOverOwnership,
+  installLicense,
   reissueToken,
   removeMember,
   setAdmin,
   type IssuedToken,
+  type LicenseState,
   type MemberSummary,
   type Members,
   type RateLimits,
@@ -148,6 +151,8 @@ export function Team({ me }: { me: SignedInMember }) {
         </table>
       </div>
 
+      <LicenseSection onRefused={setRefused} onInstalled={() => fetchMembers().then(setAnswer).catch(() => undefined)} />
+
       <RateLimitSection onRefused={setRefused} />
 
       {runs && (
@@ -165,6 +170,90 @@ export function Team({ me }: { me: SignedInMember }) {
         </section>
       )}
     </div>
+  );
+}
+
+/** Sent on the window when a license key is installed, so the banner above every page can ask again. */
+export const LICENSE_CHANGED = "shared-memory:license-changed";
+
+/** The words for where a license stands, shared by the Team page and the banner. */
+export function licenseSentence(license: LicenseState): string {
+  switch (license.status) {
+    case "licensed":
+      return `Licensed to ${license.team} until ${license.expires}.`;
+    case "expiring":
+      return `The license for ${license.team} expires on ${license.expires}, in ${license.days_left} days. Install a renewed key to keep the member cap.`;
+    case "lapsed":
+      return `The license for ${license.team} lapsed on ${license.expires}. Memory keeps working; install a renewed key to add members beyond the cap.`;
+    case "invalid":
+      return `The license key can’t be used: ${license.reason}`;
+    default:
+      return "This server has no license key. It works fully for evaluation; install a key to license it for your team.";
+  }
+}
+
+/** The server's license key: shown to every member, installed by admins. */
+function LicenseSection({
+  onRefused,
+  onInstalled,
+}: {
+  onRefused: (message: string) => void;
+  onInstalled: () => void;
+}) {
+  const { answer, setAnswer } = useAsked((signal) => fetchLicense(signal), []);
+  const [key, setKey] = useState("");
+  const [installing, setInstalling] = useState(false);
+
+  if (!answer) return null;
+
+  const install = async () => {
+    setInstalling(true);
+    try {
+      setAnswer(await installLicense(key.trim()));
+      window.dispatchEvent(new Event(LICENSE_CHANGED));
+      onInstalled();
+      setKey("");
+      onRefused("");
+    } catch (problem) {
+      onRefused((problem as Error).message);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="license-heading" data-testid="license">
+      <h2 className="section-heading" id="license-heading">
+        License key
+      </h2>
+      <p className="standfirst" data-testid="license-status">
+        {licenseSentence(answer)}
+      </p>
+      {answer.team && (
+        <dl style={{ margin: "14px 0" }}>
+          <dt>Team</dt>
+          <dd data-testid="license-team">{answer.team}</dd>
+          <dt>Member cap</dt>
+          <dd data-testid="license-cap">{answer.member_cap}</dd>
+          <dt>Expires</dt>
+          <dd data-testid="license-expires">{answer.expires}</dd>
+        </dl>
+      )}
+      {answer.you_may_change && (
+        <div>
+          <TextInput
+            label="Install a license key"
+            description="Paste the key you were sent. Or set SHARED_MEMORY_LICENSE_KEY in .env."
+            value={key}
+            onChange={(event) => setKey(event.currentTarget.value)}
+            data-testid="license-key"
+          />
+          <Button mt="sm" onClick={install} loading={installing} disabled={!key.trim()} data-testid="install-license">
+            Install key
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 

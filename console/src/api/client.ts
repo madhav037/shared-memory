@@ -38,6 +38,7 @@ export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
 export type RateLimits = components["schemas"]["RateLimits"];
+export type LicenseState = components["schemas"]["LicenseState"];
 export type RateLimitChange = components["schemas"]["RateLimitChange"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
@@ -208,6 +209,16 @@ export function fetchRateLimits(signal?: AbortSignal): Promise<RateLimits> {
 /** Change the rate limit, or switch it off. Admins only. */
 export function changeRateLimits(asked: RateLimitChange): Promise<RateLimits> {
   return change<RateLimits>("/api/rate-limits", asked);
+}
+
+/** The server's license key: its status, team, member cap and expiry. */
+export function fetchLicense(signal?: AbortSignal): Promise<LicenseState> {
+  return ask<LicenseState>("/api/license", { signal });
+}
+
+/** Install a license key. Admins only. */
+export function installLicense(key: string): Promise<LicenseState> {
+  return change<LicenseState>("/api/license", { key });
 }
 
 /** Everyone in the team, with their role and GitHub account. */

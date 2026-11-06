@@ -210,6 +210,12 @@ CREATE TABLE IF NOT EXISTS rate_limit_settings (
     console_per_minute INTEGER NOT NULL,
     address_per_minute INTEGER NOT NULL
 );
+
+-- The license key an admin installed in the console, server-wide (licensing.py). No row means the environment's stands.
+CREATE TABLE IF NOT EXISTS license_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    key TEXT NOT NULL
+);
 """
 
 

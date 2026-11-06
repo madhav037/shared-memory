@@ -67,6 +67,7 @@ Kind = Literal[
     "never_lock_pattern_added",
     "never_lock_pattern_removed",
     "rate_limits_changed",
+    "license_installed",
     "token_limited",
     "team_exported",
 ]
@@ -119,6 +120,8 @@ NEVER_LOCK_PATTERN_ADDED: Kind = "never_lock_pattern_added"
 NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
 # An admin changed the server's rate limit; the entry's detail holds the limits now and the limits before.
 RATE_LIMITS_CHANGED: Kind = "rate_limits_changed"
+# An admin installed a license key; the entry's detail holds the team, member cap, expiry and key ID (never the key).
+LICENSE_INSTALLED: Kind = "license_installed"
 # A personal token was limited, at most once an hour; the entry's target is its member.
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
 # An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.

@@ -55,6 +55,7 @@ from shared_memory.console_contract import (
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    LicenseKeyText, LicenseState,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
@@ -66,6 +67,7 @@ from shared_memory.console_contract import (
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
 from shared_memory.identity import Caller, Identity, Member
+from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import Limits
 from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
@@ -183,11 +185,13 @@ class ConsoleApi:
         locks: Locks,
         uses: Uses,
         rate_limits: RateLimiter,
+        licenses: Licenses,
         export: TeamExport,
     ) -> None:
         self._export_of = export
         self._settings = settings
         self._rate_limits_of = rate_limits
+        self._licenses = licenses
         self._uses = uses
         self._board = board
         self._activities = activities
@@ -248,6 +252,8 @@ class ConsoleApi:
             "decide_challenge": self._decide_challenge,
             "rate_limits": self._rate_limits,
             "change_rate_limits": self._change_rate_limits,
+            "license_state": self._license_state,
+            "install_license": self._install_license,
             "members": self._members,
             "add_member": self._add_member,
             "remove_member": self._remove_member,
@@ -956,6 +962,39 @@ class ConsoleApi:
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         return JSONResponse(self._rate_limits_answer(member).model_dump(mode="json"))
+
+    def _license_state(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return JSONResponse(self._license_answer(member).model_dump(mode="json"))
+
+    def _install_license(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        asked: LicenseKeyText = request.state.asked
+        try:
+            self._licenses.install(member, asked.key)
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return JSONResponse(self._license_answer(member).model_dump(mode="json"))
+
+    def _license_answer(self, member: Member) -> LicenseState:
+        current = self._licenses.current()
+        held = current.license
+        return LicenseState(
+            status=current.status,  # type: ignore[arg-type]
+            team=held.team if held else None,
+            member_cap=held.member_cap if held else None,
+            issued=held.issued.isoformat() if held else None,
+            expires=held.expires.isoformat() if held else None,
+            key_id=held.key_id if held else None,
+            days_left=current.days_left,
+            reason=current.reason,
+            source=current.source,  # type: ignore[arg-type]
+            you_may_change=member.is_owner or member.is_admin,
+        )
 
     def _rate_limits_answer(self, member: Member) -> RateLimits:
         limits = self._rate_limits_of.limits()

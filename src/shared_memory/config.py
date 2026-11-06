@@ -62,6 +62,8 @@ class Settings:
     rate_limit_address_per_minute: int = 30
     # The member cap (CONTEXT.md): how many members the server may have at once. None: no cap.
     member_cap: int | None = None
+    # A license key (license.py), which sets the member cap. Empty: none; an admin may install one in the console.
+    license_key: str = ""
     # Where server errors are reported, with private data removed (monitoring.py). Empty: nothing is ever sent.
     sentry_dsn: str = ""
 
@@ -107,5 +109,6 @@ class Settings:
             rate_limit_console_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE", "300")),
             rate_limit_address_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_ADDRESS_PER_MINUTE", "30")),
             member_cap=_optional_int(env.get("SHARED_MEMORY_MEMBER_CAP", "")),
+            license_key=env.get("SHARED_MEMORY_LICENSE_KEY", "").strip(),
             sentry_dsn=env.get("SHARED_MEMORY_SENTRY_DSN", "").strip(),
         )

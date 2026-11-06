@@ -1734,6 +1734,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
+    { name = "cryptography" },
     { name = "fastembed" },
     { name = "httpx" },
     { name = "mcp" },
@@ -1761,6 +1762,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.15.1" },
+    { name = "cryptography", specifier = ">=46" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", specifier = ">=2.2.0" },
