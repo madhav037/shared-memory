@@ -103,7 +103,7 @@ def test_recall_gives_the_top_hit_in_full_and_the_rest_as_pointers(owner: Sessio
     entries = [line for line in context.splitlines() if line.startswith("[project memory]")]
     assert len(entries) == 3
     assert context.count("Detail only in the body") == 1
-    pointer = re.compile(r": <memory-[0-9a-f]+>Failed card charges are retried")
+    pointer = re.compile(r": <memory-[A-Za-z0-9]+>Failed card charges are retried")
     pointers = [line for line in entries if "Detail only" not in line and pointer.search(line)]
     assert len(pointers) == 2
     assert all(line.startswith("[project memory] Retry rule ") and ".md)" in line for line in pointers)

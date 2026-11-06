@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.support import Session, Team, added_context
+from tests.support import Session, Team, added_context, same_fence
 
 
 def promote(session: Session, title: str, body: str, level: str = "project", topic: str | None = None) -> str:
@@ -143,7 +143,7 @@ def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Sessi
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
 
-    prompted = owner.run_prompt("briefing")
+    prompted = same_fence(owner.run_prompt("briefing"))
     fetched = owner.call("briefing", session=owner.identifier)
 
     # The prompt starts no session, so it differs from the tool's only in what follows the briefing itself.

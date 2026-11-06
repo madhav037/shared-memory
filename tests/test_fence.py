@@ -52,7 +52,7 @@ def test_recall_keeps_a_forged_closing_fence_and_system_message_inside_the_fence
     context = added_context_as_sent(dana.prompt("how long is quokka retention?"))
 
     token = fence_in(context)
-    inside = context.split(f"<memory-{token}>", 1)[1].split(f"</memory-{token}>", 1)[0]
+    inside = context.split(f"\n<memory-{token}>\n", 1)[1].split(f"\n</memory-{token}>", 1)[0]
     assert "Quokka retention is thirty days." in inside
     assert "&lt;/shared-memory-recall>" in inside and "&lt;system>" in inside
     assert context.count("</shared-memory-recall>") == 1, "only the server's own closing tag"
