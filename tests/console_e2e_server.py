@@ -48,6 +48,7 @@ if __name__ == "__main__":
             github_client_secret="client-secret",
             github_sign_in_url=github.url,
             github_api_url=github.url,
+            rate_limit_on=False,
             console_url=CONSOLE,
         )
         server = RunningServer(build_app(settings, clock=TestClock()), settings, TestClock(), portal, port=PORT)

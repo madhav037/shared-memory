@@ -34,7 +34,7 @@ def grown(tmp_path_factory: pytest.TempPathFactory, embedder: FastEmbedEmbedder)
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute(f"ALTER DATABASE {name} SET enable_seqscan = off")
         conn.execute(f"ALTER DATABASE {name} SET enable_sort = off")
-    settings = Settings(url, tmp_path_factory.mktemp("grown-memory"), REPO_ROOT / ".cache" / "fastembed")
+    settings = Settings(url, tmp_path_factory.mktemp("grown-memory"), REPO_ROOT / ".cache" / "fastembed", rate_limit_on=False)
     clock = TestClock()
     with start_blocking_portal() as portal:
         running = RunningServer(build_app(settings, clock=clock, embedder=embedder), settings, clock, portal)

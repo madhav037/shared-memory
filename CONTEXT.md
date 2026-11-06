@@ -190,6 +190,10 @@ _Avoid_: Injection, auto-search
 Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
 
+**Rate limit**:
+A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
+_Avoid_: Throttle, quota
+
 ### The console
 
 **Console**:

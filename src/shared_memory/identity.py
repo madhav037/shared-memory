@@ -198,6 +198,13 @@ class Identity:
                     )
             return Caller(member, project, repository or None, self._unreachable(conn, member))
 
+    def token_id(self, token: str) -> int | None:
+        """Which personal token this is, by the number the server keeps it under, or None when it is not one the
+        server issued. Revoked tokens and those of removed members are still known: a call is counted against them."""
+        with self._db.transaction() as conn:
+            found = conn.execute("SELECT id FROM tokens WHERE token_hash = %s", (_hash(token),)).fetchone()
+        return found["id"] if found else None
+
     def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
 
