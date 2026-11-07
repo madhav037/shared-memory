@@ -47,7 +47,7 @@ jobs:
     # Raised from 40 only for room: building and a code-only upload take minutes, and the link to the server has run
     # at 41 KB/s (2026-11-06). A release that changes a base sends that image whole, hundreds of MB, which no modest
     # limit covers at that speed; run that one by hand with a longer `minutes` rather than raise the limit for every run.
-    timeout-minutes: ${{ inputs.minutes || 60 }}
+    timeout-minutes: ${{ fromJSON(inputs.minutes || 60) }}
     environment: production
     env:
       ACTION: ${{ inputs.action || 'deploy' }}
