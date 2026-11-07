@@ -23,7 +23,6 @@ services:
     environment:
       SHARED_MEMORY_DATABASE_URL: postgresql://postgres:postgres@db:5432/shared_memory
       SHARED_MEMORY_ROOT: /data/memory
-      SHARED_MEMORY_MODEL_CACHE: /data/models
     ports:
       - "8000:8000"
     volumes:

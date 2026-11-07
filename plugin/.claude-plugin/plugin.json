@@ -2,6 +2,14 @@
   "name": "shared-memory",
   "version": "0.1.9",
   "description": "Connects Claude Code sessions to your team's Shared Memory server.",
+  "author": {
+    "name": "madhav037",
+    "url": "https://github.com/madhav037"
+  },
+  "homepage": "https://github.com/madhav037/shared-memory",
+  "repository": "https://github.com/madhav037/shared-memory",
+  "license": "FSL-1.1-ALv2",
+  "keywords": ["memory", "team", "mcp", "coding-agent"],
   "userConfig": {
     "server_url": {
       "type": "string",

@@ -131,7 +131,11 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 
 When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
 
-The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`.
+**What a deploy sends.** Only the layers the host lacks. The workflow first asks the script's `layers`, which prints the layers of the release images the host holds and changes nothing, and leaves those layers out of what it sends ([`deploy/upload.py`](../deploy/upload.py)); `docker load` on the host finds them already there. The server image is built in two parts for this ([`Dockerfile`](../Dockerfile)): a base with the system packages, the locked dependencies and the search model, named by a hash of exactly what goes into it, and the server's code on top. The images the three Dockerfiles start from are pinned by digest. So a release that changes only the server's code or the console sends a few megabytes, and the log says how many bytes went and how long they took.
+
+A release that changes a base (`uv.lock`, the dependencies in `pyproject.toml`, the Dockerfile above its release stage, or a pinned image) sends that image whole, some hundreds of megabytes. Over a slow link that takes longer than the deploy's hour: run that deploy from **Actions → Deploy → Run workflow** with a longer `minutes`. A host whose script predates `layers` is sent every layer, as before.
+
+The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`, and so can `layers`.
 
 ## Sizing
 
@@ -221,6 +225,48 @@ wait, and the console's JSON API a body with a `message` and `retry_after_second
 notification. A hook gets an empty answer: a limited prompt hook adds no memory, and a limited before-edit hook behaves as it
 does when the server is unreachable, so a coding agent is never blocked by it. `/health` is never limited. If the
 counter can't be read or written, the call is allowed and the failure is logged.
+
+## The member cap
+
+A server can limit how many members it has at once. Set `SHARED_MEMORY_MEMBER_CAP` in `.env` to a whole number; unset
+means no cap. Adding a member past it, from a coding agent or from the console, is refused with an answer naming the
+cap. Removed members hold no place, so removing one frees it. Memory, MCP tools and hooks are never affected. The
+Team page shows how many places are used.
+
+## License keys
+
+A self-hosted team runs under a license key: a small document signed with Ed25519 that names the team, its member
+cap, when it was issued and when it expires. Set it as `SHARED_MEMORY_LICENSE_KEY` in `.env`, or paste it into the
+console's Team page (owner and admins; the install is in the audit log, and a key installed there replaces the one in
+`.env`). A valid key sets the member cap, so `SHARED_MEMORY_MEMBER_CAP` is then ignored.
+
+The server checks the key against a public key built into it and makes no network call to do so. With no key, an
+invalid one or a lapsed one, admins see a banner on the console, from 30 days before expiry it says the key is
+expiring, and a lapsed key still keeps its cap. Memory, MCP tools and hooks are never affected, and an unlicensed
+server works fully for evaluation.
+
+### Generating the production key pair (the developer, once)
+
+The public key in `src/shared_memory/license.py` (`PUBLIC_KEYS`) is a placeholder whose private half nobody holds. Make
+the real pair on an offline machine, keep the private file outside this repository, and never commit it:
+
+```
+uv run python scripts/sign-license.py --generate --private-key-file ~/secrets/shared-memory-license.key
+```
+
+It prints the public key; replace the placeholder with it. To rotate the signing key later, add the new public key as
+version 2 beside version 1 and sign new keys with `--key-version 2`; keys signed by version 1 keep working until they
+expire.
+
+### Signing a key when someone pays
+
+```
+uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory-license.key \
+    --team "Acme" --member-cap 10 --expires 2027-11-06
+```
+
+It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
+the old one.
 
 ## How alike two activities must be for a collision warning
 

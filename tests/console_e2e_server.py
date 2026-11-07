@@ -12,6 +12,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
+from tests.license_keys import TEST_PUBLIC_KEYS
 from tests.support import (
     REPO_ROOT,
     FakeGitHub,
@@ -51,7 +52,9 @@ if __name__ == "__main__":
             rate_limit_on=False,
             console_url=CONSOLE,
         )
-        server = RunningServer(build_app(settings, clock=TestClock()), settings, TestClock(), portal, port=PORT)
+        server = RunningServer(
+            build_app(settings, clock=TestClock(), license_keys=TEST_PUBLIC_KEYS), settings, TestClock(), portal, port=PORT
+        )
         printed = server.run_cli(
             "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",

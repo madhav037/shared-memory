@@ -1,5 +1,6 @@
 # pg_dump must match the Postgres major version in compose.yaml.
-FROM postgres:17
+# Pinned, so its layers stay the ones the server has and a deploy needn't send them; Dependabot moves the pin.
+FROM postgres:17@sha256:748a18a54d3842d43bc156f0840d78029b8d349e0feca98c12b9c4ce3404a6b3
 
 # age encrypts the backup before it leaves the server. The release is pinned, and each download is checked against
 # the SHA-256 of the release archive (amd64 and arm64), so a changed archive fails the build.

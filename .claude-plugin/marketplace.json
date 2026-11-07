@@ -1,13 +1,17 @@
 {
   "name": "shared-memory",
+  "description": "A memory server every member's coding agent reads and writes, and the Claude Code plugin that connects to it.",
   "owner": {
-    "name": "madhav037"
+    "name": "madhav037",
+    "url": "https://github.com/madhav037"
   },
   "plugins": [
     {
       "name": "shared-memory",
       "source": "./plugin",
-      "description": "Connects Claude Code sessions to your team's Shared Memory server."
+      "description": "Connects Claude Code sessions to your team's Shared Memory server.",
+      "category": "productivity",
+      "tags": ["memory", "team", "mcp"]
     }
   ]
 }

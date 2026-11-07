@@ -5,9 +5,12 @@ description = "Shared memory for a team's Claude Code sessions"
 authors = [
     { name = "madhav037", email = "madhavlehru@gmail.com" }
 ]
+license = "FSL-1.1-ALv2"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "anyio>=4.15.1",
+    "cryptography>=46",
     "fastembed>=0.8.0",
     "httpx>=0.28.1",
     "mcp>=2.2.0",
@@ -45,7 +48,7 @@ warn_unused_ignores = true
 files = ["src", "tests", "smoke"]
 
 [[tool.mypy.overrides]]
-module = ["fastembed.*", "pgvector.*"]
+module = ["fastembed.*", "pgvector.*", "jsonschema.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -71,6 +74,7 @@ ignore = [
 [dependency-groups]
 dev = [
     "httpx2>=2.13.0",
+    "jsonschema>=4.26.0",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "ruff>=0.16.9",

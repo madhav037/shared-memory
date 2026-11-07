@@ -1069,6 +1069,25 @@
         }
       }
     },
+    "/api/export": {
+      "get": {
+        "operationId": "export",
+        "summary": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        "responses": {
+          "200": {
+            "description": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/pins": {
       "get": {
         "operationId": "pins",
@@ -1472,6 +1491,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RateLimits"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/license": {
+      "get": {
+        "operationId": "license_state",
+        "summary": "The server's license key: its status, team, member cap and expiry.",
+        "responses": {
+          "200": {
+            "description": "The server's license key: its status, team, member cap and expiry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "install_license",
+        "summary": "Install a license key on the server. Admins only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LicenseKeyText"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Install a license key on the server. Admins only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseState"
                 }
               }
             }
@@ -3330,7 +3393,9 @@
               "never_lock_pattern_added",
               "never_lock_pattern_removed",
               "rate_limits_changed",
-              "token_limited"
+              "license_installed",
+              "token_limited",
+              "team_exported"
             ],
             "title": "Kind",
             "type": "string"
@@ -4779,6 +4844,147 @@
         "title": "RateLimitChange",
         "type": "object"
       },
+      "LicenseState": {
+        "description": "The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that\ncan't be trusted), and what a trusted key says. Nothing here ever includes the key itself.",
+        "properties": {
+          "status": {
+            "enum": [
+              "licensed",
+              "expiring",
+              "lapsed",
+              "unlicensed",
+              "invalid"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team"
+          },
+          "member_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Cap"
+          },
+          "issued": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued"
+          },
+          "expires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires"
+          },
+          "key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Id"
+          },
+          "days_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Left"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "console",
+                  "environment"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "you_may_change": {
+            "title": "You May Change",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "team",
+          "member_cap",
+          "issued",
+          "expires",
+          "key_id",
+          "days_left",
+          "reason",
+          "source",
+          "you_may_change"
+        ],
+        "title": "LicenseState",
+        "type": "object"
+      },
+      "LicenseKeyText": {
+        "description": "A license key being installed.",
+        "properties": {
+          "key": {
+            "maxLength": 4000,
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "LicenseKeyText",
+        "type": "object"
+      },
       "MemberSummary": {
         "description": "One member of the team, as an admin sees them.",
         "properties": {
@@ -4833,10 +5039,27 @@
             },
             "title": "Members",
             "type": "array"
+          },
+          "member_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Cap"
+          },
+          "members_used": {
+            "title": "Members Used",
+            "type": "integer"
           }
         },
         "required": [
-          "members"
+          "members",
+          "member_cap",
+          "members_used"
         ],
         "title": "Members",
         "type": "object"

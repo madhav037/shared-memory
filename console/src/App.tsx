@@ -13,10 +13,12 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, usePa
 
 import {
   fetchChallenges,
+  fetchLicense,
   fetchStatus,
   onRateLimited,
   signInUrl,
   signOut,
+  type LicenseState,
   type SignedInMember,
   type Status,
 } from "./api/client";
@@ -32,11 +34,12 @@ import { FolderPage } from "./pages/FolderPage";
 import { ComingSoon, NotFound } from "./pages/Elsewhere";
 import { Front } from "./pages/Front";
 import { Landing } from "./pages/Landing";
+import { LegalLinks, Privacy, Terms } from "./pages/Legal";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
-import { Team } from "./pages/Team";
+import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -134,6 +137,8 @@ export function App() {
         <main id="page">
           <Routes>
             <Route path="/coming-soon" element={<ComingSoon />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             {CONSOLE_ADDRESSES.map((path) => (
               <Route key={path} path={path} element={<Landing status={status} refused={signInRefused} />} />
             ))}
@@ -177,6 +182,7 @@ function SignedIn({
   const [limited, setLimited] = useState<string | null>(null);
   const location = useLocation();
   const readsAudit = member.role === "owner" || member.role === "admin" || member.leads_a_project;
+  const manages = member.role === "owner" || member.role === "admin";
 
   // The page's own title describes Shared Memory to search engines; a signed-in member's tab just names it.
   useEffect(() => {
@@ -275,6 +281,7 @@ function SignedIn({
         </aside>
         <main className="page" id="page" tabIndex={-1}>
           {refused && <Refusal testid="sign-in-error">{refused}</Refusal>}
+          {manages && <LicenseBanner />}
           <Routes>
             <Route path="/" element={<Front member={member} />} />
             <Route path="/files" element={<FolderPage member={member} />} />
@@ -294,11 +301,41 @@ function SignedIn({
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
             <Route path="/coming-soon" element={<ComingSoon inConsole />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
             <Route path="*" element={<NotFound inConsole />} />
           </Routes>
         </main>
       </div>
+      <footer className="legal-foot">
+        <LegalLinks />
+      </footer>
     </>
+  );
+}
+
+/** Tells admins when the server has no usable license key, or its key is about to expire or has. Never blocks. */
+function LicenseBanner() {
+  const [license, setLicense] = useState<LicenseState | null>(null);
+  const [installed, setInstalled] = useState(0);
+  // The Team page says when it installs a key, so the banner follows without a reload.
+  useEffect(() => {
+    const again = () => setInstalled((count) => count + 1);
+    window.addEventListener(LICENSE_CHANGED, again);
+    return () => window.removeEventListener(LICENSE_CHANGED, again);
+  }, []);
+  useEffect(() => {
+    const attempt = new AbortController();
+    fetchLicense(attempt.signal)
+      .then(setLicense)
+      .catch(() => undefined);
+    return () => attempt.abort();
+  }, [installed]);
+  if (!license || license.status === "licensed") return null;
+  return (
+    <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
+      {licenseSentence(license)} <Link to="/team">Team</Link>
+    </p>
   );
 }
 

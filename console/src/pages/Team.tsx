@@ -6,14 +6,18 @@ import {
   addMember,
   changeMember,
   changeRateLimits,
+  fetchLicense,
   fetchMembers,
   fetchRateLimits,
   handOverOwnership,
+  installLicense,
   reissueToken,
   removeMember,
   setAdmin,
   type IssuedToken,
+  type LicenseState,
   type MemberSummary,
+  type Members,
   type RateLimits,
   type SignedInMember,
 } from "../api/client";
@@ -35,7 +39,7 @@ export function Team({ me }: { me: SignedInMember }) {
   const [editing, setEditing] = useState<Editing>(null);
   const runs = me.role === "owner" || me.role === "admin";
 
-  const attempt = async (what: () => Promise<{ members: MemberSummary[] }>) => {
+  const attempt = async (what: () => Promise<Members>) => {
     try {
       const after = await what();
       setAnswer(after);
@@ -103,13 +107,18 @@ export function Team({ me }: { me: SignedInMember }) {
         <AddMember
           onAdded={(token, everyone) => {
             setIssued(token);
-            setAnswer({ members: everyone });
+            setAnswer(everyone);
           }}
           onRefused={setRefused}
         />
       )}
 
       <h2 className="section-heading">Members</h2>
+      <p className="standfirst" data-testid="member-places">
+        {answer.member_cap === null
+          ? `${answer.members_used} members; this server has no member cap.`
+          : `${answer.members_used} of ${answer.member_cap} places used.`}
+      </p>
       <div className="scroll-x">
         <table className="register" data-testid="members">
           <thead>
@@ -142,8 +151,109 @@ export function Team({ me }: { me: SignedInMember }) {
         </table>
       </div>
 
+      <LicenseSection onRefused={setRefused} onInstalled={() => fetchMembers().then(setAnswer).catch(() => undefined)} />
+
       <RateLimitSection onRefused={setRefused} />
+
+      {runs && (
+        <section aria-labelledby="export-heading" data-testid="export">
+          <h2 className="section-heading" id="export-heading">
+            Take your data with you
+          </h2>
+          <p className="standfirst">
+            One zip with the memory and its full history, the members, the projects and their cards, and the audit log.
+            Downloading it is recorded in the audit log.
+          </p>
+          <Button component="a" href="/api/export" download data-testid="download-export">
+            Download all team data
+          </Button>
+        </section>
+      )}
     </div>
+  );
+}
+
+/** Sent on the window when a license key is installed, so the banner above every page can ask again. */
+export const LICENSE_CHANGED = "shared-memory:license-changed";
+
+/** The words for where a license stands, shared by the Team page and the banner. */
+export function licenseSentence(license: LicenseState): string {
+  switch (license.status) {
+    case "licensed":
+      return `Licensed to ${license.team} until ${license.expires}.`;
+    case "expiring":
+      return `The license for ${license.team} expires on ${license.expires}, in ${license.days_left} days. Install a renewed key to keep the member cap.`;
+    case "lapsed":
+      return `The license for ${license.team} lapsed on ${license.expires}. Memory keeps working; install a renewed key to add members beyond the cap.`;
+    case "invalid":
+      return `The license key can’t be used: ${license.reason}`;
+    default:
+      return "This server has no license key. It works fully for evaluation; install a key to license it for your team.";
+  }
+}
+
+/** The server's license key: shown to every member, installed by admins. */
+function LicenseSection({
+  onRefused,
+  onInstalled,
+}: {
+  onRefused: (message: string) => void;
+  onInstalled: () => void;
+}) {
+  const { answer, setAnswer } = useAsked((signal) => fetchLicense(signal), []);
+  const [key, setKey] = useState("");
+  const [installing, setInstalling] = useState(false);
+
+  if (!answer) return null;
+
+  const install = async () => {
+    setInstalling(true);
+    try {
+      setAnswer(await installLicense(key.trim()));
+      window.dispatchEvent(new Event(LICENSE_CHANGED));
+      onInstalled();
+      setKey("");
+      onRefused("");
+    } catch (problem) {
+      onRefused((problem as Error).message);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="license-heading" data-testid="license">
+      <h2 className="section-heading" id="license-heading">
+        License key
+      </h2>
+      <p className="standfirst" data-testid="license-status">
+        {licenseSentence(answer)}
+      </p>
+      {answer.team && (
+        <dl style={{ margin: "14px 0" }}>
+          <dt>Team</dt>
+          <dd data-testid="license-team">{answer.team}</dd>
+          <dt>Member cap</dt>
+          <dd data-testid="license-cap">{answer.member_cap}</dd>
+          <dt>Expires</dt>
+          <dd data-testid="license-expires">{answer.expires}</dd>
+        </dl>
+      )}
+      {answer.you_may_change && (
+        <div>
+          <TextInput
+            label="Install a license key"
+            description="Paste the key you were sent. Or set SHARED_MEMORY_LICENSE_KEY in .env."
+            value={key}
+            onChange={(event) => setKey(event.currentTarget.value)}
+            data-testid="license-key"
+          />
+          <Button mt="sm" onClick={install} loading={installing} disabled={!key.trim()} data-testid="install-license">
+            Install key
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -257,7 +367,7 @@ function MemberRow({
   runs: boolean;
   editing: Editing;
   setEditing: (editing: Editing) => void;
-  attempt: (what: () => Promise<{ members: MemberSummary[] }>) => Promise<void>;
+  attempt: (what: () => Promise<Members>) => Promise<void>;
   issue: (memberId: string) => Promise<void>;
 }) {
   const id = member.member_id;
@@ -427,7 +537,7 @@ function AddMember({
   onAdded,
   onRefused,
 }: {
-  onAdded: (token: IssuedToken, everyone: MemberSummary[]) => void;
+  onAdded: (token: IssuedToken, everyone: Members) => void;
   onRefused: (message: string) => void;
 }) {
   const [memberId, setMemberId] = useState("");
@@ -441,7 +551,7 @@ function AddMember({
     try {
       const token = await addMember({ member_id: memberId.trim(), name: name.trim(), github: github.trim() || undefined });
       const everyone = await fetchMembers();
-      onAdded(token, everyone.members);
+      onAdded(token, everyone);
       setMemberId("");
       setName("");
       setGithub("");

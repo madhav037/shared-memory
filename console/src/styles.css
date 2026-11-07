@@ -3173,3 +3173,15 @@ div.dotted {
     scroll-snap-align: start;
   }
 }
+
+/* The license banner admins see above the page when the server key is missing, invalid, expiring or lapsed. */
+.license-banner {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  background: var(--accent-wash);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+}

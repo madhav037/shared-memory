@@ -84,6 +84,31 @@ class RateLimitChange(BaseModel):
     address_per_minute: int = Field(ge=MIN_PER_MINUTE, le=MAX_PER_MINUTE)
 
 
+class LicenseState(BaseModel):
+    """The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
+    can't be trusted), and what a trusted key says. Nothing here ever includes the key itself."""
+
+    status: Literal["licensed", "expiring", "lapsed", "unlicensed", "invalid"]
+    team: str | None
+    member_cap: int | None
+    issued: str | None
+    expires: str | None
+    key_id: str | None
+    days_left: int | None
+    # Why there is no trusted key, in words an admin can act on.
+    reason: str | None
+    # Where the key came from: installed in the console, or set in the server's environment.
+    source: Literal["console", "environment"] | None
+    # Whether the signed-in member may install a key: the team's owner and its admins.
+    you_may_change: bool
+
+
+class LicenseKeyText(BaseModel):
+    """A license key being installed."""
+
+    key: str = Field(max_length=4000)
+
+
 class ProjectMember(BaseModel):
     """A member named on a project."""
 
@@ -460,6 +485,9 @@ class MemberSummary(BaseModel):
 
 class Members(BaseModel):
     members: list[MemberSummary]
+    # The server's member cap and how many places are taken (removed members hold none); no cap: null.
+    member_cap: int | None
+    members_used: int
 
 
 class NewMember(BaseModel):
@@ -708,6 +736,8 @@ class Declaration:
     changes: bool = False
     query: tuple[str, ...] = ()
     accepts: type[BaseModel] | None = None
+    # The media type of a file the call streams instead of JSON; such a call answers `None`.
+    download: str | None = None
 
 
 DECLARATIONS: tuple[Declaration, ...] = (
@@ -950,6 +980,14 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
     Declaration(
+        path="/export",
+        method="GET",
+        operation_id="export",
+        summary="All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        answers=None,
+        download="application/zip",
+    ),
+    Declaration(
         path="/projects/{project_id}/pins",
         method="GET",
         operation_id="pins",
@@ -1064,6 +1102,22 @@ DECLARATIONS: tuple[Declaration, ...] = (
         accepts=RateLimitChange,
     ),
     Declaration(
+        path="/license",
+        method="GET",
+        operation_id="license_state",
+        summary="The server's license key: its status, team, member cap and expiry.",
+        answers=LicenseState,
+    ),
+    Declaration(
+        path="/license",
+        method="POST",
+        operation_id="install_license",
+        summary="Install a license key on the server. Admins only.",
+        answers=LicenseState,
+        changes=True,
+        accepts=LicenseKeyText,
+    ),
+    Declaration(
         path="/members",
         method="GET",
         operation_id="members",
@@ -1146,7 +1200,14 @@ def description() -> dict[str, Any]:
     schemas: dict[str, Any] = {}
     for declaration in DECLARATIONS:
         responses: dict[str, Any]
-        if declaration.answers is None:
+        if declaration.download is not None:
+            responses = {
+                "200": {
+                    "description": declaration.summary,
+                    "content": {declaration.download: {"schema": {"type": "string", "format": "binary"}}},
+                }
+            }
+        elif declaration.answers is None:
             responses = {"302": {"description": declaration.summary}}
         else:
             schema = declaration.answers.model_json_schema(ref_template="#/components/schemas/{model}")
