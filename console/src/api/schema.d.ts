@@ -2066,15 +2066,16 @@ export interface components {
         };
         /**
          * LicenseState
-         * @description The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
-         *     can't be trusted), and what a trusted key says. Nothing here ever includes the key itself.
+         * @description The server's license: whether it is licensed, expiring, lapsed, read-only (a hosted server's key has lapsed),
+         *     unlicensed (no key) or invalid (a key that can't be trusted), and what a trusted key says. Nothing here ever
+         *     includes the key itself.
          */
         LicenseState: {
             /**
              * Status
              * @enum {string}
              */
-            status: "licensed" | "expiring" | "lapsed" | "unlicensed" | "invalid";
+            status: "licensed" | "expiring" | "lapsed" | "read-only" | "unlicensed" | "invalid";
             /** Team */
             team: string | null;
             /** Member Cap */

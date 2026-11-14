@@ -230,6 +230,24 @@ def build_app(
     audit = Audit(db, clock, identity)
     licenses = Licenses(settings, db, audit, clock, license_keys)
     identity.member_cap = licenses.member_cap
+
+    def unless_read_only(step: F) -> F:
+        """A tool, or a step of one, that changes memory: refused while the server is read-only (a hosted server whose
+        license key has lapsed, ADR-0022), before it does anything. On a read-only server a tool's caller is checked
+        first, so a call without a valid personal token is refused for that, as it always is."""
+
+        @functools.wraps(step)
+        def guarded(*args: Any, **kwargs: Any) -> Any:
+            try:
+                licenses.ensure_writable()
+            except Refused:
+                for each in (*args, *kwargs.values()):
+                    if isinstance(each, Context):
+                        caller(each)
+                raise
+            return step(*args, **kwargs)
+
+        return guarded  # type: ignore[return-value]
     # The model loads here, before the server takes its first request.
     counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
     model = embedder or FastEmbedEmbedder(settings.model_cache)
@@ -244,7 +262,8 @@ def build_app(
     store.subscribe(uses)
     service = MemoryService(settings, identity, store, history, index, challenges, audit, uses)
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
-    board = Board(settings, db, identity, audit, clock, challenges.tell, lifecycle.retire_fixed)
+    # A card moved to Done on a read-only server stays moved; its known issues stay active and say why.
+    board = Board(settings, db, identity, audit, clock, challenges.tell, unless_read_only(lifecycle.retire_fixed))
     identity.on_access_lost(board.return_cards)
     identity.on_access_lost(challenges.drop_keepers)
     known_issues = KnownIssues(settings, db, store, index, board, audit, clock)
@@ -616,6 +635,7 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def pin(path: str, ctx: Context) -> dict[str, Any]:
         """Pin a project or team memory, or a topic folder, so it appears in every session's briefing.
 
@@ -625,12 +645,14 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def unpin(path: str, ctx: Context) -> dict[str, Any]:
         """Remove a pin so the memory or topic no longer appears in the briefing."""
         return briefing.unpin(caller(ctx), path)
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def create_project(name: str, ctx: Context, repository: str = "app") -> dict[str, Any]:
         """Create a project in your team.
 
@@ -647,6 +669,7 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def add_foundation(name: str, ctx: Context) -> dict[str, Any]:
         """Project leads: add an extra foundation to this project, beside architecture, product, glossary and decisions.
 
@@ -660,6 +683,7 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def add_member(
         member_id: str, name: str, ctx: Context, team: str | None = None, github: str | None = None
     ) -> dict[str, Any]:
@@ -688,6 +712,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def remember(
         title: str,
         summary: str,
@@ -774,6 +799,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def retire(path: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
         """Mark a project or team memory as no longer true, with nothing superseding it.
 
@@ -785,6 +811,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def add_to_foundation(path: str, foundation: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into one of the project's foundations (architecture, product, glossary,
         decisions, or an extra one a project lead added). Only an active project memory outside any foundation, of a
@@ -798,6 +825,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
         """Accept or reject a challenge against a memory (decision: accept or reject).
 
@@ -811,12 +839,14 @@ def build_app(
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
     @_refusals_as_tool_errors
+    @unless_read_only
     def similar_before_promoting(
         path: str, level: str, ctx: Context, author: str | None, imported_from: str | None, foundation: str | None
     ) -> dict[str, Any] | None:
         return lifecycle.similar_before_promoting(caller(ctx), path, level, author, imported_from, foundation)
 
     @_refusals_as_tool_errors
+    @unless_read_only
     def promoting(
         path: str,
         level: str,
@@ -873,12 +903,14 @@ def build_app(
         )
 
     @_refusals_as_tool_errors
+    @unless_read_only
     def similar_before_saving(
         title: str, summary: str, body: str, related_files: list[str] | None, card: int | None, ctx: Context
     ) -> dict[str, Any] | None:
         return known_issues.similar_before_saving(caller(ctx), title, summary, body, related_files, card)
 
     @_refusals_as_tool_errors
+    @unless_read_only
     def saving_known_issue(
         title: str,
         summary: str,
@@ -928,6 +960,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def edit_memory(
         path: str,
         ctx: Context,
@@ -943,6 +976,7 @@ def build_app(
     @server.tool()
     @saving
     @_refusals_as_tool_errors
+    @unless_read_only
     def delete_memory(path: str, ctx: Context) -> dict[str, Any]:
         """Delete your own personal memory."""
         return service.delete_memory(caller(ctx), path)
@@ -1062,6 +1096,7 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    @unless_read_only
     def add_card(
         title: str,
         ctx: Context,
