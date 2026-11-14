@@ -753,7 +753,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/sign-in/github",
         method="GET",
         operation_id="sign_in",
-        summary="Begin signing in: send the member to GitHub.",
+        summary="Begin signing in: send the member to GitHub, or to the platform on a hosted server.",
         answers=None,
     ),
     Declaration(
@@ -761,6 +761,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="sign_in_callback",
         summary="Finish signing in and return the member to the console.",
+        answers=None,
+    ),
+    Declaration(
+        path="/sign-in/platform/callback",
+        method="GET",
+        operation_id="sign_in_handed_over",
+        summary="Finish a sign-in the platform handed over, on a hosted server, and return the member to the console.",
         answers=None,
     ),
     Declaration(

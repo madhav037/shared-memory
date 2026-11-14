@@ -15,8 +15,11 @@ from tests.support import (
     Console,
     ConsoleClient,
     FakeGitHub,
+    FakePlatform,
+    HostedConsole,
     RunningServer,
     Session,
+    StubEmbedder,
     Team,
     TestClock,
     fresh_database,
@@ -94,6 +97,31 @@ def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
         finally:
             server.stop()
             github.stop()
+
+
+@pytest.fixture(scope="session")
+def hosted_console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[HostedConsole]:
+    """A hosted server: it signs members in by a sign-in the fake platform hands over, for the subdomain `acme`."""
+    with start_blocking_portal() as portal:
+        memory = tmp_path_factory.mktemp("hosted-console-memory")
+        clock = TestClock()
+        platform = FakePlatform(portal, Settings("", Path(memory), Path(memory)), clock)
+        settings = Settings(
+            database_url=fresh_database("shared_memory_hosted_console"),
+            memory_root=memory,
+            model_cache=REPO_ROOT / ".cache" / "fastembed",
+            sign_in="platform",
+            platform_url=platform.url,
+            platform_public_key=platform.public_key,
+            subdomain="acme",
+            rate_limit_on=False,
+        )
+        server = RunningServer(build_app(settings, clock=clock, embedder=StubEmbedder()), settings, clock, portal)
+        try:
+            yield HostedConsole(server, platform, clock)
+        finally:
+            server.stop()
+            platform.stop()
 
 
 @pytest.fixture

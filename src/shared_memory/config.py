@@ -9,6 +9,9 @@ from pathlib import Path
 # Below this a worker cannot keep a connection free for reads while saves hold theirs.
 MIN_POOL_CONNECTIONS = 4
 
+# The ways a server can sign members in to the console.
+SIGN_INS = ("github", "platform")
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -39,6 +42,14 @@ class Settings:
     github_sign_in_url: str = "https://github.com"
     github_api_url: str = "https://api.github.com"
     console_url: str = ""
+    # How members sign in to the console: "github", through this server's own GitHub OAuth app, or "platform", by a
+    # sign-in the platform hands over (platform_sign_in.py), which is how a hosted server signs members in. The platform
+    # is reached at platform_url, signs with the Ed25519 key whose public half is platform_public_key (hex), and names
+    # this server by its subdomain.
+    sign_in: str = "github"
+    platform_url: str = ""
+    platform_public_key: str = ""
+    subdomain: str = ""
     console_session_idle_hours: float = 24
     console_session_days: float = 7
     # How many server processes `serve` runs, and how many connections to Postgres all of them may hold together.
@@ -67,9 +78,24 @@ class Settings:
     # Where server errors are reported, with private data removed (monitoring.py). Empty: nothing is ever sent.
     sentry_dsn: str = ""
 
+    def __post_init__(self) -> None:
+        if self.sign_in not in SIGN_INS:
+            raise ValueError(
+                f"SHARED_MEMORY_SIGN_IN is {self.sign_in!r}: it should be \"github\" (the server's own GitHub app) or "
+                "\"platform\" (a sign-in the platform hands over)."
+            )
+
+    @property
+    def signs_in_through_platform(self) -> bool:
+        """Whether members sign in by a sign-in the platform hands over, as on a hosted server."""
+        return self.sign_in == "platform"
+
     @property
     def github_sign_in(self) -> bool:
-        """Whether this server can sign anyone in to the console."""
+        """Whether this server can sign anyone in to the console with GitHub: through its own GitHub app, or through
+        the platform's."""
+        if self.signs_in_through_platform:
+            return bool(self.platform_url and self.platform_public_key and self.subdomain)
         return bool(self.github_client_id and self.github_client_secret)
 
     @property
@@ -98,6 +124,10 @@ class Settings:
             github_sign_in_url=env.get("SHARED_MEMORY_GITHUB_SIGN_IN_URL", "https://github.com"),
             github_api_url=env.get("SHARED_MEMORY_GITHUB_API_URL", "https://api.github.com"),
             console_url=env.get("SHARED_MEMORY_CONSOLE_URL", ""),
+            sign_in=env.get("SHARED_MEMORY_SIGN_IN", "github").strip().lower() or "github",
+            platform_url=env.get("SHARED_MEMORY_PLATFORM_URL", "").strip(),
+            platform_public_key=env.get("SHARED_MEMORY_PLATFORM_PUBLIC_KEY", "").strip(),
+            subdomain=env.get("SHARED_MEMORY_SUBDOMAIN", "").strip().lower(),
             workers=int(env.get("SHARED_MEMORY_WORKERS", "2")),
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),

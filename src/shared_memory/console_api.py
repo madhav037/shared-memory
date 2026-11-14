@@ -211,6 +211,7 @@ class ConsoleApi:
             "status": self._status,
             "sign_in": self._sign_in,
             "sign_in_callback": self._sign_in_callback,
+            "sign_in_handed_over": self._sign_in_handed_over,
             "audit": self._audit_log,
             "export": self._export,
             "projects": self._projects,
@@ -308,6 +309,20 @@ class ConsoleApi:
             token = self._sessions.finish(code, state, self._root(request))
         except Refused as refused:
             return self._back_to_console(request, str(refused))
+        return self._signed_in(request, token)
+
+    def _sign_in_handed_over(self, request: Request) -> Response:
+        handed_over = request.query_params.get("sign_in", "")
+        if not handed_over:
+            return self._back_to_console(request, "That sign-in didn't finish. Try again.")
+        try:
+            token = self._sessions.finish_handed_over(handed_over)
+        except Refused as refused:
+            return self._back_to_console(request, str(refused))
+        return self._signed_in(request, token)
+
+    def _signed_in(self, request: Request, token: str) -> Response:
+        """Back to the console, holding the new session in its cookie."""
         signed_in = RedirectResponse(self._console_url(request), status_code=303)
         signed_in.set_cookie(
             COOKIE,

@@ -68,6 +68,56 @@ def test_signing_in_needs_both_halves_of_the_github_app() -> None:
     assert Settings.from_env({"SHARED_MEMORY_GITHUB_CLIENT_SECRET": "a-secret"}).github_sign_in is False
 
 
+PLATFORM_SIGN_IN = {
+    "SHARED_MEMORY_SIGN_IN": "platform",
+    "SHARED_MEMORY_PLATFORM_URL": "https://platform.example.com",
+    "SHARED_MEMORY_PLATFORM_PUBLIC_KEY": "ab" * 32,
+    "SHARED_MEMORY_SUBDOMAIN": "acme",
+}
+
+
+def test_a_server_signs_in_with_its_own_github_app_unless_told_to_take_sign_ins_from_the_platform() -> None:
+    assert Settings.from_env({}).sign_in == "github"
+    assert Settings.from_env({}).signs_in_through_platform is False
+
+    hosted = Settings.from_env(PLATFORM_SIGN_IN)
+
+    assert hosted.sign_in == "platform"
+    assert hosted.signs_in_through_platform is True
+    assert hosted.platform_url == "https://platform.example.com"
+    assert hosted.platform_public_key == "ab" * 32
+    assert hosted.subdomain == "acme"
+    assert hosted.github_sign_in is True
+
+
+@pytest.mark.parametrize(
+    "missing", ["SHARED_MEMORY_PLATFORM_URL", "SHARED_MEMORY_PLATFORM_PUBLIC_KEY", "SHARED_MEMORY_SUBDOMAIN"]
+)
+def test_signing_in_through_the_platform_needs_its_address_its_public_key_and_the_servers_subdomain(
+    missing: str,
+) -> None:
+    without = {name: value for name, value in PLATFORM_SIGN_IN.items() if name != missing}
+
+    assert Settings.from_env(without).github_sign_in is False
+
+
+def test_a_github_app_does_not_sign_anyone_in_on_a_server_that_signs_in_through_the_platform() -> None:
+    settings = Settings.from_env(
+        {
+            "SHARED_MEMORY_SIGN_IN": "platform",
+            "SHARED_MEMORY_GITHUB_CLIENT_ID": "an-id",
+            "SHARED_MEMORY_GITHUB_CLIENT_SECRET": "a-secret",
+        }
+    )
+
+    assert settings.github_sign_in is False
+
+
+def test_an_unknown_way_of_signing_in_stops_the_server_from_starting() -> None:
+    with pytest.raises(ValueError, match="SHARED_MEMORY_SIGN_IN is 'saml'"):
+        Settings.from_env({"SHARED_MEMORY_SIGN_IN": "saml"})
+
+
 def test_the_collision_threshold_reads_its_environment_variable() -> None:
     assert Settings.from_env({}).collision_threshold == 0.75
     assert Settings.from_env({"SHARED_MEMORY_COLLISION_THRESHOLD": "0.9"}).collision_threshold == 0.9
