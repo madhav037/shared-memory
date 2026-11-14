@@ -1,9 +1,11 @@
 """The license key through the console JSON API and the Session driver (spec #416): an admin installs a key and sees the
-team, cap and expiry; a member who isn't an admin can't; the cap follows the key; memory works the same without one."""
+team, cap and expiry; a member who isn't an admin can't; the cap follows the key; memory works the same without one.
+The `install-license` command installs a key the same way, as the platform does on a hosted server's host (#470)."""
 
 from __future__ import annotations
 
 import dataclasses
+import io
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -12,6 +14,7 @@ from typing import Any
 import pytest
 from anyio.from_thread import start_blocking_portal
 
+from shared_memory import cli
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
@@ -233,3 +236,75 @@ def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_ins
     assert renewed.status_code == 200, renewed.text
     assert license_of(client)["status"] == "licensed"
     assert owner.call("create_project", name="Paid")["project_id"]
+
+
+def install_license(console: Console, key: str) -> tuple[int, str]:
+    """`shared-memory install-license`, as the platform runs it on a hosted server's host (#470)."""
+    out = io.StringIO()
+    code = cli.run(["install-license", key], settings=console.server.settings, out=out, license_keys=TEST_PUBLIC_KEYS)
+    return code, out.getvalue()
+
+
+def vendor_installs(client: ConsoleClient) -> list[tuple[str, str]]:
+    """The audit log's license installs, newest first: who installed which key."""
+    events = client.get("/api/audit").json()["events"]
+    return [(one["actor"], one["detail"]["key_id"]) for one in events if one["kind"] == "license_installed"]
+
+
+def test_install_license_installs_a_key_server_wide_without_a_restart(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-cli", 814)
+    assert license_of(client)["status"] == "unlicensed"
+
+    code, printed = install_license(console, a_key(team="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-cli"))
+    console.clock.advance(seconds=5)  # how long a running server keeps the key it read before reading it again
+
+    assert code == 0, printed
+    assert "Acme" in printed
+    found = license_of(client)
+    assert (found["status"], found["team"], found["member_cap"], found["key_id"], found["source"]) == (
+        "licensed",
+        "Acme",
+        10,
+        "k-cli",
+        "console",
+    )
+    assert client.get("/api/members").json()["member_cap"] == 10
+
+
+def test_install_license_is_in_the_audit_log_as_installed_by_the_vendor(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-cli-audit", 815)
+
+    install_license(console, a_key(key_id="k-cli-audit"))
+
+    assert vendor_installs(client)[0] == ("vendor", "k-cli-audit")
+
+
+def test_install_license_refuses_an_invalid_key_with_the_team_pages_answer_and_changes_nothing(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-cli-bad", 816)
+    install(client, a_key(key_id="k-before"))
+    head, payload, signature = a_key().split(".")
+
+    for bad in (f"{head}.{payload}.{signature[:-3]}AAA", "not a key", a_key().replace("sm1.", "sm9.", 1)):
+        code, printed = install_license(console, bad)
+        console.clock.advance(seconds=5)
+
+        assert code == 1
+        assert printed.strip() == install(client, bad).json()["message"]
+
+    assert license_of(client)["key_id"] == "k-before"
+    assert vendor_installs(client)[0] == ("E1001", "k-before")
+
+
+def test_install_license_replaces_a_key_installed_earlier(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-cli-renew", 817)
+    install(client, a_key(member_cap=5, expires=date(2026, 9, 20), key_id="k-old", hosted=True))
+
+    install_license(console, a_key(member_cap=15, expires=date(2027, 9, 20), key_id="k-renewed", hosted=True))
+    console.clock.advance(seconds=5)
+
+    found = license_of(client)
+    assert (found["status"], found["member_cap"], found["key_id"]) == ("licensed", 15, "k-renewed")

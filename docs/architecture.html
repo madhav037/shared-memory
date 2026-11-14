@@ -843,7 +843,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
     hooks: ["Hook endpoints", "app.py · hooks.py", "/hooks/session-start, prompt-submitted, before-edit and session-end, answered in each agent's own hook format. Never blocks a session, except an edit."],
     api: ["Console API", "console_api.py", "The /api/* JSON routes the console calls, described as OpenAPI (console_contract.py). Cookie sessions; a changing call needs the console header."],
     signin: ["Console sign-in", "console_sessions.py", "GitHub OAuth and console session cookies. Stores hashes of states and cookies, never the values."],
-    cli: ["CLI", "cli.py", "setup (team and owner), link-github, reindex, openapi, and serve, which sets up once and starts the workers."],
+    cli: ["CLI", "cli.py", "setup (team and owner), link-github, install-license (the platform renews a hosted server's key), reindex, openapi, and serve, which sets up once and starts the workers."],
     identity: ["Identity", "identity.py", "Personal tokens, members, roles, projects, restricted access, leads, keepers and the list of foundations. Every entry point asks it who the caller is."],
     listing: ["Listing", "listing.py", "Which tools a caller is listed: admin tools to admins, card tools once a board has cards. Presentation only: every tool still checks for itself."],
     saves: ["Saves pool", "saves.py", "Runs every save on its own thread pool, so a save waiting for its turn never holds a thread that reads and hooks need."],
