@@ -236,7 +236,7 @@ _Avoid_: Node, box, shared server
 
 **Vendor**:
 Us: the people who sell Shared Memory and run the hosted servers.
-_Avoid_: Operator, super admin, owner
+_Avoid_: Operator, super admin
 
 **Platform**:
 The vendor's own server: it carries the landing page, sign-up and trials, takes payments, starts and watches hosted servers, and signs license keys. Teams' memory never passes through it.
