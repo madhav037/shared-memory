@@ -1,5 +1,5 @@
 """A license key is checked offline: valid, tampered, lapsed and wrongly signed keys, key versions (spec #416), and
-whether a key is a hosted server's (#469)."""
+whether a key is a hosted server's (#469), and the `install-license` command's help (#470)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from datetime import date
 
 import pytest
 
+from shared_memory import cli
 from shared_memory import license as licensing
 from shared_memory.license import License, InvalidLicense, verify
 from tests.license_keys import OTHER_PRIVATE, TEST_PUBLIC_KEYS, a_key
@@ -113,3 +114,13 @@ def test_checking_a_key_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -
 
     assert verify(a_key(), TEST_PUBLIC_KEYS).status(TODAY) == "licensed"
     assert licensing.PUBLIC_KEYS  # the built-in key is present
+
+
+def test_install_license_says_what_it_does_in_the_glossarys_words(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        cli.run(["install-license", "--help"])
+
+    said = " ".join(capsys.readouterr().out.split())
+    assert "Install a license key server-wide, as an admin does on the Team page" in said
+    assert "recorded in the audit log as installed by the vendor" in said
+    assert "The platform runs it to renew a hosted server's license key" in said

@@ -1,6 +1,7 @@
 """Which license key the server is running under, and what it sets (spec #416).
 
-The key comes from the server-wide settings an admin installed on the Team page, or else from `SHARED_MEMORY_LICENSE_KEY`.
+The key comes from the server-wide settings an admin installed on the Team page (or the platform installed with
+`install-license`), or else from `SHARED_MEMORY_LICENSE_KEY`.
 A key whose signature checks out sets the member cap, even once it has lapsed. On a self-hosted server nothing else
 depends on it: a missing, lapsed or invalid key only shows admins a banner, and memory, MCP tools and hooks never look at
 it. A hosted server's key that has lapsed makes the server read-only: every change to memory is refused, and reading
@@ -20,6 +21,9 @@ from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Member
 from shared_memory.license import PUBLIC_KEYS, InvalidLicense, License, verify
+
+# Who the audit log names when the platform installs a key from the host (CONTEXT.md: Vendor).
+VENDOR = "vendor"
 
 # Several workers share one database: how long one remembers the key before reading it again.
 CACHED = timedelta(seconds=5)
@@ -94,6 +98,16 @@ class Licenses:
         """Keep this key server-wide, as an owner or an admin, and record who did it."""
         if not (admin.is_owner or admin.is_admin):
             raise Refused("Only the team's owner and its admins can install a license key.")
+        return self._keep(text, member=admin)
+
+    def install_as_vendor(self, text: str) -> Current:
+        """Keep this key server-wide on the vendor's behalf, as the platform does from the host to renew a hosted
+        server's key (`install-license`, #470). The key is the whole server's, so its audit entry names the vendor and
+        belongs to no team: every team's admins see it."""
+        return self._keep(text, actor=VENDOR)
+
+    def _keep(self, text: str, *, member: Member | None = None, actor: str | None = None) -> Current:
+        """Check the key, then keep it in place of any earlier one. A key that can't be trusted changes nothing."""
         try:
             held = verify(text, self._public_keys)
         except InvalidLicense as invalid:
@@ -106,7 +120,8 @@ class Licenses:
         self._known = None
         self._audit.record(
             LICENSE_INSTALLED,
-            member=admin,
+            member=member,
+            actor=actor,
             detail={
                 "team": held.team,
                 "member_cap": held.member_cap,

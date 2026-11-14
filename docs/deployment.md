@@ -253,6 +253,14 @@ and that paying restores it. Reading, search, the briefing and the hooks keep wo
 agent over it. Removing members, reissuing personal tokens, locks and the board's existing cards keep working too.
 Installing a renewed key ends it at once.
 
+The platform renews a hosted server's key from the host, with no restart; a running server picks it up within five
+seconds. A key that can't be trusted is refused with the Team page's answer and changes nothing, and the audit log
+records the install as the vendor's:
+
+```
+docker compose exec server shared-memory install-license <license key>
+```
+
 ### Generating the production key pair (the developer, once)
 
 The public key in `src/shared_memory/license.py` (`PUBLIC_KEYS`) is a placeholder whose private half nobody holds. Make
