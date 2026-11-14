@@ -188,6 +188,7 @@ ALLOWED: tuple[Allow, ...] = (
     ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),
+    Allow("operator", "whoever runs the server, in plain English, not the vendor", (PAGES + "Legal.tsx",), "its operator chooses"),
     Allow(
         "task",
         "what a session is asked to do, not a card",

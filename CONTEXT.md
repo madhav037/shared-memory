@@ -203,7 +203,7 @@ How many members one server may have at once, set by `SHARED_MEMORY_MEMBER_CAP` 
 _Avoid_: Seat limit, user limit
 
 **License key**:
-A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. Memory, MCP tools and hooks never depend on it.
+A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. On a self-hosted server, memory, MCP tools and hooks never depend on it; a lapsed key makes a hosted server read-only.
 _Avoid_: Serial, activation code
 
 ### The console
@@ -217,7 +217,7 @@ The record of who changed members, roles, access, tokens, memory, cards or a pro
 _Avoid_: History, activity, trail
 
 **Landing page**:
-What the console shows before anyone signs in: what Shared Memory is, shown working on an example team, and its plans.
+What the platform shows a visitor: what Shared Memory is, shown working on an example team, and its plans. A team's console shows only its sign-in.
 _Avoid_: Title page, home page, marketing site
 
 ### Paying for Shared Memory
@@ -227,8 +227,24 @@ What a team pays for: the most members it may have (5, 10 or 15) on a hosted ser
 _Avoid_: Tier, seat, subscription level
 
 **Hosted server**:
-A team's server that we run for it, never shared with another team.
+A team's server that we run for it on a host. It is the team's alone, with its own memory, members and data, and no other team can reach them; only the host beneath it is shared. It carries a license key that the platform signs and renews while the team pays. Once that key lapses, the server is _read-only_: members can still read and export memory, but nothing new is saved. If the team still hasn't paid after fourteen days, the server is stopped, and its data is deleted thirty days after that.
 _Avoid_: Cloud instance, tenant, SaaS
+
+**Host**:
+A machine we run several teams' hosted servers on.
+_Avoid_: Node, box, shared server
+
+**Vendor**:
+Us: the people who sell Shared Memory and run the hosted servers.
+_Avoid_: Operator, super admin
+
+**Platform**:
+The vendor's own server: it carries the landing page, sign-up and trials, takes payments, starts and watches hosted servers, and signs license keys. Teams' memory never passes through it.
+_Avoid_: Control plane, main server, backend
+
+**Vendor console**:
+The platform's web app, where the vendor runs hosts, hosted servers, plans and license keys. Only an allow-listed few may sign in.
+_Avoid_: Admin panel, super admin panel, back office
 
 **Self-hosted server**:
 A team's server that the team runs itself, under a license.
