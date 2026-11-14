@@ -31,6 +31,20 @@ def test_a_signed_key_is_accepted_by_the_servers_check(tmp_path: Path) -> None:
     assert (found.team, found.member_cap, found.expires, found.key_id) == ("Acme", 10, date(2027, 11, 6), "acme-1")
 
 
+def test_the_script_signs_a_hosted_servers_key(tmp_path: Path) -> None:
+    private = tmp_path / "test-only.key"
+    private.write_text(TEST_SEED.hex())
+    signing = ("--private-key-file", str(private), "--team", "Acme", "--member-cap", "5", "--expires", "2026-12-06")
+
+    hosted = run(*signing, "--hosted")
+    self_hosted = run(*signing)
+
+    assert hosted.returncode == 0, hosted.stderr
+    assert hosted.stdout.startswith("sm1.")
+    assert verify(hosted.stdout.strip(), TEST_PUBLIC_KEYS).hosted is True
+    assert verify(self_hosted.stdout.strip(), TEST_PUBLIC_KEYS).hosted is False
+
+
 def test_generate_writes_a_private_key_once_and_prints_only_the_public_half(tmp_path: Path) -> None:
     private = tmp_path / "fresh.key"
 

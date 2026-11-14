@@ -1,11 +1,13 @@
 """License keys (spec #416): a small document signed with Ed25519, checked offline.
 
 A key reads `sm<N>.<payload>.<signature>`. The payload is JSON, base64url-encoded, holding the team's name, the member
-cap, the dates the key was issued and expires, and a key ID. `<N>` says which signing key signed it, so the signing key
+cap, the dates the key was issued and expires, a key ID and, for a hosted server's key only, `"hosted": true`. `<N>` says which signing key signed it, so the signing key
 can rotate: the server keeps one public key per version and accepts any of them. The signature covers `sm<N>.<payload>`.
 
-The server only ever verifies. Nothing here makes a network call, and a key that fails to verify, or has lapsed, only
-changes what the console says and whether more members can be added: memory, MCP tools and hooks never depend on it.
+The server only ever verifies. Nothing here makes a network call. On a self-hosted server a key that fails to verify, or
+has lapsed, only changes what the console says and whether more members can be added: memory, MCP tools and hooks never
+depend on it. A hosted server's key that has lapsed makes the server read-only (ADR-0022). A key without the hosted
+field is a self-hosted server's, so every key signed before the field existed reads as it always did.
 Signing lives here so `scripts/sign-license.py` and the tests share one format.
 """
 
@@ -46,15 +48,18 @@ class License:
     issued: date
     expires: date
     key_id: str
+    # The key is for a hosted server, which turns read-only once the key lapses (ADR-0022).
+    hosted: bool = False
 
     def days_left(self, today: date) -> int:
         return (self.expires - today).days
 
     def status(self, today: date) -> str:
-        """`lapsed` once the expiry date has passed, `expiring` from 30 days before it, else `licensed`."""
+        """`lapsed` once the expiry date has passed (`read-only` for a hosted server's key), `expiring` from 30 days
+        before it, else `licensed`."""
         left = self.days_left(today)
         if left < 0:
-            return "lapsed"
+            return "read-only" if self.hosted else "lapsed"
         return "expiring" if left <= EXPIRING_DAYS else "licensed"
 
 
@@ -68,14 +73,18 @@ def _unb64(text: str) -> bytes:
 
 def sign(private_key: Ed25519PrivateKey, version: int, license: License) -> str:
     """A license key for this license, signed by the signing key of this version."""
+    body: dict[str, object] = {
+        "team": license.team,
+        "member_cap": license.member_cap,
+        "issued": license.issued.isoformat(),
+        "expires": license.expires.isoformat(),
+        "key_id": license.key_id,
+    }
+    if license.hosted:
+        # Only a hosted key carries the field, so a self-hosted key is signed exactly as before it existed.
+        body["hosted"] = True
     payload = json.dumps(
-        {
-            "team": license.team,
-            "member_cap": license.member_cap,
-            "issued": license.issued.isoformat(),
-            "expires": license.expires.isoformat(),
-            "key_id": license.key_id,
-        },
+        body,
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -105,6 +114,7 @@ def verify(text: str, public_keys: Mapping[int, bytes] = PUBLIC_KEYS) -> License
             issued=date.fromisoformat(body["issued"]),
             expires=date.fromisoformat(body["expires"]),
             key_id=str(body["key_id"]),
+            hosted=body.get("hosted", False) is True,
         )
     except (KeyError, TypeError, ValueError, binascii.Error):
         raise InvalidLicense("This license key is signed, but its contents can't be read.") from None

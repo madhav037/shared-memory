@@ -218,3 +218,18 @@ def test_the_session_driver_is_unaffected_by_the_key_state(console: Console) -> 
     owner = signed_in_owner(console, client, "olive-lic-driver", 812)
     assert isinstance(owner, Session)
     assert owner.call("create_project", name="Check")["project_id"]
+
+
+def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_installed(console: Console) -> None:
+    client = console.client()
+    owner = signed_in_owner(console, client, "olive-lic-read-only", 813)
+    install(client, a_key(member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
+
+    assert license_of(client)["status"] == "read-only"
+    assert "read-only" in owner.refusal("create_project", name="Late")
+
+    renewed = install(client, a_key(member_cap=1000, expires=date(2027, 1, 1), hosted=True))
+
+    assert renewed.status_code == 200, renewed.text
+    assert license_of(client)["status"] == "licensed"
+    assert owner.call("create_project", name="Paid")["project_id"]
