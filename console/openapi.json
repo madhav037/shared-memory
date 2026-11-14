@@ -4936,6 +4936,17 @@
             ],
             "title": "Days Left"
           },
+          "stops": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stops"
+          },
           "reason": {
             "anyOf": [
               {
@@ -4975,6 +4986,7 @@
           "expires",
           "key_id",
           "days_left",
+          "stops",
           "reason",
           "source",
           "you_may_change"

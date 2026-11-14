@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from shared_memory.audit import LICENSE_INSTALLED, Audit
 from shared_memory.clock import Clock
@@ -28,6 +28,9 @@ VENDOR = "vendor"
 # Several workers share one database: how long one remembers the key before reading it again.
 CACHED = timedelta(seconds=5)
 
+# How long a hosted server stays read-only after its key lapsed before the platform stops it (ADR-0022).
+READ_ONLY_FOR = timedelta(days=14)
+
 
 @dataclass(frozen=True)
 class Current:
@@ -39,6 +42,14 @@ class Current:
     reason: str | None
     source: str | None
     days_left: int | None
+
+    @property
+    def stops(self) -> date | None:
+        """The day a read-only hosted server will be stopped: fourteen days after its key lapsed. Any other server
+        never is."""
+        if self.status != "read-only" or self.license is None:
+            return None
+        return self.license.expires + READ_ONLY_FOR
 
 
 class Licenses:

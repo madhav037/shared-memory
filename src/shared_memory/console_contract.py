@@ -96,6 +96,8 @@ class LicenseState(BaseModel):
     expires: str | None
     key_id: str | None
     days_left: int | None
+    # The day a read-only hosted server will be stopped, fourteen days after its key lapsed (ADR-0022); otherwise null.
+    stops: str | None
     # Why there is no trusted key, in words an admin can act on.
     reason: str | None
     # Where the key came from: installed in the console, or set in the server's environment.

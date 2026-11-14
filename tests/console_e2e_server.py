@@ -1,11 +1,13 @@
 """The servers the browser journeys run against: a real server, a fake GitHub, and a team to sign in to; and a hosted
-server beside it, which signs members in by a sign-in a fake platform hands over (#471)."""
+server beside it, which signs members in by a sign-in a fake platform hands over (#471), and whose license key has
+lapsed, so it is read-only (#472)."""
 
 from __future__ import annotations
 
 import os
 import tempfile
 from collections.abc import Mapping
+from datetime import date
 from pathlib import Path
 
 import psycopg
@@ -13,7 +15,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
-from tests.license_keys import TEST_PUBLIC_KEYS
+from tests.license_keys import TEST_PUBLIC_KEYS, a_key
 from tests.support import (
     REPO_ROOT,
     FakeGitHub,
@@ -337,16 +339,27 @@ if __name__ == "__main__":
             console_url=HOSTED_CONSOLE,
         )
         hosted = RunningServer(
-            build_app(hosted_settings, clock=hosted_clock, embedder=StubEmbedder()),
+            build_app(hosted_settings, clock=hosted_clock, embedder=StubEmbedder(), license_keys=TEST_PUBLIC_KEYS),
             hosted_settings,
             hosted_clock,
             portal,
             port=HOSTED_PORT,
         )
-        hosted.run_cli(
+        hosted_printed = hosted.run_cli(
             "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
+        hosted_token = next(
+            line.split(":", 1)[1].strip() for line in hosted_printed.splitlines() if line.startswith("Owner personal")
+        )
+        hosted_owner = Session(hosted, hosted_token)
+        # Raj, a member who isn't an admin, for the journey that shows members the read-only notice.
+        hosted_owner.call("add_member", member_id="emp-dana", name="Raj Raiser", github="dana")
+        # The team stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
+        # hosted server is read-only, and stops on 14 September. The platform installs keys as the vendor (#470).
+        hosted.app.state.licenses.install_as_vendor(
+            a_key(team="Acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
+        )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         print(f"hosted server on {hosted.url}, fake platform on {platform.url}", flush=True)
         try:

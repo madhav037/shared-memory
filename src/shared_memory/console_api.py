@@ -85,6 +85,22 @@ CONSOLE_HEADER = "x-shared-memory-console"
 # `saves.py`).
 SAVING = frozenset({"retire_at", "decide_challenge", "move_card"})
 
+# The calls a read-only server refuses (a hosted server whose license key has lapsed, ADR-0022), the ones the memory
+# tools refuse too: every change to memory, inviting members and creating cards. Removing members, revoking personal
+# tokens, exporting and installing a renewed key keep working, as do card edits.
+REFUSED_WHILE_READ_ONLY = frozenset(
+    {
+        "retire_at",
+        "decide_challenge",
+        "pin_at",
+        "unpin_at",
+        "create_project",
+        "add_foundation",
+        "add_member",
+        "add_card",
+    }
+)
+
 
 # The board's refusals are written for a coding agent and name its tools and their fields. In the console the same
 # refusal names what a member has in front of them instead.
@@ -266,6 +282,7 @@ class ConsoleApi:
             "sign_out": self._sign_out,
         }
         assert SAVING <= handlers.keys()
+        assert REFUSED_WHILE_READ_ONLY <= handlers.keys()
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
 
         async def describe(request: Request) -> Response:
@@ -282,6 +299,10 @@ class ConsoleApi:
                     request.state.asked = declaration.accepts.model_validate(await request.json())
                 except (ValueError, ValidationError) as wrong:
                     return JSONResponse({"message": _plainly(wrong)}, status_code=422)
+            if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
+                refused = await anyio.to_thread.run_sync(self._read_only_refusal, request)
+                if refused is not None:
+                    return refused
             if declaration.operation_id in SAVING:
                 return await self._saves.run(handle, request)
             return await anyio.to_thread.run_sync(handle, request)
@@ -289,6 +310,17 @@ class ConsoleApi:
         return Route(
             f"{PREFIX}{declaration.path}", endpoint, methods=[declaration.method], name=declaration.operation_id
         )
+
+    def _read_only_refusal(self, request: Request) -> Response | None:
+        """The refusal of a change a read-only server forbids, made before it waits for a turn or does anything. Only
+        a signed-in member hears it: anyone else is told to sign in first, as always."""
+        if self._member(request) is None:
+            return None
+        try:
+            self._licenses.ensure_writable()
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return None
 
     # --- the calls ---
 
@@ -1006,6 +1038,7 @@ class ConsoleApi:
             expires=held.expires.isoformat() if held else None,
             key_id=held.key_id if held else None,
             days_left=current.days_left,
+            stops=current.stops.isoformat() if current.stops else None,
             reason=current.reason,
             source=current.source,  # type: ignore[arg-type]
             you_may_change=member.is_owner or member.is_admin,

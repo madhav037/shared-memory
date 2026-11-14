@@ -281,7 +281,7 @@ function SignedIn({
         </aside>
         <main className="page" id="page" tabIndex={-1}>
           {refused && <Refusal testid="sign-in-error">{refused}</Refusal>}
-          {manages && <LicenseBanner />}
+          <LicenseBanner manages={manages} />
           <Routes>
             <Route path="/" element={<Front member={member} />} />
             <Route path="/files" element={<FolderPage member={member} />} />
@@ -314,8 +314,12 @@ function SignedIn({
   );
 }
 
-/** Tells admins when the server has no usable license key, or its key is about to expire or has. Never blocks. */
-function LicenseBanner() {
+/**
+ * Tells admins when the server has no usable license key, or its key is about to expire or has, and when a hosted
+ * server has turned read-only, until when and how to restore it. Members see only a plain notice that memory can't be
+ * changed, while the server is read-only. Never blocks.
+ */
+function LicenseBanner({ manages }: { manages: boolean }) {
   const [license, setLicense] = useState<LicenseState | null>(null);
   const [installed, setInstalled] = useState(0);
   // The Team page says when it installs a key, so the banner follows without a reload.
@@ -332,6 +336,14 @@ function LicenseBanner() {
     return () => attempt.abort();
   }, [installed]);
   if (!license || license.status === "licensed") return null;
+  if (!manages) {
+    if (license.status !== "read-only") return null;
+    return (
+      <p className="license-banner" role="status" data-testid="read-only-notice">
+        Memory can’t be changed right now: this server is read-only. You can still read and search everything.
+      </p>
+    );
+  }
   return (
     <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
       {licenseSentence(license)} <Link to="/team">Team</Link>
