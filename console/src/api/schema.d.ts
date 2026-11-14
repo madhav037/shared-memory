@@ -2237,7 +2237,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Begin signing in: send the member to GitHub. */
+            /** @description Begin signing in: send the member to GitHub, or to the platform on a hosted server. */
             302: {
                 headers: {
                     [name: string]: unknown;
