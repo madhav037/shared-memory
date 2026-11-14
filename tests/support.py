@@ -500,13 +500,16 @@ class FakePlatform:
                 id=secrets.token_urlsafe(16),
             )
             key = Ed25519PrivateKey.generate() if wrong.get("forged") else self._key
-            self.last = f"{request.query_params['return_to']}?{urlencode({'sign_in': platform_sign_in.sign(key, handed)})}"
+            handed_over = urlencode({"sign_in": platform_sign_in.sign(key, handed)})
+            self.last = f"{request.query_params['return_to']}?{handed_over}"
             return RedirectResponse(self.last, status_code=302)
 
         async def as_account(request: Request) -> Response:
             body = await request.json()
             self.as_(int(body["id"]), str(body["login"]))
-            self.go_wrong(subdomain=body.get("subdomain"), expired=bool(body.get("expired")), forged=bool(body.get("forged")))
+            self.go_wrong(
+                subdomain=body.get("subdomain"), expired=bool(body.get("expired")), forged=bool(body.get("forged"))
+            )
             return JSONResponse({"id": self.account_id, "login": self.login})
 
         async def last(request: Request) -> Response:
