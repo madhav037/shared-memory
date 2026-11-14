@@ -1,4 +1,5 @@
-"""The server the browser journeys run against: a real server, a fake GitHub, and a team to sign in to."""
+"""The servers the browser journeys run against: a real server, a fake GitHub, and a team to sign in to; and a hosted
+server beside it, which signs members in by a sign-in a fake platform hands over (#471)."""
 
 from __future__ import annotations
 
@@ -16,8 +17,10 @@ from tests.license_keys import TEST_PUBLIC_KEYS
 from tests.support import (
     REPO_ROOT,
     FakeGitHub,
+    FakePlatform,
     RunningServer,
     Session,
+    StubEmbedder,
     TestClock,
     challenge,
     fresh_database,
@@ -31,6 +34,12 @@ PORT = 8123
 # then could not start at all. Set SHARED_MEMORY_E2E_GITHUB_PORT when something else holds this one too; the browser
 # side reads the same variable (console/e2e/helpers.ts).
 DEFAULT_GITHUB_PORT = 8126
+
+
+# The hosted server's console, the hosted server and its fake platform (console/playwright.config.ts names the same).
+HOSTED_CONSOLE = "http://127.0.0.1:4274"
+HOSTED_PORT = 8128
+PLATFORM_PORT = 8129
 
 
 def github_port(env: Mapping[str, str] = os.environ) -> int:
@@ -311,7 +320,35 @@ if __name__ == "__main__":
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
+        # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
+        # Olive's GitHub account. It saves and searches nothing, so it loads no model.
+        hosted_memory = memory.parent / "hosted-memory"
+        hosted_clock = TestClock()
+        platform = FakePlatform(portal, Settings("", hosted_memory, hosted_memory), hosted_clock, port=PLATFORM_PORT)
+        hosted_settings = Settings(
+            database_url=fresh_database("shared_memory_console_e2e_hosted"),
+            memory_root=hosted_memory,
+            model_cache=REPO_ROOT / ".cache" / "fastembed",
+            sign_in="platform",
+            platform_url=platform.url,
+            platform_public_key=platform.public_key,
+            subdomain="acme",
+            rate_limit_on=False,
+            console_url=HOSTED_CONSOLE,
+        )
+        hosted = RunningServer(
+            build_app(hosted_settings, clock=hosted_clock, embedder=StubEmbedder()),
+            hosted_settings,
+            hosted_clock,
+            portal,
+            port=HOSTED_PORT,
+        )
+        hosted.run_cli(
+            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "--owner-github", "olive",
+        )  # fmt: skip
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
+        print(f"hosted server on {hosted.url}, fake platform on {platform.url}", flush=True)
         try:
             server.join()
         except KeyboardInterrupt:

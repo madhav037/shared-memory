@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import secrets
 import threading
 import time
 import uuid
@@ -25,6 +26,8 @@ import psycopg
 import pytest
 import uvicorn
 from anyio.from_thread import BlockingPortal
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from mcp import Client, types
 from mcp.client.streamable_http import streamable_http_client
 from starlette.applications import Starlette
@@ -32,7 +35,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory import cli
+from shared_memory import cli, platform_sign_in
 from shared_memory.config import Settings
 from shared_memory.fence import unfenced
 from shared_memory.sessions import Session as KnownSession
@@ -469,6 +472,71 @@ class FakeGitHub:
         self._server.stop()
 
 
+class FakePlatform:
+    """Stands in for the platform's half of a hosted server's sign-in: it signs a member in "with GitHub" as whichever
+    account it has been told to, and hands the sign-in back to the server signed with its own Ed25519 key, exactly as
+    the platform does (platform_sign_in.py).
+
+    `go_wrong` makes the next sign-in alone go wrong: for another subdomain, already expired, or signed by a key that
+    isn't the platform's. The browser journeys reach both through `POST /as-account`, and read the address the last
+    sign-in was handed back to from `GET /last`, to use it a second time.
+    """
+
+    def __init__(self, portal: BlockingPortal, settings: Settings, clock: TestClock, port: int = 0) -> None:
+        self._key = Ed25519PrivateKey.generate()
+        self.public_key = self._key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
+        self.account_id = 1
+        self.login = "olive"
+        self.last = ""
+        self._wrong: dict[str, Any] = {}
+
+        async def sign_in(request: Request) -> Response:
+            wrong, self._wrong = self._wrong, {}
+            handed = platform_sign_in.HandedOverSignIn(
+                github_id=self.account_id,
+                github_login=self.login,
+                subdomain=wrong.get("subdomain") or request.query_params["subdomain"],
+                expires=clock() + (timedelta(seconds=-1) if wrong.get("expired") else timedelta(minutes=5)),
+                id=secrets.token_urlsafe(16),
+            )
+            key = Ed25519PrivateKey.generate() if wrong.get("forged") else self._key
+            handed_over = urlencode({"sign_in": platform_sign_in.sign(key, handed)})
+            self.last = f"{request.query_params['return_to']}?{handed_over}"
+            return RedirectResponse(self.last, status_code=302)
+
+        async def as_account(request: Request) -> Response:
+            body = await request.json()
+            self.as_(int(body["id"]), str(body["login"]))
+            self.go_wrong(
+                subdomain=body.get("subdomain"), expired=bool(body.get("expired")), forged=bool(body.get("forged"))
+            )
+            return JSONResponse({"id": self.account_id, "login": self.login})
+
+        async def last(request: Request) -> Response:
+            return JSONResponse({"url": self.last})
+
+        app = Starlette(
+            routes=[
+                Route("/sign-in", sign_in, methods=["GET"]),
+                Route("/as-account", as_account, methods=["POST"]),
+                Route("/last", last, methods=["GET"]),
+            ]
+        )
+        self._server = RunningServer(app, settings, TestClock(), portal, port=port)
+        self.url = self._server.url
+
+    def as_(self, account_id: int, login: str) -> None:
+        """Whoever signs in next is this GitHub account."""
+        self.account_id, self.login = account_id, login
+
+    def go_wrong(self, subdomain: str | None = None, expired: bool = False, forged: bool = False) -> None:
+        """Make the next sign-in, and only that one, for another subdomain, expired, or not signed by the platform."""
+        self._wrong = {"subdomain": subdomain, "expired": expired, "forged": forged}
+
+    def stop(self) -> None:
+        self._server.stop()
+
+
 class ConsoleClient:
     """A browser, as the server sees it: it follows redirects and keeps the session cookie."""
 
@@ -521,13 +589,44 @@ class Console:
 
     def a_team(self, github_login: str) -> tuple[str, str]:
         """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
-        code = f"team-{uuid.uuid4().hex[:8]}"
-        printed = self.server.run_cli(
-            "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
-            "--owner-github", github_login,
-        )  # fmt: skip
-        token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
-        return code, token
+        return a_team_on(self.server, github_login)
+
+
+class StubEmbedder:
+    """Stands in for the embedding model, for a server whose tests never save or search, so it loads no model."""
+
+    def passages(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] for _ in texts]
+
+    def query(self, text: str) -> list[float]:
+        return [0.0]
+
+    def tokens(self, words: list[str]) -> list[int]:
+        return [1 for _ in words]
+
+
+@dataclass
+class HostedConsole:
+    """A hosted server, which signs members in by a sign-in the platform hands over, and the fake platform."""
+
+    server: RunningServer
+    platform: FakePlatform
+    clock: TestClock
+
+    def a_team(self, github_login: str) -> tuple[str, str]:
+        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
+        return a_team_on(self.server, github_login)
+
+
+def a_team_on(server: RunningServer, github_login: str) -> tuple[str, str]:
+    """A team on this server whose owner signs in as this GitHub account; returns its code and the owner's token."""
+    code = f"team-{uuid.uuid4().hex[:8]}"
+    printed = server.run_cli(
+        "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+        "--owner-github", github_login,
+    )  # fmt: skip
+    token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
+    return code, token
 
 
 def signed_in(console: Console, github: str, account: int) -> ConsoleClient:

@@ -3,6 +3,10 @@ import { expect, type Page } from "@playwright/test";
 /** The fake GitHub the journey server starts; tests/console_e2e_server.py reads the same variable, with the same default. */
 export const fakeGitHub = `http://127.0.0.1:${process.env.SHARED_MEMORY_E2E_GITHUB_PORT ?? "8126"}`;
 
+/** The hosted server's console (playwright.config.ts) and the fake platform that signs its members in. */
+export const hostedConsole = "http://127.0.0.1:4274";
+export const fakePlatform = "http://127.0.0.1:8129";
+
 /** Sign in as this GitHub account, through the fake GitHub the journeys run against. */
 export async function signInAs(page: Page, id: number, login: string) {
   await page.request.post(`${fakeGitHub}/as-account`, { data: { id, login } });

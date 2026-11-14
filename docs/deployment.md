@@ -315,6 +315,47 @@ The console is served at the domain by the same Caddy that fronts the server, so
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
 
+### Signing in on a hosted server
+
+A hosted server has no GitHub OAuth app of its own: the platform signs members in with its one GitHub app and hands the
+sign-in over, signed with Ed25519. A self-hosted server ignores all of this and keeps its own GitHub app. The platform
+provisions a hosted server with:
+
+| Setting | Value |
+|---|---|
+| `SHARED_MEMORY_SIGN_IN` | `platform` (the default, `github`, is the server's own GitHub app) |
+| `SHARED_MEMORY_PLATFORM_URL` | The platform's address, for example `https://platform.example.com` |
+| `SHARED_MEMORY_PLATFORM_PUBLIC_KEY` | The public half of the platform's sign-in key: 32 bytes of Ed25519, in hex |
+| `SHARED_MEMORY_SUBDOMAIN` | The server's own subdomain, for example `acme` for `acme.example.com` |
+
+Signing in then goes:
+
+1. The member chooses to sign in. The server sends them to
+   `<platform>/sign-in?subdomain=<subdomain>&return_to=<console>/api/sign-in/platform/callback`.
+2. The platform signs them in with GitHub, then sends them to `return_to` with `?sign_in=<handed-over sign-in>`. It
+   only ever sends them to the address of the hosted server that `subdomain` names.
+3. The server checks the handed-over sign-in and signs in the member that GitHub account is linked to, as its own
+   GitHub sign-in would. It refuses one whose signature doesn't check out, that names another subdomain, that has
+   expired, or that was already used once; it remembers each one-time ID until its sign-in expires.
+
+A handed-over sign-in reads `<payload>.<signature>`, both base64url without padding. The payload is JSON:
+
+```json
+{"expires": 1763112300, "github_id": 583231, "github_login": "olive", "id": "kq3Jf0mXb2", "subdomain": "acme"}
+```
+
+| Field | What it is |
+|---|---|
+| `github_id` | The GitHub account's number, which never changes when the account is renamed |
+| `github_login` | The GitHub account's login |
+| `subdomain` | The hosted server the sign-in is for |
+| `expires` | When it stops being accepted, in Unix seconds: a few minutes after signing |
+| `id` | A one-time ID, unique to this sign-in, at most 200 characters |
+
+The signature is Ed25519 over the payload's base64url text exactly as sent, so the order of the keys and the spacing
+are the platform's to choose. `src/shared_memory/platform_sign_in.py` signs and verifies this format; the tests' fake
+platform signs with it.
+
 ### Search engines
 
 Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server, its console and its landing page stay out of search results. On the one server whose landing page should be found, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.

@@ -3,6 +3,9 @@ import { defineConfig } from "@playwright/test";
 // A port of the journeys' own. 4173 is where a developer's `npm run preview` listens, and that preview
 // proxies to the Docker server on :8000, not to the seeded journey server below.
 const consoleUrl = "http://127.0.0.1:4273";
+// The hosted server's console, whose journeys sign in through a fake platform: the same build, its API proxied to the
+// hosted server tests/console_e2e_server.py starts beside the first. e2e/helpers.ts names the same address.
+const hostedConsoleUrl = "http://127.0.0.1:4274";
 
 // The journeys run against the built console and a real server, both started here.
 export default defineConfig({
@@ -31,6 +34,14 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 180_000,
       env: { SHARED_MEMORY_SERVER: "http://127.0.0.1:8123" },
+    },
+    {
+      // Started after the one above has built the console, which it serves too.
+      command: "npm run preview -- --port 4274",
+      url: hostedConsoleUrl,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: { SHARED_MEMORY_SERVER: "http://127.0.0.1:8128" },
     },
   ],
 });

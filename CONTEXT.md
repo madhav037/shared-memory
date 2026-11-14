@@ -212,6 +212,10 @@ _Avoid_: Serial, activation code
 The web app where members browse memory and admins run the team; members sign in to it with GitHub.
 _Avoid_: Dashboard, admin panel, web UI
 
+**Handed-over sign-in**:
+How a member signs in to a hosted server's console: the platform signs them in with its own GitHub app and hands the server a short-lived, single-use sign-in, signed by the platform, naming the GitHub account and the server's subdomain. A self-hosted server signs members in with its own GitHub app instead.
+_Avoid_: SSO token, login token, auth ticket
+
 **Audit log**:
 The record of who changed members, roles, access, tokens, memory, cards or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail

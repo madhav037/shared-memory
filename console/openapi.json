@@ -26,10 +26,10 @@
     "/api/sign-in/github": {
       "get": {
         "operationId": "sign_in",
-        "summary": "Begin signing in: send the member to GitHub.",
+        "summary": "Begin signing in: send the member to GitHub, or to the platform on a hosted server.",
         "responses": {
           "302": {
-            "description": "Begin signing in: send the member to GitHub."
+            "description": "Begin signing in: send the member to GitHub, or to the platform on a hosted server."
           }
         }
       }
@@ -41,6 +41,17 @@
         "responses": {
           "302": {
             "description": "Finish signing in and return the member to the console."
+          }
+        }
+      }
+    },
+    "/api/sign-in/platform/callback": {
+      "get": {
+        "operationId": "sign_in_handed_over",
+        "summary": "Finish a sign-in the platform handed over, on a hosted server, and return the member to the console.",
+        "responses": {
+          "302": {
+            "description": "Finish a sign-in the platform handed over, on a hosted server, and return the member to the console."
           }
         }
       }

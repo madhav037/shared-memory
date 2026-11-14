@@ -28,7 +28,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Begin signing in: send the member to GitHub. */
+        /** Begin signing in: send the member to GitHub, or to the platform on a hosted server. */
         get: operations["sign_in"];
         put?: never;
         post?: never;
@@ -47,6 +47,23 @@ export interface paths {
         };
         /** Finish signing in and return the member to the console. */
         get: operations["sign_in_callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sign-in/platform/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Finish a sign-in the platform handed over, on a hosted server, and return the member to the console. */
+        get: operations["sign_in_handed_over"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2220,7 +2237,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Begin signing in: send the member to GitHub. */
+            /** @description Begin signing in: send the member to GitHub, or to the platform on a hosted server. */
             302: {
                 headers: {
                     [name: string]: unknown;
@@ -2239,6 +2256,24 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Finish signing in and return the member to the console. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sign_in_handed_over: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finish a sign-in the platform handed over, on a hosted server, and return the member to the console. */
             302: {
                 headers: {
                     [name: string]: unknown;
