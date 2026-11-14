@@ -299,12 +299,15 @@ class ConsoleApi:
                     request.state.asked = declaration.accepts.model_validate(await request.json())
                 except (ValueError, ValidationError) as wrong:
                     return JSONResponse({"message": _plainly(wrong)}, status_code=422)
-            if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
-                refused = await anyio.to_thread.run_sync(self._read_only_refusal, request)
-                if refused is not None:
-                    return refused
             if declaration.operation_id in SAVING:
+                if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
+                    # Refused before it waits for its turn with every other save.
+                    refused = await anyio.to_thread.run_sync(self._read_only_refusal, request)
+                    if refused is not None:
+                        return refused
                 return await self._saves.run(handle, request)
+            if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
+                return await anyio.to_thread.run_sync(self._unless_read_only, handle, request)
             return await anyio.to_thread.run_sync(handle, request)
 
         return Route(
@@ -321,6 +324,9 @@ class ConsoleApi:
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         return None
+
+    def _unless_read_only(self, handle: Callable[[Request], Response], request: Request) -> Response:
+        return self._read_only_refusal(request) or handle(request)
 
     # --- the calls ---
 
