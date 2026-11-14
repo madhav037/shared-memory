@@ -1,7 +1,10 @@
-"""A license key is checked offline: valid, tampered, lapsed and wrongly signed keys, and key versions (spec #416)."""
+"""A license key is checked offline: valid, tampered, lapsed and wrongly signed keys, key versions (spec #416), and
+whether a key is a hosted server's (#469)."""
 
 from __future__ import annotations
 
+import base64
+import json
 import socket
 from datetime import date
 
@@ -71,6 +74,34 @@ def test_a_key_is_licensed_expiring_or_lapsed_by_its_date() -> None:
     assert found.status(date(2026, 12, 6)) == "expiring"  # the last day still counts
     assert found.status(date(2026, 12, 7)) == "lapsed"
     assert found.days_left(date(2026, 12, 1)) == 5
+
+
+def test_a_key_without_the_hosted_field_is_a_self_hosted_servers_and_signs_as_before() -> None:
+    key = a_key()
+    encoded = key.split(".")[1]
+    payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+
+    assert key.startswith("sm1.")
+    assert set(payload) == {"team", "member_cap", "issued", "expires", "key_id"}
+    assert verify(key, TEST_PUBLIC_KEYS).hosted is False
+
+
+def test_a_hosted_key_says_so_and_is_signed_by_the_same_key_and_version() -> None:
+    key = a_key(hosted=True)
+
+    assert key.startswith("sm1.")
+    assert verify(key, TEST_PUBLIC_KEYS) == License(
+        "Acme", 5, date(2026, 9, 1), date(2027, 9, 1), "k-1", hosted=True
+    )
+
+
+def test_a_hosted_key_that_has_lapsed_is_read_only_and_a_self_hosted_one_only_lapsed() -> None:
+    hosted = verify(a_key(expires=date(2026, 12, 6), hosted=True), TEST_PUBLIC_KEYS)
+    self_hosted = verify(a_key(expires=date(2026, 12, 6)), TEST_PUBLIC_KEYS)
+
+    assert hosted.status(date(2026, 12, 6)) == "expiring"
+    assert hosted.status(date(2026, 12, 7)) == "read-only"
+    assert self_hosted.status(date(2026, 12, 7)) == "lapsed"
 
 
 def test_checking_a_key_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -> None:

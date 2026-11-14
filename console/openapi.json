@@ -4845,13 +4845,14 @@
         "type": "object"
       },
       "LicenseState": {
-        "description": "The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that\ncan't be trusted), and what a trusted key says. Nothing here ever includes the key itself.",
+        "description": "The server's license: whether it is licensed, expiring, lapsed, read-only (a hosted server's key has lapsed),\nunlicensed (no key) or invalid (a key that can't be trusted), and what a trusted key says. Nothing here ever\nincludes the key itself.",
         "properties": {
           "status": {
             "enum": [
               "licensed",
               "expiring",
               "lapsed",
+              "read-only",
               "unlicensed",
               "invalid"
             ],

@@ -242,8 +242,16 @@ console's Team page (owner and admins; the install is in the audit log, and a ke
 
 The server checks the key against a public key built into it and makes no network call to do so. With no key, an
 invalid one or a lapsed one, admins see a banner on the console, from 30 days before expiry it says the key is
-expiring, and a lapsed key still keeps its cap. Memory, MCP tools and hooks are never affected, and an unlicensed
-server works fully for evaluation.
+expiring, and a lapsed key still keeps its cap. On a self-hosted server memory, MCP tools and hooks are never
+affected, and an unlicensed server works fully for evaluation.
+
+A hosted server's key says so (`"hosted": true`; a key without it is a self-hosted server's). Once a hosted server's
+key lapses, the server is read-only ([ADR-0022](./adr/0022-a-lapsed-hosted-server-turns-read-only.md)): every change
+to memory from a coding agent (saving, editing, deleting, promoting, retiring, deciding a challenge, pinning, creating a
+project or a foundation), adding a member and adding a card is refused with an answer naming the date the key lapsed
+and that paying restores it. Reading, search, the briefing and the hooks keep working, and a hook never blocks a coding
+agent over it. Removing members, reissuing personal tokens, locks and the board's existing cards keep working too.
+Installing a renewed key ends it at once.
 
 ### Generating the production key pair (the developer, once)
 
@@ -265,7 +273,7 @@ uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory
     --team "Acme" --member-cap 10 --expires 2027-11-06
 ```
 
-It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
+Add `--hosted` for a hosted server's key. It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
 the old one.
 
 ## How alike two activities must be for a collision warning

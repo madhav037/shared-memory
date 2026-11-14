@@ -1,9 +1,10 @@
 """Which license key the server is running under, and what it sets (spec #416).
 
 The key comes from the server-wide settings an admin installed on the Team page, or else from `SHARED_MEMORY_LICENSE_KEY`.
-A key whose signature checks out sets the member cap, even once it has lapsed. Nothing else depends on it: a missing,
-lapsed or invalid key only shows admins a banner, and memory, MCP tools and hooks never look at it. No network call is
-made, ever (license.py only verifies).
+A key whose signature checks out sets the member cap, even once it has lapsed. On a self-hosted server nothing else
+depends on it: a missing, lapsed or invalid key only shows admins a banner, and memory, MCP tools and hooks never look at
+it. A hosted server's key that has lapsed makes the server read-only: every change to memory is refused, and reading
+keeps working (ADR-0022). No network call is made, ever (license.py only verifies).
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ CACHED = timedelta(seconds=5)
 
 @dataclass(frozen=True)
 class Current:
-    """The license the server is under. `status` is licensed, expiring, lapsed, invalid (a key was given but can't be
-    trusted) or unlicensed (none was given)."""
+    """The license the server is under. `status` is licensed, expiring, lapsed, read-only (a hosted server's key has
+    lapsed), invalid (a key was given but can't be trusted) or unlicensed (none was given)."""
 
     status: str
     license: License | None
@@ -77,6 +78,17 @@ class Licenses:
         """The server's member cap: the key's, if it has a trustworthy one, otherwise `SHARED_MEMORY_MEMBER_CAP`."""
         held = self.current().license
         return held.member_cap if held is not None else self.settings.member_cap
+
+    def ensure_writable(self) -> None:
+        """Refuse a change to memory while the server is read-only: its key is a hosted server's, and has lapsed. A
+        self-hosted server is never read-only (ADR-0022)."""
+        current = self.current()
+        if current.status == "read-only" and current.license is not None:
+            raise Refused(
+                f"This hosted server's license key lapsed on {current.license.expires.isoformat()}, so the server is "
+                "read-only: memory can still be read and searched, but nothing can be saved or changed. Paying for "
+                "your team's plan restores it, with all its memory."
+            )
 
     def install(self, admin: Member, text: str) -> Current:
         """Keep this key server-wide, as an owner or an admin, and record who did it."""

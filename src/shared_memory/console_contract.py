@@ -85,10 +85,11 @@ class RateLimitChange(BaseModel):
 
 
 class LicenseState(BaseModel):
-    """The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
-    can't be trusted), and what a trusted key says. Nothing here ever includes the key itself."""
+    """The server's license: whether it is licensed, expiring, lapsed, read-only (a hosted server's key has lapsed),
+    unlicensed (no key) or invalid (a key that can't be trusted), and what a trusted key says. Nothing here ever
+    includes the key itself."""
 
-    status: Literal["licensed", "expiring", "lapsed", "unlicensed", "invalid"]
+    status: Literal["licensed", "expiring", "lapsed", "read-only", "unlicensed", "invalid"]
     team: str | None
     member_cap: int | None
     issued: str | None
