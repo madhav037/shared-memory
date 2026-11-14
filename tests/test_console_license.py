@@ -1,6 +1,9 @@
 """The license key through the console JSON API and the Session driver (spec #416): an admin installs a key and sees the
 team, cap and expiry; a member who isn't an admin can't; the cap follows the key; memory works the same without one.
-The `install-license` command installs a key the same way, as the platform does on a hosted server's host (#470)."""
+The `install-license` command installs a key the same way, as the platform does on a hosted server's host (#470).
+A hosted server whose key has lapsed is read-only in the console too: it says the day it will stop, refuses inviting
+members, creating cards and every change to memory, and still lets admins export, remove members and revoke personal
+tokens (#472, ADR-0022)."""
 
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from tests.support import (
     Session,
     TestClock,
     add,
+    create,
     fresh_database,
     signed_in,
     signed_in_owner,
@@ -308,3 +312,124 @@ def test_install_license_replaces_a_key_installed_earlier(console: Console) -> N
 
     found = license_of(client)
     assert (found["status"], found["member_cap"], found["key_id"]) == ("licensed", 15, "k-renewed")
+
+
+# --- a read-only hosted server in the console (#472, ADR-0022) ---
+
+# The test clock stands at 1 September 2026, so a key whose last day was 31 August has lapsed.
+LAPSED_ON = date(2026, 8, 31)
+
+
+def lapsed_hosted_key() -> str:
+    return a_key(member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON, hosted=True)
+
+
+def lapsed_self_hosted_key() -> str:
+    return a_key(member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON)
+
+
+def read_only_refusal(response: Any) -> str:
+    """The plain answer a read-only server gives: refused, naming the date the key lapsed and that paying restores it."""
+    assert response.status_code == 403, response.text
+    message: str = response.json()["message"]
+    assert "read-only" in message
+    assert LAPSED_ON.isoformat() in message
+    assert "Paying" in message
+    return message
+
+
+def test_a_read_only_server_says_the_day_it_will_stop_fourteen_days_after_its_key_lapsed(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-stops", 820)
+
+    install(client, lapsed_hosted_key())
+
+    found = license_of(client)
+    assert (found["status"], found["expires"], found["stops"]) == ("read-only", "2026-08-31", "2026-09-14")
+
+
+def test_a_self_hosted_server_with_a_lapsed_key_never_stops(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-self-hosted-stops", 821)
+
+    install(client, lapsed_self_hosted_key())
+
+    found = license_of(client)
+    assert (found["status"], found["stops"]) == ("lapsed", None)
+
+
+def test_a_read_only_server_refuses_inviting_members_and_creating_cards(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-refuses", 822)
+    project = create(client, "Billing")["project_id"]
+    install(client, lapsed_hosted_key())
+
+    read_only_refusal(client.post_json("/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None}))
+    read_only_refusal(client.post_json(f"/api/projects/{project}/cards", {"title": "Retry failed webhooks"}))
+
+    assert [one["member_id"] for one in client.get("/api/members").json()["members"]] == ["E1001"]
+    assert all(not column["cards"] for column in client.get(f"/api/projects/{project}/board").json()["columns"])
+
+
+def test_a_read_only_server_refuses_every_console_change_to_memory_before_doing_anything(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-memory", 823)
+    project = create(client, "Billing")["project_id"]
+    install(client, lapsed_hosted_key())
+
+    # None of these name anything that exists: refused for read-only first, not for what they name.
+    for path, body in (
+        ("/api/memory/pin", {"path": f"projects/{project}/convention/invoicing"}),
+        ("/api/memory/unpin", {"path": f"projects/{project}/convention/invoicing"}),
+        ("/api/memory/retire", {"path": f"projects/{project}/convention/no-such-memory.md"}),
+        ("/api/challenges/9999/decide", {"decision": "accept"}),
+        ("/api/projects", {"name": "Late"}),
+        (f"/api/projects/{project}/foundations", {"name": "Product"}),
+    ):
+        read_only_refusal(client.post_json(path, body))
+
+
+def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_while_read_only(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-still", 824)
+    add(client, "emp-2", "Dana Dev", "dana-ro-still")
+    add(client, "emp-3", "Eve Eng", "eve-ro-still")
+    install(client, lapsed_hosted_key())
+
+    exported = client.get("/api/export")
+    assert exported.status_code == 200, exported.text
+    assert exported.headers["content-type"] == "application/zip"
+
+    for revoked in (client.post("/api/members/emp-2/token"), client.post("/api/my-token")):
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["personal_token"]
+
+    removed = client.post("/api/members/emp-3/remove")
+    assert removed.status_code == 200, removed.text
+    assert {one["member_id"]: one["removed"] for one in removed.json()["members"]} == {
+        "E1001": False,
+        "emp-2": False,
+        "emp-3": True,
+    }
+
+
+def test_a_stranger_is_told_to_sign_in_not_that_the_server_is_read_only(console: Console) -> None:
+    owner = console.client()
+    signed_in_owner(console, owner, "olive-ro-stranger", 825)
+    install(owner, lapsed_hosted_key())
+
+    refused = console.client().post_json("/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None})
+
+    assert refused.status_code == 401
+    assert "read-only" not in refused.json()["message"]
+
+
+def test_a_self_hosted_server_with_a_lapsed_key_still_invites_members_and_creates_cards(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-ro-self-hosted", 826)
+    project = create(client, "Billing")["project_id"]
+    install(client, lapsed_self_hosted_key())
+
+    assert add(client, "emp-2", "Dana Dev")["personal_token"]
+    added = client.post_json(f"/api/projects/{project}/cards", {"title": "Retry failed webhooks"})
+    assert added.status_code == 200, added.text

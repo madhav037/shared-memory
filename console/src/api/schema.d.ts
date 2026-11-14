@@ -2105,6 +2105,8 @@ export interface components {
             key_id: string | null;
             /** Days Left */
             days_left: number | null;
+            /** Stops */
+            stops: string | null;
             /** Reason */
             reason: string | null;
             /** Source */
