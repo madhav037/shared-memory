@@ -196,15 +196,16 @@ svg text { font-family: var(--body); fill: var(--ink); }
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">madhav037/shared-memory · main @ 19bb384 (same tree as dev @ 17f41ff) · 20 Oct 2026</div>
+    <div class="eyebrow">madhav037/shared-memory · dev @ a080601 · 15 Nov 2026</div>
     <h1>Shared Memory Architecture</h1>
-    <p class="cap">One server keeps the team's memory. Every coding agent reads and writes it. The console governs it. Every box, arrow and step on this page names the file in <code class="code">src/shared_memory/</code> that does it.</p>
+    <p class="cap">One server keeps the team's memory. Every coding agent reads and writes it. The console governs it. Every box, arrow and step on this page names the file in <code class="code">src/shared_memory/</code> that does it. The cloud platform (#468) lives in the private repository <code class="code">madhav037/shared-memory-platform</code>; where this page draws it, files are in <code class="code">src/shared_memory_platform/</code>. The platform is built and merged into its <code class="code">dev</code>, not yet live: its real Hetzner, Paddle and Storage Box paths are unverified until go-live (platform #13).</p>
     <nav class="toc" aria-label="Sections">
       <a href="#travel">How a request travels</a>
-      <a href="#containers" class="new">Containers</a>
-      <a href="#components" class="new">Components</a>
+      <a href="#containers">Containers</a>
+      <a href="#platform" class="new">Cloud platform</a>
+      <a href="#components">Components</a>
       <a href="#flows" class="new">Flows, step by step</a>
-      <a href="#data" class="new">Data and storage</a>
+      <a href="#data">Data and storage</a>
       <a href="#trust" class="new">Trust boundaries</a>
       <a href="#turns">Saves take turns</a>
       <a href="#cache">What is cached</a>
@@ -260,6 +261,87 @@ svg text { font-family: var(--body); fill: var(--ink); }
       </svg>
     </div>
     <p class="cap">Production is <code class="code">deploy/compose.yaml</code>. Only caddy publishes ports (80, 443). The server and db publish none, so nothing reaches the server except through caddy. On the helper's host, <code class="code">deploy/behind-a-proxy.yaml</code> moves caddy to 127.0.0.1:8180 behind the host's own nginx, which holds HTTPS. <code class="code">shared-memory serve</code> sets up the schema and the memory folder once, then starts <code class="code">SHARED_MEMORY_WORKERS</code> uvicorn workers (2 by default). Each worker loads the model, so RAM grows with the worker count.</p>
+  </section>
+
+  <!-- 2b. The cloud platform (#468) -->
+  <section class="card" id="platform">
+    <div class="head"><h2>The cloud platform</h2><span class="cap">private repository · hosted servers on shared hosts · built, not yet live</span></div>
+    <div class="scroll">
+      <svg class="w1000" viewBox="0 0 1000 470" role="img" aria-label="The platform, in its own private repository, serves visitors, owners and the vendor. It runs commands on hosts over root SSH. Each host has one Caddy, one Postgres with a database per team, and one stack per team. Members and coding agents reach their team's hosted server through the host's Caddy. The platform calls GitHub, Paddle, Hetzner and Telegram; each host copies backups to a Storage Box. Crossings B10 to B14 are listed under Trust boundaries.">
+        <rect x="10" y="30" width="180" height="415" rx="12" class="frame"/><text x="20" y="48" class="flabel">PEOPLE</text>
+        <rect x="210" y="30" width="340" height="415" rx="12" class="frame"/><text x="220" y="48" class="flabel">PLATFORM · PRIVATE REPOSITORY</text>
+        <rect x="570" y="30" width="235" height="415" rx="12" class="frame"/><text x="580" y="48" class="flabel">EACH HOST · HETZNER CLOUD, EU</text>
+        <rect x="820" y="30" width="170" height="415" rx="12" class="frame"/><text x="830" y="48" class="flabel">OUTSIDE</text>
+
+        <g class="nd"><rect x="25" y="60" width="150" height="60" rx="8"/><text class="tt" x="100" y="86">Visitor · owner</text><text class="sb" x="100" y="102">landing · sign-up · plan</text></g>
+        <g class="nd"><rect x="25" y="165" width="150" height="50" rx="8"/><text class="tt" x="100" y="186">Vendor</text><text class="sb" x="100" y="202">allow-listed GitHub ids</text></g>
+        <g class="nd"><rect x="25" y="300" width="150" height="60" rx="8"/><text class="tt" x="100" y="326">Member's browser</text><text class="sb" x="100" y="342">the team's console</text></g>
+        <g class="nd"><rect x="25" y="385" width="150" height="50" rx="8"/><text class="tt" x="100" y="406">Coding agent</text><text class="sb" x="100" y="422">/mcp · /hooks</text></g>
+
+        <g class="nd"><rect x="225" y="60" width="150" height="44" rx="8"/><text class="tt" x="300" y="78">Landing + sign-up</text><text class="fl" x="300" y="94">app.py · teams.py</text></g>
+        <g class="nd"><rect x="225" y="114" width="150" height="44" rx="8"/><text class="tt" x="300" y="132">GitHub sign-in</text><text class="fl" x="300" y="148">accounts.py</text></g>
+        <g class="nd"><rect x="225" y="168" width="150" height="44" rx="8"/><text class="tt" x="300" y="186">Vendor console</text><text class="fl" x="300" y="202">app.py · console/</text></g>
+        <g class="nd"><rect x="225" y="222" width="150" height="44" rx="8"/><text class="tt" x="300" y="240">Billing · Paddle</text><text class="fl" x="300" y="256">billing.py</text></g>
+        <g class="nd"><rect x="225" y="276" width="150" height="44" rx="8"/><text class="tt" x="300" y="294">Lapsing</text><text class="fl" x="300" y="310">lapsing.py</text></g>
+        <g class="nd"><rect x="225" y="330" width="150" height="44" rx="8"/><text class="tt" x="300" y="348">Roll-outs</text><text class="fl" x="300" y="364">roll_out.py</text></g>
+        <g class="nd"><rect x="385" y="60" width="150" height="44" rx="8"/><text class="tt" x="460" y="78">License keys</text><text class="fl" x="460" y="94">licensing.py</text></g>
+        <g class="nd"><rect x="385" y="114" width="150" height="44" rx="8"/><text class="tt" x="460" y="132">Provisioner</text><text class="fl" x="460" y="148">provisioner.py</text></g>
+        <g class="nd"><rect x="385" y="168" width="150" height="44" rx="8"/><text class="tt" x="460" y="186">Hosts</text><text class="fl" x="460" y="202">hosts.py</text></g>
+        <g class="nd"><rect x="385" y="222" width="150" height="44" rx="8"/><text class="tt" x="460" y="240">Monitoring</text><text class="fl" x="460" y="256">monitoring.py</text></g>
+        <g class="nd"><rect x="385" y="276" width="150" height="44" rx="8"/><text class="tt" x="460" y="294">Backups</text><text class="fl" x="460" y="310">backups.py</text></g>
+        <g class="nd"><rect x="385" y="330" width="150" height="44" rx="8"/><text class="tt" x="460" y="348">Host runner</text><text class="fl" x="460" y="364">host_runner.py</text></g>
+        <g class="nd ext"><rect x="225" y="386" width="310" height="44" rx="8"/><text class="tt" x="380" y="404">Platform Postgres</text><text class="sb" x="380" y="420">teams · hosts · keys signed · vendor audit log</text></g>
+
+        <g class="nd"><rect x="585" y="60" width="205" height="50" rx="8"/><text class="tt" x="687" y="81">Caddy · one per host</text><text class="sb" x="687" y="97">*.domain · wildcard TLS</text></g>
+        <g class="nd"><rect x="585" y="130" width="205" height="70" rx="8"/><text class="tt" x="687" y="153">Team stack</text><text class="sb" x="687" y="169">server · 1 worker · 1 GB</text><text class="sb" x="687" y="182">console in front</text></g>
+        <g class="nd"><rect x="585" y="215" width="205" height="60" rx="8"/><text class="tt" x="687" y="240">Team stack …</text><text class="sb" x="687" y="256">one per team</text></g>
+        <g class="nd"><rect x="585" y="300" width="205" height="55" rx="8"/><text class="tt" x="687" y="323">Postgres · one per host</text><text class="sb" x="687" y="339">a database + role per team</text></g>
+        <text x="687" y="380" class="lbl" text-anchor="middle">Docker · rsync · /srv/shared-memory</text>
+        <text x="687" y="396" class="lbl" text-anchor="middle">each stack's memory files in its own volume</text>
+
+        <g class="nd ext"><rect x="835" y="60" width="145" height="44" rx="8"/><text class="tt" x="907" y="78">GitHub</text><text class="sb" x="907" y="94">one OAuth app</text></g>
+        <g class="nd ext"><rect x="835" y="120" width="145" height="44" rx="8"/><text class="tt" x="907" y="138">Paddle</text><text class="sb" x="907" y="154">checkout · webhooks</text></g>
+        <g class="nd ext"><rect x="835" y="180" width="145" height="44" rx="8"/><text class="tt" x="907" y="198">Hetzner</text><text class="sb" x="907" y="214">Cloud API · DNS</text></g>
+        <g class="nd ext"><rect x="835" y="240" width="145" height="44" rx="8"/><text class="tt" x="907" y="258">Telegram + email</text><text class="sb" x="907" y="274">vendor alerts</text></g>
+        <g class="nd ext"><rect x="835" y="305" width="145" height="44" rx="8"/><text class="tt" x="907" y="323">Storage Box</text><text class="sb" x="907" y="339">nightly backups</text></g>
+
+        <path class="arw" d="M175 90 H 221" marker-end="url(#mA)"/>
+        <path class="arw" d="M175 190 H 221" marker-end="url(#mA)"/>
+        <path class="arw" d="M175 318 H 203 V 136 H 221" marker-end="url(#mA)"/><text x="0" y="0" class="lbl" transform="translate(214 300) rotate(-90)">sign-in · nonce</text>
+        <path class="arw" d="M175 345 H 195 V 455 H 560 V 85 H 581" marker-end="url(#mA)"/>
+        <path class="arw" d="M175 425 H 195"/>
+        <text x="380" y="451" class="lbl" text-anchor="middle">HTTPS to &lt;subdomain&gt;.domain</text>
+        <path class="arw" d="M687 110 V 126" marker-end="url(#mA)"/>
+        <path class="arw" d="M687 275 V 296" marker-end="url(#mA)"/><text x="694" y="290" class="lbl">SQL</text>
+        <path class="arw" d="M535 352 H 566" marker-end="url(#mA)"/>
+        <path class="arw m d" d="M535 244 H 581" marker-end="url(#mM)"/>
+        <path class="arw" d="M500 60 V 18 H 812 V 262 H 831" marker-end="url(#mA)"/>
+        <path class="arw" d="M812 82 H 831" marker-end="url(#mA)"/>
+        <path class="arw" d="M812 142 H 831" marker-end="url(#mA)"/>
+        <path class="arw" d="M812 202 H 831" marker-end="url(#mA)"/>
+        <text x="656" y="13" class="lbl" text-anchor="middle">platform calls out · Paddle's webhooks call in</text>
+        <path class="arw m" d="M790 327 H 831" marker-end="url(#mM)"/><text x="812" y="368" class="lbl" text-anchor="middle">rsync · SSH</text>
+
+        <g class="bx"><circle cx="198" cy="90" r="9"/><text x="198" y="93.5">B10</text></g>
+        <g class="bx"><circle cx="198" cy="190" r="9"/><text x="198" y="193.5">B10</text></g>
+        <g class="bx"><circle cx="552" cy="352" r="9"/><text x="552" y="355.5">B11</text></g>
+        <g class="bx"><circle cx="558" cy="244" r="9"/><text x="558" y="247.5">B12</text></g>
+        <g class="bx"><circle cx="812" cy="112" r="9"/><text x="812" y="115.5">B13</text></g>
+        <g class="bx"><circle cx="812" cy="327" r="9"/><text x="812" y="330.5">B14</text></g>
+      </svg>
+    </div>
+    <p class="cap">The platform (<code class="code">shared-memory-platform serve</code>, on 127.0.0.1:8100 behind Caddy) carries the landing page, sign-up and trials, Paddle billing and the vendor console. Its provisioner sets up each team's hosted server on a host in named steps (<code class="code">provisioner.STEPS</code>: host, images, database, stack, setup, github, license, caddy, email), running the public package's own CLI in the team's container (<code class="code">setup</code>, <code class="code">link-github</code>, <code class="code">install-license</code>, <code class="code">count-members</code>). Hosts share, teams don't (ADR-0021): one Caddy and one Postgres per host (<code class="code">host/compose.yaml</code>), and one stack per team, a server with one worker plus its console (<code class="code">host/team.yaml</code>). <code class="code">Hosts.grow</code> adds a host when every ready host is past the RAM threshold (75% by default), never past the host ceiling, which is 0 until the vendor sets one; sign-ups queue meanwhile. Backups: each host copies a team's dump (without <code class="code">sections</code>) and memory files straight to the Storage Box, never through the platform; 7 daily and 4 weekly are kept. Roll-outs take a public repository release to hosted servers in stages (own team, one host, the rest), backing each up first and rolling it back on a failed <code class="code">/health</code>. Monitoring polls each hosted server's <code class="code">/health</code> and each host's RAM, alerting by Telegram at once or in a daily email digest. <em>Unverified:</em> every Hetzner, SSH, Storage Box and Paddle call is tested only against fakes until go-live (platform #13).</p>
+    <div class="tw">
+      <table class="t">
+        <thead><tr><th>Flow</th><th>Steps</th><th>In the code</th></tr></thead>
+        <tbody>
+          <tr><td>License key</td><td>The platform signs a short-lived hosted key (the trial's 7 days, then renewed daily while the team is in good standing) in the public package's own format, and installs it on the team's server over SSH: <code>install-license</code>, the key on the command's input. The server checks it offline and keeps it in <code>license_settings</code>; workers re-read it within 5 seconds, with no restart. A plan change or a renewal is just a new key (ADR-0023).</td><td>platform <code>licensing.py</code> · <code>Billing.renew_due</code> · <code>Provisioner.install_license</code> → public <code>cli.py install-license</code> · <code>Licenses.install_as_vendor</code></td></tr>
+          <tr><td>Handed-over sign-in</td><td>The member clicks Sign in on the team's console. The server keeps a one-time nonce in a cookie and sends the browser to <code>&lt;platform&gt;/sign-in?subdomain&amp;return_to&amp;nonce</code>. The platform signs them in with its one GitHub app, keeps no session for them, and hands back a sign-in signed with its Ed25519 key (GitHub account, subdomain, one-time ID, nonce, expiry), only ever to that hosted server's own address. The server checks it offline: signature, subdomain, expiry (at most 10 minutes ahead), the nonce in this browser's cookie, used once (<code>handed_over_sign_ins</code>). After sign-up the owner clicks "Open your console", which runs the same flow.</td><td>public <code>ConsoleSessions.start</code>, <code>finish_handed_over</code> · <code>platform_sign_in.verify</code> · platform <code>Accounts.hand_over</code>, <code>app.handed_back_to</code>, <code>open_console</code></td></tr>
+          <tr><td>Paying</td><td>The owner picks a plan (5, 10 or 15 members, monthly or yearly). Paddle's checkout takes the payment in INR. Paddle's webhooks, once their signature checks out, set the team's plan; its member cap comes from the price billed. A first payment Paddle reports as paid before the subscription exists (a UPI one can wait) keeps the team in good standing up to 3 days. Cancelling, cards and invoices are in Paddle's customer portal only.</td><td><code>Billing.checkout</code>, <code>received</code>, <code>_unverified</code>, <code>portal</code> · <code>billing.in_good_standing</code></td></tr>
+          <tr><td>Read-only lifecycle (ADR-0022)</td><td>A team that ends unpaid gets no new key, so its last one lapses. The day after its last day the hosted server is read-only: reading, search, the briefing and export keep working; every change to memory, inviting members and creating cards are refused. 14 days later its stack is stopped, and 30 days after that it is deleted with its database, memory files and backups. The owner is emailed at each step. Paying, or the vendor extending a trial, restores it: stack started, then a fresh key. The vendor can't restore an unpaid team by hand; extending its trial is the way.</td><td>platform <code>lapsing.py</code> · public <code>Licenses.ensure_writable</code>, <code>app.unless_read_only</code>, <code>console_api.REFUSED_WHILE_READ_ONLY</code></td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <!-- 3. Components (C4 level 3) -->
