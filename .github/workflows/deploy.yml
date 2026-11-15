@@ -75,15 +75,16 @@ jobs:
         if: steps.credentials.outputs.ready == 'true'
         run: echo "COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: SSH to the server, its host key pinned
+      # The deploy key is on disk only while our own steps use it: never while an action runs, so an action whose tag
+      # or code changed can't take it (#390). The check writes it and removes it again; after the builds it's written
+      # once for the steps that talk to the server, and removed at the end however the job went.
+      - name: Pin the server's host key
         if: steps.credentials.outputs.ready == 'true'
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           cat > ~/.ssh/config <<EOF
           Host server
@@ -97,7 +98,12 @@ jobs:
 
       - name: Check the server
         if: steps.credentials.outputs.ready == 'true'
-        run: ssh server check
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          trap 'rm -f ~/.ssh/deploy_key' EXIT
+          (umask 077 && printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key)
+          ssh server check
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
@@ -154,6 +160,13 @@ jobs:
           cache-from: type=gha,scope=backup
           cache-to: type=gha,scope=backup,mode=max
 
+      # Every action has run: from here on only this workflow's own steps run until the key is removed.
+      - name: Hand the deploy key to the steps that talk to the server
+        if: steps.credentials.outputs.ready == 'true' && env.ACTION != 'check'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: (umask 077 && printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key)
+
       # A server whose deploy command predates `layers` refuses it, and is sent every layer, as before.
       - name: Ask the server which layers it has
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'deploy'
@@ -191,3 +204,7 @@ jobs:
       - name: Run the release before this one, then come back
         if: steps.credentials.outputs.ready == 'true' && env.ACTION == 'drill'
         run: ssh server drill
+
+      - name: Remove the deploy key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
