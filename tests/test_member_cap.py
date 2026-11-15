@@ -131,7 +131,13 @@ def count_members(console: Console, team: str) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def uncapped(console: Console) -> None:
+    """Lift the cap an earlier test left, so these tests can add the members they count."""
+    console.server.app.state.identity.member_cap = lambda: None
+
+
 def test_count_members_prints_the_teams_members_as_a_number_alone(console: Console) -> None:
+    uncapped(console)
     team, owner_token = console.a_team("olive-count")
     owner = Session(console.server, owner_token)
     owner.call("add_member", member_id="emp-2", name="Dana Dev")
@@ -141,6 +147,7 @@ def test_count_members_prints_the_teams_members_as_a_number_alone(console: Conso
 
 
 def test_count_members_leaves_out_removed_members_as_the_cap_does(console: Console) -> None:
+    uncapped(console)
     team, owner_token = console.a_team("olive-count-removed")
     owner = Session(console.server, owner_token)
     owner.call("add_member", member_id="emp-2", name="Dana Dev")
@@ -150,6 +157,7 @@ def test_count_members_leaves_out_removed_members_as_the_cap_does(console: Conso
 
 
 def test_count_members_counts_only_that_team(console: Console) -> None:
+    uncapped(console)
     team, _ = console.a_team("olive-count-own")
     _, other_owner = console.a_team("olive-count-other")
     Session(console.server, other_owner).call("add_member", member_id="emp-2", name="Dana Dev")
