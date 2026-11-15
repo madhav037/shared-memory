@@ -269,8 +269,12 @@ seconds. A key that can't be trusted, or is for the other kind of server, is ref
 standard error, exiting 1, and changes nothing; the audit log records an install as the vendor's:
 
 ```
-docker compose exec server shared-memory install-license <license key>
+docker compose exec -T server shared-memory install-license - < license-key.txt
 ```
+
+The command reads the key from standard input when given `-`, or no key with standard input not a terminal, so the key
+never appears in the host's or the container's process list. Passing the key as the argument
+(`shared-memory install-license <license key>`) still works, but puts it in the process list while it installs.
 
 Before moving a hosted team to a smaller plan, the platform asks the server how many **members** the team has. It
 prints the count alone on one line, counted as the **member cap** counts them (a removed member holds no place), and

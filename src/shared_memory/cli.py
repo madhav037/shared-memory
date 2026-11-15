@@ -27,6 +27,7 @@ def run(
     out: TextIO = sys.stdout,
     err: TextIO = sys.stderr,
     license_keys: Mapping[int, bytes] = PUBLIC_KEYS,
+    stdin: TextIO = sys.stdin,
 ) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -55,7 +56,14 @@ def run(
         "within five seconds, with no restart."
     )
     install = commands.add_parser("install-license", help=installs, description=installs)
-    install.add_argument("key", help="The license key, as signed by the vendor.")
+    install.add_argument(
+        "key",
+        nargs="?",
+        help=(
+            "The license key, as signed by the vendor. Pass - or leave it out to read the key from standard input, so "
+            "it never appears in the process list."
+        ),
+    )
 
     commands.add_parser("reindex", help="Rebuild the search index from the memory files.")
 
@@ -101,10 +109,19 @@ def run(
         from shared_memory.audit import Audit
         from shared_memory.licensing import Licenses
 
+        key = args.key
+        if key is None and stdin.isatty():
+            install.error("give the license key, or pipe it on standard input")
+        if key is None or key == "-":
+            key = stdin.read().strip()
+            if not key:
+                print("No license key on standard input.", file=err)
+                return 1
+
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             audit = Audit(db, system_clock, Identity(db, system_clock))
-            held = Licenses(settings, db, audit, system_clock, license_keys).install_as_vendor(args.key).license
+            held = Licenses(settings, db, audit, system_clock, license_keys).install_as_vendor(key).license
         except Refused as refused:
             print(refused, file=err)
             return 1
