@@ -354,6 +354,37 @@ def test_install_license_refuses_an_invalid_key_with_the_team_pages_answer_and_c
     assert vendor_installs(client)[0] == ("E1001", "k-before")
 
 
+class Piped(io.StringIO):
+    """Standard input that is a pipe, not a terminal: what the platform's `docker exec -i` hands the command."""
+
+    def isatty(self) -> bool:
+        return False
+
+
+@pytest.mark.parametrize("arguments", [["-"], []], ids=["dash", "no-argument"])
+def test_install_license_reads_the_key_from_standard_input_so_it_is_never_an_argument(
+    console: Console, arguments: list[str]
+) -> None:
+    client = console.client()
+    signed_in_owner(console, client, f"olive-lic-cli-stdin-{len(arguments)}", 818 + len(arguments))
+    key = a_key(team="Acme", key_id=f"k-stdin-{len(arguments)}")
+    out, err = io.StringIO(), io.StringIO()
+
+    code = cli.run(
+        ["install-license", *arguments],
+        settings=console.server.settings,
+        out=out,
+        err=err,
+        license_keys=TEST_PUBLIC_KEYS,
+        stdin=Piped(key + "\n"),
+    )
+    console.clock.advance(seconds=5)
+
+    assert code == 0, err.getvalue()
+    assert "Acme" in out.getvalue()
+    assert license_of(client)["key_id"] == f"k-stdin-{len(arguments)}"
+
+
 def test_install_license_replaces_a_key_installed_earlier(console: Console) -> None:
     client = console.client()
     signed_in_owner(console, client, "olive-lic-cli-renew", 817)
