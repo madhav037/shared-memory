@@ -25,6 +25,7 @@ def run(
     argv: list[str],
     settings: Settings | None = None,
     out: TextIO = sys.stdout,
+    err: TextIO = sys.stderr,
     license_keys: Mapping[int, bytes] = PUBLIC_KEYS,
 ) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
@@ -40,6 +41,13 @@ def run(
     link.add_argument("--team", required=True, help="Team ID")
     link.add_argument("--member-id", required=True)
     link.add_argument("--github", required=True, help="Their GitHub username")
+
+    counts = (
+        "Print how many members a team has, as a number alone on one line: those the member cap counts, so not removed "
+        "members. The platform runs it before moving a hosted team to a smaller plan."
+    )
+    counting = commands.add_parser("count-members", help=counts, description=counts)
+    counting.add_argument("--team", required=True, help="Team ID")
 
     installs = (
         "Install a license key server-wide, as an admin does on the Team page, recorded in the audit log as installed "
@@ -75,6 +83,18 @@ def run(
         print(f"Team: {args.team}", file=out)
         print(f"Owner personal token: {token}", file=out)
         print("Keep this token secret: it is shown only once.", file=out)
+        return 0
+
+    if args.command == "count-members":
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
+        try:
+            members = Identity(db, system_clock).members_in_team(args.team)
+        except Refused as refused:
+            print(refused, file=err)
+            return 1
+        finally:
+            db.close()
+        print(members, file=out)
         return 0
 
     if args.command == "install-license":

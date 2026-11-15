@@ -340,6 +340,19 @@ class Identity:
         with self._db.transaction() as conn:
             return self._members_in_use(conn)
 
+    def members_in_team(self, team_code: str) -> int:
+        """The members one team has now, counted as the member cap counts them: a removed member holds no place."""
+        with self._db.transaction() as conn:
+            team = conn.execute("SELECT id FROM teams WHERE code = %s", (team_code,)).fetchone()
+            if team is None:
+                raise Refused(f"No team {team_code!r} on this server.")
+            row = conn.execute(
+                "SELECT count(*) AS n FROM members WHERE team_id = %s AND removed_at IS NULL", (team["id"],)
+            ).fetchone()
+        assert row is not None
+        members: int = row["n"]
+        return members
+
     def remove_member(self, caller: Caller, member_id: str) -> None:
         self._require_admin(caller)
         if member_id == caller.member_id:

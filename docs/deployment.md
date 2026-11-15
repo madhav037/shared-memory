@@ -261,6 +261,14 @@ records the install as the vendor's:
 docker compose exec server shared-memory install-license <license key>
 ```
 
+Before moving a hosted team to a smaller plan, the platform asks the server how many **members** the team has. It
+prints the count alone on one line, counted as the **member cap** counts them (a removed member holds no place), and
+exits 0; a team the server doesn't have is a plain error on stderr with a non-zero exit:
+
+```
+docker compose exec server shared-memory count-members --team acme
+```
+
 ### Generating the production key pair (the developer, once)
 
 The public key in `src/shared_memory/license.py` (`PUBLIC_KEYS`) is a placeholder whose private half nobody holds. Make
