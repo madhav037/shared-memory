@@ -17,6 +17,17 @@ What a coding agent needs when it implements a ticket in its own worktree, next 
   several at once get killed; when agents work in parallel, CI runs the full suite.
 - Read pytest's own last line for the result. Piped through `tail`, the exit code is `tail`'s.
 
+## Waiting for CI
+
+Wait on a PR's `checks` job, or on its merge, with the Monitor tool: an until-loop on
+`gh pr view <n> --json state` or `gh pr checks <n>`. When memory runs low the guard kills background shell loops
+(twice in #373's run) and leaves a Monitor watch running.
+
+## Finishing
+
+Once your PR has merged, remove your worktree from the main checkout with `git worktree remove <path>`, and leave
+its branch in place: a PR stacked on it still needs it.
+
 ## The console's API contract
 
 A change to `console_contract.py` needs both generated files refreshed, from the repository root:
