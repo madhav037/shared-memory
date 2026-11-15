@@ -108,11 +108,11 @@ _Avoid_: Flagged, quarantined, unsafe
 
 **Tied file**:
 A file, or a folder glob, in one of a project's repositories that a memory is about, written as repository:path; editing it brings the memory up.
-_Avoid_: Related file, linked file, attached file
+_Avoid_: Linked file, attached file
 
 **In doubt**:
 Said of a memory with at least one open challenge naming a reason; recall ranks it lower and marks it so.
-_Avoid_: Flagged, disputed, suspect
+_Avoid_: Flagged, disputed
 
 **Popular memory**:
 A personal memory other members have recalled at least ten times, at least two of them distinct, within thirty days; its author is prompted to promote it.
@@ -120,7 +120,7 @@ _Avoid_: Trending, hot, top memory
 
 **Draft learning**:
 A candidate memory a session's coding agent drafts from what the session learned, private to its member until they confirm it as personal memory or it is dropped after seven days.
-_Avoid_: Suggestion, proposal, candidate, pending memory
+_Avoid_: Learning proposal, memory candidate
 
 ### Memory types
 
@@ -160,11 +160,11 @@ _Avoid_: Replace, overwrite, update
 
 **Challenge**:
 A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
-_Avoid_: Approval, proposal, change request, flag, report
+_Avoid_: Approval, proposal, change request
 
 **Reason**:
 Which of two grounds a challenge that doubts a memory names: *misled me*, or *contradicts the code*, quoting the file and line. It is not the reasoning, which is free text.
-_Avoid_: Flag type, category, cause
+_Avoid_: Doubt kind, doubt type
 
 **Foundation challenge**:
 A challenge to add a memory to a foundation, or to supersede or retire one of its memories, even the challenger's own; a keeper of that foundation or a project lead decides it, and it is shown apart from other challenges.
@@ -212,7 +212,7 @@ _Avoid_: Injection, auto-search
 
 **Question**:
 What a member asks a memory's author about that memory; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read.
-_Avoid_: Comment, query, ticket, discussion
+_Avoid_: Memory comment, discussion
 
 **Hook**:
 Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
