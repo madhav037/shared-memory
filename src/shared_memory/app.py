@@ -105,8 +105,8 @@ _unfiltered = contextvars.ContextVar("unfiltered_listing", default=False)
 
 
 async def _tool_input_schema(
-    app: Any, request: Any, request_id: Any, verdict: Any, lifespan_state: Any, name: str
-) -> Any | None:
+    app: Any, request: Any, request_id: Any, verdict: Any, lifespan_state: Any, name: str  # noqa: ANN401  # typed as the SDK function it stands in for
+) -> Any | None:  # noqa: ANN401  # the SDK function this stands in for returns Any, and the schema is passed back as is
     key = (id(app), name)
     if key not in _tool_schemas:
         token = _unfiltered.set(True)
@@ -157,7 +157,7 @@ class NeverCached:
 
 def _refusals_as_tool_errors(fn: F) -> F:
     @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: object, **kwargs: object) -> object:
         try:
             return fn(*args, **kwargs)
         except Refused as refused:
@@ -237,7 +237,7 @@ def build_app(
         first, so a call without a valid personal token is refused for that, as it always is."""
 
         @functools.wraps(step)
-        def guarded(*args: Any, **kwargs: Any) -> Any:
+        def guarded(*args: object, **kwargs: object) -> object:
             try:
                 licenses.ensure_writable()
             except Refused:
@@ -328,12 +328,12 @@ def build_app(
         """A tool that saves memory: it waits for its turn without holding a worker thread (see `saves.py`)."""
 
         @functools.wraps(tool)
-        async def in_turn(*args: Any, **kwargs: Any) -> Any:
+        async def in_turn(*args: object, **kwargs: object) -> object:
             return await saves.run(tool, *args, **kwargs)
 
         return in_turn  # type: ignore[return-value]
 
-    def authenticate(headers: Any) -> Caller:
+    def authenticate(headers: Mapping[str, str]) -> Caller:
         return identity.authenticate(
             _bearer(headers.get("authorization")),
             headers.get("x-shared-memory-project") or None,
