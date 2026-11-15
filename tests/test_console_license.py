@@ -3,7 +3,9 @@ team, cap and expiry; a member who isn't an admin can't; the cap follows the key
 The `install-license` command installs a key the same way, as the platform does on a hosted server's host (#470).
 A hosted server whose key has lapsed is read-only in the console too: it says the day it will stop, refuses inviting
 members, creating cards and every change to memory, and still lets admins export, remove members and revoke personal
-tokens (#472, ADR-0022)."""
+tokens (#472, ADR-0022). A server takes only a key of its own kind: a hosted server (the platform signs its members in)
+refuses a self-hosted server's key, so it can't escape read-only with one, and a self-hosted server refuses a hosted
+server's, so it never turns read-only."""
 
 from __future__ import annotations
 
@@ -27,6 +29,8 @@ from tests.support import (
     Console,
     ConsoleClient,
     FakeGitHub,
+    FakePlatform,
+    HostedConsole,
     RunningServer,
     Session,
     TestClock,
@@ -69,9 +73,52 @@ def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
             sign_in.stop()
 
 
+@pytest.fixture(scope="module")
+def hosted(tmp_path_factory: pytest.TempPathFactory) -> Iterator[HostedConsole]:
+    """A hosted server: the fake platform signs its members in, which is how the server knows it is hosted."""
+    with start_blocking_portal() as portal:
+        memory = tmp_path_factory.mktemp("hosted-license-memory")
+        clock = TestClock()  # 1 September 2026
+        platform = FakePlatform(portal, Settings("", Path(memory), Path(memory)), clock)
+        settings = Settings(
+            database_url=fresh_database("shared_memory_hosted_license"),
+            memory_root=memory,
+            model_cache=REPO_ROOT / ".cache" / "fastembed",
+            sign_in="platform",
+            platform_url=platform.url,
+            platform_public_key=platform.public_key,
+            subdomain="acme",
+            rate_limit_on=False,
+        )
+        server = RunningServer(
+            build_app(
+                settings, clock=clock, embedder=LazyEmbedder(settings.model_cache), license_keys=TEST_PUBLIC_KEYS
+            ),
+            settings,
+            clock,
+            portal,
+        )
+        try:
+            yield HostedConsole(server, platform, clock)
+        finally:
+            server.stop()
+            platform.stop()
+
+
 @pytest.fixture(autouse=True)
-def no_key_installed(console: Console) -> None:
+def no_key_installed(console: Console, hosted: HostedConsole) -> None:
     console.server.app.state.licenses.clear()
+    hosted.server.app.state.licenses.clear()
+
+
+def hosted_owner(hosted: HostedConsole, github: str, account: int) -> tuple[ConsoleClient, Session]:
+    """A team on the hosted server whose owner is signed in to its console through the platform, and that owner's
+    Claude session."""
+    _, owner_token = hosted.a_team(github)
+    client = ConsoleClient(hosted.server)
+    hosted.platform.as_(account, github)
+    client.sign_in()
+    return client, Session(hosted.server, owner_token)
 
 
 def license_of(client: ConsoleClient) -> dict[str, Any]:
@@ -227,9 +274,8 @@ def test_the_session_driver_is_unaffected_by_the_key_state(console: Console) -> 
     assert owner.call("create_project", name="Check")["project_id"]
 
 
-def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_installed(console: Console) -> None:
-    client = console.client()
-    owner = signed_in_owner(console, client, "olive-lic-read-only", 813)
+def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_installed(hosted: HostedConsole) -> None:
+    client, owner = hosted_owner(hosted, "olive-lic-read-only", 813)
     install(client, a_key(member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
 
     assert license_of(client)["status"] == "read-only"
@@ -242,11 +288,14 @@ def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_ins
     assert owner.call("create_project", name="Paid")["project_id"]
 
 
-def install_license(console: Console, key: str) -> tuple[int, str]:
-    """`shared-memory install-license`, as the platform runs it on a hosted server's host (#470)."""
-    out = io.StringIO()
-    code = cli.run(["install-license", key], settings=console.server.settings, out=out, license_keys=TEST_PUBLIC_KEYS)
-    return code, out.getvalue()
+def install_license(server: Console | HostedConsole, key: str) -> tuple[int, str, str]:
+    """`shared-memory install-license`, as the platform runs it on a hosted server's host (#470): its exit code, what it
+    printed, and what it printed to standard error."""
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.run(
+        ["install-license", key], settings=server.server.settings, out=out, err=err, license_keys=TEST_PUBLIC_KEYS
+    )
+    return code, out.getvalue(), err.getvalue()
 
 
 def vendor_installs(client: ConsoleClient) -> list[tuple[str, str]]:
@@ -260,7 +309,9 @@ def test_install_license_installs_a_key_server_wide_without_a_restart(console: C
     signed_in_owner(console, client, "olive-lic-cli", 814)
     assert license_of(client)["status"] == "unlicensed"
 
-    code, printed = install_license(console, a_key(team="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-cli"))
+    code, printed, _ = install_license(
+        console, a_key(team="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-cli")
+    )
     console.clock.advance(seconds=5)  # how long a running server keeps the key it read before reading it again
 
     assert code == 0, printed
@@ -292,11 +343,12 @@ def test_install_license_refuses_an_invalid_key_with_the_team_pages_answer_and_c
     head, payload, signature = a_key().split(".")
 
     for bad in (f"{head}.{payload}.{signature[:-3]}AAA", "not a key", a_key().replace("sm1.", "sm9.", 1)):
-        code, printed = install_license(console, bad)
+        code, printed, complained = install_license(console, bad)
         console.clock.advance(seconds=5)
 
         assert code == 1
-        assert printed.strip() == install(client, bad).json()["message"]
+        assert printed == ""
+        assert complained.strip() == install(client, bad).json()["message"]
 
     assert license_of(client)["key_id"] == "k-before"
     assert vendor_installs(client)[0] == ("E1001", "k-before")
@@ -305,9 +357,9 @@ def test_install_license_refuses_an_invalid_key_with_the_team_pages_answer_and_c
 def test_install_license_replaces_a_key_installed_earlier(console: Console) -> None:
     client = console.client()
     signed_in_owner(console, client, "olive-lic-cli-renew", 817)
-    install(client, a_key(member_cap=5, expires=date(2026, 9, 20), key_id="k-old", hosted=True))
+    install(client, a_key(member_cap=5, expires=date(2026, 9, 20), key_id="k-old"))
 
-    install_license(console, a_key(member_cap=15, expires=date(2027, 9, 20), key_id="k-renewed", hosted=True))
+    install_license(console, a_key(member_cap=15, expires=date(2027, 9, 20), key_id="k-renewed"))
     console.clock.advance(seconds=5)
 
     found = license_of(client)
@@ -338,9 +390,8 @@ def read_only_refusal(response: Any) -> str:
     return message
 
 
-def test_a_read_only_server_says_the_day_it_will_stop_fourteen_days_after_its_key_lapsed(console: Console) -> None:
-    client = console.client()
-    signed_in_owner(console, client, "olive-ro-stops", 820)
+def test_a_read_only_server_says_the_day_it_will_stop_fourteen_days_after_its_key_lapsed(hosted: HostedConsole) -> None:
+    client, _ = hosted_owner(hosted, "olive-ro-stops", 820)
 
     install(client, lapsed_hosted_key())
 
@@ -358,9 +409,8 @@ def test_a_self_hosted_server_with_a_lapsed_key_never_stops(console: Console) ->
     assert (found["status"], found["stops"]) == ("lapsed", None)
 
 
-def test_a_read_only_server_refuses_inviting_members_and_creating_cards(console: Console) -> None:
-    client = console.client()
-    signed_in_owner(console, client, "olive-ro-refuses", 822)
+def test_a_read_only_server_refuses_inviting_members_and_creating_cards(hosted: HostedConsole) -> None:
+    client, _ = hosted_owner(hosted, "olive-ro-refuses", 822)
     project = create(client, "Billing")["project_id"]
     install(client, lapsed_hosted_key())
 
@@ -371,9 +421,8 @@ def test_a_read_only_server_refuses_inviting_members_and_creating_cards(console:
     assert all(not column["cards"] for column in client.get(f"/api/projects/{project}/board").json()["columns"])
 
 
-def test_a_read_only_server_refuses_every_console_change_to_memory_before_doing_anything(console: Console) -> None:
-    client = console.client()
-    signed_in_owner(console, client, "olive-ro-memory", 823)
+def test_a_read_only_server_refuses_every_console_change_to_memory_before_doing_anything(hosted: HostedConsole) -> None:
+    client, _ = hosted_owner(hosted, "olive-ro-memory", 823)
     project = create(client, "Billing")["project_id"]
     install(client, lapsed_hosted_key())
 
@@ -389,9 +438,8 @@ def test_a_read_only_server_refuses_every_console_change_to_memory_before_doing_
         read_only_refusal(client.post_json(path, body))
 
 
-def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_while_read_only(console: Console) -> None:
-    client = console.client()
-    signed_in_owner(console, client, "olive-ro-still", 824)
+def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_while_read_only(hosted: HostedConsole) -> None:
+    client, _ = hosted_owner(hosted, "olive-ro-still", 824)
     add(client, "emp-2", "Dana Dev", "dana-ro-still")
     add(client, "emp-3", "Eve Eng", "eve-ro-still")
     install(client, lapsed_hosted_key())
@@ -413,12 +461,11 @@ def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_whi
     }
 
 
-def test_a_stranger_is_told_to_sign_in_not_that_the_server_is_read_only(console: Console) -> None:
-    owner = console.client()
-    signed_in_owner(console, owner, "olive-ro-stranger", 825)
+def test_a_stranger_is_told_to_sign_in_not_that_the_server_is_read_only(hosted: HostedConsole) -> None:
+    owner, _ = hosted_owner(hosted, "olive-ro-stranger", 825)
     install(owner, lapsed_hosted_key())
 
-    refused = console.client().post_json("/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None})
+    refused = ConsoleClient(hosted.server).post_json("/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None})
 
     assert refused.status_code == 401
     assert "read-only" not in refused.json()["message"]
@@ -433,3 +480,74 @@ def test_a_self_hosted_server_with_a_lapsed_key_still_invites_members_and_create
     assert add(client, "emp-2", "Dana Dev")["personal_token"]
     added = client.post_json(f"/api/projects/{project}/cards", {"title": "Retry failed webhooks"})
     assert added.status_code == 200, added.text
+
+
+# --- a server takes only a key of its own kind (ADR-0022) ---
+
+
+def test_a_read_only_hosted_server_refuses_a_self_hosted_servers_key_and_stays_read_only(hosted: HostedConsole) -> None:
+    client, owner = hosted_owner(hosted, "olive-kind-escape", 830)
+    install(client, lapsed_hosted_key())
+
+    refused = install(client, a_key(member_cap=1000, expires=date(2027, 9, 1), key_id="k-self-hosted"))
+
+    assert refused.status_code == 403
+    assert refused.json()["message"] == (
+        "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed here. "
+        "A hosted server runs under its own license key, which the platform installs when your team's plan is paid."
+    )
+    found = license_of(client)
+    assert (found["status"], found["expires"]) == ("read-only", LAPSED_ON.isoformat())
+    assert read_only_refusal(client.post_json("/api/projects", {"name": "Late"}))
+    assert "read-only" in owner.refusal("remember", title="T", summary="S", type="convention", body="B")
+    assert [k for k in vendor_installs(client) if k[1] == "k-self-hosted"] == []
+
+
+def test_a_self_hosted_server_refuses_a_hosted_servers_key_and_keeps_saving(console: Console) -> None:
+    client = console.client()
+    owner = signed_in_owner(console, client, "olive-kind-imposed", 831)
+
+    refused = install(client, lapsed_hosted_key())
+
+    assert refused.status_code == 403
+    assert refused.json()["message"] == (
+        "That license key is for a hosted server, and this is a self-hosted server, so it can't be installed here. "
+        "Install the license key for your self-hosted server."
+    )
+    assert license_of(client)["status"] == "unlicensed"
+    assert owner.call("create_project", name="Still saving")["project_id"]
+
+
+def test_a_self_hosted_server_under_a_lapsed_hosted_key_in_its_environment_is_never_read_only(console: Console) -> None:
+    client = console.client()
+    owner = signed_in_owner(console, client, "olive-kind-env", 832)
+    licenses = console.server.app.state.licenses
+    environment = dataclasses.replace(licenses.settings, license_key=lapsed_hosted_key())
+    licenses.settings = environment
+
+    try:
+        found = license_of(client)
+        assert (found["status"], found["stops"]) == ("lapsed", None)
+        assert owner.call("create_project", name="Never read-only")["project_id"]
+    finally:
+        licenses.settings = dataclasses.replace(environment, license_key="")
+
+
+def test_install_license_refuses_a_key_of_the_other_kind_on_standard_error(
+    console: Console, hosted: HostedConsole
+) -> None:
+    owner_client = console.client()
+    signed_in_owner(console, owner_client, "olive-kind-cli", 833)
+    hosted_client, _ = hosted_owner(hosted, "olive-kind-cli-hosted", 834)
+
+    for server, client, key in (
+        (console, owner_client, a_key(key_id="k-hosted-on-self", hosted=True)),
+        (hosted, hosted_client, a_key(key_id="k-self-on-hosted")),
+    ):
+        code, printed, complained = install_license(server, key)
+        server.clock.advance(seconds=5)
+
+        assert code == 1
+        assert printed == ""
+        assert complained.strip() == install(client, key).json()["message"]
+        assert license_of(client)["status"] == "unlicensed"

@@ -1,7 +1,7 @@
 """A hosted server whose license key has lapsed is read-only (#469, ADR-0022): every change to memory is refused with a
 plain answer naming the date and that paying restores it, while reading, search, the briefing and the hooks keep
-working. A self-hosted server with a lapsed key never turns read-only (#416). Driven through the Session driver over
-HTTP."""
+working. A self-hosted server with a lapsed key never turns read-only (#416), whatever kind of key it is under: a server
+knows it is hosted from its settings, not from its key. Driven through the Session driver over HTTP."""
 
 from __future__ import annotations
 
@@ -65,6 +65,11 @@ def hosted(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
         memory_root=tmp_path_factory.mktemp("read-only-memory"),
         model_cache=REPO_ROOT / ".cache" / "fastembed",
         rate_limit_on=False,
+        # The platform signs a hosted server's members in, which is how the server knows it is hosted.
+        sign_in="platform",
+        platform_url="https://platform.invalid",
+        platform_public_key="00" * 32,
+        subdomain="acme",
     )
     clock = TestClock()
     app = build_app(
@@ -78,10 +83,13 @@ def hosted(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
             running.stop()
 
 
-def under(server: RunningServer, key: str) -> None:
-    """Run the server under this license key, as if it were set in its environment ("" for none)."""
+def under(server: RunningServer, key: str, *, self_hosted: bool = False) -> None:
+    """Run the server under this license key, as if it were set in its environment ("" for none), as the hosted server
+    it is or, with `self_hosted`, as a self-hosted server signing members in with its own GitHub app."""
     licenses = server.app.state.licenses
-    licenses.settings = dataclasses.replace(licenses.settings, license_key=key)
+    licenses.settings = dataclasses.replace(
+        licenses.settings, license_key=key, sign_in="github" if self_hosted else "platform"
+    )
     licenses.clear()
 
 
@@ -227,8 +235,23 @@ def test_installing_a_renewed_key_ends_read_only(hosted: RunningServer, team: Te
     assert team.owner.call("remember", **SERVICES)["path"]
 
 
-def test_a_self_hosted_server_whose_key_has_lapsed_still_saves(hosted: RunningServer, team: Team) -> None:
+def test_a_hosted_server_under_a_lapsed_self_hosted_servers_key_is_read_only_too(
+    hosted: RunningServer, team: Team
+) -> None:
     under(hosted, self_hosted_key())
+
+    assert read_only_refusal(team.owner.refusal("remember", **SERVICES))
+
+
+def test_a_self_hosted_server_under_a_lapsed_hosted_servers_key_still_saves(hosted: RunningServer, team: Team) -> None:
+    under(hosted, hosted_key(), self_hosted=True)
+
+    assert remember(team.owner, SERVICES)
+    assert team.owner.call("add_card", title="Retry failed webhooks")["number"]
+
+
+def test_a_self_hosted_server_whose_key_has_lapsed_still_saves(hosted: RunningServer, team: Team) -> None:
+    under(hosted, self_hosted_key(), self_hosted=True)
     owner = team.owner
 
     saved = remember(owner, SERVICES)

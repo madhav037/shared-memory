@@ -91,6 +91,12 @@ class Settings:
         return self.sign_in == "platform"
 
     @property
+    def hosted(self) -> bool:
+        """Whether this is a hosted server: the platform signs its members in. Only a hosted server turns read-only
+        when its license key lapses, and it takes only a hosted server's key (ADR-0022)."""
+        return self.signs_in_through_platform
+
+    @property
     def github_sign_in(self) -> bool:
         """Whether this server can sign anyone in to the console with GitHub: through its own GitHub app, or through
         the platform's."""

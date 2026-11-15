@@ -9,5 +9,5 @@ A self-hosted server with no license key, or a lapsed one, only shows a banner (
 
 ## Consequences
 
-- The rule "memory never depends on the license key" now holds only for self-hosted servers. The server needs to know which kind it is, and a hosted server's key says so.
+- The rule "memory never depends on the license key" now holds only for self-hosted servers. The server needs to know which kind it is. Its settings say so (the platform signs a hosted server's members in), and a hosted server's key says so too: a server takes only a key of its own kind, so a hosted server can't escape read-only with a self-hosted server's key, and a hosted server's key can't make a self-hosted server read-only. Read-only is a hosted server whose key has lapsed.
 - Hooks still never block a coding agent. A read-only server answers a save with a plain refusal, the way the member cap refuses a member.

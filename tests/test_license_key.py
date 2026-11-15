@@ -96,12 +96,13 @@ def test_a_hosted_key_says_so_and_is_signed_by_the_same_key_and_version() -> Non
     )
 
 
-def test_a_hosted_key_that_has_lapsed_is_read_only_and_a_self_hosted_one_only_lapsed() -> None:
+def test_a_key_lapses_alike_whichever_kind_of_server_it_is_for() -> None:
     hosted = verify(a_key(expires=date(2026, 12, 6), hosted=True), TEST_PUBLIC_KEYS)
     self_hosted = verify(a_key(expires=date(2026, 12, 6)), TEST_PUBLIC_KEYS)
 
     assert hosted.status(date(2026, 12, 6)) == "expiring"
-    assert hosted.status(date(2026, 12, 7)) == "read-only"
+    # Whether a lapsed key makes the server read-only is the server's to say, from its settings (ADR-0022).
+    assert hosted.status(date(2026, 12, 7)) == "lapsed"
     assert self_hosted.status(date(2026, 12, 7)) == "lapsed"
 
 

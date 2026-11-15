@@ -245,8 +245,11 @@ invalid one or a lapsed one, admins see a banner on the console, from 30 days be
 expiring, and a lapsed key still keeps its cap. On a self-hosted server memory, MCP tools and hooks are never
 affected, and an unlicensed server works fully for evaluation.
 
-A hosted server's key says so (`"hosted": true`; a key without it is a self-hosted server's). Once a hosted server's
-key lapses, the server is read-only ([ADR-0022](./adr/0022-a-lapsed-hosted-server-turns-read-only.md)): every change
+A hosted server's key says so (`"hosted": true`; a key without it is a self-hosted server's). A server knows it is
+hosted from `SHARED_MEMORY_SIGN_IN=platform` ([Signing in on a hosted server](#signing-in-on-a-hosted-server)), and
+takes only a key of its own kind: a hosted server refuses a self-hosted server's key, and a self-hosted server a
+hosted server's, from the Team page and `install-license` alike. Once a hosted server's key lapses, the server is
+read-only ([ADR-0022](./adr/0022-a-lapsed-hosted-server-turns-read-only.md)): every change
 to memory from a coding agent (saving, editing, deleting, promoting, retiring, deciding a challenge, pinning, creating a
 project or a foundation), adding a member and adding a card is refused with an answer naming the date the key lapsed
 and that paying restores it. Reading, search, the briefing and the hooks keep working, and a hook never blocks a coding
@@ -254,8 +257,8 @@ agent over it. Removing members, reissuing personal tokens, locks and the board'
 Installing a renewed key ends it at once.
 
 The platform renews a hosted server's key from the host, with no restart; a running server picks it up within five
-seconds. A key that can't be trusted is refused with the Team page's answer and changes nothing, and the audit log
-records the install as the vendor's:
+seconds. A key that can't be trusted, or is for the other kind of server, is refused with the Team page's answer on
+standard error, exiting 1, and changes nothing; the audit log records an install as the vendor's:
 
 ```
 docker compose exec server shared-memory install-license <license key>
