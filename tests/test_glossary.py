@@ -79,7 +79,6 @@ ALLOWED: tuple[Allow, ...] = (
             SERVER + "identity.py",
             "console/src/App.tsx",
             PAGES + "AuditLog.tsx",
-            PAGES + "Landing.tsx",
             PAGES + "ProjectSettings.tsx",
             PAGES + "Team.tsx",
         ),
@@ -138,16 +137,6 @@ ALLOWED: tuple[Allow, ...] = (
         (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py"),
     ),
     Allow(
-        "collision",
-        "the landing page's example of two sessions reaching for one file, the glossary's Collision",
-        (PAGES + "Landing.tsx",),
-    ),
-    Allow(
-        "lock",
-        "the landing page's example of a session's lock on a file, the glossary's Lock",
-        (PAGES + "Landing.tsx",),
-    ),
-    Allow(
         "activity",
         "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
         (SERVER + "collisions.py",),
@@ -159,12 +148,6 @@ ALLOWED: tuple[Allow, ...] = (
         (SERVER + "app.py", SERVER + "hooks.py"),
     ),
     Allow("callback", "GitHub's OAuth callback address, not a hook", text="callback"),
-    Allow(
-        "draft",
-        "the legal pages' banner, awaiting a lawyer's review; avoided only for a personal memory",
-        (PAGES + "Legal.tsx",),
-        "pending legal review",
-    ),
     Allow(
         "client", "GitHub's OAuth client ID and secret, not a coding agent", (SERVER + "config.py",), "github client"
     ),
@@ -188,7 +171,6 @@ ALLOWED: tuple[Allow, ...] = (
     ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),
-    Allow("operator", "whoever runs the server, in plain English, not the vendor", (PAGES + "Legal.tsx",), "its operator chooses"),
     Allow(
         "task",
         "what a session is asked to do, not a card",

@@ -28,6 +28,27 @@ test("a member of a hosted server signs in through the platform", async ({ page 
   await expect(page.getByText("Olive Owner (E1001), owner of acme")).toBeVisible();
 });
 
+test("a hosted console's links to the landing page, plans, Terms and Privacy Policy reach the platform", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const notice = page.getByTestId("sign-in-notice");
+  await expect(notice.getByRole("link", { name: "Terms" })).toHaveAttribute("href", `${fakePlatform}/terms`);
+  await expect(notice.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", `${fakePlatform}/privacy`);
+  const links = page.getByTestId("platform-links");
+  await expect(links.getByRole("link", { name: "Plans" })).toHaveAttribute("href", `${fakePlatform}/#pricing`);
+
+  await platformSignsIn(page, { id: 1, login: "olive" });
+  await page.getByTestId("sign-in").click();
+  await expect(page.getByTestId("member-menu")).toBeVisible();
+
+  const footer = page.getByTestId("platform-links");
+  await expect(footer.getByRole("link", { name: "About Shared Memory" })).toHaveAttribute("href", `${fakePlatform}/`);
+  await expect(footer.getByRole("link", { name: "Plans" })).toHaveAttribute("href", `${fakePlatform}/#pricing`);
+  await expect(footer.getByRole("link", { name: "Terms" })).toHaveAttribute("href", `${fakePlatform}/terms`);
+  await expect(footer.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", `${fakePlatform}/privacy`);
+});
+
 test("a sign-in whose signature doesn't check out is turned away", async ({ page }) => {
   await platformSignsIn(page, { id: 1, login: "olive", forged: true });
 

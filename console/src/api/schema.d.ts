@@ -911,6 +911,8 @@ export interface components {
             member: components["schemas"]["SignedInMember"] | null;
             /** Server Url */
             server_url: string;
+            /** Platform Url */
+            platform_url: string | null;
         };
         /**
          * ProjectMember

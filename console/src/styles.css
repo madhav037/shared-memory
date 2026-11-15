@@ -1977,6 +1977,41 @@ div.dotted {
   margin: 0;
 }
 
+/* ---------- Signing in, and the links to the platform ---------- */
+
+.sign-in-page .title-page-inner {
+  display: grid;
+  justify-items: start;
+  gap: 20px;
+}
+.sign-in-lede {
+  font-size: 1.25rem;
+  color: var(--ink-2);
+  margin: 0;
+}
+.sign-in-fine {
+  font-size: 0.875rem;
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 60ch;
+}
+.sign-in-fine a,
+.platform-links a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.platform-links {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+}
+.platform-foot {
+  padding: 16px 24px 24px;
+}
+
 /* ---------- Challenges: the memory now, and what is offered in its place ---------- */
 
 .dispute {

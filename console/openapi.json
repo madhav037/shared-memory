@@ -1859,13 +1859,25 @@
           "server_url": {
             "title": "Server Url",
             "type": "string"
+          },
+          "platform_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Url"
           }
         },
         "required": [
           "signed_in",
           "github_sign_in",
           "member",
-          "server_url"
+          "server_url",
+          "platform_url"
         ],
         "title": "Status",
         "type": "object"
