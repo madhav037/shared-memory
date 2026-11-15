@@ -6,8 +6,8 @@ can rotate: the server keeps one public key per version and accepts any of them.
 
 The server only ever verifies. Nothing here makes a network call. On a self-hosted server a key that fails to verify, or
 has lapsed, only changes what the console says and whether more members can be added: memory, MCP tools and hooks never
-depend on it. A hosted server's key that has lapsed makes the server read-only (ADR-0022). A key without the hosted
-field is a self-hosted server's, so every key signed before the field existed reads as it always did.
+depend on it. A hosted server whose key has lapsed is read-only (ADR-0022). A key without the hosted field is a
+self-hosted server's, so every key signed before the field existed reads as it always did.
 Signing lives here so `scripts/sign-license.py` and the tests share one format.
 """
 
@@ -48,18 +48,18 @@ class License:
     issued: date
     expires: date
     key_id: str
-    # The key is for a hosted server, which turns read-only once the key lapses (ADR-0022).
+    # The key is for a hosted server. A hosted server takes only such a key, and a self-hosted server never does.
     hosted: bool = False
 
     def days_left(self, today: date) -> int:
         return (self.expires - today).days
 
     def status(self, today: date) -> str:
-        """`lapsed` once the expiry date has passed (`read-only` for a hosted server's key), `expiring` from 30 days
-        before it, else `licensed`."""
+        """`lapsed` once the expiry date has passed, `expiring` from 30 days before it, else `licensed`. Whether a lapsed
+        key makes the server read-only is the server's to say (licensing.py): it does only on a hosted server."""
         left = self.days_left(today)
         if left < 0:
-            return "read-only" if self.hosted else "lapsed"
+            return "lapsed"
         return "expiring" if left <= EXPIRING_DAYS else "licensed"
 
 

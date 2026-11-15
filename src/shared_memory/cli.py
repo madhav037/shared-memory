@@ -106,7 +106,7 @@ def run(
             audit = Audit(db, system_clock, Identity(db, system_clock))
             held = Licenses(settings, db, audit, system_clock, license_keys).install_as_vendor(args.key).license
         except Refused as refused:
-            print(refused, file=out)
+            print(refused, file=err)
             return 1
         finally:
             db.close()

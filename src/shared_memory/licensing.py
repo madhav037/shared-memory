@@ -4,8 +4,10 @@ The key comes from the server-wide settings an admin installed on the Team page 
 `install-license`), or else from `SHARED_MEMORY_LICENSE_KEY`.
 A key whose signature checks out sets the member cap, even once it has lapsed. On a self-hosted server nothing else
 depends on it: a missing, lapsed or invalid key only shows admins a banner, and memory, MCP tools and hooks never look at
-it. A hosted server's key that has lapsed makes the server read-only: every change to memory is refused, and reading
-keeps working (ADR-0022). No network call is made, ever (license.py only verifies).
+it. A hosted server (its settings say so: the platform signs its members in) whose key has lapsed is read-only: every
+change to memory is refused, and reading keeps working (ADR-0022). A server takes only a key of its own kind, so a
+hosted server can't escape read-only with a self-hosted server's key, nor a self-hosted server be made read-only by a
+hosted server's. No network call is made, ever (license.py only verifies).
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ READ_ONLY_FOR = timedelta(days=14)
 
 @dataclass(frozen=True)
 class Current:
-    """The license the server is under. `status` is licensed, expiring, lapsed, read-only (a hosted server's key has
+    """The license the server is under. `status` is licensed, expiring, lapsed, read-only (a hosted server whose key has
     lapsed), invalid (a key was given but can't be trusted) or unlicensed (none was given)."""
 
     status: str
@@ -85,7 +87,10 @@ class Licenses:
                 found = Current("invalid", None, str(invalid), source, None)
             else:
                 today = now.date()
-                found = Current(held.status(today), held, None, source, held.days_left(today))
+                status = held.status(today)
+                if status == "lapsed" and self.settings.hosted:
+                    status = "read-only"
+                found = Current(status, held, None, source, held.days_left(today))
         self._known = (now, found)
         return found
 
@@ -95,7 +100,7 @@ class Licenses:
         return held.member_cap if held is not None else self.settings.member_cap
 
     def ensure_writable(self) -> None:
-        """Refuse a change to memory while the server is read-only: its key is a hosted server's, and has lapsed. A
+        """Refuse a change to memory while the server is read-only: it is a hosted server, and its key has lapsed. A
         self-hosted server is never read-only (ADR-0022)."""
         current = self.current()
         if current.status == "read-only" and current.license is not None:
@@ -118,11 +123,23 @@ class Licenses:
         return self._keep(text, actor=VENDOR)
 
     def _keep(self, text: str, *, member: Member | None = None, actor: str | None = None) -> Current:
-        """Check the key, then keep it in place of any earlier one. A key that can't be trusted changes nothing."""
+        """Check the key, then keep it in place of any earlier one. A key that can't be trusted, or is for the other
+        kind of server, changes nothing."""
         try:
             held = verify(text, self._public_keys)
         except InvalidLicense as invalid:
             raise Refused(str(invalid)) from None
+        if held.hosted and not self.settings.hosted:
+            raise Refused(
+                "That license key is for a hosted server, and this is a self-hosted server, so it can't be installed "
+                "here. Install the license key for your self-hosted server."
+            )
+        if self.settings.hosted and not held.hosted:
+            raise Refused(
+                "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed "
+                "here. A hosted server runs under its own license key, which the platform installs when your team's "
+                "plan is paid."
+            )
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO license_settings (id, key) VALUES (1, %s) ON CONFLICT (id) DO UPDATE SET key = EXCLUDED.key",
