@@ -51,7 +51,7 @@ STALE_PRICES = {
 
 
 def hosted_key(expires: date = LAPSED_ON) -> str:
-    return a_key(member_cap=1000, issued=date(2025, 9, 1), expires=expires, hosted=True)
+    return a_key(team="acme", member_cap=1000, issued=date(2025, 9, 1), expires=expires, hosted=True)
 
 
 def self_hosted_key(expires: date = LAPSED_ON) -> str:

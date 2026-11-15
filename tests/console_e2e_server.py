@@ -358,7 +358,7 @@ if __name__ == "__main__":
         # The team stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
         # hosted server is read-only, and stops on 14 September. The platform installs keys as the vendor (#470).
         hosted.app.state.licenses.install_as_vendor(
-            a_key(team="Acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
+            a_key(team="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
         )
         print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
         print(f"hosted server on {hosted.url}, fake platform on {platform.url}", flush=True)
