@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 import psycopg
-from anyio.from_thread import start_blocking_portal
+from anyio.from_thread import BlockingPortal, start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
@@ -47,13 +49,38 @@ PLATFORM_PORT = 8129
 def github_port(env: Mapping[str, str] = os.environ) -> int:
     return int(env.get("SHARED_MEMORY_E2E_GITHUB_PORT", DEFAULT_GITHUB_PORT))
 
-if __name__ == "__main__":
-    memory = Path(tempfile.mkdtemp(prefix="console-e2e-")) / "memory"
-    with start_blocking_portal() as portal:
-        github = FakeGitHub(portal, Settings("", memory, memory), port=github_port())
+
+@dataclass
+class Seeded:
+    """The journeys' servers, started and seeded: the console's server and its fake GitHub, the hosted server and its
+    fake platform, and the Billing project the browsing journeys open."""
+
+    server: RunningServer
+    github: FakeGitHub
+    hosted: RunningServer
+    platform: FakePlatform
+    project: str
+
+
+@contextmanager
+def seeded(
+    portal: BlockingPortal,
+    memory: Path,
+    *,
+    databases: str = "shared_memory_console_e2e",
+    port: int = 0,
+    github_port: int = 0,
+    hosted_port: int = 0,
+    platform_port: int = 0,
+) -> Iterator[Seeded]:
+    """Start the journeys' servers and seed them, and stop them on the way out. Port 0 takes any free port. A seed that
+    no longer holds raises here, so tests/test_e2e_seed.py catches it without a browser (#373)."""
+    with ExitStack() as running:
+        github = FakeGitHub(portal, Settings("", memory, memory), port=github_port)
+        running.callback(github.stop)
         github.as_(1, "olive")
         settings = Settings(
-            database_url=fresh_database("shared_memory_console_e2e"),
+            database_url=fresh_database(databases),
             memory_root=memory,
             model_cache=REPO_ROOT / ".cache" / "fastembed",
             github_client_id="client-id",
@@ -64,8 +91,9 @@ if __name__ == "__main__":
             console_url=CONSOLE,
         )
         server = RunningServer(
-            build_app(settings, clock=TestClock(), license_keys=TEST_PUBLIC_KEYS), settings, TestClock(), portal, port=PORT
+            build_app(settings, clock=TestClock(), license_keys=TEST_PUBLIC_KEYS), settings, TestClock(), portal, port=port
         )
+        running.callback(server.stop)
         printed = server.run_cli(
             "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
@@ -326,9 +354,10 @@ if __name__ == "__main__":
         # Olive's GitHub account. It saves and searches nothing, so it loads no model.
         hosted_memory = memory.parent / "hosted-memory"
         hosted_clock = TestClock()
-        platform = FakePlatform(portal, Settings("", hosted_memory, hosted_memory), hosted_clock, port=PLATFORM_PORT)
+        platform = FakePlatform(portal, Settings("", hosted_memory, hosted_memory), hosted_clock, port=platform_port)
+        running.callback(platform.stop)
         hosted_settings = Settings(
-            database_url=fresh_database("shared_memory_console_e2e_hosted"),
+            database_url=fresh_database(f"{databases}_hosted"),
             memory_root=hosted_memory,
             model_cache=REPO_ROOT / ".cache" / "fastembed",
             sign_in="platform",
@@ -343,8 +372,9 @@ if __name__ == "__main__":
             hosted_settings,
             hosted_clock,
             portal,
-            port=HOSTED_PORT,
+            port=hosted_port,
         )
+        running.callback(hosted.stop)
         hosted_printed = hosted.run_cli(
             "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
@@ -360,9 +390,25 @@ if __name__ == "__main__":
         hosted.app.state.licenses.install_as_vendor(
             a_key(team="Acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
         )
-        print(f"console server on {server.url}, fake GitHub on {github.url}, project {project}", flush=True)
-        print(f"hosted server on {hosted.url}, fake platform on {platform.url}", flush=True)
+
+        yield Seeded(server, github, hosted, platform, project)
+
+
+if __name__ == "__main__":
+    with (
+        start_blocking_portal() as portal,
+        seeded(
+            portal,
+            Path(tempfile.mkdtemp(prefix="console-e2e-")) / "memory",
+            port=PORT,
+            github_port=github_port(),
+            hosted_port=HOSTED_PORT,
+            platform_port=PLATFORM_PORT,
+        ) as seed,
+    ):
+        print(f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True)
+        print(f"hosted server on {seed.hosted.url}, fake platform on {seed.platform.url}", flush=True)
         try:
-            server.join()
+            seed.server.join()
         except KeyboardInterrupt:
             pass
