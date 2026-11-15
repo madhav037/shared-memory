@@ -16,6 +16,7 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
     assert signed_out.status() == {
         "signed_in": True,
         "github_sign_in": True,
+        "hosted": False,
         "member": {
             "member_id": "E1001",
             "name": "Olive Owner",
@@ -135,6 +136,7 @@ def test_a_server_without_github_cannot_sign_anyone_in(server: RunningServer) ->
         assert client.status() == {
             "signed_in": False,
             "github_sign_in": False,
+            "hosted": False,
             "member": None,
             "server_url": server.url,
             "platform_url": None,

@@ -1200,6 +1200,7 @@ class ConsoleApi:
         return Status(
             signed_in=member is not None,
             github_sign_in=self._sessions.configured,
+            hosted=self._settings.signs_in_through_platform,
             server_url=self._server_url(request),
             platform_url=self._settings.platform_url.rstrip("/") or None,
             member=None

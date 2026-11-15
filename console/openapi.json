@@ -1846,6 +1846,10 @@
             "title": "Github Sign In",
             "type": "boolean"
           },
+          "hosted": {
+            "title": "Hosted",
+            "type": "boolean"
+          },
           "member": {
             "anyOf": [
               {
@@ -1875,6 +1879,7 @@
         "required": [
           "signed_in",
           "github_sign_in",
+          "hosted",
           "member",
           "server_url",
           "platform_url"

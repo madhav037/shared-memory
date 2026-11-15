@@ -908,6 +908,8 @@ export interface components {
             signed_in: boolean;
             /** Github Sign In */
             github_sign_in: boolean;
+            /** Hosted */
+            hosted: boolean;
             member: components["schemas"]["SignedInMember"] | null;
             /** Server Url */
             server_url: string;

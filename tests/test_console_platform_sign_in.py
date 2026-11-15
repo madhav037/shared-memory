@@ -63,6 +63,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
     assert hosted.status() == {
         "signed_in": True,
         "github_sign_in": True,
+        "hosted": True,
         "member": {
             "member_id": "E1001",
             "name": "Olive Owner",
