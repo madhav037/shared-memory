@@ -32,4 +32,6 @@ Communication to and from subagents should be sparse. Communicate primarily thro
 
 8. Mark the PR as ready for review.
 
-9. Clean up all **implementer subagent** worktrees.
+9. Once the PR merges into `dev`, close the spec issue and every ticket by hand: `Closes #n` acts only on a merge into the default branch. Run `gh issue close <n> --comment "Merged into dev in #<pr>."` for each. Done when none of them is still open.
+
+10. Clean up the worktrees: `git worktree remove <path>` for each **implementer subagent** worktree whose branch has merged, then `git worktree prune`. Done when `git worktree list` shows none of this run's worktrees.
