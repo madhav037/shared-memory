@@ -67,6 +67,8 @@ Members use `https://memory.example.com` as the **Shared Memory server URL** in 
 
 To update the server later, pull this repository and run `docker compose up -d --build` again, or let GitHub do it: [Deploying from GitHub](#deploying-from-github).
 
+**The server runs as its own user, not root.** The server image's process runs as `shared-memory` (uid 10001). The container starts as root only to hand the `memory-data` volume to that user, then drops to it, so a volume made by an older, root-run image, or a memory folder restored into it, needs nothing done by hand: the first start hands it over. `docker compose exec server …` still runs as root; the commands run that way change the database, not the memory folder. Caddy and the backup still run as root: Caddy binds ports 80 and 443, and the backup reads the SSH key mounted from the host.
+
 ## Behind a web server the host already runs
 
 On a host whose own web server (nginx, say) already holds ports 80 and 443 for other sites, the stack's Caddy can't take them. Put the stack behind that web server instead. The web server keeps 80 and 443 and holds HTTPS for this domain too. It passes the domain on to Caddy, which listens only on the host's loopback (`127.0.0.1:8180`), so the stack is reachable from outside only through the web server. The other sites aren't touched: nginx tells sites apart by name.
@@ -130,6 +132,8 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 5. In **Actions → Deploy → Run workflow**, run `check` first. It changes nothing and prints what the host's web server answers and the running release. Then run `deploy`. After the next deploy, run a `drill` once: it backs up, runs the release before the running one, checks it's healthy, and comes back, so the way back is known to work. It needs no build, and it's refused while the release before is the same images, since nothing would really swap.
 
 When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
+
+Install it again before the first release whose server runs as its own user (#388) reaches the host. Putting back a release from before that, whose server ran as root, then hands the memory folder back to root first; the copy from before it doesn't, and a root server can't open a memory folder another user owns.
 
 **What a deploy sends.** Only the layers the host lacks. The workflow first asks the script's `layers`, which prints the layers of the release images the host holds and changes nothing, and leaves those layers out of what it sends ([`deploy/upload.py`](../deploy/upload.py)); `docker load` on the host finds them already there. The server image is built in two parts for this ([`Dockerfile`](../Dockerfile)): a base with the system packages, the locked dependencies and the search model, named by a hash of exactly what goes into it, and the server's code on top. The images the three Dockerfiles start from are pinned by digest. So a release that changes only the server's code or the console sends a few megabytes, and the log says how many bytes went and how long they took.
 

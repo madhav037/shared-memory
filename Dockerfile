@@ -40,6 +40,13 @@ RUN python -c "import sys; from fastembed import TextEmbedding; TextEmbedding(mo
 
 FROM base AS release
 
+# The server runs as shared-memory, not root (#388). The entrypoint starts as root only to hand /data to that user, so
+# a volume made when the image ran as root keeps working, then drops to it. /data starts out the user's, so a new
+# volume does too. Root, as `docker compose exec` runs, may still read the memory folder: git trusts it.
+RUN useradd --system --uid 10001 --user-group --create-home --home-dir /home/shared-memory shared-memory     && mkdir -p /data/memory     && chown -R shared-memory:shared-memory /data     && git config --system --add safe.directory /data/memory
+COPY --chmod=755 deploy/server-entrypoint.sh /usr/local/bin/server-entrypoint
+ENTRYPOINT ["server-entrypoint"]
+
 # The project installs editable and without compiling: compiling would rewrite every dependency's bytecode, and the
 # release layer would carry all of it again.
 COPY pyproject.toml LICENSE ./

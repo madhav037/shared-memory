@@ -66,6 +66,11 @@ case "$1" in
             inspect)
                 case "$3 $4" in
                     *RootFS.Layers*) cat "$images/.layers/$5" ;;
+                    # A server image built before #388 has no entrypoint and runs as root.
+                    *Entrypoint*) case " ${STUB_ROOT_IMAGES:-} " in
+                                      *" $(cat "$images/$5") "*) echo null ;;
+                                      *) echo '["server-entrypoint"]' ;;
+                                  esac ;;
                     -f*) cat "$images/$5" ;;
                     *) [ -e "$images/$3" ] ;;
                 esac ;;
@@ -234,6 +239,29 @@ def test_a_release_that_fails_to_start_is_replaced_by_the_one_it_replaced(host: 
     assert b"runs again" in done.stderr
     assert host.serving() == "shared-memory-server@running"
     assert host.head() == host.running
+
+
+def test_putting_back_a_release_whose_server_runs_as_root_hands_the_memory_folder_back_to_root(host: Host) -> None:
+    done = host.ssh(
+        f"deploy {host.newer}",
+        host.release(host.newer),
+        STUB_UNHEALTHY=f"shared-memory-server:{host.newer}",
+        STUB_ROOT_IMAGES="shared-memory-server@running",
+    )
+
+    assert done.returncode == 1
+    assert host.serving() == "shared-memory-server@running"
+    calls = host.calls()
+    chown = "compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data"
+    assert calls.index(f"up shared-memory-server:{host.newer}") < calls.index(chown), "only on the way back"
+    assert calls.index("compose stop server") < calls.index(chown) < calls.index("up shared-memory-server@running")
+
+
+def test_a_release_whose_server_drops_root_itself_leaves_the_memory_folder_alone(host: Host) -> None:
+    done = host.ssh(f"deploy {host.newer}", host.release(host.newer), STUB_ROOT_IMAGES="shared-memory-server@running")
+
+    assert done.returncode == 0, done.stderr.decode()
+    assert "chown" not in host.calls()
 
 
 def test_nothing_switches_when_the_backup_fails(host: Host) -> None:

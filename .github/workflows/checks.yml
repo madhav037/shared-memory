@@ -334,6 +334,26 @@ jobs:
             unset DOCKER_HOST
           done
 
+      # The server runs as shared-memory, not root (#388), on a volume a root server left behind as on a server's own
+      # rootless Docker: its memory folder is handed over, git works in it, and root can still read it as `exec` does.
+      - name: The release runs as its own user over a volume root made
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+        run: |
+          docker run --rm -v legacy:/data --entrypoint sh shared-memory-server:two -ec '
+            git init -q -b main /data/memory
+            git -C /data/memory -c user.name=t -c user.email=t@t.invalid commit -q --allow-empty -m "made by root"
+            chown -R 0:0 /data'
+          docker run --rm -v legacy:/data shared-memory-server:two sh -ec '
+            [ "$(id -u)" != 0 ] || { echo "::error::The server runs as root."; exit 1; }
+            [ "$(stat -c %U /data/memory/.git/HEAD)" = shared-memory ]
+            touch /data/memory/written
+            git -C /data/memory log -1 --format=%s | grep -q "made by root"
+            python -c "import pygit2; pygit2.Repository(\"/data/memory\")"
+            echo "The server runs as $(id -un) and owns the memory folder root left."'
+          docker run --rm -v legacy:/data --entrypoint git shared-memory-server:two -C /data/memory log -1 --format=%s
+          docker volume rm legacy
+
   checks:
     needs: [changes, server, console, edge, transfer]
     if: always()
