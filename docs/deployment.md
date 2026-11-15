@@ -324,7 +324,7 @@ provisions a hosted server with:
 | Setting | Value |
 |---|---|
 | `SHARED_MEMORY_SIGN_IN` | `platform` (the default, `github`, is the server's own GitHub app) |
-| `SHARED_MEMORY_PLATFORM_URL` | The platform's address, for example `https://platform.example.com` |
+| `SHARED_MEMORY_PLATFORM_URL` | The platform's address, for example `https://platform.example.com`. The console links there for the landing page, plans, Terms and Privacy Policy; a self-hosted server may set it for those links alone |
 | `SHARED_MEMORY_PLATFORM_PUBLIC_KEY` | The public half of the platform's sign-in key: 32 bytes of Ed25519, in hex |
 | `SHARED_MEMORY_SUBDOMAIN` | The server's own subdomain, for example `acme` for `acme.example.com` |
 
@@ -358,7 +358,7 @@ platform signs with it.
 
 ### Search engines
 
-Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server, its console and its landing page stay out of search results. On the one server whose landing page should be found, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
+Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server and its console stay out of search results. The landing page lives on the platform, not on any server; to let search engines index a server anyway, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
 
 ## Behind a CDN
 
