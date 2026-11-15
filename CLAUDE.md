@@ -58,6 +58,7 @@ Run the seam you're touching while iterating, and the whole table once before ea
 | Seam | Command |
 | --- | --- |
 | Python lint | `uv run ruff check` |
+| Repo rules (in no seam, so run them every commit) | `uv run pytest tests/test_glossary.py tests/test_table_owners.py` |
 | Python tests | `uv run pytest` |
 | Python types | `uv run mypy` |
 | Dependency audit | `uv export --frozen --no-emit-project -o req.txt && uvx pip-audit --disable-pip -r req.txt`; `cd console && npm audit --omit=dev --audit-level=high` |
@@ -80,8 +81,9 @@ seam.
   console, or both), so don't wait on it.
 - **Stacked PRs:** merge the base with `gh pr merge --squash` and leave its branch in place.
   Deleting the base branch makes GitHub close the stacked PR instead of retargeting it, so
-  `--delete-branch` waits until every PR stacked on it has merged. Then move the stacked branch
-  onto the squashed base with `git rebase --onto origin/main <old base>`.
+  `--delete-branch` waits until every PR stacked on it has merged. `scripts/land-stacked-pr.sh
+  <base PR> <stacked PR>...` does the landing: it merges the base, retargets the next PR onto
+  `dev`, and merges `dev` up the stack, resolving the conflicts the squash merge causes.
 - **Several agents at once:** each works in its own worktree. See `docs/agents/worktrees.md`.
 - **Review** reads `CODING_STANDARDS.md`.
 
