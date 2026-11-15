@@ -338,18 +338,23 @@ provisions a hosted server with:
 
 Signing in then goes:
 
-1. The member chooses to sign in. The server sends them to
-   `<platform>/sign-in?subdomain=<subdomain>&return_to=<console>/api/sign-in/platform/callback`.
-2. The platform signs them in with GitHub, then sends them to `return_to` with `?sign_in=<handed-over sign-in>`. It
-   only ever sends them to the address of the hosted server that `subdomain` names.
+1. The member chooses to sign in. The server makes a random one-time nonce, keeps it in the browser in a short-lived
+   httponly cookie (ten minutes), and sends them to
+   `<platform>/sign-in?subdomain=<subdomain>&return_to=<console>/api/sign-in/platform/callback&nonce=<nonce>`.
+2. The platform signs them in with GitHub, then sends them to `return_to` with `?sign_in=<handed-over sign-in>`,
+   whose payload carries the `nonce` it was given. It only ever sends them to the address of the hosted server that
+   `subdomain` names.
 3. The server checks the handed-over sign-in and signs in the member that GitHub account is linked to, as its own
    GitHub sign-in would. It refuses one whose signature doesn't check out, that names another subdomain, that has
-   expired, or that was already used once; it remembers each one-time ID until its sign-in expires.
+   expired or expires more than ten minutes ahead, whose nonce isn't the one in this browser's cookie, or that was
+   already used once; it remembers each one-time ID until its sign-in expires. It clears the nonce cookie either way.
+   The nonce is what keeps an unused sign-in from signing in whoever it is passed to: in any other browser it is
+   refused, and left unspent.
 
 A handed-over sign-in reads `<payload>.<signature>`, both base64url without padding. The payload is JSON:
 
 ```json
-{"expires": 1763112300, "github_id": 583231, "github_login": "olive", "id": "kq3Jf0mXb2", "subdomain": "acme"}
+{"expires": 1763112300, "github_id": 583231, "github_login": "olive", "id": "kq3Jf0mXb2", "nonce": "Zp8vR2kQ", "subdomain": "acme"}
 ```
 
 | Field | What it is |
@@ -357,8 +362,9 @@ A handed-over sign-in reads `<payload>.<signature>`, both base64url without padd
 | `github_id` | The GitHub account's number, which never changes when the account is renamed |
 | `github_login` | The GitHub account's login |
 | `subdomain` | The hosted server the sign-in is for |
-| `expires` | When it stops being accepted, in Unix seconds: a few minutes after signing |
+| `expires` | When it stops being accepted, in Unix seconds: a few minutes after signing, and no more than ten |
 | `id` | A one-time ID, unique to this sign-in, at most 200 characters |
+| `nonce` | Required: the `nonce` the server sent the member to the platform with, exactly as given, at most 200 characters |
 
 The signature is Ed25519 over the payload's base64url text exactly as sent, so the order of the keys and the spacing
 are the platform's to choose. `src/shared_memory/platform_sign_in.py` signs and verifies this format; the tests' fake
