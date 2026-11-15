@@ -49,7 +49,7 @@ from shared_memory.briefing import Briefing, pin_target
 from shared_memory.challenges import Challenge, Challenges, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
-from shared_memory.console_sessions import COOKIE, ConsoleSessions
+from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
 from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
@@ -165,6 +165,10 @@ def _may_be_pinned(path: str) -> bool:
     except Refused:
         return False
     return True
+
+
+# Where the nonce cookie is sent: only to the sign-in's own addresses.
+NONCE_PATH = "/api/sign-in"
 
 
 def _sign_in_first() -> Response:
@@ -335,9 +339,21 @@ class ConsoleApi:
 
     def _sign_in(self, request: Request) -> Response:
         try:
-            return RedirectResponse(self._sessions.start(self._root(request)), status_code=302)
+            started = self._sessions.start(self._root(request))
         except Refused as refused:
             return self._back_to_console(request, str(refused))
+        sent = RedirectResponse(started.url, status_code=302)
+        if started.nonce is not None:
+            sent.set_cookie(
+                NONCE_COOKIE,
+                started.nonce,
+                max_age=STATE_MINUTES * 60,
+                httponly=True,
+                secure=self._https(request),
+                samesite="lax",
+                path=NONCE_PATH,
+            )
+        return sent
 
     def _sign_in_callback(self, request: Request) -> Response:
         code, state = request.query_params.get("code", ""), request.query_params.get("state", "")
@@ -354,10 +370,14 @@ class ConsoleApi:
         if not handed_over:
             return self._back_to_console(request, "That sign-in didn't finish. Try again.")
         try:
-            token = self._sessions.finish_handed_over(handed_over)
+            token = self._sessions.finish_handed_over(handed_over, request.cookies.get(NONCE_COOKIE))
         except Refused as refused:
-            return self._back_to_console(request, str(refused))
-        return self._signed_in(request, token)
+            answer = self._back_to_console(request, str(refused))
+        else:
+            answer = self._signed_in(request, token)
+        # The nonce serves one sign-in, however it went.
+        answer.delete_cookie(NONCE_COOKIE, path=NONCE_PATH, httponly=True, secure=self._https(request), samesite="lax")
+        return answer
 
     def _signed_in(self, request: Request, token: str) -> Response:
         """Back to the console, holding the new session in its cookie."""
