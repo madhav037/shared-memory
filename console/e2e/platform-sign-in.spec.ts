@@ -8,7 +8,7 @@ test.use({ baseURL: hostedConsole });
 /** Whoever the fake platform signs in next, and how that one sign-in goes wrong, if it does. */
 async function platformSignsIn(
   page: Page,
-  account: { id: number; login: string; subdomain?: string; expired?: boolean; forged?: boolean },
+  account: { id: number; login: string; subdomain?: string; expired?: boolean; forged?: boolean; held?: boolean },
 ) {
   await page.request.post(`${fakePlatform}/as-account`, { data: account });
 }
@@ -76,7 +76,7 @@ test("a sign-in that has expired is turned away", async ({ page }) => {
   await expect(page.getByTestId("sign-in")).toBeVisible();
 });
 
-test("a sign-in already used once is turned away", async ({ page }) => {
+test("a sign-in handed back a second time is turned away", async ({ page }) => {
   await platformSignsIn(page, { id: 1, login: "olive" });
   await chooseToSignIn(page);
   await expect(page.getByTestId("member-menu")).toBeVisible();
@@ -85,8 +85,30 @@ test("a sign-in already used once is turned away", async ({ page }) => {
 
   await page.goto(handedBack.url);
 
-  await expect(page.getByTestId("sign-in-error")).toContainText("already used");
+  await expect(page.getByTestId("sign-in-error")).toContainText("didn't start in this browser");
   await expect(page.getByTestId("sign-in")).toBeVisible();
+});
+
+test("a sign-in passed to a colleague's browser signs nobody in there", async ({ page, browser }) => {
+  // Olive starts signing in, but the platform holds the sign-in back rather than handing it to her browser.
+  await platformSignsIn(page, { id: 1, login: "olive", held: true });
+  await chooseToSignIn(page);
+  const handedBack: { url: string } = await (await page.request.get(`${fakePlatform}/last`)).json();
+
+  const colleagues = await browser.newContext({ baseURL: hostedConsole });
+  try {
+    const colleague = await colleagues.newPage();
+    await colleague.goto(handedBack.url);
+
+    await expect(colleague.getByTestId("sign-in-error")).toContainText("didn't start in this browser");
+    await expect(colleague.getByTestId("sign-in")).toBeVisible();
+  } finally {
+    await colleagues.close();
+  }
+
+  // Turning the colleague away didn't spend it: Olive's own browser still finishes the sign-in.
+  await page.goto(handedBack.url);
+  await expect(page.getByTestId("member-menu")).toBeVisible();
 });
 
 test("a GitHub account nobody has linked is turned away, as GitHub sign-in turns it away", async ({ page }) => {

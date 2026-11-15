@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Iterator
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from shared_memory import platform_sign_in
+
+from shared_memory.console_sessions import NONCE_COOKIE
 from tests.support import Console, ConsoleClient, HostedConsole, sign_in_error
 
 
@@ -21,18 +28,27 @@ def hosted(hosted_console: HostedConsole) -> Iterator[ConsoleClient]:
         client.close()
 
 
-def test_choosing_to_sign_in_sends_the_member_to_the_platform_with_the_subdomain_and_a_return_address(
-    hosted_console: HostedConsole,
+def test_choosing_to_sign_in_sends_the_member_to_the_platform_with_the_subdomain_a_return_address_and_a_nonce(
+    hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    sent = httpx.get(f"{hosted_console.server.url}/api/sign-in/github", follow_redirects=False)
+    where = urlsplit(hosted.start_sign_in())
 
-    assert sent.status_code == 302
-    where = urlsplit(sent.headers["location"])
     assert f"{where.scheme}://{where.netloc}{where.path}" == f"{hosted_console.platform.url}/sign-in"
-    assert parse_qs(where.query) == {
+    query = parse_qs(where.query)
+    nonce = hosted.cookie(NONCE_COOKIE)
+    assert nonce
+    assert query == {
         "subdomain": ["acme"],
         "return_to": [f"{hosted_console.server.url}/api/sign-in/platform/callback"],
+        "nonce": [nonce],
     }
+
+
+def test_each_sign_in_gets_its_own_nonce(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+    first = parse_qs(urlsplit(hosted.start_sign_in()).query)["nonce"]
+    second = parse_qs(urlsplit(hosted.start_sign_in()).query)["nonce"]
+
+    assert first != second
 
 
 def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
@@ -43,6 +59,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
 
     hosted.sign_in()
 
+    assert hosted.cookie(NONCE_COOKIE) is None
     assert hosted.status() == {
         "signed_in": True,
         "github_sign_in": True,
@@ -96,7 +113,7 @@ def test_a_sign_in_that_has_expired_is_refused(hosted_console: HostedConsole, ho
 def test_a_sign_in_held_back_until_it_expires_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
     hosted_console.a_team("hana-five")
     hosted_console.platform.as_(205, "hana-five")
-    handed_back = handed_over(hosted_console, f"{hosted_console.server.url}/api/sign-in/platform/callback")
+    handed_back = handed_back_to(hosted)
     hosted_console.clock.advance(minutes=6)
 
     try:
@@ -108,12 +125,71 @@ def test_a_sign_in_held_back_until_it_expires_is_refused(hosted_console: HostedC
     assert hosted.status()["signed_in"] is False
 
 
-def test_a_sign_in_is_accepted_only_once(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+def test_a_sign_in_expiring_too_far_ahead_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+    hosted_console.a_team("hana-nine")
+    hosted_console.platform.as_(209, "hana-nine")
+    hosted_console.platform.go_wrong(far_ahead=True)
+
+    landed = hosted.sign_in()
+
+    assert "couldn't be checked" in sign_in_error(landed)
+    assert hosted.status()["signed_in"] is False
+
+
+def test_a_sign_in_handed_to_a_browser_that_did_not_start_it_is_refused(
+    hosted_console: HostedConsole, hosted: ConsoleClient
+) -> None:
+    hosted_console.a_team("hana-ten")
+    hosted_console.platform.as_(210, "hana-ten")
+    handed_back = handed_back_to(hosted)
+    colleague = ConsoleClient(hosted_console.server)
+    try:
+        landed = colleague.get(handed_back)
+        assert "didn't start in this browser" in sign_in_error(landed)
+        assert colleague.status()["signed_in"] is False
+    finally:
+        colleague.close()
+
+    # Turning the colleague away didn't spend the sign-in: the browser that started it still finishes it.
+    assert sign_in_error(hosted.get(handed_back)) == ""
+    assert hosted.status()["signed_in"] is True
+
+
+def test_a_sign_in_carrying_another_nonce_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+    hosted_console.a_team("hana-eleven")
+    hosted_console.platform.as_(211, "hana-eleven")
+    hosted_console.platform.go_wrong(nonce="someone-elses-nonce")
+
+    landed = hosted.sign_in()
+
+    assert "didn't start in this browser" in sign_in_error(landed)
+    assert hosted.status()["signed_in"] is False
+
+
+def test_a_sign_in_handed_back_a_second_time_is_refused(
+    hosted_console: HostedConsole, hosted: ConsoleClient
+) -> None:
+    hosted_console.a_team("hana-twelve")
+    hosted_console.platform.as_(212, "hana-twelve")
+    hosted.sign_in()
+    handed_back = hosted_console.platform.last
+    hosted.sign_out()
+
+    landed = hosted.get(handed_back)
+
+    assert "didn't start in this browser" in sign_in_error(landed)
+    assert hosted.status()["signed_in"] is False
+
+
+def test_a_sign_in_is_accepted_only_once_even_with_its_nonce(
+    hosted_console: HostedConsole, hosted: ConsoleClient
+) -> None:
     hosted_console.a_team("hana-six")
     hosted_console.platform.as_(206, "hana-six")
     hosted.sign_in()
     handed_back = hosted_console.platform.last
     hosted.sign_out()
+    hosted.set_cookie(NONCE_COOKIE, hosted_console.platform.last_nonce)
 
     landed = hosted.get(handed_back)
 
@@ -151,12 +227,32 @@ def test_a_server_with_its_own_github_app_takes_no_sign_in_from_the_platform(
     assert signed_out.status()["signed_in"] is False
 
 
+def handed_back_to(browser: ConsoleClient) -> str:
+    """The address the fake platform hands a sign-in this browser started back to, without going there."""
+    sent = httpx.get(browser.start_sign_in(), follow_redirects=False)
+    assert sent.status_code == 302, sent.text
+    return str(sent.headers["location"])
+
+
 def handed_over(hosted_console: HostedConsole, return_to: str) -> str:
     """The address the fake platform hands a sign-in for `acme` back to, without going there."""
     sent = httpx.get(
         f"{hosted_console.platform.url}/sign-in",
-        params={"subdomain": "acme", "return_to": return_to},
+        params={"subdomain": "acme", "return_to": return_to, "nonce": "a-nonce"},
         follow_redirects=False,
     )
     assert sent.status_code == 302, sent.text
     return str(sent.headers["location"])
+
+
+def test_a_sign_in_whose_payload_carries_no_nonce_cannot_be_trusted() -> None:
+    key = Ed25519PrivateKey.generate()
+    public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
+    payload = json.dumps(
+        {"expires": 1763112300, "github_id": 1, "github_login": "olive", "id": "kq3", "subdomain": "acme"}
+    ).encode()
+    encoded = base64.urlsafe_b64encode(payload).rstrip(b"=")
+    signature = base64.urlsafe_b64encode(key.sign(encoded)).rstrip(b"=")
+
+    with pytest.raises(platform_sign_in.InvalidSignIn):
+        platform_sign_in.verify(f"{encoded.decode()}.{signature.decode()}", public)

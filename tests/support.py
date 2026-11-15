@@ -477,9 +477,10 @@ class FakePlatform:
     account it has been told to, and hands the sign-in back to the server signed with its own Ed25519 key, exactly as
     the platform does (platform_sign_in.py).
 
-    `go_wrong` makes the next sign-in alone go wrong: for another subdomain, already expired, or signed by a key that
-    isn't the platform's. The browser journeys reach both through `POST /as-account`, and read the address the last
-    sign-in was handed back to from `GET /last`, to use it a second time.
+    `go_wrong` makes the next sign-in alone go wrong: for another subdomain, already expired, expiring too far ahead,
+    for another browser's nonce, or signed by a key that isn't the platform's; or held back, answered with the address
+    it would have handed back to rather than sent there. The browser journeys reach both through `POST /as-account`,
+    and read the address the last sign-in was handed back to from `GET /last`, to use it again or elsewhere.
     """
 
     def __init__(self, portal: BlockingPortal, settings: Settings, clock: TestClock, port: int = 0) -> None:
@@ -488,27 +489,40 @@ class FakePlatform:
         self.account_id = 1
         self.login = "olive"
         self.last = ""
+        self.last_nonce = ""
         self._wrong: dict[str, Any] = {}
 
         async def sign_in(request: Request) -> Response:
             wrong, self._wrong = self._wrong, {}
+            self.last_nonce = request.query_params.get("nonce", "")
+            lasts = timedelta(minutes=5)
+            if wrong.get("expired"):
+                lasts = timedelta(seconds=-1)
+            elif wrong.get("far_ahead"):
+                lasts = timedelta(hours=1)
             handed = platform_sign_in.HandedOverSignIn(
                 github_id=self.account_id,
                 github_login=self.login,
                 subdomain=wrong.get("subdomain") or request.query_params["subdomain"],
-                expires=clock() + (timedelta(seconds=-1) if wrong.get("expired") else timedelta(minutes=5)),
+                expires=clock() + lasts,
                 id=secrets.token_urlsafe(16),
+                nonce=wrong.get("nonce") or self.last_nonce,
             )
             key = Ed25519PrivateKey.generate() if wrong.get("forged") else self._key
             handed_over = urlencode({"sign_in": platform_sign_in.sign(key, handed)})
             self.last = f"{request.query_params['return_to']}?{handed_over}"
+            if wrong.get("held"):
+                return JSONResponse({"url": self.last})
             return RedirectResponse(self.last, status_code=302)
 
         async def as_account(request: Request) -> Response:
             body = await request.json()
             self.as_(int(body["id"]), str(body["login"]))
             self.go_wrong(
-                subdomain=body.get("subdomain"), expired=bool(body.get("expired")), forged=bool(body.get("forged"))
+                subdomain=body.get("subdomain"),
+                expired=bool(body.get("expired")),
+                forged=bool(body.get("forged")),
+                held=bool(body.get("held")),
             )
             return JSONResponse({"id": self.account_id, "login": self.login})
 
@@ -529,9 +543,25 @@ class FakePlatform:
         """Whoever signs in next is this GitHub account."""
         self.account_id, self.login = account_id, login
 
-    def go_wrong(self, subdomain: str | None = None, expired: bool = False, forged: bool = False) -> None:
-        """Make the next sign-in, and only that one, for another subdomain, expired, or not signed by the platform."""
-        self._wrong = {"subdomain": subdomain, "expired": expired, "forged": forged}
+    def go_wrong(
+        self,
+        subdomain: str | None = None,
+        expired: bool = False,
+        forged: bool = False,
+        far_ahead: bool = False,
+        nonce: str | None = None,
+        held: bool = False,
+    ) -> None:
+        """Make the next sign-in, and only that one, for another subdomain, expired, expiring too far ahead, for
+        another nonce, or not signed by the platform; or held back rather than handed over."""
+        self._wrong = {
+            "subdomain": subdomain,
+            "expired": expired,
+            "forged": forged,
+            "far_ahead": far_ahead,
+            "nonce": nonce,
+            "held": held,
+        }
 
     def stop(self) -> None:
         self._server.stop()
@@ -556,6 +586,18 @@ class ConsoleClient:
     def sign_in(self) -> httpx.Response:
         """Follow the whole sign-in: to GitHub, back to the callback, and on to the console."""
         return self._http.get("/api/sign-in/github")
+
+    def start_sign_in(self) -> str:
+        """Choose to sign in, keeping whatever cookie that sets, and return where the browser is sent, not going."""
+        sent = self._http.get("/api/sign-in/github", follow_redirects=False)
+        assert sent.status_code == 302, sent.text
+        return str(sent.headers["location"])
+
+    def cookie(self, name: str) -> str | None:
+        return self._http.cookies.get(name)
+
+    def set_cookie(self, name: str, value: str) -> None:
+        self._http.cookies.set(name, value)
 
     def post(self, path: str, with_header: bool = True) -> httpx.Response:
         headers = {"X-Shared-Memory-Console": "1"} if with_header else {}

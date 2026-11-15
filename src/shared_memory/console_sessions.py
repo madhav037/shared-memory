@@ -23,9 +23,11 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity, Member
-from shared_memory.platform_sign_in import InvalidSignIn, verify
+from shared_memory.platform_sign_in import MAX_LIFETIME, InvalidSignIn, verify
 
 COOKIE = "shared_memory_console"
+# The cookie holding the nonce a hosted server sent the member to the platform with, until the sign-in comes back.
+NONCE_COOKIE = "shared_memory_sign_in_nonce"
 SIGN_IN_PATH = "/api/sign-in/github"
 CALLBACK_PATH = f"{SIGN_IN_PATH}/callback"
 # Where the platform hands a sign-in back to, as `?sign_in=<the handed-over sign-in>`.
@@ -35,6 +37,14 @@ STATE_MINUTES = 10
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class SignInStarted:
+    """Where to send the member to sign in, and, when that is the platform, the nonce the browser keeps meanwhile."""
+
+    url: str
+    nonce: str | None = None
 
 
 @dataclass(frozen=True)
@@ -75,14 +85,16 @@ class ConsoleSessions:
         root = (self._settings.console_url or base_url).rstrip("/")
         return f"{root}{CALLBACK_PATH}"
 
-    def start(self, base_url: str) -> str:
+    def start(self, base_url: str) -> SignInStarted:
         """Begin a sign-in: remember a one-time state and return the address on GitHub to send the member to. A server
-        that signs in through the platform sends the member there instead, naming its subdomain and where to come back."""
+        that signs in through the platform sends the member there instead, naming its subdomain, where to come back and
+        a one-time nonce, which the browser keeps in a cookie until the sign-in comes back carrying it."""
         self._require_configured()
         if self._settings.signs_in_through_platform:
             back = f"{(self._settings.console_url or base_url).rstrip('/')}{HANDED_OVER_PATH}"
-            query = urlencode({"subdomain": self._settings.subdomain, "return_to": back})
-            return f"{self._settings.platform_url.rstrip('/')}/sign-in?{query}"
+            nonce = secrets.token_urlsafe(24)
+            query = urlencode({"subdomain": self._settings.subdomain, "return_to": back, "nonce": nonce})
+            return SignInStarted(f"{self._settings.platform_url.rstrip('/')}/sign-in?{query}", nonce)
         state = secrets.token_urlsafe(24)
         now = self._clock()
         with self._db.transaction() as conn:
@@ -98,7 +110,7 @@ class ConsoleSessions:
                 "state": state,
             }
         )
-        return f"{self._settings.github_sign_in_url.rstrip('/')}/login/oauth/authorize?{query}"
+        return SignInStarted(f"{self._settings.github_sign_in_url.rstrip('/')}/login/oauth/authorize?{query}")
 
     def finish(self, code: str, state: str, base_url: str) -> str:
         """Complete a sign-in and return the session's token, or refuse with what to tell the member."""
@@ -108,9 +120,11 @@ class ConsoleSessions:
         self._spend_state(state)
         return self._sign_in_as(self._account(self._access_token(code, base_url)))
 
-    def finish_handed_over(self, text: str) -> str:
+    def finish_handed_over(self, text: str, nonce: str | None) -> str:
         """Complete a sign-in the platform handed over and return the session's token, or refuse with what to tell the
-        member: it must be signed by the platform, name this server's subdomain, not have expired, and be used once."""
+        member: it must be signed by the platform, name this server's subdomain, not have expired nor expire too far
+        ahead, carry the nonce this browser was sent with (`nonce`, from its cookie), and be used once. A sign-in landing
+        in another browser is refused before it is spent, so the browser that started it can still finish it."""
         if not self._settings.signs_in_through_platform:
             raise Refused("This server doesn't take sign-ins from the platform. Sign in with GitHub here.")
         self._require_configured()
@@ -123,6 +137,10 @@ class ConsoleSessions:
         now = self._clock()
         if handed.expires <= now:
             raise Refused("That sign-in took too long. Try again.")
+        if handed.expires > now + MAX_LIFETIME:
+            raise Refused("That sign-in couldn't be checked, so it can't be trusted. Try again.")
+        if not nonce or not secrets.compare_digest(handed.nonce.encode(), nonce.encode()):
+            raise Refused("That sign-in didn't start in this browser, so it can't sign you in here. Sign in again.")
         with self._db.transaction() as conn:
             conn.execute("DELETE FROM handed_over_sign_ins WHERE expires_at <= %s", (now,))
             spent = conn.execute(
