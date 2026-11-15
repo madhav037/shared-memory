@@ -37,6 +37,8 @@ class Status(BaseModel):
 
     signed_in: bool
     github_sign_in: bool
+    # Whether this is a hosted server, whose members the platform signs in: what setting up sign-in takes differs.
+    hosted: bool
     member: SignedInMember | None
     # The address every coding agent reaches this server at: the one the repository's files name.
     server_url: str

@@ -4,6 +4,7 @@ import { IconBrandGithub } from "@tabler/icons-react";
 import { signInUrl, type Status } from "../api/client";
 import { Refusal } from "../components/Bits";
 import { PlatformLinks } from "../components/PlatformLinks";
+import { signInNote } from "../lib/signIn";
 
 /**
  * What a visitor who isn't signed in sees at any of the console's addresses: its sign-in, and nothing else. What
@@ -32,9 +33,7 @@ export function SignIn({ status, refused }: { status: Status; refused: string | 
           </Button>
         )}
         <p className="sign-in-fine" data-testid="status">
-          {status.github_sign_in
-            ? "Connected to the server. Your personal token stays with your coding agent; the console never asks for it."
-            : "Connected to the server. Signing in with GitHub isn’t set up on this server yet: whoever runs it sets the GitHub app’s details."}
+          {signInNote(status)}
         </p>
         {status.platform_url && (
           <p className="sign-in-fine" data-testid="sign-in-notice">
