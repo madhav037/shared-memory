@@ -179,7 +179,7 @@ class Audit:
                 ),
             )
 
-    def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: Any) -> None:
+    def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: object) -> None:
         """Note a change to one memory: who changed it, in which project, and at which path.
 
         The project is the session's, or the memory's own when the change was made from somewhere that isn't in
@@ -206,7 +206,7 @@ class Audit:
             ).fetchone()
         return row is not None
 
-    def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: Any) -> None:
+    def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: object) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
         these entries (ADR-0014)."""
         if caller.agent is not None:

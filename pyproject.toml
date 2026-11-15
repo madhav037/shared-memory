@@ -65,11 +65,14 @@ ignore = [
     # would turn a None into a crash, never into a way past a check.
     "S101",
 ]
+# Server code names the types it takes and returns: no parameter or return typed Any (CODING_STANDARDS' typed
+# interfaces). Tests and the smoke and stress runs are exempt below.
+extend-select = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests and the smoke and stress runs assert, start git and the CLI as subprocesses, and use made-up tokens.
-"tests/**" = ["S"]
-"smoke/**" = ["S"]
+"tests/**" = ["S", "ANN401"]
+"smoke/**" = ["S", "ANN401"]
 
 [dependency-groups]
 dev = [

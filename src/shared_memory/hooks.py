@@ -292,7 +292,7 @@ def prompt_in(payload: Mapping[str, Any], depth: int = 3) -> str | None:
     return None
 
 
-def _as_text(value: Any) -> str | None:
+def _as_text(value: object) -> str | None:
     """A prompt as text, whether the agent sent a string or a list of content parts."""
     if isinstance(value, str):
         return value.strip() or None

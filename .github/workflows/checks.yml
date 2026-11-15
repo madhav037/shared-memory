@@ -5,13 +5,14 @@ name: Checks
 #
 # The server and the console are checked side by side, and a pull request runs only the side its files can affect: a
 # change inside console/ alone can't break the server, while the console's journeys run against the real server, so
-# they run for server changes too. Every push to main runs both. The job named checks says whether everything that ran
-# passed; it is the one check a pull request needs.
+# they run for server changes too. Every push to dev or main runs both, so dev is checked as squash merges leave it, not
+# only each pull request against the dev it started from. The job named checks says whether everything that ran passed;
+# it is the one check a pull request needs.
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [dev, main]
 
 permissions:
   contents: read

@@ -310,7 +310,7 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
     matcher must match a tool's whole name. A hook that posts lets the edit through when the server is down or slow.
     """
 
-    def posting(endpoint: str, seconds: int, **more: Any) -> dict[str, Any]:
+    def posting(endpoint: str, seconds: int, **more: object) -> dict[str, Any]:
         return {
             "type": "http",
             **more,
