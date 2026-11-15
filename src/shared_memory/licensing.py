@@ -7,7 +7,8 @@ depends on it: a missing, lapsed or invalid key only shows admins a banner, and 
 it. A hosted server (its settings say so: the platform signs its members in) whose key has lapsed is read-only: every
 change to memory is refused, and reading keeps working (ADR-0022). A server takes only a key of its own kind, so a
 hosted server can't escape read-only with a self-hosted server's key, nor a self-hosted server be made read-only by a
-hosted server's. No network call is made, ever (license.py only verifies).
+hosted server's. A hosted server takes only a key naming its own team, by its subdomain (`SHARED_MEMORY_SUBDOMAIN`), so
+it can't escape read-only with another hosted team's key either (#485). No network call is made, ever (license.py only verifies).
 """
 
 from __future__ import annotations
@@ -123,8 +124,8 @@ class Licenses:
         return self._keep(text, actor=VENDOR)
 
     def _keep(self, text: str, *, member: Member | None = None, actor: str | None = None) -> Current:
-        """Check the key, then keep it in place of any earlier one. A key that can't be trusted, or is for the other
-        kind of server, changes nothing."""
+        """Check the key, then keep it in place of any earlier one. A key that can't be trusted, is for the other
+        kind of server, or on a hosted server names another team, changes nothing."""
         try:
             held = verify(text, self._public_keys)
         except InvalidLicense as invalid:
@@ -139,6 +140,12 @@ class Licenses:
                 "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed "
                 "here. A hosted server runs under its own license key, which the platform installs when your team's "
                 "plan is paid."
+            )
+        if self.settings.hosted and held.team != self.settings.subdomain:
+            raise Refused(
+                f"That license key is for another team's hosted server ({held.team}), and this is "
+                f"{self.settings.subdomain}'s, so it can't be installed here. A hosted server runs under its own license "
+                "key, which the platform installs when your team's plan is paid."
             )
         with self._db.transaction() as conn:
             conn.execute(

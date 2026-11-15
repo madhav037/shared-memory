@@ -5,7 +5,8 @@ A hosted server whose key has lapsed is read-only in the console too: it says th
 members, creating cards and every change to memory, and still lets admins export, remove members and revoke personal
 tokens (#472, ADR-0022). A server takes only a key of its own kind: a hosted server (the platform signs its members in)
 refuses a self-hosted server's key, so it can't escape read-only with one, and a self-hosted server refuses a hosted
-server's, so it never turns read-only."""
+server's, so it never turns read-only. A hosted server takes only a key naming its own team by its subdomain, so it
+can't escape read-only with another hosted team's key either (#485)."""
 
 from __future__ import annotations
 
@@ -276,12 +277,12 @@ def test_the_session_driver_is_unaffected_by_the_key_state(console: Console) -> 
 
 def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_installed(hosted: HostedConsole) -> None:
     client, owner = hosted_owner(hosted, "olive-lic-read-only", 813)
-    install(client, a_key(member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
+    install(client, a_key(team="acme", member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
 
     assert license_of(client)["status"] == "read-only"
     assert "read-only" in owner.refusal("create_project", name="Late")
 
-    renewed = install(client, a_key(member_cap=1000, expires=date(2027, 1, 1), hosted=True))
+    renewed = install(client, a_key(team="acme", member_cap=1000, expires=date(2027, 1, 1), hosted=True))
 
     assert renewed.status_code == 200, renewed.text
     assert license_of(client)["status"] == "licensed"
@@ -404,7 +405,8 @@ LAPSED_ON = date(2026, 8, 31)
 
 
 def lapsed_hosted_key() -> str:
-    return a_key(member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON, hosted=True)
+    # A hosted server's key names its team by the server's subdomain: the hosted fixture's is acme.
+    return a_key(team="acme", member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON, hosted=True)
 
 
 def lapsed_self_hosted_key() -> str:
@@ -534,6 +536,25 @@ def test_a_read_only_hosted_server_refuses_a_self_hosted_servers_key_and_stays_r
     assert [k for k in vendor_installs(client) if k[1] == "k-self-hosted"] == []
 
 
+def test_a_read_only_hosted_server_refuses_another_teams_hosted_key_and_stays_read_only(hosted: HostedConsole) -> None:
+    client, owner = hosted_owner(hosted, "olive-team-escape", 835)
+    install(client, lapsed_hosted_key())
+
+    another_team = a_key(team="globex", member_cap=1000, expires=date(2027, 9, 1), key_id="k-globex", hosted=True)
+    refused = install(client, another_team)
+
+    assert refused.status_code == 403
+    assert refused.json()["message"] == (
+        "That license key is for another team's hosted server (globex), and this is acme's, so it can't be installed "
+        "here. A hosted server runs under its own license key, which the platform installs when your team's plan is "
+        "paid."
+    )
+    found = license_of(client)
+    assert (found["status"], found["expires"]) == ("read-only", LAPSED_ON.isoformat())
+    assert "read-only" in owner.refusal("remember", title="T", summary="S", type="convention", body="B")
+    assert [k for k in vendor_installs(client) if k[1] == "k-globex"] == []
+
+
 def test_a_self_hosted_server_refuses_a_hosted_servers_key_and_keeps_saving(console: Console) -> None:
     client = console.client()
     owner = signed_in_owner(console, client, "olive-kind-imposed", 831)
@@ -564,7 +585,7 @@ def test_a_self_hosted_server_under_a_lapsed_hosted_key_in_its_environment_is_ne
         licenses.settings = dataclasses.replace(environment, license_key="")
 
 
-def test_install_license_refuses_a_key_of_the_other_kind_on_standard_error(
+def test_install_license_refuses_a_key_of_the_other_kind_or_another_team_on_standard_error(
     console: Console, hosted: HostedConsole
 ) -> None:
     owner_client = console.client()
@@ -574,6 +595,7 @@ def test_install_license_refuses_a_key_of_the_other_kind_on_standard_error(
     for server, client, key in (
         (console, owner_client, a_key(key_id="k-hosted-on-self", hosted=True)),
         (hosted, hosted_client, a_key(key_id="k-self-on-hosted")),
+        (hosted, hosted_client, a_key(team="globex", key_id="k-other-team-on-hosted", hosted=True)),
     ):
         code, printed, complained = install_license(server, key)
         server.clock.advance(seconds=5)
