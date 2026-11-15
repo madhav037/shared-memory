@@ -3,7 +3,7 @@ name = "shared-memory"
 version = "0.1.0"
 description = "Shared memory for a team's Claude Code sessions"
 authors = [
-    { name = "madhav037", email = "madhavlehru@gmail.com" }
+    { name = "Raven" }
 ]
 license = "FSL-1.1-ALv2"
 license-files = ["LICENSE"]
