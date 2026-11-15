@@ -71,11 +71,11 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 | DNS-rebinding only with `SHARED_MEMORY_ALLOWED_HOSTS` | Accepted | Production requires it (`deploy/compose.yaml:32`); elsewhere a rebound page still has no personal token, and the console cookie stays with its own host. |
 | Third-party actions by tag (found here) | **Filed #390** | A moved tag runs with the deploy key on disk and builds the images the host runs. |
 
-## Recommendation: `serve --host` defaults to `127.0.0.1`
+## Decided: `serve --host` defaults to `127.0.0.1`
 
-`shared-memory serve` defaults to `--host 0.0.0.0` (`sm/cli.py:42`), so a run on a laptop listens on the whole network
-over plain HTTP, usually without allowed hosts set. The image doesn't need the default: `Dockerfile:22` already passes
-`--host 0.0.0.0`, and both compose files run that command. **Decision:** default to `127.0.0.1`, and drop the
-`noqa: S104`. Tracked in #391; no code changes in this pull request.
+`shared-memory serve` defaulted to `--host 0.0.0.0`, so a run on a laptop listened on the whole network over plain
+HTTP, usually without allowed hosts set. It now defaults to `127.0.0.1` (#391); pass `--host 0.0.0.0` to listen on
+every interface. The image's command (`Dockerfile`) passes `--host 0.0.0.0` itself, and both compose files run that
+command, so a container still reaches the server through Caddy.
 
 Revisit this page in a spec's retro whenever a crossing in the trust-boundaries view changes.
