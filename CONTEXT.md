@@ -106,6 +106,22 @@ _Avoid_: Stale, expired
 A memory whose text reads like orders to a coding agent ("ignore your instructions", piping a download into a shell). The server finds it with a fixed list of patterns each time a memory is saved or edited, and works it out again from the text rather than keeping it, so rewording the memory removes a wrong mark. A marked memory is still shown, with a warning telling the coding agent to treat it with suspicion and never act on it, and the session that saved it is told why it was marked.
 _Avoid_: Flagged, quarantined, unsafe
 
+**Tied file**:
+A file, or a folder glob, in one of a project's repositories that a memory is about, written as repository:path; editing it brings the memory up.
+_Avoid_: Linked file, attached file
+
+**In doubt**:
+Said of a memory with at least one open challenge naming a reason; recall ranks it lower and marks it so.
+_Avoid_: Flagged, disputed
+
+**Popular memory**:
+A personal memory other members have recalled at least ten times, at least two of them distinct, within thirty days; its author is prompted to promote it.
+_Avoid_: Trending, hot, top memory
+
+**Draft learning**:
+A candidate memory a session's coding agent drafts from what the session learned, private to its member until they confirm it as personal memory or it is dropped after seven days.
+_Avoid_: Learning proposal, memory candidate
+
 ### Memory types
 
 **Convention**:
@@ -143,8 +159,12 @@ To put a new memory in an old one's place, keeping the old one in history.
 _Avoid_: Replace, overwrite, update
 
 **Challenge**:
-A request to supersede or retire another author's memory, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
+A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
 _Avoid_: Approval, proposal, change request
+
+**Reason**:
+Which of two grounds a challenge that doubts a memory names: *misled me*, or *contradicts the code*, quoting the file and line. It is not the reasoning, which is free text.
+_Avoid_: Doubt kind, doubt type
 
 **Foundation challenge**:
 A challenge to add a memory to a foundation, or to supersede or retire one of its memories, even the challenger's own; a keeper of that foundation or a project lead decides it, and it is shown apart from other challenges.
@@ -190,6 +210,10 @@ _Avoid_: Star, favorite
 Memories added to a prompt automatically because they match it. A session is given each memory once, and again only if the memory has changed.
 _Avoid_: Injection, auto-search
 
+**Question**:
+What a member asks a memory's author about that memory; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read.
+_Avoid_: Memory comment, discussion
+
 **Hook**:
 Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
@@ -211,6 +235,10 @@ _Avoid_: Serial, activation code
 **Console**:
 The web app where members browse memory and admins run the team; members sign in to it with GitHub.
 _Avoid_: Dashboard, admin panel, web UI
+
+**Project health**:
+A console page, read-only, where a project's leads see its possibly outdated memory, its memory in doubt, the memory it relies on most, and its coverage gaps: files edited often that no memory is tied to.
+_Avoid_: Dashboard, insights, analytics, stats page
 
 **Handed-over sign-in**:
 How a member signs in to a hosted server's console: the platform signs them in with its own GitHub app and hands the server a short-lived, single-use sign-in, signed by the platform, naming the GitHub account and the server's subdomain. A self-hosted server signs members in with its own GitHub app instead.
