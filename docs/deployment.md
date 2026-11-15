@@ -137,6 +137,14 @@ A release that changes a base (`uv.lock`, the dependencies in `pyproject.toml`, 
 
 The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`, and so can `layers`.
 
+## Listening address
+
+`shared-memory serve` listens on `127.0.0.1` unless given `--host`, so a server run on a laptop is reachable only
+from that laptop. The image's command passes `--host 0.0.0.0`, because inside a container Caddy reaches the server
+over the compose network; the server still publishes no port, so only Caddy reaches it. Running the server outside
+the image and wanting it reachable from other machines, pass `--host 0.0.0.0` (or the one address to listen on) and
+put it behind HTTPS with `SHARED_MEMORY_ALLOWED_HOSTS` set.
+
 ## Sizing
 
 The server runs several worker processes, so saves and reads in different areas use more than one CPU (ADR-0013). Two

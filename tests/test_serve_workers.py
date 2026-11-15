@@ -190,6 +190,14 @@ def test_serve_listens_on_the_host_it_is_given(monkeypatch: pytest.MonkeyPatch) 
     assert kwargs["host"] == "0.0.0.0"  # noqa: S104
 
 
+def test_the_image_asks_serve_to_listen_on_every_interface() -> None:
+    # serve listens on loopback unless told otherwise (#391), so the image passes the host itself: inside a container
+    # loopback is unreachable from Caddy, and both compose files run the image's command.
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert 'CMD ["shared-memory", "serve", "--host", "0.0.0.0"' in dockerfile
+
+
 def test_serve_workers_overrides_the_setting_and_reaches_the_workers(monkeypatch: pytest.MonkeyPatch) -> None:
     started = Started(monkeypatch)
 
