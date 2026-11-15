@@ -102,7 +102,7 @@ def test_the_console_page_runs_no_inline_script_the_policy_would_block() -> None
     page = (REPO_ROOT / "console" / "index.html").read_text(encoding="utf-8")
 
     for tag in re.findall(r"<script\b[^>]*>", page):
-        assert "src=" in tag or "application/ld+json" in tag, f"an inline script the policy blocks: {tag}"
+        assert "src=" in tag, f"an inline script the policy blocks: {tag}"
 
 
 def handle_block(path: str) -> str:

@@ -54,6 +54,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
             "leads_a_project": False,
         },
         "server_url": hosted_console.server.url,
+        "platform_url": hosted_console.platform.url,
     }
 
 

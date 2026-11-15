@@ -40,6 +40,9 @@ class Status(BaseModel):
     member: SignedInMember | None
     # The address every coding agent reaches this server at: the one the repository's files name.
     server_url: str
+    # The platform's address, where the landing page, the plans, the Terms and the Privacy Policy live: the console links
+    # there. None on a server that wasn't given one.
+    platform_url: str | None
 
 
 class AuditEvent(BaseModel):

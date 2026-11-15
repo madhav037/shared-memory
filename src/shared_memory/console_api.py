@@ -1181,6 +1181,7 @@ class ConsoleApi:
             signed_in=member is not None,
             github_sign_in=self._sessions.configured,
             server_url=self._server_url(request),
+            platform_url=self._settings.platform_url.rstrip("/") or None,
             member=None
             if member is None
             else SignedInMember(

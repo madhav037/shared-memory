@@ -41,8 +41,8 @@
 		max_size 1MB
 	}
 
-	# A team's server is kept out of search engines; whoever runs the server where the landing page should be found
-	# sets SHARED_MEMORY_ROBOTS_TAG=all.
+	# A team's server is kept out of search engines: the landing page lives on the platform. Whoever wants a server
+	# indexed anyway sets SHARED_MEMORY_ROBOTS_TAG=all.
 	header X-Robots-Tag {$CADDY_ROBOTS_TAG:noindex}
 
 	# What every answer tells the browser. The console holds a signed-in cookie, so it must not be framed (clickjacking
