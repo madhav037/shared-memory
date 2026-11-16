@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { openInContents, signInAs } from "./helpers";
+import { openInContents, signInAs, teammates } from "./helpers";
 
 async function openSessions(page: Page, project: string) {
   await signInAs(page, 1, "olive");
@@ -77,4 +77,45 @@ test.describe("on a phone", () => {
 
     await page.screenshot({ path: test.info().outputPath("sessions-phone.png"), fullPage: true });
   });
+});
+
+/** Seconds left on a gate's wait, as the page counts it down ("4:05 left"). */
+function secondsIn(left: string | null): number {
+  const [minutes = NaN, seconds = NaN] = (left ?? "").replace(" left", "").split(":").map(Number);
+  return minutes * 60 + seconds;
+}
+
+// Last in the file: Mira's session joins Billing here and stays, as the journeys' clock never moves.
+test("a new gate and a new message appear on the Sessions page without reloading, and the gate's time left counts down", async ({
+  page,
+}) => {
+  await openSessions(page, "Billing");
+  const miraGated = page.getByTestId("gate").filter({ hasText: "Mira Maker" });
+  const fromMira = page.getByTestId("message").filter({ hasText: "Mira Maker" });
+  await expect(page.getByTestId("session")).toHaveCount(2);
+  await expect(miraGated).toHaveCount(0);
+  await expect(fromMira).toHaveCount(0);
+
+  // Mira's coding agent states the activity Raj's session stated: hers is the later session, so she is gated.
+  expect((await page.request.post(`${teammates}/collide`)).ok()).toBe(true);
+
+  await expect(miraGated).toHaveCount(1);
+  await expect(page.getByTestId("session")).toHaveCount(3);
+  const waitsForRaj = miraGated.getByTestId("gate-wait").filter({ hasText: "Raj Raiser" });
+  await expect(waitsForRaj).toContainText("Adding backoff to the webhook retries");
+  await expect(page.getByTestId("collision").filter({ hasText: "Mira Maker" }).first()).toContainText("Raj Raiser");
+  const left = waitsForRaj.getByTestId("time-left");
+  await expect(left).toHaveText(/^[0-5]:\d\d left$/);
+  const first = secondsIn(await left.textContent());
+  await expect.poll(async () => secondsIn(await left.textContent()), { timeout: 5000 }).toBeLessThan(first);
+
+  // Then she messages Olive, who is signed in: it is Olive's own session's message, so she sees it.
+  expect((await page.request.post(`${teammates}/message`)).ok()).toBe(true);
+
+  await expect(fromMira.first()).toContainText("Mira Maker to you");
+  await expect(fromMira.first().getByTestId("message-text")).toHaveText("Is the retry UI yours? I can take the back end.");
+  // Still nothing on the page to press: it governs nothing here, and never writes memory (ADR-0009).
+  await expect(page.getByTestId("sessions-page").getByRole("button")).toHaveCount(0);
+
+  await page.screenshot({ path: test.info().outputPath("sessions-that-talk.png"), fullPage: true });
 });
