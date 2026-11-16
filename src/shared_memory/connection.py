@@ -411,6 +411,8 @@ SESSION_HABITS = f"""\
   stop editing that file and tell the member.
 - When your work on a file is finished, call `release_lock` for it.
 - Mention the active sessions the briefing lists, and any collision warning, when they bear on the task.
+- When an edit is refused as gated, don't edit and don't decide alone: stop and ask the member whether to wait, to
+  say it is different work, or to pick something else. Call `different_work` only once the member says so.
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.

@@ -451,6 +451,8 @@ SESSION_HABITS = (
     "release_lock",
     "active sessions",
     "collision",
+    "gated",
+    "different_work",
     "from the repository's root",
 )
 

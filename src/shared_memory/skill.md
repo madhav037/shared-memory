@@ -123,6 +123,7 @@ The server knows each running session. The briefing ends by naming this session'
 - **A lock of yours taken over**: you are told once, on your next prompt or in the `notices` of `take_lock` or `set_activity`: stop editing that file and tell the member.
 - **Finished with a file**: `release_lock` it, so nobody waits for it. Your other locks end with the session, or after it sits idle.
 - **Collisions**: when a prompt warns of a possible collision, another session's activity being nearly the same as yours, tell the member before going on. Mention the briefing's active sessions when they bear on the task.
+- **Gated**: when an edit is refused as gated, another member's session was on nearly the same work first. Don't edit, and don't decide alone: stop and ask the member whether to wait (reading and searching still work), to say it is different work, or to pick something else. Call `different_work` with this session only once the member says it is different work; the gate also lifts by itself once the project's wait has passed (`project_wait` reads it).
 
 ## Challenges
 
