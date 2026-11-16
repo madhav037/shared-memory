@@ -709,13 +709,70 @@ class ActiveSession(BaseModel):
     locks: list[HeldLock]
 
 
+class NamedSession(BaseModel):
+    """An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has
+    said which) and its activity (None when it has none)."""
+
+    member_id: str
+    member_name: str
+    agent: str | None
+    activity: str | None
+
+
+class SessionCollision(BaseModel):
+    """Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made
+    the collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown."""
+
+    later: NamedSession
+    earlier: NamedSession
+    cause: Literal["prompt", "activity"]
+    found_at: datetime
+
+
+class GateWait(BaseModel):
+    """One earlier session a gate waits for, until the project's wait has passed (until)."""
+
+    earlier: NamedSession
+    until: datetime
+
+
+class SessionGate(BaseModel):
+    """A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the
+    gate stops waiting for each when the project's wait has passed, or at once when its member says it is different
+    work. The page counts the time left down from now (the server's clock when it answered) to each until."""
+
+    later: NamedSession
+    waits_for: list[GateWait]
+
+
+class SessionMessage(BaseModel):
+    """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
+    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
+    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions."""
+
+    sender_member_id: str
+    sender_name: str
+    recipient_member_id: str
+    recipient_name: str
+    text: str
+    sent_at: datetime
+    delivered_at: datetime | None
+    sent_by_me: bool
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
-    or gone idle is not among them."""
+    or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
+    gates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.
+    now is the server's clock when it answered. The page asks again every few seconds; asking changes nothing."""
 
     project_id: str
     project_name: str
+    now: datetime
     sessions: list[ActiveSession]
+    collisions: list[SessionCollision]
+    gates: list[SessionGate]
+    messages: list[SessionMessage]
 
 
 class Notice(BaseModel):
@@ -927,7 +984,10 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/projects/{project_id}/sessions",
         method="GET",
         operation_id="project_sessions",
-        summary="A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        summary=(
+            "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the "
+            "project's collisions and gates; and the signed-in member's own sessions' messages."
+        ),
         answers=ProjectSessions,
     ),
     Declaration(

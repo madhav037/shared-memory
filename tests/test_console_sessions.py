@@ -230,3 +230,138 @@ def test_a_session_whose_hooks_never_named_a_branch_or_a_file_shows_none(
     (shown,) = sessions(signed_out, project)
 
     assert (shown["branch"], shown["touched_files"]) == (None, [])
+
+
+# Sessions that talk (#516): the project's collisions and gates for every member who can reach it, and the signed-in
+# member's own sessions' messages. The same activity scores 1 against itself, so stating it twice collides.
+
+WEBHOOKS = "Retrying failed webhooks"
+
+
+def page(client: ConsoleClient, project: str) -> dict[str, Any]:
+    return ask(client, f"/api/projects/{project}/sessions")
+
+
+def test_a_collision_and_the_gate_it_makes_show_who_is_later_who_it_waits_for_and_until_when(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-gate", 1433)
+    olive = olive.as_agent("claude-code")
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    console.clock.advance(minutes=1)
+    state(dana, WEBHOOKS)
+    console.clock.advance(minutes=2)
+
+    shown = page(signed_out, project)
+
+    (collision,) = shown["collisions"]
+    assert (collision["later"]["member_id"], collision["earlier"]["member_id"]) == ("emp-2", "E1001")
+    assert (collision["earlier"]["agent"], collision["earlier"]["activity"]) == ("Claude Code", WEBHOOKS)
+    assert collision["cause"] == "activity"
+    (gate,) = shown["gates"]
+    assert gate["later"]["member_name"] == "Dana Dev"
+    (waits,) = gate["waits_for"]
+    assert waits["earlier"]["member_name"] == "Olive Owner"
+    assert (at(waits["until"]) - at(collision["found_at"])).total_seconds() == 5 * 60, "the project's wait"
+    assert (at(waits["until"]) - at(shown["now"])).total_seconds() == 3 * 60, "the time left"
+
+
+def test_a_gate_leaves_the_page_when_its_member_says_different_work_or_the_wait_has_passed(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-lifted", 1434)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    cole = member_session(signed_out, console, project, "emp-3", "Cole Coder")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    state(cole, WEBHOOKS)
+    before = page(signed_out, project)["gates"]
+
+    dana.call("different_work", session=dana.identifier)
+    after_different_work = page(signed_out, project)["gates"]
+    console.clock.advance(minutes=5)
+    after_the_wait = page(signed_out, project)
+
+    assert [gate["later"]["member_id"] for gate in before] == ["emp-2", "emp-3"]
+    assert [gate["later"]["member_id"] for gate in after_different_work] == ["emp-3"]
+    assert after_the_wait["gates"] == []
+    assert len(after_the_wait["collisions"]) == 3, "the collisions stay while their sessions are active"
+
+
+def test_a_members_own_two_sessions_collide_but_never_gate_each_other(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-own", 1435)
+    state(olive, WEBHOOKS)
+    state(olive.as_session("olive-second"), WEBHOOKS)
+
+    shown = page(signed_out, project)
+
+    assert len(shown["collisions"]) == 1
+    assert shown["gates"] == []
+
+
+def test_a_member_sees_their_own_sessions_messages_and_no_one_elses(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-messages", 1436)
+    olive.start()
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    cole_token = add(signed_out, "emp-3", "Cole Coder", "cole-sessions-messages")["personal_token"]
+    cole = Session(console.server, cole_token).in_project(project, "billing-api").as_session("cole-first")
+    dana.start()
+    cole.start()
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Do you have the retry UI?")
+    console.clock.advance(minutes=1)
+    olive.call("send_message", session=olive.identifier, to="emp-2", text="Yes, take the back end.")
+    cole.call("send_message", session=cole.identifier, to="emp-2", text="Lunch at one?")
+    coles_console = signed_in(console, "cole-sessions-messages", 1437)
+
+    olives = page(signed_out, project)["messages"]
+    coles = page(coles_console, project)["messages"]
+
+    assert [(one["sender_name"], one["recipient_name"], one["text"], one["sent_by_me"]) for one in olives] == [
+        ("Dana Dev", "Olive Owner", "Do you have the retry UI?", False),
+        ("Olive Owner", "Dana Dev", "Yes, take the back end.", True),
+    ]
+    assert all(one["delivered_at"] is None for one in olives), "neither has reached its recipient's session yet"
+    assert [one["text"] for one in coles] == ["Lunch at one?"], "only what Cole's own session sent"
+    coles_console.close()
+
+
+def test_reading_messages_on_the_page_leaves_them_waiting_for_the_session(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-unread", 1438)
+    olive.start()
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    dana.start()
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Do you have the retry UI?")
+
+    page(signed_out, project)
+    told = json.dumps(olive.prompt("Carry on."))
+    console.clock.advance(minutes=1)
+    (delivered,) = page(signed_out, project)["messages"]
+
+    assert "Do you have the retry UI?" in told, "the page read it, and the session was still told"
+    assert delivered["delivered_at"] is not None
+
+
+def test_a_restricted_projects_collisions_gates_and_messages_stay_inside_its_access_list(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-talk-shut", 1439)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Do you have the retry UI?")
+    add(signed_out, "emp-3", "Cole Coder", "cole-sessions-talk-shut")
+    signed_out.post_json(f"/api/projects/{project}/restrict", {"restricted": True})
+    cole = signed_in(console, "cole-sessions-talk-shut", 1440)
+
+    shut_out = cole.get(f"/api/projects/{project}/sessions")
+
+    assert shut_out.status_code == 403
+    assert WEBHOOKS not in shut_out.text and "retry UI" not in shut_out.text and "Dana Dev" not in shut_out.text
+    cole.close()
