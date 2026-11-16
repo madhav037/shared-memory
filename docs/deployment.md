@@ -328,8 +328,10 @@ refused until each earlier session's member agrees, or the project's wait has pa
 says it is different work; an earlier member's refusal holds past the wait, until their session ends or goes idle
 ([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
 wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
-in `.env`). Each agree, refuse, timeout and "different work" is in the audit log with the collision's score, never an
-answer's text, for tuning the threshold above.
+in `.env`). The same wait bounds an urgent message: the later session may send one per collision, and the earlier
+session's edits wait until its member answers or the wait has passed since it was sent. Each agree, refuse, timeout,
+urgent message and "different work" is in the audit log with the collision's score, never an answer's or a message's
+text, for tuning the threshold above.
 
 ## How long messages between sessions are kept
 
