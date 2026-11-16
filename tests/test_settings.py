@@ -174,3 +174,8 @@ def test_a_request_for_an_allowed_host_is_answered(guarded: RunningServer) -> No
 
     assert answered.status_code == 200, answered.text
     assert answered.json()["result"]["tools"]
+
+
+def test_the_gate_wait_reads_its_environment_variable() -> None:
+    assert Settings.from_env({}).gate_wait_minutes == 5
+    assert Settings.from_env({"SHARED_MEMORY_GATE_WAIT_MINUTES": "10"}).gate_wait_minutes == 10

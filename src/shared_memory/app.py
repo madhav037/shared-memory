@@ -45,6 +45,7 @@ from shared_memory.db import Database
 from shared_memory.collisions import Collisions
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
+from shared_memory.gates import Gates
 from shared_memory.export import TeamExport
 from shared_memory.history import MemoryHistory
 from shared_memory.connection import GUIDANCE_ONLY, skill_sections
@@ -278,6 +279,7 @@ def build_app(
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
+    gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -368,6 +370,7 @@ def build_app(
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
+            *gates.waiting_notices(session),
         ]
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
@@ -525,10 +528,14 @@ def build_app(
         root = request.headers.get("x-shared-memory-root")
 
         def held(current: Caller, payload: dict[str, Any]) -> str | None:
-            """Why the edit is blocked: another active session holds the file. None lets it through, with the file's
-            lock taken or kept for this session where the file locks."""
+            """Why the edit is blocked: the session is gated (ADR-0024), or another active session holds the file.
+            None lets it through, with the file's lock taken or kept for this session where the file locks. A gated
+            edit takes no lock."""
             session = session_of(current, payload)
-            return locks.before_edit(session, hooks.edited_files(payload, root)) if session else None
+            if session is None:
+                return None
+            files = hooks.edited_files(payload, root)
+            return gates.before_edit(current, session, files) or locks.before_edit(session, files)
 
         return await hook(request, "PreToolUse", held, answer=hooks.blocked)
 
@@ -1092,6 +1099,37 @@ def build_app(
             for one in project_patterns.of(project_id)
         ]
         return {**changed, "built_in": list(NEVER_LOCK), "project": own}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def different_work(session: str, ctx: Context) -> dict[str, Any]:
+        """Lift this session's gate at once, because its member says the work is different from the earlier
+        session's. Call it only once your member has said so, never on your own judgment.
+
+        A session is gated when its prompt or activity collides with another member's active session: its edits are
+        refused until the project's wait has passed, or until this is called. lifted names the members it was waiting
+        for; each is told, and the verdict is recorded with the collision's score so the threshold can be tuned.
+
+        session is this session's identifier, as its briefing named it."""
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        lifted = gates.different_work(current, calling)
+        return {"session": calling.identifier, "lifted": lifted, "notices": waiting_for(current, calling)}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def project_wait(ctx: Context, minutes: int | None = None) -> dict[str, Any]:
+        """Read, or change, the project's wait: how many minutes a gated session's edits wait for the earlier
+        session's member before they go ahead. Call it with nothing to read it; five minutes unless the project set
+        its own.
+
+        minutes is for the project's leads and the team's admins, and only when the member asks: a whole number from
+        1 to 1440."""
+        current = caller(ctx)
+        project_id = current.require_project().project_id
+        if minutes is not None:
+            return {"minutes": gates.set_wait(current, minutes)}
+        return {"minutes": gates.wait(project_id)}
 
     @server.tool(name="board")
     @_refusals_as_tool_errors

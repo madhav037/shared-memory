@@ -62,6 +62,8 @@ class Settings:
     # How similar two sessions' activities must be, as embeddings, for a collision warning. 0.75 is a guess that
     # needs tuning on real activity lines: they are short, and short lines score high against each other.
     collision_threshold: float = 0.75
+    # How long a later session's edits wait at the gate for a project that hasn't set its own wait (ADR-0024).
+    gate_wait_minutes: float = 5
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
@@ -139,6 +141,7 @@ class Settings:
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
+            gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
