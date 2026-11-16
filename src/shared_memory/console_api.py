@@ -8,8 +8,9 @@ description and can't drift away from it. This module turns each declaration int
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
-from datetime import UTC, date, datetime, time
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -19,7 +20,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory.activity import Activities
+from shared_memory.activity import Activities, SessionActivity
+from shared_memory.clock import Clock
+from shared_memory.collisions import Collision, Collisions
+from shared_memory.db import Database
+from shared_memory.gates import Gates
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -63,6 +68,7 @@ from shared_memory.console_contract import (
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
+    GateWait, NamedSession, SessionCollision, SessionGate, SessionMessage,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -185,6 +191,126 @@ def _moment(asked: str | None, edge: time) -> datetime | None:
         raise ValueError(f"{asked!r} is not a date") from None
 
 
+def _named(each: SessionActivity) -> NamedSession:
+    """An active session as a collision, a gate or a message names it on the Sessions page."""
+    return NamedSession(
+        member_id=each.session.member_id,
+        member_name=each.session.member_name,
+        agent=each.session.agent,
+        activity=each.activity,
+    )
+
+
+@dataclass(frozen=True)
+class Collided:
+    """A collision between two of a project's active sessions."""
+
+    later: SessionActivity
+    earlier: SessionActivity
+    collision: Collision
+
+
+@dataclass(frozen=True)
+class Exchanged:
+    """One message a member's sessions sent or were sent, once though it went to several of the recipient's sessions."""
+
+    sender_member_id: str
+    sender_name: str
+    recipient_member_id: str
+    text: str
+    sent_at: datetime
+    delivered_at: datetime | None
+
+
+class SessionTalk:
+    """What the Sessions page reads of sessions that talk (spec #507): a project's collisions and gates, and one
+    member's sessions' messages. Read only (ADR-0009): it marks no message delivered and keeps no gate as timed out;
+    the sessions' own calls do that, as `Gates` and `Messages` say."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        db: Database,
+        activities: Activities,
+        collisions: Collisions,
+        gates: Gates,
+        clock: Clock,
+    ) -> None:
+        self._db = db
+        self._activities = activities
+        self._collisions = collisions
+        self._gates = gates
+        self._clock = clock
+        self._kept = timedelta(days=settings.message_kept_days)
+
+    def now(self) -> datetime:
+        return self._clock()
+
+    def collided(self, active: Sequence[SessionActivity]) -> list[Collided]:
+        """The collisions between these active sessions, the oldest first."""
+        by_id = {each.session.id: each for each in active}
+        found: dict[tuple[int, int], Collision] = {}
+        for each in active:
+            for one in self._collisions.of(each.session):
+                if one.later_session_id in by_id and one.earlier_session_id in by_id:
+                    found[(one.later_session_id, one.earlier_session_id)] = one
+        return [
+            Collided(by_id[one.later_session_id], by_id[one.earlier_session_id], one)
+            for one in sorted(found.values(), key=lambda one: one.found_at)
+        ]
+
+    def gated(self, project_id: str, collided: Sequence[Collided]) -> list[tuple[SessionActivity, list[Collided]]]:
+        """Each later session gated now, the oldest gate first, with the collisions it waits on, as `Gates` works them
+        out: an earlier session of another member's, whose collision was found less than the project's wait ago, unless
+        the gate between them has ended."""
+        now = self._clock()
+        wait = timedelta(minutes=self._gates.wait(project_id))
+        waiting = [
+            one
+            for one in collided
+            if one.later.session.member_id != one.earlier.session.member_id and now < one.collision.found_at + wait
+        ]
+        if not waiting:
+            return []
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT later_session_id, earlier_session_id FROM gate_ends WHERE later_session_id = ANY(%s)",
+                (list({one.later.session.id for one in waiting}),),
+            ).fetchall()
+        ended = {(row["later_session_id"], row["earlier_session_id"]) for row in rows}
+        gates: dict[int, tuple[SessionActivity, list[Collided]]] = {}
+        for one in waiting:
+            if (one.later.session.id, one.earlier.session.id) not in ended:
+                gates.setdefault(one.later.session.id, (one.later, []))[1].append(one)
+        return list(gates.values())
+
+    def wait(self, project_id: str) -> timedelta:
+        return timedelta(minutes=self._gates.wait(project_id))
+
+    def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
+        """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT sender_member_id, sender_name, recipient_member_id, text, sent_at,"
+                " MIN(delivered_at) AS delivered_at FROM messages"
+                " WHERE project_id = %s AND (recipient_member_id = %s OR sender_member_id = %s) AND sent_at > %s"
+                " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at"
+                " ORDER BY sent_at, MIN(id)",
+                (project_id, member_id, member_id, self._clock() - self._kept),
+            ).fetchall()
+        return [
+            Exchanged(
+                row["sender_member_id"],
+                row["sender_name"],
+                row["recipient_member_id"],
+                row["text"],
+                row["sent_at"],
+                row["delivered_at"],
+            )
+            for row in rows
+        ]
+
+
 class ConsoleApi:
     """The API's behaviour: sessions in cookies, and the same refusals the memory tools give."""
 
@@ -207,8 +333,10 @@ class ConsoleApi:
         rate_limits: RateLimiter,
         licenses: Licenses,
         export: TeamExport,
+        talk: SessionTalk,
     ) -> None:
         self._export_of = export
+        self._talk = talk
         self._settings = settings
         self._rate_limits_of = rate_limits
         self._licenses = licenses
@@ -616,9 +744,46 @@ class ConsoleApi:
                         last_used_at=lock.last_used_at,
                     )
                 )
+            active = self._activities.in_project(project.project_id)
+            collided = self._talk.collided(active)
+            wait = self._talk.wait(project.project_id)
+            names = self._names(caller.member)
+            mine = caller.member_id
             return ProjectSessions(
                 project_id=project.project_id,
                 project_name=project.name,
+                now=self._talk.now(),
+                collisions=[
+                    SessionCollision(
+                        later=_named(one.later),
+                        earlier=_named(one.earlier),
+                        cause=one.collision.cause.value,
+                        found_at=one.collision.found_at,
+                    )
+                    for one in collided
+                ],
+                gates=[
+                    SessionGate(
+                        later=_named(later),
+                        waits_for=[
+                            GateWait(earlier=_named(one.earlier), until=one.collision.found_at + wait) for one in waits
+                        ],
+                    )
+                    for later, waits in self._talk.gated(project.project_id, collided)
+                ],
+                messages=[
+                    SessionMessage(
+                        sender_member_id=one.sender_member_id,
+                        sender_name=one.sender_name,
+                        recipient_member_id=one.recipient_member_id,
+                        recipient_name=names.get(one.recipient_member_id, one.recipient_member_id),
+                        text=one.text,
+                        sent_at=one.sent_at,
+                        delivered_at=one.delivered_at,
+                        sent_by_me=one.sender_member_id == mine,
+                    )
+                    for one in self._talk.messages(project.project_id, mine)
+                ],
                 sessions=[
                     ActiveSession(
                         member_id=each.session.member_id,
@@ -633,7 +798,7 @@ class ConsoleApi:
                         touched_files=list(each.session.touched_files),
                         locks=held.get(each.session.id, []),
                     )
-                    for each in self._activities.in_project(project.project_id)
+                    for each in active
                 ],
             )
 

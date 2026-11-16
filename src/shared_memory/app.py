@@ -32,7 +32,7 @@ from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.board import Board
 from shared_memory.briefing import Briefing, Work
-from shared_memory.console_api import ConsoleApi
+from shared_memory.console_api import ConsoleApi, SessionTalk
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.fence import escape, fenced, new_token
 from shared_memory.monitoring import start_reporting
@@ -1344,6 +1344,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
+            SessionTalk(settings, db, activities, collisions, gates, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.
