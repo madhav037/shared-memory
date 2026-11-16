@@ -40,6 +40,8 @@ const WORDS: Record<Kind, string> = {
   gate_timed_out: "Gate's wait passed",
   different_work: "Said different work",
   project_wait_changed: "Project's wait changed",
+  gate_agreed: "Agreed to a gate",
+  gate_refused: "Refused a gate",
   never_lock_pattern_added: "Never-lock pattern added",
   never_lock_pattern_removed: "Never-lock pattern removed",
   signed_in: "Signed in",
