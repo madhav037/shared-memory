@@ -16,10 +16,11 @@ Kept in Postgres, so every worker agrees (ADR-0013):
 
 What other modules stand on, all of it on `Messages`:
 
-- `send(caller, session, to, text, urgent)`: send from this session; the name of the member it went to, and whether it
-  waits for that member's next session. An urgent message gates through `Gates`, which decides whether one may be sent.
+- `send(caller, session, to, text, urgent)`: send from this session; the name of the member it went to, whether it
+  waits for that member's next session, and whether every session it reached is muted. An urgent message gates through `Gates`, which decides whether one may be sent.
 - `check(text)`: the text as it is kept, refused when empty or too long.
-- `waiting_notices(session)`: what a session is told once: each message waiting for it. Asking marks them delivered.
+- `waiting_notices(session, urgent_only)`: what a session is told once: each message waiting for it, or only the urgent
+  ones, for a muted session asking on a tool call (#514); the rest keep waiting. Asking marks them delivered.
 """
 
 from __future__ import annotations
@@ -67,10 +68,12 @@ TEXT_LIMIT = 2000
 
 @dataclass(frozen=True)
 class Sent:
-    """What sending a message did: the member it went to, and whether it waits for their next session."""
+    """What sending a message did: the member it went to, whether it waits for their next session, and whether every
+    session it reached is muted, so that one not urgent waits for their next prompt or unmute (#514)."""
 
     to: str
     waiting: bool
+    muted: bool = False
 
 
 def notice(sender_name: str, sender_member_id: str, sent_at: datetime, text: str, urgent: bool = False) -> str:
@@ -145,17 +148,20 @@ class Messages:
                         written, urgent, now,
                     ),  # fmt: skip
                 )
-        return Sent(to=for_sessions[0].member_name, waiting=not active)
+        return Sent(
+            to=for_sessions[0].member_name, waiting=not active, muted=bool(active) and all(each.muted for each in active)
+        )
 
-    def waiting_notices(self, session: Session) -> list[str]:
+    def waiting_notices(self, session: Session, urgent_only: bool = False) -> list[str]:
         """What this session is told once: each message sent to it, and each sent to another session of its member in
-        this project that is no longer active, oldest first. Asking marks them delivered to this session."""
+        this project that is no longer active, oldest first. With `urgent_only`, for a muted session on a tool call,
+        only the urgent ones, and the rest keep waiting. Asking marks them delivered to this session."""
         now = self._clock()
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, recipient_session_id FROM messages WHERE project_id = %s AND recipient_member_id = %s"
-                " AND delivered_at IS NULL AND sent_at > %s",
-                (session.project_id, session.member_id, now - self._kept),
+                " AND delivered_at IS NULL AND sent_at > %s AND (urgent OR NOT %s)",
+                (session.project_id, session.member_id, now - self._kept, urgent_only),
             ).fetchall()
         if not rows:
             return []

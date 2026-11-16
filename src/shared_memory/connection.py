@@ -473,6 +473,8 @@ SESSION_HABITS = f"""\
 - Pass `urgent` to `send_message` only when the member asks, from the later session of a collision: the earlier
   session's edits wait until its member answers or the wait passes. When an edit is refused for an urgent message,
   finish the step you are on, then stop and ask the member what to answer.
+- Call `mute` only when the member asks: messages that are not urgent then wait for their next prompt or the
+  unmute. When `send_message` answers `muted`, tell the member theirs waits for that member's next prompt.
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.

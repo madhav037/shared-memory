@@ -21,6 +21,7 @@ What other modules stand on, all of it on `Sessions`:
 - `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
 - `report(session, branch, files)`: where a session is, from its hook before a tool: its git branch and the files
   that tool named, kept beside the session as the files it touched (ADR-0025).
+- `mute(session, on)`: mute or unmute a session; `Session.muted` says which it is (#514).
 - `idle_after`: the idle time, from `Settings.session_idle_minutes`.
 
 A module keeping rows per session refers to `Session.id`. Only this module reads the `sessions` table, and it reads
@@ -29,6 +30,7 @@ members and projects through `Identity`.
 
 from __future__ import annotations
 
+import dataclasses
 import secrets
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -65,6 +67,10 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS back_from_end BOOLEAN NOT NULL DEF
 -- recent first. Both start over when the session comes back from idle or after it had ended. Never the tool's name.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS branch TEXT;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS touched_files TEXT[] NOT NULL DEFAULT '{}';
+
+-- Muted (#514): its messages that are not urgent wait for its next prompt or its unmute. A session back from idle
+-- or after it had ended starts unmuted.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS sessions_not_ended ON sessions (project_id, last_seen_at) WHERE ended_at IS NULL;
 -- A project's sessions by when they were last seen, ended or not, for those gone a little while.
@@ -111,6 +117,8 @@ class Session:
     # Its git branch as its hooks last said, and the files its tools named, the most recent first (ADR-0025).
     branch: str | None = None
     touched_files: tuple[str, ...] = ()
+    # Its messages that are not urgent wait for its next prompt or its unmute (#514).
+    muted: bool = False
 
 
 class UnusableIdentifier(Refused):
@@ -183,7 +191,7 @@ class Sessions:
             row = conn.execute(
                 "INSERT INTO sessions (member_id, project_id, identifier, repository, agent, started_at, last_seen_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (member_id, project_id, identifier) DO NOTHING"
-                " RETURNING id, repository, agent, started_at, branch, touched_files",
+                " RETURNING id, repository, agent, started_at, branch, touched_files, muted",
                 (*key, caller.repository, caller.agent or hooked_by, now, now),
             ).fetchone()
             if row is None:
@@ -203,11 +211,12 @@ class Sessions:
                     " back_from_idle = (back_from_idle OR %s) AND NOT %s, back_from_end = back_from_end OR %s,"
                     " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent, %s),"
                     " branch = CASE WHEN %s THEN NULL ELSE branch END,"
-                    " touched_files = CASE WHEN %s THEN '{}' ELSE touched_files END"
-                    " WHERE id = %s RETURNING id, repository, agent, started_at, branch, touched_files",
+                    " touched_files = CASE WHEN %s THEN '{}' ELSE touched_files END,"
+                    " muted = muted AND NOT %s"
+                    " WHERE id = %s RETURNING id, repository, agent, started_at, branch, touched_files, muted",
                     (
                         now, ended, now, idle, ended, ended, caller.repository, caller.agent, hooked_by,
-                        idle or ended, idle or ended, known["id"],
+                        idle or ended, idle or ended, idle or ended, known["id"],
                     ),  # fmt: skip
                 ).fetchone()
                 assert row is not None
@@ -223,7 +232,15 @@ class Sessions:
             last_seen_at=now,
             branch=row["branch"],
             touched_files=tuple(row["touched_files"]),
+            muted=row["muted"],
         )
+
+    def mute(self, session: Session, on: bool) -> Session:
+        """Mute this session, or unmute it: while muted, its messages that are not urgent wait for its next prompt or
+        its unmute. The session as it now is."""
+        with self._db.transaction() as conn:
+            conn.execute("UPDATE sessions SET muted = %s WHERE id = %s", (on, session.id))
+        return dataclasses.replace(session, muted=on)
 
     def report(self, session: Session, branch: str | None, files: Sequence[str]) -> None:
         """Keep where this session is, as its hook before a tool says: its branch, where the hook named one, and the
@@ -257,7 +274,7 @@ class Sessions:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
-                " touched_files FROM sessions"
+                " touched_files, muted FROM sessions"
                 " WHERE project_id = %s AND ended_at IS NULL AND last_seen_at > %s ORDER BY started_at, id",
                 (project_id, self._clock() - self.idle_after),
             ).fetchall()
@@ -272,7 +289,7 @@ class Sessions:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
-                " touched_files, (ended_at IS NULL AND last_seen_at > %s) AS active FROM sessions"
+                " touched_files, muted, (ended_at IS NULL AND last_seen_at > %s) AS active FROM sessions"
                 " WHERE project_id = %s AND last_seen_at > %s AND COALESCE(ended_at, last_seen_at + %s) > %s"
                 " ORDER BY last_seen_at DESC, id DESC",
                 (now - self.idle_after, project_id, now - within - self.idle_after, self.idle_after, now - within),
@@ -344,4 +361,5 @@ def _session(row: dict[str, Any], member_id: str, member_name: str) -> Session:
         last_seen_at=row["last_seen_at"],
         branch=row["branch"],
         touched_files=tuple(row["touched_files"]),
+        muted=row["muted"],
     )
