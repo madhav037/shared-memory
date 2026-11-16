@@ -3423,7 +3423,10 @@
               "rate_limits_changed",
               "license_installed",
               "token_limited",
-              "team_exported"
+              "team_exported",
+              "gate_timed_out",
+              "different_work",
+              "project_wait_changed"
             ],
             "title": "Kind",
             "type": "string"
