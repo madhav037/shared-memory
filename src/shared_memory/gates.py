@@ -197,7 +197,14 @@ def refusal(waiting: Sequence[Waiting], now: datetime) -> str:
             if each.refused
             else f"{_left(now, each.until)} of the project's wait (until {each.until.isoformat()}), unless they agree"
         )
-        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {held}.")
+        # A muted earlier session (#514) hears a message that is not urgent only at its next prompt; the wait runs on.
+        muted = (
+            " Their session is muted: a message that is not urgent reaches them at their next prompt, and the wait "
+            "still runs."
+            if who.muted
+            else ""
+        )
+        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {held}.{muted}")
     lines.append(
         "Don't edit, and don't decide alone: stop and ask your member whether to wait (reading, searching and "
         "planning still work), to say it is different work, or to pick something else. When each member it waits for "
