@@ -134,7 +134,16 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "collision",
         "two sessions on the same work, the glossary's Collision; avoided only for a contradiction between memories",
-        (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py", SERVER + "gates.py"),
+        (
+            SERVER + "app.py",
+            SERVER + "collisions.py",
+            SERVER + "config.py",
+            SERVER + "gates.py",
+            SERVER + "console_api.py",
+            SERVER + "console_contract.py",
+            PAGES + "SessionsPage.tsx",
+            "console/src/api/client.ts",
+        ),
     ),
     Allow(
         "activity",

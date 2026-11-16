@@ -3213,6 +3213,74 @@ div.dotted {
   font-size: 0.8125rem;
   color: var(--ink-3);
 }
+/*
+ * Sessions that talk: the project's gates, its collisions and the member's own sessions' messages, each a part between
+ * rules above the sessions, every line on a soft rule. The time left is tabular, so its figures don't jump as it counts.
+ */
+.talk {
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 2px solid var(--ink);
+}
+.talk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-family: var(--sans);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.talk-lede {
+  margin: 0 0 6px;
+  max-width: 68ch;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
+.talk-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.talk-list > li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.talk-line {
+  margin: 0;
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+.talk-activity {
+  font-weight: 500;
+}
+.talk-activity.none {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.talk-waits {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.talk-left {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.talk-meta {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+.talk-text {
+  margin: 6px 0 0;
+  max-width: 68ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* Narrower screens scroll the board sideways, a column at a time, rather than squeezing four columns in. */
 @media (max-width: 1180px) {
   .board {
