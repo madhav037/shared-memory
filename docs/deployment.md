@@ -321,6 +321,15 @@ own model, at or above `SHARED_MEMORY_COLLISION_THRESHOLD` (default 0.75, option
 with a small embedding model. Raise it if members are warned about work that isn't the same; lower it if two sessions
 doing the same work were not warned.
 
+## How long a gated session waits
+
+When a session's prompt or activity collides with another member's active session, the later session's file edits are
+refused until the project's wait has passed or its member says it is different work
+([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
+wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
+in `.env`). Each timeout and each "different work" is in the audit log with the collision's score, for tuning the
+threshold above.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

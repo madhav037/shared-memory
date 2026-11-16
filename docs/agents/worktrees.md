@@ -78,6 +78,10 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   It owns `activity_embeddings` (each session's activity as an embedding) and `collision_warnings` (what each session
   was warned about), and `collisions.warnings(caller, session)` is what `waiting_for` adds. `tests/test_collisions.py`
   runs its own server, whose embedder gives chosen activities chosen embeddings.
+- **The gate** (ADR-0024) is `Gates` in `src/shared_memory/gates.py`, built in `build_app` as `gates`. It reads
+  `Collisions.of(session)` and owns `gate_ends` (how each later and earlier pair's gate ended) and `project_waits`
+  (a project's own wait). The before-edit hook asks `gates.before_edit` before `locks.before_edit`; a gated edit takes
+  no lock. `tests/test_gates.py` runs its own server with `test_collisions.py`'s chosen embeddings.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
 
 ### Locks

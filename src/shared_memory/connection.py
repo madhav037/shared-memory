@@ -464,6 +464,8 @@ SESSION_HABITS = f"""\
 - Mention the active sessions the briefing lists, and any collision warning, when they bear on the task.
 - News from other sessions (a collision warning, a lock taken over) can arrive mid-turn, beside a tool's result,
   not only with the next prompt. When it does, finish the step you are on, then stop and tell the member.
+- When an edit is refused as gated, don't edit and don't decide alone: stop and ask the member whether to wait, to
+  say it is different work, or to pick something else. Call `different_work` only once the member says so.
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.

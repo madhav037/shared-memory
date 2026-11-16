@@ -70,6 +70,9 @@ Kind = Literal[
     "license_installed",
     "token_limited",
     "team_exported",
+    "gate_timed_out",
+    "different_work",
+    "project_wait_changed",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -126,6 +129,13 @@ LICENSE_INSTALLED: Kind = "license_installed"
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
 # An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.
 TEAM_EXPORTED: Kind = "team_exported"
+# A later session's gate ended (ADR-0024): its wait passed with no answer, or its member said it is different work. The
+# entry's actor is the later session's member, its target the earlier one's, and its detail holds the collision's score
+# and cause, never a prompt.
+GATE_TIMED_OUT: Kind = "gate_timed_out"
+DIFFERENT_WORK: Kind = "different_work"
+# A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
+PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
 
 
 @dataclass(frozen=True)
