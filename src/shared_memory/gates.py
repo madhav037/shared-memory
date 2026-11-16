@@ -39,6 +39,8 @@ What other modules stand on, all of it on `Gates`:
 - `different_work(caller, session)`: lift this session's gate at once; the names of the members it was waiting for.
 - `answer(caller, session, gate, answer, text)`: the earlier member agrees to or refuses the gates a member's sessions
   have on this session's work; the names of the members answered.
+- `in_project(project_id)`: each session gated now and whom it waits for, answers included, changing nothing: what
+  the console shows.
 - `waiting_notices(session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
   each one ended; as a later session, each answer to its gate.
 - `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
@@ -164,6 +166,14 @@ class Urgent:
     later: Session
     activity: str | None
     until: datetime
+
+
+@dataclass(frozen=True)
+class Gate:
+    """A later session gated now, and each earlier session it waits for."""
+
+    later: SessionActivity
+    waiting: list[Waiting]
 
 
 @dataclass(frozen=True)
@@ -345,11 +355,14 @@ class Gates:
 
     # The gate
 
-    def _active_others(self, session: Session) -> dict[int, SessionActivity]:
-        """The active sessions in this session's project that belong to another member, by id."""
+    def _active_others(
+        self, session: Session, active: Sequence[SessionActivity] | None = None
+    ) -> dict[int, SessionActivity]:
+        """The active sessions in this session's project that belong to another member, by id: from `active` when the
+        caller already has the project's."""
         return {
             each.session.id: each
-            for each in self._activities.in_project(session.project_id)
+            for each in (active if active is not None else self._activities.in_project(session.project_id))
             if each.session.member_id != session.member_id
         }
 
@@ -363,16 +376,18 @@ class Gates:
         ).fetchall()
         return {row["other"]: row["answer"] for row in rows}
 
-    def _waiting(self, caller: Caller, session: Session) -> list[Waiting]:
-        """The earlier sessions this session's gate waits for now. A pair whose wait has just been found passed with no
-        answer is kept as timed out, and written to the audit log once."""
+    def _work_out(
+        self, session: Session, active: Sequence[SessionActivity] | None = None
+    ) -> tuple[list[Waiting], list[tuple[Session, Collision]]]:
+        """The earlier sessions this session's gate waits for now, and those whose wait has passed with no answer but
+        that no call has kept as timed out yet. Changes nothing."""
         mine = [each for each in self._collisions.of(session) if each.later_session_id == session.id]
         if not mine:
-            return []
-        active = self._active_others(session)
-        others = [each for each in mine if each.earlier_session_id in active]
-        if not others:
-            return []
+            return [], []
+        others = self._active_others(session, active)
+        colliding = [each for each in mine if each.earlier_session_id in others]
+        if not colliding:
+            return [], []
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT earlier_session_id FROM gate_ends WHERE later_session_id = %s", (session.id,)
@@ -381,20 +396,40 @@ class Gates:
         ended = {row["earlier_session_id"] for row in rows}
         now = self._clock()
         wait = timedelta(minutes=self.wait(session.project_id))
-        waiting = []
-        for each in others:
+        waiting, passed = [], []
+        for each in colliding:
             answer = answers.get(each.earlier_session_id)
             if each.earlier_session_id in ended or answer == AGREED:
                 continue
-            earlier = active[each.earlier_session_id]
+            earlier = others[each.earlier_session_id]
             until = each.found_at + wait
             if answer == REFUSED:
                 waiting.append(Waiting(earlier.session, earlier.activity, each, until, refused=True))
             elif now >= until:
-                self._end(caller, session, earlier.session, each, TIMED_OUT)
+                passed.append((earlier.session, each))
             else:
                 waiting.append(Waiting(earlier.session, earlier.activity, each, until))
+        return waiting, passed
+
+    def _waiting(self, caller: Caller, session: Session) -> list[Waiting]:
+        """The earlier sessions this session's gate waits for now. A pair whose wait has just been found passed with no
+        answer is kept as timed out, and written to the audit log once."""
+        waiting, passed = self._work_out(session)
+        for earlier, collision in passed:
+            self._end(caller, session, earlier, collision, TIMED_OUT)
         return waiting
+
+    def in_project(self, project_id: str) -> list[Gate]:
+        """Each of the project's active sessions gated now, the oldest gate first, with the earlier sessions it waits
+        for, answers included: what the console's Sessions page shows. Read only: a wait found passed is left for the
+        gated session's own next call to keep as timed out."""
+        active = self._activities.in_project(project_id)
+        gates = []
+        for each in active:
+            waiting, _ = self._work_out(each.session, active)
+            if waiting:
+                gates.append(Gate(each, waiting))
+        return sorted(gates, key=lambda gate: min(one.collision.found_at for one in gate.waiting))
 
     def _end(self, caller: Caller, later: Session, earlier: Session, collision: Collision, by: str) -> bool:
         """Keep how the gate between these two sessions ended, and write it to the audit log, unless another call

@@ -23,8 +23,9 @@ from starlette.routing import Route
 from shared_memory.activity import Activities, SessionActivity
 from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
-from shared_memory.db import Database
-from shared_memory.gates import Gates
+from shared_memory.gates import Gate, Gates
+from shared_memory.messages import Exchanged, Messages
+from shared_memory.sessions import Session, Sessions
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -68,7 +69,7 @@ from shared_memory.console_contract import (
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
-    GateWait, NamedSession, SessionCollision, SessionGate, SessionMessage,
+    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionMessage,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -191,14 +192,15 @@ def _moment(asked: str | None, edge: time) -> datetime | None:
         raise ValueError(f"{asked!r} is not a date") from None
 
 
-def _named(each: SessionActivity) -> NamedSession:
+def _named_session(session: Session, activity: str | None) -> NamedSession:
     """An active session as a collision, a gate or a message names it on the Sessions page."""
     return NamedSession(
-        member_id=each.session.member_id,
-        member_name=each.session.member_name,
-        agent=each.session.agent,
-        activity=each.activity,
+        member_id=session.member_id, member_name=session.member_name, agent=session.agent, activity=activity
     )
+
+
+def _named(each: SessionActivity) -> NamedSession:
+    return _named_session(each.session, each.activity)
 
 
 @dataclass(frozen=True)
@@ -210,38 +212,28 @@ class Collided:
     collision: Collision
 
 
-@dataclass(frozen=True)
-class Exchanged:
-    """One message a member's sessions sent or were sent, once though it went to several of the recipient's sessions."""
-
-    sender_member_id: str
-    sender_name: str
-    recipient_member_id: str
-    text: str
-    sent_at: datetime
-    delivered_at: datetime | None
-
-
 class SessionTalk:
-    """What the Sessions page reads of sessions that talk (spec #507): a project's collisions and gates, and one
-    member's sessions' messages. Read only (ADR-0009): it marks no message delivered and keeps no gate as timed out;
-    the sessions' own calls do that, as `Gates` and `Messages` say."""
+    """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions and gates, one
+    member's sessions' messages, and that member's replies and answers. Reading changes nothing: it marks no message
+    delivered and keeps no gate as timed out, which the sessions' own calls do. A reply and an answer go through the
+    same `Messages.send` and `Gates.answer` the session tools call, from one of the member's own sessions, and are
+    audited as those are. Nothing here saves, edits or promotes a memory (ADR-0009, ADR-0026)."""
 
     def __init__(
         self,
         settings: Settings,
-        db: Database,
-        activities: Activities,
+        sessions: Sessions,
         collisions: Collisions,
         gates: Gates,
+        messages: Messages,
         clock: Clock,
     ) -> None:
-        self._db = db
-        self._activities = activities
+        self._sessions = sessions
         self._collisions = collisions
         self._gates = gates
+        self._messages = messages
         self._clock = clock
-        self._kept = timedelta(days=settings.message_kept_days)
+        self._recent = timedelta(hours=settings.recent_work_hours)
 
     def now(self) -> datetime:
         return self._clock()
@@ -259,56 +251,56 @@ class SessionTalk:
             for one in sorted(found.values(), key=lambda one: one.found_at)
         ]
 
-    def gated(self, project_id: str, collided: Sequence[Collided]) -> list[tuple[SessionActivity, list[Collided]]]:
-        """Each later session gated now, the oldest gate first, with the collisions it waits on, as `Gates` works them
-        out: an earlier session of another member's, whose collision was found less than the project's wait ago, unless
-        the gate between them has ended."""
-        now = self._clock()
-        wait = timedelta(minutes=self._gates.wait(project_id))
-        waiting = [
-            one
-            for one in collided
-            if one.later.session.member_id != one.earlier.session.member_id and now < one.collision.found_at + wait
-        ]
-        if not waiting:
-            return []
-        with self._db.transaction() as conn:
-            rows = conn.execute(
-                "SELECT later_session_id, earlier_session_id FROM gate_ends WHERE later_session_id = ANY(%s)",
-                (list({one.later.session.id for one in waiting}),),
-            ).fetchall()
-        ended = {(row["later_session_id"], row["earlier_session_id"]) for row in rows}
-        gates: dict[int, tuple[SessionActivity, list[Collided]]] = {}
-        for one in waiting:
-            if (one.later.session.id, one.earlier.session.id) not in ended:
-                gates.setdefault(one.later.session.id, (one.later, []))[1].append(one)
-        return list(gates.values())
-
-    def wait(self, project_id: str) -> timedelta:
-        return timedelta(minutes=self._gates.wait(project_id))
+    def gated(self, project_id: str) -> list[Gate]:
+        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included."""
+        return self._gates.in_project(project_id)
 
     def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
         """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
-        with self._db.transaction() as conn:
-            rows = conn.execute(
-                "SELECT sender_member_id, sender_name, recipient_member_id, text, sent_at,"
-                " MIN(delivered_at) AS delivered_at FROM messages"
-                " WHERE project_id = %s AND (recipient_member_id = %s OR sender_member_id = %s) AND sent_at > %s"
-                " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at"
-                " ORDER BY sent_at, MIN(id)",
-                (project_id, member_id, member_id, self._clock() - self._kept),
-            ).fetchall()
-        return [
-            Exchanged(
-                row["sender_member_id"],
-                row["sender_name"],
-                row["recipient_member_id"],
-                row["text"],
-                row["sent_at"],
-                row["delivered_at"],
-            )
-            for row in rows
+        return self._messages.exchanged(project_id, member_id)
+
+    def send(self, caller: Caller, to: str, text: str) -> None:
+        """Send a message from the caller's session in the project: an active one, the most recently seen first, or
+        else the one last seen in the recent-work window."""
+        project_id = caller.require_project().project_id
+        own = [
+            (each, active)
+            for each, active in self._sessions.lately(project_id, self._recent)
+            if each.member_id == caller.member_id
         ]
+        if not own:
+            hours = round(self._recent.total_seconds() / 3600)
+            raise Refused(
+                f"None of your sessions is active in this project, or was in the last {hours} hours, so the message "
+                "has no session to come from. Start a coding agent in this project, then send it."
+            )
+        sender = next((each for each, active in own if active), own[0][0])
+        self._messages.send(caller, sender, to, text)
+
+    def answer(self, caller: Caller, gate: str, answer: str, text: str | None) -> list[str]:
+        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions' work,
+        from each of the caller's sessions it waits for. The names of the members answered."""
+        project_id = caller.require_project().project_id
+        member_id = gate.strip()
+        mine: dict[int, Session] = {}
+        for one in self._gates.in_project(project_id):
+            if one.later.session.member_id != member_id:
+                continue
+            for wait in one.waiting:
+                if wait.earlier.member_id == caller.member_id:
+                    mine.setdefault(wait.earlier.id, wait.earlier)
+        if not mine:
+            raise Refused(
+                f"No gate of {member_id!r} waits on your sessions' work now: its member may have said it is different "
+                "work, the project's wait may have passed, or you have already agreed. To tell them something, send "
+                "them a message."
+            )
+        answered: list[str] = []
+        for session in mine.values():
+            for name in self._gates.answer(caller, session, member_id, answer, text):
+                if name not in answered:
+                    answered.append(name)
+        return answered
 
 
 class ConsoleApi:
@@ -377,6 +369,8 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
+            "send_message": self._send_message,
+            "answer_gate": self._answer_gate,
             "card": self._card,
             "add_card": self._add_card,
             "edit_card": self._edit_card,
@@ -730,79 +724,103 @@ class ConsoleApi:
     # --- a project's active sessions, read: nothing here changes a session, an activity or a lock (ADR-0009) ---
 
     def _project_sessions(self, request: Request) -> Response:
-        def read(caller: Caller) -> ProjectSessions:
-            # `_browse` placed the caller in the project, which refuses a member who can't reach it: neither read
-            # below checks reach itself.
-            project = caller.require_project()
-            held: dict[int, list[HeldLock]] = {}
-            for lock in self._locks.held(project.project_id):
-                held.setdefault(lock.holder.id, []).append(
-                    HeldLock(
-                        repository=lock.repository,
-                        path=lock.path,
-                        taken_at=lock.taken_at,
-                        last_used_at=lock.last_used_at,
-                    )
-                )
-            active = self._activities.in_project(project.project_id)
-            collided = self._talk.collided(active)
-            wait = self._talk.wait(project.project_id)
-            names = self._names(caller.member)
-            mine = caller.member_id
-            return ProjectSessions(
-                project_id=project.project_id,
-                project_name=project.name,
-                now=self._talk.now(),
-                collisions=[
-                    SessionCollision(
-                        later=_named(one.later),
-                        earlier=_named(one.earlier),
-                        cause=one.collision.cause.value,
-                        found_at=one.collision.found_at,
-                    )
-                    for one in collided
-                ],
-                gates=[
-                    SessionGate(
-                        later=_named(later),
-                        waits_for=[
-                            GateWait(earlier=_named(one.earlier), until=one.collision.found_at + wait) for one in waits
-                        ],
-                    )
-                    for later, waits in self._talk.gated(project.project_id, collided)
-                ],
-                messages=[
-                    SessionMessage(
-                        sender_member_id=one.sender_member_id,
-                        sender_name=one.sender_name,
-                        recipient_member_id=one.recipient_member_id,
-                        recipient_name=names.get(one.recipient_member_id, one.recipient_member_id),
-                        text=one.text,
-                        sent_at=one.sent_at,
-                        delivered_at=one.delivered_at,
-                        sent_by_me=one.sender_member_id == mine,
-                    )
-                    for one in self._talk.messages(project.project_id, mine)
-                ],
-                sessions=[
-                    ActiveSession(
-                        member_id=each.session.member_id,
-                        member_name=each.session.member_name,
-                        agent=each.session.agent,
-                        repository=each.session.repository,
-                        activity=each.activity,
-                        from_card=each.from_card,
-                        started_at=each.session.started_at,
-                        last_seen_at=each.session.last_seen_at,
-                        branch=each.session.branch,
-                        touched_files=list(each.session.touched_files),
-                        locks=held.get(each.session.id, []),
-                    )
-                    for each in active
-                ],
-            )
+        return self._browse(request, self._sessions_now)
 
-        return self._browse(request, read)
+    # --- a member's reply and answer, through the same operations their session's tools use (ADR-0026) ---
+
+    def _send_message(self, request: Request) -> Response:
+        def send(caller: Caller) -> ProjectSessions:
+            asked: MessageToSend = request.state.asked
+            self._talk.send(caller, asked.to, asked.text)
+            return self._sessions_now(caller)
+
+        return self._browse(request, send)
+
+    def _answer_gate(self, request: Request) -> Response:
+        def answer(caller: Caller) -> ProjectSessions:
+            asked: GateAnswer = request.state.asked
+            self._talk.answer(caller, request.path_params["member_id"], asked.answer, asked.text)
+            return self._sessions_now(caller)
+
+        return self._browse(request, answer)
+
+    def _sessions_now(self, caller: Caller) -> ProjectSessions:
+        """The Sessions page as the caller sees it now. `_browse` placed the caller in the project, which refuses a
+        member who can't reach it: none of the reads below checks reach itself."""
+        project = caller.require_project()
+        held: dict[int, list[HeldLock]] = {}
+        for lock in self._locks.held(project.project_id):
+            held.setdefault(lock.holder.id, []).append(
+                HeldLock(
+                    repository=lock.repository,
+                    path=lock.path,
+                    taken_at=lock.taken_at,
+                    last_used_at=lock.last_used_at,
+                )
+            )
+        active = self._activities.in_project(project.project_id)
+        collided = self._talk.collided(active)
+        names = self._names(caller.member)
+        mine = caller.member_id
+        return ProjectSessions(
+            project_id=project.project_id,
+            project_name=project.name,
+            now=self._talk.now(),
+            collisions=[
+                SessionCollision(
+                    later=_named(one.later),
+                    earlier=_named(one.earlier),
+                    cause=one.collision.cause.value,
+                    found_at=one.collision.found_at,
+                )
+                for one in collided
+            ],
+            gates=[
+                SessionGate(
+                    later=_named(gate.later),
+                    waits_for=[
+                        GateWait(
+                            earlier=_named_session(one.earlier, one.activity),
+                            until=one.until,
+                            refused=one.refused,
+                            on_my_work=one.earlier.member_id == mine,
+                        )
+                        for one in gate.waiting
+                    ],
+                )
+                for gate in self._talk.gated(project.project_id)
+            ],
+            messages=[
+                SessionMessage(
+                    message_id=one.message_id,
+                    sender_member_id=one.sender_member_id,
+                    sender_name=one.sender_name,
+                    recipient_member_id=one.recipient_member_id,
+                    recipient_name=names.get(one.recipient_member_id, one.recipient_member_id),
+                    text=one.text,
+                    sent_at=one.sent_at,
+                    delivered_at=one.delivered_at,
+                    sent_by_me=one.sender_member_id == mine,
+                )
+                for one in self._talk.messages(project.project_id, mine)
+            ],
+            sessions=[
+                ActiveSession(
+                    member_id=each.session.member_id,
+                    member_name=each.session.member_name,
+                    agent=each.session.agent,
+                    repository=each.session.repository,
+                    activity=each.activity,
+                    from_card=each.from_card,
+                    started_at=each.session.started_at,
+                    last_seen_at=each.session.last_seen_at,
+                    branch=each.session.branch,
+                    touched_files=list(each.session.touched_files),
+                    locks=held.get(each.session.id, []),
+                )
+                for each in active
+            ],
+        )
 
     def _card(self, request: Request) -> Response:
         def read(caller: Caller) -> CardDetail:

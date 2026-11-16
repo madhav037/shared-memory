@@ -34,8 +34,10 @@ from tests.support import (
     challenge,
     fresh_database,
     promote_keeping_both,
+    added_context,
     promote_now,
     read_tool,
+    search_tool,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -57,14 +59,26 @@ TEAMMATES_PORT = 8127
 RAJS_ACTIVITY = "Adding backoff to the webhook retries"
 # What Mira's session sends Olive when a journey asks.
 MIRAS_MESSAGE = "Is the retry UI yours? I can take the back end."
+# The work Olive's second session in Billing states, and Mira's second session too, when a journey asks: Mira's is then
+# gated on Olive's work, for Olive to answer from the console.
+SPLIT_ACTIVITY = "Splitting the invoice module into its own package"
+# What Mira's second session asks Olive, for Olive to reply to from the console.
+MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 
 
 class Teammates:
     """Stands in for a teammate at her coding agent while a journey watches the Sessions page: on `POST /collide` Mira's
     session in Billing states Raj's activity, so it collides with his and is gated; on `POST /message` it sends Olive a
-    message. Each is the session's own call over HTTP, as her coding agent makes it."""
+    message. On `POST /gate-olive` a second session of Olive's states a piece of work and a second session of Mira's
+    states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
+    question; `GET /heard` says what Mira's second session hears on its next tool call. Each is the session's own call
+    over HTTP, as its coding agent makes it."""
 
-    def __init__(self, portal: BlockingPortal, settings: Settings, mira: Session, port: int = 0) -> None:
+    def __init__(
+        self, portal: BlockingPortal, settings: Settings, mira: Session, olive: Session, port: int = 0
+    ) -> None:
+        mira_split = mira.as_session("mira-split")
+
         def collide(request: Request) -> Response:
             mira.call("set_activity", activity=RAJS_ACTIVITY, session=mira.identifier)
             return JSONResponse({"collided": True})
@@ -73,7 +87,27 @@ class Teammates:
             mira.call("send_message", session=mira.identifier, to="E1001", text=MIRAS_MESSAGE)
             return JSONResponse({"sent": True})
 
-        app = Starlette(routes=[Route("/collide", collide, methods=["POST"]), Route("/message", message, methods=["POST"])])
+        def gate_olive(request: Request) -> Response:
+            olive.call("set_activity", activity=SPLIT_ACTIVITY, session=olive.identifier)
+            mira_split.call("set_activity", activity=SPLIT_ACTIVITY, session=mira_split.identifier)
+            return JSONResponse({"gated": True})
+
+        def ask_olive(request: Request) -> Response:
+            mira_split.call("send_message", session=mira_split.identifier, to="E1001", text=MIRAS_QUESTION)
+            return JSONResponse({"sent": True})
+
+        def heard(request: Request) -> Response:
+            return JSONResponse({"heard": added_context(mira_split.use(search_tool("invoices")))})
+
+        app = Starlette(
+            routes=[
+                Route("/collide", collide, methods=["POST"]),
+                Route("/message", message, methods=["POST"]),
+                Route("/gate-olive", gate_olive, methods=["POST"]),
+                Route("/ask-olive", ask_olive, methods=["POST"]),
+                Route("/heard", heard, methods=["GET"]),
+            ]
+        )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)
         self.url = self._server.url
 
@@ -389,9 +423,14 @@ def seeded(
         raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
-        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message.
+        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message, and Olive's
+        # second session, which has none until a journey asks for a gate on Olive's work.
         teammates = Teammates(
-            portal, Settings("", memory, memory), mira.as_agent("claude-code").as_session("mira-retries"), teammates_port
+            portal,
+            Settings("", memory, memory),
+            mira.as_agent("claude-code").as_session("mira-retries"),
+            in_project.as_agent("claude-code").as_session("olive-split"),
+            teammates_port,
         )
         running.callback(teammates.stop)
         # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
