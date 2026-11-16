@@ -442,7 +442,7 @@ def test_every_agent_is_given_the_same_board_habits(team: Team) -> None:
 #: The session habits every agent is given, one marker each: pass the session's identifier, state the activity and
 #: again when the task changes, tell the member who holds a file, a takeover only on the member's word, stop on a lock
 #: taken over (told on a prompt or in a tool's notices), release a finished file, and the active sessions and collision
-#: warnings that bear on the task.
+#: warnings that bear on the task, a gate, and a message: finish the step, then stop and ask the member.
 SESSION_HABITS = (
     "`session`",
     "set_activity",
@@ -458,6 +458,9 @@ SESSION_HABITS = (
     "collision",
     "gated",
     "different_work",
+    "message from another session",
+    "finish the step you are on, then stop and ask the member",
+    "send_message",
     "from the repository's root",
 )
 
