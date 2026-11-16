@@ -3651,7 +3651,8 @@
               "different_work",
               "project_wait_changed",
               "gate_agreed",
-              "gate_refused"
+              "gate_refused",
+              "urgent_message"
             ],
             "title": "Kind",
             "type": "string"

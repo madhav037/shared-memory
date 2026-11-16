@@ -496,3 +496,125 @@ def test_agree_and_refuse_are_in_the_audit_log_with_the_score_and_no_text(
         ("gate_agreed", "owner-1", "emp-2", {"later": "emp-2", "score": 0.8, "cause": "prompt"}),
     ]
     assert "Not yet" not in str(entries) and "go ahead" not in str(entries)
+
+
+# Urgent messages (#513)
+
+URGENT = "Please hold the webhook retries: the gateway's contract changed this morning."
+
+
+def send_urgent(session: Session, to: str, text: str = URGENT) -> dict[str, Any]:
+    sent: dict[str, Any] = session.call("send_message", session=session.identifier, to=to, text=text, urgent=True)
+    return sent
+
+
+def refused_urgent(session: Session, to: str, text: str = URGENT) -> str:
+    return session.refusal("send_message", session=session.identifier, to=to, text=text, urgent=True)
+
+
+def test_an_urgent_message_gates_the_earlier_sessions_edit_until_its_member_answers(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+
+    send_urgent(dana, "owner-1")
+    told = heard(owner)
+    reason = reason_in(owner.edit("src/other.py"))
+
+    assert "urgent" in told and URGENT in told
+    first_line = reason.splitlines()[0]
+    assert first_line.startswith(GATED) and "urgent" in first_line and "different_work" in first_line
+    assert "Dana Dev (emp-2)" in reason and "5 minutes left" in reason
+    assert "send_message" in reason
+
+    owner.call("send_message", session=owner.identifier, to="emp-2", text="Holding off; tell me when it is settled.")
+
+    assert owner.edit("src/other.py") == ALLOWED, "its member answered"
+
+
+def test_an_answer_to_the_gate_answers_the_urgent_message_too(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    send_urgent(dana, "owner-1")
+
+    answer_gate(owner, "emp-2", "agree")
+
+    assert owner.edit("src/other.py") == ALLOWED
+
+
+def test_without_an_answer_the_wait_lifts_an_urgent_messages_gate(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    team.server.clock.advance(minutes=2)
+    send_urgent(dana, "owner-1")
+    team.server.clock.advance(minutes=4, seconds=59)
+    assert GATED in reason_in(owner.edit("src/other.py")), "the wait runs from the urgent message"
+
+    team.server.clock.advance(seconds=1)
+
+    assert owner.edit("src/other.py") == ALLOWED
+
+
+def test_different_work_lifts_an_urgent_messages_gate(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    send_urgent(dana, "owner-1")
+
+    lifted = different_work(owner)
+
+    assert lifted["lifted"] == ["Dana Dev"]
+    assert owner.edit("src/other.py") == ALLOWED
+
+
+def test_a_second_urgent_message_on_the_same_collision_is_refused(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    send_urgent(dana, "owner-1")
+
+    refused = refused_urgent(dana, "owner-1", "Really, please hold.")
+
+    assert "urgent" in refused and "one" in refused
+    assert dana.call("send_message", session=dana.identifier, to="owner-1", text="Really, please hold.")["to"] == (
+        "Olive Owner"
+    ), "a message that is not urgent still goes"
+
+
+def test_an_urgent_message_needs_a_collision_between_the_two_sessions(owner: Session, dana: Session) -> None:
+    owner.start()
+    dana.start()
+
+    refused = refused_urgent(dana, "owner-1")
+
+    assert "collision" in refused
+    assert owner.edit("src/other.py") == ALLOWED
+    assert URGENT not in heard(owner), "nothing was sent"
+
+
+def test_only_the_later_session_sends_an_urgent_message(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    refused = refused_urgent(owner, "emp-2")
+
+    assert "later" in refused
+    assert owner.edit("src/other.py") == ALLOWED
+
+
+def test_an_urgent_messages_gate_ends_when_its_later_session_ends(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    send_urgent(dana, "owner-1")
+
+    dana.end()
+
+    assert owner.edit("src/other.py") == ALLOWED
+
+
+def test_each_urgent_message_is_in_the_audit_log_without_its_text(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    send_urgent(dana, "owner-1")
+
+    with psycopg.connect(team.server.settings.database_url, autocommit=True) as conn:
+        rows = conn.execute(
+            "SELECT kind, actor, target, detail FROM audit_events WHERE project_id = %s AND kind = 'urgent_message'",
+            (owner.project or "",),
+        ).fetchall()
+
+    assert [tuple(row) for row in rows] == [
+        ("urgent_message", "emp-2", "owner-1", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"})
+    ]
+    assert URGENT not in str(rows)
