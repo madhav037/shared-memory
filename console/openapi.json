@@ -2868,8 +2868,12 @@
         "type": "object"
       },
       "SessionMessage": {
-        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\nfor, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n(None while it waits). sent_by_me says it came from one of the signed-in member's sessions.",
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message.",
         "properties": {
+          "message_id": {
+            "title": "Message Id",
+            "type": "integer"
+          },
           "sender_member_id": {
             "title": "Sender Member Id",
             "type": "string"
@@ -2913,6 +2917,7 @@
           }
         },
         "required": [
+          "message_id",
           "sender_member_id",
           "sender_name",
           "recipient_member_id",

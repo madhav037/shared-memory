@@ -1356,10 +1356,13 @@ export interface components {
         /**
          * SessionMessage
          * @description A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
-         *     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
-         *     (None while it waits). sent_by_me says it came from one of the signed-in member's sessions.
+         *         for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
+         *         (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
+         *     apart from every other message.
          */
         SessionMessage: {
+            /** Message Id */
+            message_id: number;
             /** Sender Member Id */
             sender_member_id: string;
             /** Sender Name */

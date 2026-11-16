@@ -416,6 +416,7 @@ def test_a_reply_from_the_console_reaches_the_other_session_on_its_next_hook(
         ("Do you have the retry UI?", False),
         ("Yes, take the back end.", True),
     ]
+    assert len({one["message_id"] for one in replied.json()["messages"]}) == 2, "each known by its own number"
     assert "Olive Owner (E1001)" in told and "Yes, take the back end." in told
     assert "Yes, take the back end." not in heard(dana), "heard once"
 

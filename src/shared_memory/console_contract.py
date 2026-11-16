@@ -752,8 +752,10 @@ class SessionGate(BaseModel):
 class SessionMessage(BaseModel):
     """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
-    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions."""
+    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
+apart from every other message."""
 
+    message_id: int
     sender_member_id: str
     sender_name: str
     recipient_member_id: str

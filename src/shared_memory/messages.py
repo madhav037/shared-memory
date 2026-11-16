@@ -65,8 +65,10 @@ TEXT_LIMIT = 2000
 
 @dataclass(frozen=True)
 class Exchanged:
-    """One message a member's sessions sent or were sent, once though it went to several of the recipient's sessions."""
+    """One message a member's sessions sent or were sent, once though it went to several of the recipient's sessions,
+    known by the number of its first copy."""
 
+    message_id: int
     sender_member_id: str
     sender_name: str
     recipient_member_id: str
@@ -178,7 +180,7 @@ class Messages:
         only: none is marked delivered."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT sender_member_id, sender_name, recipient_member_id, text, sent_at,"
+                "SELECT MIN(id) AS message_id, sender_member_id, sender_name, recipient_member_id, text, sent_at,"
                 " MIN(delivered_at) AS delivered_at FROM messages"
                 " WHERE project_id = %s AND (recipient_member_id = %s OR sender_member_id = %s) AND sent_at > %s"
                 " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at"
@@ -187,6 +189,7 @@ class Messages:
             ).fetchall()
         return [
             Exchanged(
+                row["message_id"],
                 row["sender_member_id"],
                 row["sender_name"],
                 row["recipient_member_id"],

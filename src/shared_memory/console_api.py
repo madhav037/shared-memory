@@ -792,6 +792,7 @@ class ConsoleApi:
             ],
             messages=[
                 SessionMessage(
+                    message_id=one.message_id,
                     sender_member_id=one.sender_member_id,
                     sender_name=one.sender_name,
                     recipient_member_id=one.recipient_member_id,
