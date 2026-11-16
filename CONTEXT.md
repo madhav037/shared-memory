@@ -356,3 +356,27 @@ _Avoid_: Steal, force-unlock
 **Collision**:
 Two sessions working on the same file or the same task at the same time.
 _Avoid_: Conflict, clash
+
+**Later session**:
+Of two colliding sessions, the one whose prompt or activity made the collision; the other is the *earlier session*.
+_Avoid_: Newcomer, second session
+
+**Gate**:
+The refusal of a later session's file edits on colliding work until every earlier session's member agrees, stays silent for the project's wait, or the later member says it is different work. A member's own sessions are never gated by each other.
+_Avoid_: Freeze, barrier
+
+**Message**:
+Text one active session sends another in the same project, kept for seven days.
+_Avoid_: Ping, DM
+
+**Urgent message**:
+A message that gates the earlier session's edits on the colliding work until its member answers, and gets through a mute; one per collision.
+_Avoid_: Rush, escalation
+
+**Mute**:
+A session's choice to hold back messages that are not urgent until it is unmuted or its turn ends.
+_Avoid_: Snooze, focus mode
+
+**Handoff note**:
+What a session leaves for whoever takes up its work: what is done, what is left, its branch and the files it touched. Written by its coding agent, or put together by the server when the session ends without one, and kept for seven days.
+_Avoid_: Handover, baton, recap
