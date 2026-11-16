@@ -697,7 +697,7 @@
     "/api/projects/{project_id}/sessions": {
       "get": {
         "operationId": "project_sessions",
-        "summary": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        "summary": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,7 +710,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+            "description": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2627,6 +2627,25 @@
         "title": "ActiveSession",
         "type": "object"
       },
+      "GateWait": {
+        "description": "One earlier session a gate waits for, until the project's wait has passed (until).",
+        "properties": {
+          "earlier": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "earlier",
+          "until"
+        ],
+        "title": "GateWait",
+        "type": "object"
+      },
       "HeldLock": {
         "description": "A file a session holds a lock on: its repository, and its path from that repository's root.",
         "properties": {
@@ -2658,8 +2677,162 @@
         "title": "HeldLock",
         "type": "object"
       },
+      "NamedSession": {
+        "description": "An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has\nsaid which) and its activity (None when it has none).",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_name",
+          "agent",
+          "activity"
+        ],
+        "title": "NamedSession",
+        "type": "object"
+      },
+      "SessionCollision": {
+        "description": "Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made\nthe collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown.",
+        "properties": {
+          "later": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "earlier": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "cause": {
+            "enum": [
+              "prompt",
+              "activity"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "found_at": {
+            "format": "date-time",
+            "title": "Found At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "later",
+          "earlier",
+          "cause",
+          "found_at"
+        ],
+        "title": "SessionCollision",
+        "type": "object"
+      },
+      "SessionGate": {
+        "description": "A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the\ngate stops waiting for each when the project's wait has passed, or at once when its member says it is different\nwork. The page counts the time left down from now (the server's clock when it answered) to each until.",
+        "properties": {
+          "later": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "waits_for": {
+            "items": {
+              "$ref": "#/components/schemas/GateWait"
+            },
+            "title": "Waits For",
+            "type": "array"
+          }
+        },
+        "required": [
+          "later",
+          "waits_for"
+        ],
+        "title": "SessionGate",
+        "type": "object"
+      },
+      "SessionMessage": {
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\nfor, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n(None while it waits). sent_by_me says it came from one of the signed-in member's sessions.",
+        "properties": {
+          "sender_member_id": {
+            "title": "Sender Member Id",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "recipient_member_id": {
+            "title": "Recipient Member Id",
+            "type": "string"
+          },
+          "recipient_name": {
+            "title": "Recipient Name",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "sent_at": {
+            "format": "date-time",
+            "title": "Sent At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "sent_by_me": {
+            "title": "Sent By Me",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sender_member_id",
+          "sender_name",
+          "recipient_member_id",
+          "recipient_name",
+          "text",
+          "sent_at",
+          "delivered_at",
+          "sent_by_me"
+        ],
+        "title": "SessionMessage",
+        "type": "object"
+      },
       "ProjectSessions": {
-        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them.",
+        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its\ngates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.\nnow is the server's clock when it answered. The page asks again every few seconds; asking changes nothing.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2669,18 +2842,48 @@
             "title": "Project Name",
             "type": "string"
           },
+          "now": {
+            "format": "date-time",
+            "title": "Now",
+            "type": "string"
+          },
           "sessions": {
             "items": {
               "$ref": "#/components/schemas/ActiveSession"
             },
             "title": "Sessions",
             "type": "array"
+          },
+          "collisions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionCollision"
+            },
+            "title": "Collisions",
+            "type": "array"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/SessionGate"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/SessionMessage"
+            },
+            "title": "Messages",
+            "type": "array"
           }
         },
         "required": [
           "project_id",
           "project_name",
-          "sessions"
+          "now",
+          "sessions",
+          "collisions",
+          "gates",
+          "messages"
         ],
         "title": "ProjectSessions",
         "type": "object"

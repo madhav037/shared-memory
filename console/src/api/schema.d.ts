@@ -352,7 +352,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+        /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
         get: operations["project_sessions"];
         put?: never;
         post?: never;
@@ -1237,6 +1237,18 @@ export interface components {
             locks: components["schemas"]["HeldLock"][];
         };
         /**
+         * GateWait
+         * @description One earlier session a gate waits for, until the project's wait has passed (until).
+         */
+        GateWait: {
+            earlier: components["schemas"]["NamedSession"];
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+        };
+        /**
          * HeldLock
          * @description A file a session holds a lock on: its repository, and its path from that repository's root.
          */
@@ -1257,17 +1269,102 @@ export interface components {
             last_used_at: string;
         };
         /**
+         * NamedSession
+         * @description An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has
+         *     said which) and its activity (None when it has none).
+         */
+        NamedSession: {
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Activity */
+            activity: string | null;
+        };
+        /**
+         * SessionCollision
+         * @description Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made
+         *     the collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown.
+         */
+        SessionCollision: {
+            later: components["schemas"]["NamedSession"];
+            earlier: components["schemas"]["NamedSession"];
+            /**
+             * Cause
+             * @enum {string}
+             */
+            cause: "prompt" | "activity";
+            /**
+             * Found At
+             * Format: date-time
+             */
+            found_at: string;
+        };
+        /**
+         * SessionGate
+         * @description A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the
+         *     gate stops waiting for each when the project's wait has passed, or at once when its member says it is different
+         *     work. The page counts the time left down from now (the server's clock when it answered) to each until.
+         */
+        SessionGate: {
+            later: components["schemas"]["NamedSession"];
+            /** Waits For */
+            waits_for: components["schemas"]["GateWait"][];
+        };
+        /**
+         * SessionMessage
+         * @description A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
+         *     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
+         *     (None while it waits). sent_by_me says it came from one of the signed-in member's sessions.
+         */
+        SessionMessage: {
+            /** Sender Member Id */
+            sender_member_id: string;
+            /** Sender Name */
+            sender_name: string;
+            /** Recipient Member Id */
+            recipient_member_id: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Text */
+            text: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Sent By Me */
+            sent_by_me: boolean;
+        };
+        /**
          * ProjectSessions
          * @description A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
-         *     or gone idle is not among them.
+         *     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
+         *     gates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.
+         *     now is the server's clock when it answered. The page asks again every few seconds; asking changes nothing.
          */
         ProjectSessions: {
             /** Project Id */
             project_id: string;
             /** Project Name */
             project_name: string;
+            /**
+             * Now
+             * Format: date-time
+             */
+            now: string;
             /** Sessions */
             sessions: components["schemas"]["ActiveSession"][];
+            /** Collisions */
+            collisions: components["schemas"]["SessionCollision"][];
+            /** Gates */
+            gates: components["schemas"]["SessionGate"][];
+            /** Messages */
+            messages: components["schemas"]["SessionMessage"][];
         };
         /**
          * CardDetail
@@ -2722,7 +2819,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+            /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
             200: {
                 headers: {
                     [name: string]: unknown;
