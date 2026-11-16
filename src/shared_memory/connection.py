@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from importlib import resources
 from typing import Any, Literal
 
-from shared_memory.hooks import AGENT_HEADER, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI
+from shared_memory.hooks import AGENT_HEADER, BRANCH_HEADER, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"  # noqa: S105  # a name, not a secret
 GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
@@ -93,6 +93,26 @@ def working_folder_root() -> str:
     return "$(up=$(git rev-parse --show-cdup 2>/dev/null) && printf '%s/%s' \"$PWD\" \"$up\")"
 
 
+def repository_branch(variable: str) -> str:
+    """What a POSIX shell names the session's git branch with, for an agent that names the folder it was started in
+    in this environment variable. Without git, outside a repository or with the variable unset, it names none, and
+    the server keeps the branch it was last told (ADR-0025)."""
+    return f'${{{variable}:+$(git -C "${variable}" symbolic-ref --short -q HEAD 2>/dev/null)}}'
+
+
+def working_folder_branch() -> str:
+    """What a POSIX shell names the session's git branch with for an agent that names no folder to its hooks: the
+    branch of the folder the hook's command runs in, as `working_folder_root` finds the root."""
+    return "$(git symbolic-ref --short -q HEAD 2>/dev/null)"
+
+
+# What a PowerShell hook names the session's branch with, beside the root: nothing at all without git.
+POWERSHELL_BRANCH = (
+    "try { $branch = git symbolic-ref --short -q HEAD 2>$null; "
+    f"if ($LASTEXITCODE -eq 0) {{ $headers['{BRANCH_HEADER}'] = \"$branch\" }} }} catch {{ }}; "
+)
+
+
 def hook_command(
     hooks_url: str,
     event: str,
@@ -104,6 +124,7 @@ def hook_command(
     root: str = "",
     otherwise: str = "",
     agent: str = "",
+    branch: str = "",
 ) -> str:
     """The command a hook runs to post its payload and print what the server answers.
 
@@ -111,7 +132,8 @@ def hook_command(
     all, or `otherwise` for an agent that must be answered something. It runs in a POSIX shell; Codex's Windows
     command is `codex_powershell`. `root` is what the shell names the repository's root with (`repository_root`),
     for an agent that gives its hooks a folder. `agent` names the coding agent the hook runs in, so a session known
-    only by its hooks is known with its agent.
+    only by its hooks is known with its agent. `branch` is what the shell names the session's git branch with
+    (`repository_branch`, `working_folder_branch`), for the hook before each tool.
     """
     token = "$" + TOKEN_VARIABLE
     quote = "'"
@@ -125,6 +147,8 @@ def hook_command(
         headers[AGENT_HEADER] = agent
     if root:
         headers["X-Shared-Memory-Root"] = root
+    if branch:
+        headers[BRANCH_HEADER] = branch
     # A POSIX shell reads a variable only inside double quotes.
     written = " ".join(
         f"-H {'"' if '$' in value else quote}{name}: {value}{'"' if '$' in value else quote}"
@@ -138,20 +162,21 @@ def hook_command(
     )
 
 
-# How long a session-start hook waits for the server's briefing, and every other hook (a prompt's, a before-edit
-# hook, before the edit goes ahead unchecked, and a session-end hook) before it gives up. Each agent's own limit on
+# How long a session-start hook waits for the server's briefing, and every other hook (a prompt's, the hooks before
+# and after each tool, before the tool goes ahead unchecked, and a session-end hook) before it gives up. Each agent's own limit on
 # the hook is a second longer, so the command is the one that gives up. Claude Code's plugin (plugin/hooks/hooks.json)
 # writes the same values, and a test holds it to them.
 BRIEFING_SECONDS = 5
 HOOK_SECONDS = 3
 
-# Codex's hooks: its event, the matcher on it, the endpoint it posts to and how long it waits. Codex edits files with
-# apply_patch and also answers to Edit and Write. It gives a SessionEnd hook 3 seconds at most, its timeout included.
+# Codex's hooks: its event, the matcher on it, the endpoint it posts to and how long it waits. The hook before a tool
+# runs on every tool (ADR-0025), and its PreToolUse takes added context, so it needs no hook after one; the server
+# knows Codex's file-edit tools (apply_patch, Edit and Write). It gives a SessionEnd hook 3 seconds at most, its timeout included.
 # Codex documents SessionStart's `source: compact` (https://learn.chatgpt.com/docs/hooks).
 CODEX_HOOKS = (
     ("SessionStart", "^(startup|resume|clear|compact)$", "session-start", BRIEFING_SECONDS),
     ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),
-    ("PreToolUse", "^(apply_patch|Edit|Write)$", "before-edit", HOOK_SECONDS),
+    ("PreToolUse", "", "before-edit", HOOK_SECONDS),
     ("SessionEnd", "", "session-end", 2),
 )
 
@@ -164,6 +189,7 @@ def codex_powershell(hooks_url: str, endpoint: str, project_id: str, repository:
     root = (
         "try { $up = git rev-parse --show-cdup 2>$null; "
         "if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Root'] = \"$((Get-Location).Path)/$up\" } } catch { }; "
+        f"{POWERSHELL_BRANCH}"
         if endpoint == "before-edit"
         else ""
     )
@@ -193,8 +219,9 @@ def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
     written = ""
     for event, matcher, endpoint, seconds in CODEX_HOOKS:
         root = working_folder_root() if endpoint == "before-edit" else ""
+        branch = working_folder_branch() if endpoint == "before-edit" else ""
         posix = hook_command(
-            hooks_url, endpoint, project_id, repository, seconds=seconds, root=root, agent=CODEX.header
+            hooks_url, endpoint, project_id, repository, seconds=seconds, root=root, agent=CODEX.header, branch=branch
         )
         windows = codex_powershell(hooks_url, endpoint, project_id, repository, seconds)
         written += f"""
@@ -210,11 +237,13 @@ timeout = {seconds + 1}
 
 
 # Gemini CLI's hooks: its event, the matcher on it, a name for the hook, the endpoint and how long its script waits.
-# Gemini CLI's own limit is in milliseconds. It changes files with write_file and replace.
+# Gemini CLI's own limit is in milliseconds. The hook before a tool runs on every tool (ADR-0025); BeforeTool takes no
+# added context, so the session's news comes on AfterTool, which does.
 GEMINI_HOOKS = (
     ("SessionStart", "", "shared-memory-briefing", "session-start", BRIEFING_SECONDS),
     ("BeforeAgent", "", "shared-memory-recall", "prompt-submitted", HOOK_SECONDS),
-    ("BeforeTool", "write_file|replace", "shared-memory-before-edit", "before-edit", HOOK_SECONDS),
+    ("BeforeTool", ".*", "shared-memory-before-edit", "before-edit", HOOK_SECONDS),
+    ("AfterTool", ".*", "shared-memory-after-tool", "after-tool", HOOK_SECONDS),
     ("SessionEnd", "", "shared-memory-session-end", "session-end", HOOK_SECONDS),
 )
 
@@ -242,8 +271,8 @@ def gemini_hooks() -> dict[str, Any]:
 
 def gemini_script(hooks_url: str, project_id: str, repository: str) -> str:
     """The script all of Gemini CLI's hooks run: it posts the payload it is given and prints the server's answer."""
-    return f'''// Shared Memory: the briefing when a session starts, memory recalled on each prompt, the lock on a file checked or
-// taken before an edit, and the session ended.
+    return f'''// Shared Memory: the briefing when a session starts, memory recalled on each prompt, the session's place reported and
+// the lock on a file checked or taken before each tool, news heard after it, and the session ended.
 // Gemini CLI runs a hook through whichever shell the machine has, so this is a script rather than a shell command:
 // node is the same on every machine, and Gemini CLI brings its own. Your personal token is read from the
 // {TOKEN_VARIABLE} environment variable and is never committed here.
@@ -277,6 +306,17 @@ if (started && event === "before-edit") {{
     // No git here, or no repository.
   }}
   headers["X-Shared-Memory-Root"] = `${{started}}/${{up}}`;
+  // The session's branch, for its teammates to see; none without git.
+  try {{
+    const branch = execFileSync("git", ["-C", started, "symbolic-ref", "--short", "-q", "HEAD"], {{
+      encoding: "utf8",
+      timeout: 500,
+      stdio: ["ignore", "pipe", "ignore"],
+    }}).trim();
+    if (branch) headers[{json.dumps(BRANCH_HEADER)}] = branch;
+  }} catch {{
+    // No git here, or no repository.
+  }}
 }}
 
 let payload = "";
@@ -304,10 +344,12 @@ process.exit(0);
 def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[str, Any]:
     """Copilot CLI's hooks. They post to the server themselves, so there is no command and no shell to get right.
 
-    The session's start, each edit of a file and the session's end are here. The prompt is not: GitHub's own
-    reference says the CLI drops what a userPromptSubmitted hook answers, and a hook whose answer is thrown away
-    would take this member's waiting challenges with it. The CLI's file-edit tools are `edit` and `create`, and its
-    matcher must match a tool's whole name. A hook that posts lets the edit through when the server is down or slow.
+    The session's start, each tool call before and after it, and the session's end are here. The prompt is not:
+    GitHub's own reference says the CLI drops what a userPromptSubmitted hook answers, and a hook whose answer is
+    thrown away would take this member's waiting challenges with it. The hook before a tool runs on every tool, with
+    no matcher (ADR-0025); its answer takes no added context, so the session's news comes on postToolUse, which
+    appends it to the tool's result. The server knows the CLI's file-edit tools (`edit` and `create`). A hook that
+    posts lets the tool through when the server is down or slow. It runs no shell, so it cannot name the branch.
     """
 
     def posting(endpoint: str, seconds: int, **more: object) -> dict[str, Any]:
@@ -329,15 +371,17 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
         "version": 1,
         "hooks": {
             "sessionStart": [posting("session-start", 6)],
-            "preToolUse": [posting("before-edit", HOOK_SECONDS, matcher="edit|create")],
+            "preToolUse": [posting("before-edit", HOOK_SECONDS)],
+            "postToolUse": [posting("after-tool", HOOK_SECONDS)],
             "sessionEnd": [posting("session-end", HOOK_SECONDS)],
         },
     }
 
 
 def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, Any]:
-    """Cursor's hooks: the briefing as a session starts, the lock checked or taken before its Write tool changes a
-    file, and the session ended. Its prompt hook cannot add context, which is what the rule beside them is for.
+    """Cursor's hooks: the briefing as a session starts, the session's place reported and the lock checked or taken
+    before every tool (ADR-0025), its news heard after each tool, since preToolUse takes no added context and
+    postToolUse does, and the session ended. Its prompt hook cannot add context, which is what the rule beside them is for.
     Cursor has no per-machine command, and on Windows it launches hooks through PowerShell, where these do not run;
     there the rule is what keeps memory in reach, and locks are guidance only.
 
@@ -356,6 +400,7 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             root=working_folder_root() if endpoint == "before-edit" else "",
             otherwise=otherwise,
             agent=CURSOR.header,
+            branch=working_folder_branch() if endpoint == "before-edit" else "",
         )
 
     return {
@@ -371,8 +416,14 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             "preToolUse": [
                 {
                     "type": "command",
-                    "matcher": "Write",
                     "command": command("before-edit", HOOK_SECONDS, otherwise="{}"),
+                    "timeout": HOOK_SECONDS + 1,
+                }
+            ],
+            "postToolUse": [
+                {
+                    "type": "command",
+                    "command": command("after-tool", HOOK_SECONDS, otherwise="{}"),
                     "timeout": HOOK_SECONDS + 1,
                 }
             ],
@@ -411,6 +462,8 @@ SESSION_HABITS = f"""\
   stop editing that file and tell the member.
 - When your work on a file is finished, call `release_lock` for it.
 - Mention the active sessions the briefing lists, and any collision warning, when they bear on the task.
+- News from other sessions (a collision warning, a lock taken over) can arrive mid-turn, beside a tool's result,
+  not only with the next prompt. When it does, finish the step you are on, then stop and tell the member.
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.
@@ -453,11 +506,13 @@ writes through the `shared-memory` MCP server.
 
 
 # Devin Desktop's hooks: its event, the matcher on it (a regex on the tool's name), the endpoint and how long it
-# waits. Devin's file-edit tools are write, edit and notebook_edit.
+# waits. The hook before a tool runs on every tool (ADR-0025); Devin's PreToolUse takes no added context, so the
+# session's news comes on PostToolUse, which does. The server knows Devin's file-edit tools (write, edit, notebook_edit).
 DEVIN_HOOKS = (
     ("SessionStart", "", "session-start", BRIEFING_SECONDS),
     ("UserPromptSubmit", "", "prompt-submitted", HOOK_SECONDS),
-    ("PreToolUse", "^(write|edit|notebook_edit)$", "before-edit", HOOK_SECONDS),
+    ("PreToolUse", "", "before-edit", HOOK_SECONDS),
+    ("PostToolUse", "", "after-tool", HOOK_SECONDS),
     ("SessionEnd", "", "session-end", HOOK_SECONDS),
 )
 
@@ -485,6 +540,7 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
                             format=DEVIN.format if endpoint == "before-edit" else "",
                             root=repository_root("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
                             agent=DEVIN.header,
+                            branch=repository_branch("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
                         ),
                         "timeout": seconds + 1,
                     }
@@ -508,7 +564,8 @@ CLINE_EVENTS = (
 CLINE_DOING = {
     "TaskStart": "the briefing when a task starts",
     "UserPromptSubmit": "memory recalled for a prompt",
-    "PreToolUse": "the lock on a file checked or taken before Cline changes it",
+    "PreToolUse": "the task's place reported before each tool, and the lock on a file checked or taken before Cline "
+    "changes it",
     "TaskComplete": "the session ended when its task completes",
     "TaskCancel": "the session ended when its task is cancelled",
 }
@@ -525,6 +582,7 @@ def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, rep
         format=CLINE.format,
         root=working_folder_root() if endpoint == "before-edit" else "",
         agent=CLINE.header,
+        branch=working_folder_branch() if endpoint == "before-edit" else "",
     )
     return f"""#!/bin/sh
 # Shared Memory: {CLINE_DOING[event]}. Cline hands this script its payload and reads what it prints.
@@ -540,8 +598,11 @@ CLINE_POWERSHELL_ROOT = """# The repository's root, which a file's path is read 
 try {
   $up = git rev-parse --show-cdup 2>$null
   if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Root'] = "$((Get-Location).Path)/$up" }
+  # The task's branch, for its teammates to see.
+  $branch = git symbolic-ref --short -q HEAD 2>$null
+  if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Branch'] = "$branch" }
 } catch {
-  # No git here: the server reads the root from the payload.
+  # No git here: the server reads the root from the payload, and knows no branch.
 }
 """
 

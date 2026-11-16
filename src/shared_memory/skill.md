@@ -123,6 +123,7 @@ The server knows each running session. The briefing ends by naming this session'
 - **A lock of yours taken over**: you are told once, on your next prompt or in the `notices` of `take_lock` or `set_activity`: stop editing that file and tell the member.
 - **Finished with a file**: `release_lock` it, so nobody waits for it. Your other locks end with the session, or after it sits idle.
 - **Collisions**: when a prompt warns of a possible collision, another session's activity being nearly the same as yours, tell the member before going on. Mention the briefing's active sessions when they bear on the task.
+- **News mid-turn**: a hook before or after each tool call reports where this session is and brings what is waiting for it, so a collision warning or a lock taken over can arrive in the middle of a turn, beside a tool's result, not only with the next prompt. When it does, finish the step you are on, then stop and tell the member.
 
 ## Challenges
 
