@@ -3165,6 +3165,23 @@ div.dotted {
   font-family: var(--mono);
   font-size: 0.8125rem;
 }
+.session-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.session-branch svg {
+  flex: none;
+}
+.session-touched {
+  margin-top: 16px;
+}
+.session-touched .path {
+  overflow-wrap: anywhere;
+}
 /* What a session says it is doing: its title, in the sans. The serif is a memory's own words only. */
 .session-activity {
   margin: 6px 0 0;

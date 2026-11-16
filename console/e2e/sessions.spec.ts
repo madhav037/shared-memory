@@ -23,6 +23,10 @@ test("a project's Sessions page lists its active sessions, their activity and th
   await expect(raj.getByTestId("session-activity")).toHaveText("Adding backoff to the webhook retries");
   await expect(raj.getByTestId("from-card")).toHaveCount(0);
   await expect(raj.getByTestId("session-locks")).toContainText("src/webhooks/backoff.ts");
+  // Its hook before each tool named its branch and the files the tools named, but never the tool itself.
+  await expect(raj.getByTestId("session-branch")).toHaveText("feature/webhook-backoff");
+  await expect(raj.getByTestId("session-touched")).toContainText("src/webhooks/retry.ts");
+  await expect(raj).not.toContainText("Read");
   await expect(raj).toContainText("Started");
   await expect(raj).toContainText("Last call");
 
@@ -31,6 +35,7 @@ test("a project's Sessions page lists its active sessions, their activity and th
   await expect(olive.getByTestId("session-activity")).toHaveText("Retry failed webhooks");
   await expect(olive.getByTestId("from-card")).toBeVisible();
   await expect(olive.getByTestId("session-locks")).toContainText("src/invoices/split.ts");
+  await expect(olive.getByTestId("session-branch")).toHaveCount(0);
 
   // The page changes nothing: there is nothing on it to press.
   await expect(page.getByTestId("sessions-page").getByRole("button")).toHaveCount(0);

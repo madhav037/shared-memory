@@ -20,6 +20,7 @@ from shared_memory.config import Settings
 from tests.license_keys import TEST_PUBLIC_KEYS, a_key
 from tests.support import (
     REPO_ROOT,
+    WORKING_FOLDER,
     FakeGitHub,
     FakePlatform,
     RunningServer,
@@ -30,6 +31,7 @@ from tests.support import (
     fresh_database,
     promote_keeping_both,
     promote_now,
+    read_tool,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -348,6 +350,8 @@ def seeded(
         raj = dana.as_agent("claude-code").as_session("raj-backoff")
         raj.call("set_activity", activity="Adding backoff to the webhook retries", session=raj.identifier)
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
+        # Its hook before a tool has named its branch and a file it read.
+        raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
         # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
