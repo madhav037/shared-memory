@@ -26,6 +26,7 @@ from tests.support import (
     added_context,
     fresh_database,
     member,
+    search_tool,
 )
 from tests.test_before_edit import ALLOWED, reason_in
 from tests.test_collisions import PROMPT, PROMPT_BELOW, WEBHOOKS, ChosenSimilarity, state, warnings
@@ -62,6 +63,11 @@ def collide(earlier: Session, later: Session) -> None:
 def different_work(session: Session) -> dict[str, Any]:
     answer: dict[str, Any] = session.call("different_work", session=session.identifier)
     return answer
+
+
+def denied(answer: dict[str, Any]) -> bool:
+    """Whether a before-edit hook's answer stops the edit, whatever news it carries."""
+    return bool(answer.get("hookSpecificOutput", {}).get("permissionDecision") == "deny")
 
 
 def read_of(session: Session) -> dict[str, Any]:
@@ -115,7 +121,7 @@ def test_the_time_left_counts_down(team: Team, owner: Session, dana: Session) ->
 def test_the_earlier_session_is_not_gated(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py")), "told of the gate, never stopped by it"
 
 
 def test_a_prompt_that_does_not_collide_gates_nothing(owner: Session, dana: Session) -> None:
@@ -287,3 +293,206 @@ def test_a_change_to_the_wait_is_in_the_audit_log(team: Team, dana: Session) -> 
     lead.call("project_wait", minutes=12)
 
     assert gate_entries(team.server, lead.project or "") == [("project_wait_changed", "emp-2", {"minutes": 12})]
+
+
+# The earlier member's answer (#512)
+
+
+def answer_gate(session: Session, gate: str, answer: str, text: str | None = None) -> dict[str, Any]:
+    arguments: dict[str, Any] = {"session": session.identifier, "gate": gate, "answer": answer}
+    if text is not None:
+        arguments["text"] = text
+    answered: dict[str, Any] = session.call("answer_gate", **arguments)
+    return answered
+
+
+def heard(session: Session) -> str:
+    """What the session hears on its next tool call, in Claude Code's hook before a tool."""
+    return added_context(session.use(search_tool("webhook")))
+
+
+def test_the_earlier_session_is_told_once_that_a_later_session_is_gated_on_its_work_and_how_to_answer(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+
+    told = heard(owner)
+
+    assert "[gate]" in told and "Dana Dev (emp-2)" in told
+    assert "answer_gate" in told and '"emp-2"' in told
+    assert "ask your member" in told
+    assert "Dana Dev" not in heard(owner), "told once"
+
+
+def test_agree_lifts_the_gate_and_the_later_session_hears_it(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    answered = answer_gate(owner, "emp-2", "agree", "Go ahead, I am only on the docs.")
+    told = heard(dana)
+
+    assert answered["answered"] == ["Dana Dev"]
+    assert "Olive Owner (owner-1)" in told and "agreed" in told
+    assert "Go ahead, I am only on the docs." in told
+    assert dana.edit(FILE) == ALLOWED
+    assert "agreed" not in heard(dana), "heard once"
+
+
+def test_refuse_keeps_the_gate_past_the_wait_and_the_later_session_hears_it(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+
+    answer_gate(owner, "emp-2", "refuse", "I am halfway through the retries.")
+    told = heard(dana)
+    team.server.clock.advance(minutes=6)
+    reason = reason_in(dana.edit(FILE))
+
+    assert "Olive Owner (owner-1)" in told and "refused" in told
+    assert "I am halfway through the retries." in told
+    assert reason.startswith(GATED) and "refused" in reason
+
+
+def test_a_refusal_holds_until_the_refusing_session_ends(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse")
+    team.server.clock.advance(minutes=10)
+    assert GATED in reason_in(dana.edit(FILE))
+
+    owner.end()
+
+    assert not denied(dana.edit(FILE))
+
+
+def test_a_refusal_holds_until_the_refusing_session_goes_idle(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse")
+    team.server.clock.advance(minutes=20)
+    assert GATED in reason_in(dana.edit(FILE)), "Dana's session stays active"
+
+    team.server.clock.advance(minutes=11)
+
+    assert not denied(dana.edit(FILE)), "Olive's session made no call for 31 minutes"
+
+
+def test_a_refusal_may_be_changed_to_agree(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse")
+    heard(dana)
+
+    answer_gate(owner, "emp-2", "agree")
+
+    assert "agreed" in heard(dana)
+    assert dana.edit(FILE) == ALLOWED
+
+
+def test_an_agreement_cannot_be_turned_into_a_refusal(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "agree")
+
+    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+
+    assert "agreed" in refused
+
+
+def two_earlier(owner: Session, cole: Session, dana: Session) -> None:
+    """Olive's and Cole's sessions both on the webhooks, and Dana's first prompt nearly the same: Dana's session is the
+    later one to both."""
+    state(owner, WEBHOOKS)
+    state(cole, WEBHOOKS)
+    assert len(warnings(dana, PROMPT)) == 2, "the prompt collides with both"
+
+
+def test_with_two_earlier_sessions_one_agreeing_keeps_the_gate_until_the_other_agrees(
+    owner: Session, cole: Session, dana: Session
+) -> None:
+    two_earlier(owner, cole, dana)
+
+    answer_gate(owner, "emp-2", "agree")
+    still = reason_in(dana.edit(FILE))
+    answer_gate(cole, "emp-2", "agree")
+    heard(dana)
+
+    assert still.startswith(GATED) and "Cole Coder" in still and "Olive Owner" not in still
+    assert dana.edit(FILE) == ALLOWED
+
+
+def test_with_two_earlier_sessions_one_agreeing_and_the_other_silent_lifts_once_the_wait_passes(
+    team: Team, owner: Session, cole: Session, dana: Session
+) -> None:
+    two_earlier(owner, cole, dana)
+    answer_gate(owner, "emp-2", "agree")
+    team.server.clock.advance(minutes=4)
+    assert GATED in reason_in(dana.edit(FILE)), "Cole has not answered and the wait runs"
+
+    team.server.clock.advance(minutes=1)
+
+    assert not denied(dana.edit(FILE))
+
+
+def test_with_two_earlier_sessions_one_refusal_keeps_the_gate(
+    team: Team, owner: Session, cole: Session, dana: Session
+) -> None:
+    two_earlier(owner, cole, dana)
+    answer_gate(owner, "emp-2", "agree")
+    answer_gate(cole, "emp-2", "refuse")
+    team.server.clock.advance(minutes=6)
+
+    reason = reason_in(dana.edit(FILE))
+
+    assert reason.startswith(GATED) and "Cole Coder" in reason and "refused" in reason
+    assert "Olive Owner" not in reason
+
+
+def test_only_the_earlier_sessions_own_member_can_answer(owner: Session, dana: Session, cole: Session) -> None:
+    collide(owner, dana)
+
+    by_another = cole.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="agree")
+    by_the_later = dana.refusal("answer_gate", session=dana.identifier, gate="emp-2", answer="agree")
+
+    assert "No gate" in by_another and "No gate" in by_the_later
+    assert GATED in reason_in(dana.edit(FILE)), "still gated"
+
+
+def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    team.server.clock.advance(minutes=5)
+
+    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+
+    assert "wait" in refused
+    assert dana.edit(FILE) == ALLOWED
+
+
+def test_an_answer_other_than_agree_or_refuse_is_refused(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="maybe")
+
+    assert '"agree"' in refused and '"refuse"' in refused
+
+
+def answer_entries(server: RunningServer, project: str) -> list[tuple[str, str, str, dict[str, Any]]]:
+    """The project's agree and refuse entries in the audit log: kind, actor, target and detail, oldest first."""
+    with psycopg.connect(server.settings.database_url, autocommit=True) as conn:
+        rows = conn.execute(
+            "SELECT kind, actor, target, detail FROM audit_events WHERE project_id = %s"
+            " AND kind IN ('gate_agreed', 'gate_refused') ORDER BY id",
+            (project,),
+        ).fetchall()
+    return [(kind, actor, target, detail) for kind, actor, target, detail in rows]
+
+
+def test_agree_and_refuse_are_in_the_audit_log_with_the_score_and_no_text(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse", "Not yet, please.")
+    answer_gate(owner, "emp-2", "agree", "Fine, go ahead.")
+
+    entries = answer_entries(team.server, owner.project or "")
+
+    assert entries == [
+        ("gate_refused", "owner-1", "emp-2", {"later": "emp-2", "score": 0.8, "cause": "prompt"}),
+        ("gate_agreed", "owner-1", "emp-2", {"later": "emp-2", "score": 0.8, "cause": "prompt"}),
+    ]
+    assert "Not yet" not in str(entries) and "go ahead" not in str(entries)
