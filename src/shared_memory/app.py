@@ -1173,20 +1173,30 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
-    def send_message(session: str, to: str, text: str, ctx: Context) -> dict[str, Any]:
+    def send_message(session: str, to: str, text: str, ctx: Context, urgent: bool = False) -> dict[str, Any]:
         """Send a message to another member's session in this project, collided or not, to ask about their work or
         to reply to a message. Send what your member asked you to say, never on your own judgment.
 
         to is the member ID of the member it is for, as a gate or a message named them; it reaches each of their active
         sessions in this project, on its next tool call or prompt. When none is active but one ended or went idle in
         the last day, waiting is true: it reaches their next session here. text is at most 2000 characters. Messages
-        are kept seven days.
+        are kept seven days. A message to a member whose urgent message gates this session answers it.
+
+        urgent is only for when your member asks, and only from the later session of a collision to the earlier: the
+        earlier session's edits on the colliding work then wait until its member answers or the project's wait passes.
+        One per collision; a second is refused.
 
         session is this session's identifier, as its briefing named it. notices in the answer is what this session is
         told once, such as a message sent to it: finish the step you are on, then stop and show it to your member."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        sent = messages.send(current, calling, to, text)
+        if urgent:
+            messages.check(text)
+            gated = gates.urgent_for(calling, to)
+        sent = messages.send(current, calling, to, text, urgent=urgent)
+        if urgent:
+            gates.send_urgent(current, calling, gated)
+        gates.replied(calling, to)
         return {
             "session": calling.identifier,
             "to": sent.to,

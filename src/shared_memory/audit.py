@@ -75,6 +75,7 @@ Kind = Literal[
     "project_wait_changed",
     "gate_agreed",
     "gate_refused",
+    "urgent_message",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -141,6 +142,10 @@ DIFFERENT_WORK: Kind = "different_work"
 # the answer's text.
 GATE_AGREED: Kind = "gate_agreed"
 GATE_REFUSED: Kind = "gate_refused"
+# A later session sent an earlier session's member an urgent message on their collision (#513), which gates the earlier
+# session until its member answers. The entry's actor is the later session's member, its target the earlier one's, and
+# its detail holds the collision's score and cause, never the message's text.
+URGENT_MESSAGE: Kind = "urgent_message"
 # A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
 PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
 

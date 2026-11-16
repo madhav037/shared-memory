@@ -10,6 +10,11 @@ member's refusal holds past the wait, until that earlier session ends or goes id
 goes idle gates nobody; a member's own sessions never gate each other. Reading, searching and planning go ahead: only
 the before-edit hook asks.
 
+An urgent message (#513) turns the gate round: the later session of a collision may send the earlier session's member
+one urgent message per collision, and the earlier session's edits are then refused until its member answers (a message
+back to the later member, an answer to the later session's gate, or different work), or the project's wait has passed
+since the urgent message was sent. It is the same gate, read the same way, in the other direction.
+
 Kept in Postgres, so every worker agrees (ADR-0013):
 
 - `gate_ends`: per later and earlier session, how the gate between them ended (`different_work` or `timed_out`), and
@@ -19,6 +24,8 @@ Kept in Postgres, so every worker agrees (ADR-0013):
   the later session, and whether the later session has been told. A refusal may be changed to agree; an agreement
   stands.
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
+- `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
+  member answered it. Its primary key is what keeps it to one per collision.
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
@@ -34,6 +41,9 @@ What other modules stand on, all of it on `Gates`:
   have on this session's work; the names of the members answered.
 - `waiting_notices(session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
   each one ended; as a later session, each answer to its gate.
+- `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
+  session to this member would gate, refused unless one is not yet urgent; then keep each and audit it.
+- `replied(session, to)`: this session sent this member a message, which answers their urgent messages to it.
 - `wait(project_id)` and `set_wait(caller, minutes)`: the project's wait.
 """
 
@@ -52,6 +62,7 @@ from shared_memory.audit import (
     GATE_REFUSED,
     GATE_TIMED_OUT,
     PROJECT_WAIT_CHANGED,
+    URGENT_MESSAGE,
     Audit,
     Kind,
 )
@@ -96,6 +107,16 @@ CREATE TABLE IF NOT EXISTS gate_starts (
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
 
+-- The later session sent the earlier session's member an urgent message on their collision, and when it was answered.
+CREATE TABLE IF NOT EXISTS gate_urgents (
+    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    sent_at TIMESTAMPTZ NOT NULL,
+    answered_at TIMESTAMPTZ,
+    PRIMARY KEY (later_session_id, earlier_session_id)
+);
+CREATE INDEX IF NOT EXISTS gate_urgents_earlier ON gate_urgents (earlier_session_id) WHERE answered_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS project_waits (
     project_id TEXT PRIMARY KEY REFERENCES projects(project_id),
     minutes INTEGER NOT NULL,
@@ -136,6 +157,16 @@ class Waiting:
 
 
 @dataclass(frozen=True)
+class Urgent:
+    """One later session whose urgent message gates this earlier session, until its member answers or the wait
+    passes."""
+
+    later: Session
+    activity: str | None
+    until: datetime
+
+
+@dataclass(frozen=True)
 class OnWork:
     """A later session whose collision with this earlier session can gate it, and the earlier member's answer, if
     any."""
@@ -171,6 +202,29 @@ def refusal(waiting: Sequence[Waiting], now: datetime) -> str:
         "Don't edit, and don't decide alone: stop and ask your member whether to wait (reading, searching and "
         "planning still work), to say it is different work, or to pick something else. When each member it waits for "
         "has agreed or the wait has passed with no answer, the edit goes ahead."
+    )
+    return "\n".join(lines)
+
+
+def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
+    """Why an edit is refused while an urgent message waits for an answer: how to lift it first, then who sent it."""
+    lines = [
+        "[gated] This edit waits: another member's session on nearly the same work sent this session an urgent "
+        "message. Your member lifts it by answering them, or by saying it is different work, which calling "
+        "different_work with this session records.",
+    ]
+    for each in urgents:
+        who = each.later
+        agent = who.agent or "a coding agent that has not said which it is"
+        activity = f'working on "{each.activity}"' if each.activity else "with no activity stated"
+        lines.append(
+            f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {_left(now, each.until)} of the project's "
+            f"wait (until {each.until.isoformat()}), unless your member answers. To answer in your member's words, "
+            f'call send_message with to "{who.member_id}", or answer_gate with gate "{who.member_id}".'
+        )
+    lines.append(
+        "Don't edit, and don't decide alone: finish the step you are on, then stop, show your member the urgent "
+        "message and ask what to answer. Once each one is answered or the wait has passed, the edit goes ahead."
     )
     return "\n".join(lines)
 
@@ -246,9 +300,9 @@ class Gates:
     @staticmethod
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         gone = list(ids)
-        for table in ("gate_ends", "gate_answers", "gate_starts"):
+        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents"):
             conn.execute(
-                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of three names written here
+                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
                 (gone, gone),
             )
 
@@ -361,16 +415,156 @@ class Gates:
         if not paths:
             return None
         waiting = self._waiting(caller, session)
-        return refusal(waiting, self._clock()) if waiting else None
+        urgents = self._urgents(session)
+        now = self._clock()
+        reasons = [*([refusal(waiting, now)] if waiting else []), *([urgent_refusal(urgents, now)] if urgents else [])]
+        return "\n\n".join(reasons) or None
 
     def different_work(self, caller: Caller, session: Session) -> list[str]:
         """Lift this session's gate at once: its member says it is different work. The names of the members it was
-        waiting for, each recorded in the audit log with the collision's score. A refusal is lifted too."""
+        waiting for, each recorded in the audit log with the collision's score. A refusal is lifted too, and so is each
+        urgent message waiting for this session's answer."""
         lifted = []
         for each in self._waiting(caller, session):
             if self._end(caller, session, each.earlier, each.collision, DIFFERENT):
                 lifted.append(each.earlier.member_name)
+        for later, collision in self._answer_urgents(session, None):
+            self._audit.record(
+                DIFFERENT_WORK,
+                member=caller.member,
+                project_id=session.project_id,
+                target=later.member_id,
+                detail={"later": later.member_id, "score": round(collision.score, 4), "cause": collision.cause.value},
+            )
+            if later.member_name not in lifted:
+                lifted.append(later.member_name)
         return lifted
+
+    # Urgent messages (#513)
+
+    def _urgents(self, session: Session) -> list[Urgent]:
+        """The later sessions whose urgent messages gate this earlier session now: still active, of another member,
+        unanswered, and sent less than the project's wait ago."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT later_session_id, sent_at FROM gate_urgents WHERE earlier_session_id = %s"
+                " AND answered_at IS NULL ORDER BY sent_at",
+                (session.id,),
+            ).fetchall()
+        if not rows:
+            return []
+        now = self._clock()
+        wait = timedelta(minutes=self.wait(session.project_id))
+        active = self._active_others(session)
+        urgents = []
+        for row in rows:
+            later = active.get(row["later_session_id"])
+            until = row["sent_at"] + wait
+            if later is not None and now < until:
+                urgents.append(Urgent(later.session, later.activity, until))
+        return urgents
+
+    def urgent_for(self, session: Session, to: str) -> list[Collision]:
+        """The collisions an urgent message from this session to the member with this member ID would gate: those in
+        which this session is the later one and an active session of theirs the earlier, not yet sent an urgent
+        message. Refused when there is none."""
+        member_id = to.strip()
+        active = self._active_others(session)
+
+        def theirs(collision: Collision) -> bool:
+            other_id = (
+                collision.earlier_session_id
+                if collision.later_session_id == session.id
+                else collision.later_session_id
+            )
+            other = active.get(other_id)
+            return other is not None and other.session.member_id == member_id
+
+        with_them = [each for each in self._collisions.of(session) if theirs(each)]
+        later = [each for each in with_them if each.later_session_id == session.id]
+        if not later:
+            if with_them:
+                raise Refused(
+                    f"Only the later session of a collision sends an urgent message, and this session is the earlier "
+                    f"one to {member_id!r}'s. Send it without urgent, or answer their gate with answer_gate."
+                )
+            raise Refused(
+                f"An urgent message needs a collision between this session and an active session of {member_id!r}, "
+                "with this one the later session. Send it without urgent."
+            )
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT earlier_session_id FROM gate_urgents WHERE later_session_id = %s", (session.id,)
+            ).fetchall()
+        sent = {row["earlier_session_id"] for row in rows}
+        fresh = [each for each in later if each.earlier_session_id not in sent]
+        if not fresh:
+            raise Refused(
+                f"This session already sent {member_id!r} an urgent message on this collision, and there is one per "
+                "collision. Send this one without urgent."
+            )
+        return fresh
+
+    def send_urgent(self, caller: Caller, session: Session, collisions: Sequence[Collision]) -> None:
+        """Keep that this later session sent an urgent message on each of these collisions, which gates its earlier
+        session from now, and write each to the audit log without its text."""
+        now = self._clock()
+        active = self._active_others(session)
+        for each in collisions:
+            with self._db.transaction() as conn:
+                kept = conn.execute(
+                    "INSERT INTO gate_urgents (later_session_id, earlier_session_id, sent_at) VALUES (%s, %s, %s)"
+                    " ON CONFLICT DO NOTHING RETURNING earlier_session_id",
+                    (session.id, each.earlier_session_id, now),
+                ).fetchone()
+            earlier = active.get(each.earlier_session_id)
+            if kept is None or earlier is None:
+                continue
+            self._audit.record(
+                URGENT_MESSAGE,
+                member=caller.member,
+                project_id=session.project_id,
+                target=earlier.session.member_id,
+                detail={"earlier": earlier.session.member_id, "score": round(each.score, 4), "cause": each.cause.value},
+            )
+
+    def replied(self, session: Session, to: str) -> None:
+        """This session sent the member with this member ID a message: it answers each urgent message of theirs that
+        gates this session."""
+        self._answer_urgents(session, to.strip())
+
+    def _answer_urgents(self, session: Session, member_id: str | None) -> list[tuple[Session, Collision]]:
+        """Mark answered the urgent messages that gate this earlier session, from the member with this member ID or,
+        with None, from anyone; the later sessions answered, each with its collision."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT later_session_id FROM gate_urgents WHERE earlier_session_id = %s AND answered_at IS NULL",
+                (session.id,),
+            ).fetchall()
+        if not rows:
+            return []
+        by_later = {
+            each.later_session_id: each
+            for each in self._collisions.of(session)
+            if each.earlier_session_id == session.id
+        }
+        active = self._active_others(session)
+        answered = []
+        for row in rows:
+            later = active.get(row["later_session_id"])
+            collision = by_later.get(row["later_session_id"])
+            if later is None or collision is None:
+                continue
+            if member_id is None or later.session.member_id == member_id:
+                answered.append((later.session, collision))
+        if answered:
+            with self._db.transaction() as conn:
+                conn.execute(
+                    "UPDATE gate_urgents SET answered_at = %s WHERE earlier_session_id = %s"
+                    " AND later_session_id = ANY(%s) AND answered_at IS NULL",
+                    (self._clock(), session.id, [later.id for later, _ in answered]),
+                )
+        return answered
 
     # The earlier member's answer
 
@@ -410,6 +604,8 @@ class Gates:
                 f"No gate of {member_id!r} waits on this session's work. Pass as gate the member ID the gate's notice "
                 "named, with this session's identifier as session: only the earlier session's own member answers."
             )
+        # An answer to their gate answers each urgent message of theirs too, whatever became of the gate.
+        urgents = [later.member_name for later, _ in self._answer_urgents(session, member_id)]
         now = self._clock()
         wait = timedelta(minutes=self.wait(session.project_id))
         open_ = [
@@ -419,6 +615,8 @@ class Gates:
             and each.answer != AGREED
             and (each.answer == REFUSED or now < each.collision.found_at + wait)
         ]
+        if not open_ and urgents:
+            return list(dict.fromkeys(urgents))
         if not open_:
             if any(each.answer == AGREED for each in gates):
                 raise Refused(f"Your member already agreed to {member_id!r}'s gate; an agreement stands.")
