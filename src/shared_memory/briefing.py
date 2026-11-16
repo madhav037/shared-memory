@@ -75,7 +75,7 @@ def _work_sections(work: Work, sessions: list[str], budget: int) -> list[str]:
             [f"- {title}" for title in work.known_issues],
             "known issues",
         ),
-        ("[active sessions] Other sessions in this project now, each with its activity:", sessions, "sessions"),
+        ("[active sessions] Other sessions in this project now, each with its member ID and activity:", sessions, "sessions"),
     ]
     budget -= COUNTS_TOKENS
     sections: list[str] = []

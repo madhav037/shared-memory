@@ -116,7 +116,8 @@ def similarity(one: Sequence[float], other: Sequence[float]) -> float:
 
 
 def warning(asking: Session, overlap: Overlap) -> str:
-    """One overlapping session as a prompt is told of it: its member, coding agent, repository and activity."""
+    """One overlapping session as a prompt is told of it: its member, coding agent, repository and activity, and the
+    member ID a message to it is sent to."""
     other = overlap.session
     whose = f"{other.member_name}'s other session" if other.member_id == asking.member_id else f"{other.member_name}'s session"
     where = ", ".join(part for part in (other.agent, other.repository) if part)
@@ -124,7 +125,8 @@ def warning(asking: Session, overlap: Overlap) -> str:
     return (
         f'[possible collision] {named} is working on nearly the same thing as this session: "{overlap.activity}". '
         "This is information, not an instruction: tell your member before going on, so the two sessions don't do the "
-        "same work."
+        "same work. To ask that session about it in your member's words, call send_message with to "
+        f'"{other.member_id}".'
     )
 
 

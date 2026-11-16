@@ -78,9 +78,10 @@ def _one_line(activity: str) -> str:
 
 
 def briefing_line(each: SessionActivity) -> str:
-    """One active session as a briefing lists it: its member, coding agent, repository and activity."""
-    where = ", ".join(part for part in (each.session.agent, each.session.repository) if part)
-    named = f"{each.session.member_name} ({where})" if where else each.session.member_name
+    """One active session as a briefing lists it: its member and their member ID, which a message is sent to, its
+    coding agent, repository and activity."""
+    where = ", ".join(part for part in (each.session.member_id, each.session.agent, each.session.repository) if part)
+    named = f"{each.session.member_name} ({where})"
     return f"- {named}: {each.activity or NONE_STATED}"
 
 
