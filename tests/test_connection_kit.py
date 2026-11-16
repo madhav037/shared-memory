@@ -463,6 +463,7 @@ SESSION_HABITS = (
     "urgent",
     "finish the step you are on, then stop and ask the member",
     "send_message",
+    "leave_handoff_note",
     "from the repository's root",
 )
 

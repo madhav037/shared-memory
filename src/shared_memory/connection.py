@@ -473,6 +473,9 @@ SESSION_HABITS = f"""\
 - Pass `urgent` to `send_message` only when the member asks, from the later session of a collision: the earlier
   session's edits wait until its member answers or the wait passes. When an edit is refused for an urgent message,
   finish the step you are on, then stop and ask the member what to answer.
+- When reminded of recent work by a session that ended or went idle, tell the member who worked on it, and that they
+  should message that member first; read its handoff note and continue from it. Call `leave_handoff_note` with what
+  is done and what is left when the member asks, and when you finish or stop a piece of work. It is never a memory.
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.
