@@ -1,9 +1,12 @@
-import { IconArrowsCross, IconGitBranch, IconHourglass, IconLayoutColumns, IconMessage } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { Button, Textarea } from "@mantine/core";
+import { IconArrowsCross, IconBell, IconGitBranch, IconHourglass, IconLayoutColumns, IconMessage } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 
 import {
+  answerGate,
   fetchSessions,
+  sendMessage,
   type ActiveSession,
   type NamedSession,
   type ProjectSessions,
@@ -25,35 +28,76 @@ function waitKey(gate: SessionGate, earlier: NamedSession, until: string): strin
   return `${gate.later.member_id} ${earlier.member_id} ${until}`;
 }
 
+/** Whether this browser can show alerts at all: the Notification API is missing in some browsers and webviews. */
+function alertsHere(): boolean {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+/**
+ * Show a browser alert for each message or gate for the signed-in member that arrives while the page is open, once the
+ * member has allowed alerts. What the first answer already holds was there before the page opened, so it raises none.
+ */
+function useAlerts(found: ProjectSessions | null) {
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!found) return;
+    const forMe = new Map<string, { title: string; body: string }>();
+    for (const one of found.messages)
+      if (!one.sent_by_me)
+        forMe.set(`message ${one.message_id}`, { title: `${one.sender_name} sent you a message`, body: one.text });
+    for (const gate of found.gates)
+      for (const wait of gate.waits_for)
+        if (wait.on_my_work && !wait.refused)
+          forMe.set(`gate ${waitKey(gate, wait.earlier, wait.until)}`, {
+            title: `${gate.later.member_name}’s session waits on your work`,
+            body: "Agree or refuse on the Sessions page before the project’s wait passes.",
+          });
+    if (seen.current === null) {
+      seen.current = new Set(forMe.keys());
+      return;
+    }
+    for (const [key, alert] of forMe) {
+      if (seen.current.has(key)) continue;
+      seen.current.add(key);
+      if (alertsHere() && Notification.permission === "granted") new Notification(alert.title, { body: alert.body, tag: key });
+    }
+  }, [found]);
+}
+
 /**
  * A project's active sessions: whose each is, the coding agent it runs in, its branch, its activity, the files it holds
  * a lock on and the files it has touched; the project's collisions and gates, each gate's time left counting down; and
- * the signed-in member's own sessions' messages. It asks again every few seconds and changes nothing: a lock, a gate
- * and a message move only from a session.
+ * the signed-in member's own sessions' messages. It asks again every few seconds. From here a member replies to a
+ * message and agrees to or refuses a gate on their own session's work (ADR-0026), and is alerted when one arrives; a
+ * lock and an activity move only from a session, and nothing here ever writes memory (ADR-0009).
  */
 export function SessionsPage() {
   const { projectId = "" } = useParams();
   // When each gate's wait ends on this browser's clock, the earliest any answer gave, so the time left only ever counts
   // down, whatever the time each answer took to arrive.
   const ends = useRef(new Map<string, number>());
-  const { answer: found, refused, reload } = useAsked(
-    (signal) =>
-      fetchSessions(projectId, signal).then((answer): Shown => {
-        const received = Date.now() - Date.parse(answer.now);
-        for (const gate of answer.gates)
-          for (const wait of gate.waits_for) {
-            const key = waitKey(gate, wait.earlier, wait.until);
-            const at = Date.parse(wait.until) + received;
-            ends.current.set(key, Math.min(at, ends.current.get(key) ?? at));
-          }
-        return { ...answer, ends: new Map(ends.current) };
-      }),
-    [projectId],
-  );
+  const shown = useCallback((answer: ProjectSessions): Shown => {
+    const received = Date.now() - Date.parse(answer.now);
+    for (const gate of answer.gates)
+      for (const wait of gate.waits_for) {
+        const key = waitKey(gate, wait.earlier, wait.until);
+        const at = Date.parse(wait.until) + received;
+        ends.current.set(key, Math.min(at, ends.current.get(key) ?? at));
+      }
+    return { ...answer, ends: new Map(ends.current) };
+  }, []);
+  const {
+    answer: found,
+    refused,
+    reload,
+    setAnswer,
+  } = useAsked((signal) => fetchSessions(projectId, signal).then(shown), [projectId]);
   useEffect(() => {
     const asking = window.setInterval(reload, EVERY_MS);
     return () => window.clearInterval(asking);
   }, [reload]);
+  useAlerts(found);
+  const changed = useCallback((answer: ProjectSessions) => setAnswer(shown(answer)), [setAnswer, shown]);
 
   if (refused)
     return (
@@ -74,7 +118,8 @@ export function SessionsPage() {
       <p className="standfirst">
         The coding agents at work in {found.project_name} now, the files each session holds, where two are on nearly
         the same work, and your sessions’ messages. The page keeps itself up to date; a session leaves it when it ends
-        or goes idle.
+        or goes idle. Reply to a message, or agree to or refuse a gate on your work, here; your session hears it on its
+        next step.
       </p>
       <div className="page-meta">
         <span>
@@ -83,10 +128,13 @@ export function SessionsPage() {
         </span>
         <ProjectLinks projectId={found.project_id} here="sessions" />
       </div>
+      <AlertsChoice />
 
-      {found.gates.length > 0 && <Gates found={found} />}
+      {found.gates.length > 0 && <Gates found={found} onChanged={changed} />}
       {found.collisions.length > 0 && <Collisions collisions={found.collisions} />}
-      {found.messages.length > 0 && <Messages messages={found.messages} />}
+      {found.messages.length > 0 && (
+        <Messages projectId={found.project_id} messages={found.messages} onChanged={changed} />
+      )}
 
       {found.sessions.length === 0 ? (
         <p className="empty" data-testid="no-sessions" style={{ marginTop: 28 }}>
@@ -216,8 +264,106 @@ function Activity({ session }: { session: NamedSession }) {
   );
 }
 
+/** Whether this browser shows alerts, and the way to allow them while it hasn't been asked. */
+function AlertsChoice() {
+  const [permission, setPermission] = useState(() => (alertsHere() ? Notification.permission : null));
+  if (permission === null) return null;
+  if (permission === "granted")
+    return (
+      <p className="talk-alerts" data-testid="alerts">
+        <IconBell size={14} stroke={1.6} aria-hidden />
+        This browser alerts you when a message or a gate for you arrives while the page is open.
+      </p>
+    );
+  if (permission === "denied")
+    return (
+      <p className="talk-alerts" data-testid="alerts">
+        This browser blocks alerts from the console; allow them in its site settings to hear of messages and gates here.
+      </p>
+    );
+  return (
+    <p className="talk-alerts" data-testid="alerts">
+      <Button
+        size="xs"
+        variant="default"
+        leftSection={<IconBell size={14} stroke={1.6} aria-hidden />}
+        onClick={() => void Notification.requestPermission().then(setPermission)}
+        data-testid="allow-alerts"
+      >
+        Alert me in this browser
+      </Button>
+      when a message or a gate for you arrives while the page is open.
+    </p>
+  );
+}
+
+/** Run one change from the page: busy while it runs, its refusal kept to show, the page anew when it answers. */
+function useChange(onChanged: (answer: ProjectSessions) => void) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const run = async (which: string, change: () => Promise<ProjectSessions>): Promise<boolean> => {
+    if (busy) return false;
+    setBusy(which);
+    setRefusal(null);
+    try {
+      onChanged(await change());
+      return true;
+    } catch (problem) {
+      setRefusal((problem as Error).message);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+  return { busy, refusal, run };
+}
+
+/** Agree to or refuse a gate on the signed-in member's own session's work. A refusal may still turn to agree. */
+function GateAnswer({
+  projectId,
+  gate,
+  refused,
+  onChanged,
+}: {
+  projectId: string;
+  gate: SessionGate;
+  refused: boolean;
+  onChanged: (answer: ProjectSessions) => void;
+}) {
+  const { busy, refusal, run } = useChange(onChanged);
+  const answer = (said: "agree" | "refuse") => run(said, () => answerGate(projectId, gate.later.member_id, said));
+  return (
+    <div className="talk-answer">
+      <div className="card-form-actions">
+        <Button
+          size="xs"
+          loading={busy === "agree"}
+          disabled={busy !== null}
+          onClick={() => void answer("agree")}
+          data-testid="agree"
+        >
+          Agree: let them go ahead
+        </Button>
+        {!refused && (
+          <Button
+            size="xs"
+            variant="default"
+            loading={busy === "refuse"}
+            disabled={busy !== null}
+            onClick={() => void answer("refuse")}
+            data-testid="refuse"
+          >
+            Refuse: keep them waiting
+          </Button>
+        )}
+      </div>
+      {refusal && <Refusal testid="answer-refused">{refusal}</Refusal>}
+    </div>
+  );
+}
+
 /** Each gated later session, and each earlier session it waits for with the time left of the project's wait. */
-function Gates({ found }: { found: Shown }) {
+function Gates({ found, onChanged }: { found: Shown; onChanged: (answer: ProjectSessions) => void }) {
   const now = useNow();
   return (
     <section className="talk" aria-label="Gates" data-testid="gates">
@@ -226,8 +372,9 @@ function Gates({ found }: { found: Shown }) {
         {plural(found.gates.length, "gated session")}
       </h2>
       <p className="talk-lede">
-        A later session’s file edits on colliding work wait until the project’s wait has passed, or its member says it
-        is different work. Reading, searching and planning go ahead.
+        A later session’s file edits on colliding work wait until each earlier member agrees or the project’s wait
+        passes, or its member says it is different work; a refusal holds until the refusing session ends or goes idle.
+        Reading, searching and planning go ahead.
       </p>
       <ul className="talk-list">
         {found.gates.map((gate) => (
@@ -240,10 +387,20 @@ function Gates({ found }: { found: Shown }) {
                 const end = found.ends.get(waitKey(gate, wait.earlier, wait.until)) ?? Date.parse(wait.until);
                 return (
                   <li key={wait.earlier.member_id + wait.until} data-testid="gate-wait">
-                    Waits for <Who session={wait.earlier} />, on <Activity session={wait.earlier} />:{" "}
-                    <time className="talk-left" dateTime={wait.until} data-testid="time-left">
-                      {left(end - now)}
-                    </time>
+                    Waits for {wait.on_my_work ? "your session" : <Who session={wait.earlier} />}, on{" "}
+                    <Activity session={wait.earlier} />:{" "}
+                    {wait.refused ? (
+                      <b className="talk-left" data-testid="gate-refused">
+                        {wait.on_my_work ? "you refused" : "refused"}, until that session ends or goes idle
+                      </b>
+                    ) : (
+                      <time className="talk-left" dateTime={wait.until} data-testid="time-left">
+                        {left(end - now)}
+                      </time>
+                    )}
+                    {wait.on_my_work && (
+                      <GateAnswer projectId={found.project_id} gate={gate} refused={wait.refused} onChanged={onChanged} />
+                    )}
                   </li>
                 );
               })}
@@ -281,8 +438,76 @@ function Collisions({ collisions }: { collisions: SessionCollision[] }) {
   );
 }
 
+/** A reply to one message, sent from the signed-in member's session in the project to the message's sender. */
+function Reply({
+  projectId,
+  message,
+  onChanged,
+}: {
+  projectId: string;
+  message: SessionMessage;
+  onChanged: (answer: ProjectSessions) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [tried, setTried] = useState(false);
+  const { busy, refusal, run } = useChange(onChanged);
+  if (!open)
+    return (
+      <div className="talk-answer">
+        <Button size="xs" variant="default" onClick={() => setOpen(true)} data-testid="reply">
+          Reply to {message.sender_name}
+        </Button>
+      </div>
+    );
+  return (
+    <form
+      className="card-form talk-answer"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (!text.trim()) return setTried(true);
+        if (await run("send", () => sendMessage(projectId, message.sender_member_id, text))) {
+          setText("");
+          setTried(false);
+          setOpen(false);
+        }
+      }}
+    >
+      <Textarea
+        label={`Your reply to ${message.sender_name}`}
+        description="Their session is shown it on its next step, as your words, never as an instruction."
+        autosize
+        minRows={2}
+        maxRows={8}
+        maxLength={2000}
+        value={text}
+        error={tried && !text.trim() ? "Write the reply first." : undefined}
+        onChange={(event) => setText(event.currentTarget.value)}
+        data-testid="reply-text"
+      />
+      <div className="card-form-actions">
+        <Button size="xs" type="submit" loading={busy !== null} data-testid="reply-send">
+          Send
+        </Button>
+        <Button size="xs" variant="default" disabled={busy !== null} onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+      {refusal && <Refusal testid="reply-refused">{refusal}</Refusal>}
+    </form>
+  );
+}
+
 /** The messages the signed-in member's sessions sent or were sent: no one else's are ever here. */
-function Messages({ messages }: { messages: SessionMessage[] }) {
+function Messages({
+  projectId,
+  messages,
+  onChanged,
+}: {
+  projectId: string;
+  messages: SessionMessage[];
+  onChanged: (answer: ProjectSessions) => void;
+}) {
   return (
     <section className="talk" aria-label="Your sessions’ messages" data-testid="messages">
       <h2 className="talk-head">
@@ -291,7 +516,7 @@ function Messages({ messages }: { messages: SessionMessage[] }) {
       </h2>
       <ul className="talk-list">
         {messages.map((one) => (
-          <li key={`${one.sender_member_id} ${one.recipient_member_id} ${one.sent_at}`} data-testid="message">
+          <li key={one.message_id} data-testid="message">
             <p className="talk-meta">
               {one.sent_by_me ? (
                 <>
@@ -316,6 +541,7 @@ function Messages({ messages }: { messages: SessionMessage[] }) {
             <p className="talk-text" data-testid="message-text">
               {one.text}
             </p>
+            {!one.sent_by_me && <Reply projectId={projectId} message={one} onChanged={onChanged} />}
           </li>
         ))}
       </ul>

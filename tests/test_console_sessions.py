@@ -333,7 +333,8 @@ def test_a_member_sees_their_own_sessions_messages_and_no_one_elses(
         ("Dana Dev", "Olive Owner", "Do you have the retry UI?", False),
         ("Olive Owner", "Dana Dev", "Yes, take the back end.", True),
     ]
-    assert all(one["delivered_at"] is None for one in olives), "neither has reached its recipient's session yet"
+    assert olives[0]["delivered_at"] is not None, "Olive's send_message call was told of Dana's message"
+    assert olives[1]["delivered_at"] is None, "Dana's session has made no call since"
     assert [one["text"] for one in coles] == ["Lunch at one?"], "only what Cole's own session sent"
     coles_console.close()
 
