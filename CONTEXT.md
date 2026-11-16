@@ -215,7 +215,7 @@ What a member asks a memory's author about that memory; it reaches the author's 
 _Avoid_: Memory comment, discussion
 
 **Hook**:
-Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
+Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before every tool call, to report the session's branch and the files the tool names, hear its waiting news and, before an edit, check or take the file's lock, and as the session ends. An agent whose hook before a tool takes no added context hears its news on its hook after the tool instead. The hook before a tool is the only one that can stop its agent, and only before an edit whose file another session holds. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
 
 **Rate limit**:

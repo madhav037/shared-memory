@@ -8,13 +8,14 @@ import shutil
 import socket
 import subprocess
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from shared_memory.agents import agent_named
-from shared_memory.connection import connection_kit, repository_root
+from shared_memory.connection import connection_kit, repository_branch, repository_root, working_folder_branch
 from shared_memory.hooks import AGENTS
 from tests.support import REPO_ROOT, Session, Team, edit_tool, member
 
@@ -134,7 +135,7 @@ def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_
     before_edit = hooks["PreToolUse"][0]["hooks"][0]
     end = hooks["SessionEnd"][0]["hooks"][0]
 
-    assert hooks["PreToolUse"][0]["matcher"] == "^(apply_patch|Edit|Write)$"
+    assert "matcher" not in hooks["PreToolUse"][0], "the hook before a tool runs on every tool (ADR-0025)"
     assert "compact" in hooks["SessionStart"][0]["matcher"], "a compaction starts the session's recall over"
     assert end["timeout"] <= 3, "Codex gives a SessionEnd hook 3 seconds at most"
     for hook, event in (
@@ -240,7 +241,9 @@ def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(
 
     assert hooks["SessionStart"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs session-start"
     assert hooks["BeforeAgent"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs prompt-submitted"
-    assert hooks["BeforeTool"][0]["matcher"] == "write_file|replace"
+    assert hooks["BeforeTool"][0]["matcher"] == ".*", "the hook before a tool runs on every tool (ADR-0025)"
+    assert hooks["AfterTool"][0]["matcher"] == ".*"
+    assert hooks["AfterTool"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs after-tool"
     assert hooks["BeforeTool"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs before-edit"
     assert hooks["SessionEnd"][0]["hooks"][0]["command"] == "node .gemini/hooks/shared-memory.mjs session-end"
     assert "GEMINI_PROJECT_DIR" in script["contents"]
@@ -268,9 +271,10 @@ def test_copilot_cli_asks_the_server_before_its_edit_tools_and_as_a_session_ends
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     hooks = json.loads(by_path(created["files"])[".github/hooks/shared-memory.json"]["contents"])["hooks"]
 
-    (before_edit,), (end,) = hooks["preToolUse"], hooks["sessionEnd"]
+    (before_edit,), (after,), (end,) = hooks["preToolUse"], hooks["postToolUse"], hooks["sessionEnd"]
 
-    assert before_edit["matcher"] == "edit|create"
+    assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
+    assert after["url"] == f"{team.server.url}/hooks/after-tool?format=copilot-cli"
     assert (before_edit["type"], end["type"]) == ("http", "http"), "a hook that posts lets the edit through on failure"
     assert before_edit["url"] == f"{team.server.url}/hooks/before-edit?format=copilot-cli"
     assert before_edit["timeoutSec"] == 3
@@ -347,9 +351,10 @@ def test_cursor_asks_the_server_before_its_write_tool_and_as_a_session_ends(team
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     hooks = json.loads(by_path(created["files"])[".cursor/hooks.json"]["contents"])["hooks"]
 
-    (before_edit,), (end,) = hooks["preToolUse"], hooks["sessionEnd"]
+    (before_edit,), (after,), (end,) = hooks["preToolUse"], hooks["postToolUse"], hooks["sessionEnd"]
 
-    assert before_edit["matcher"] == "Write"
+    assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
+    assert f"{team.server.url}/hooks/after-tool?format=cursor" in after["command"]
     assert f"{team.server.url}/hooks/before-edit?format=cursor" in before_edit["command"]
     assert before_edit["command"].endswith("|| echo '{}'"), "Cursor blocks a tool whose hook answers nothing readable"
     assert before_edit["timeout"] == 4
@@ -494,10 +499,11 @@ def test_devin_desktop_asks_the_server_before_its_edit_tools_and_as_a_session_en
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     devin = json.loads(by_path(created["files"])[".devin/hooks.v1.json"]["contents"])
 
-    (before_edit,), (end,) = devin["PreToolUse"], devin["SessionEnd"]
+    (before_edit,), (after,), (end,) = devin["PreToolUse"], devin["PostToolUse"], devin["SessionEnd"]
     command = before_edit["hooks"][0]["command"]
 
-    assert before_edit["matcher"] == "^(write|edit|notebook_edit)$"
+    assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
+    assert f"'{team.server.url}/hooks/after-tool'" in after["hooks"][0]["command"]
     assert f"'{team.server.url}/hooks/before-edit?format=devin'" in command
     assert f'-H "X-Shared-Memory-Root: {repository_root("DEVIN_PROJECT_DIR")}"' in command, (
         "Devin's payload names no working folder, and the folder it was started in may be below the repository's root"
@@ -591,3 +597,117 @@ def test_the_skill_says_when_to_hand_a_search_to_the_memory_search_subagent() ->
     finding = skill.split("## Finding memory", 1)[1].split("\n## ", 1)[0]
 
     assert "memory-search" in finding
+
+
+# The hook before every tool call names the session's branch (ADR-0025)
+
+
+def kit_files() -> dict[str, str]:
+    """The connection kit's files by path, for a server that need not be running."""
+    files = connection_kit(
+        server_url="https://memory.example.com",
+        marketplace="raven-memory/shared-memory",
+        project_id="billing-3f2a",
+        project_name="Billing",
+        repository="billing-api",
+    )
+    return {file["path"]: file["contents"] for file in files}
+
+
+def codex_before_tool(files: dict[str, str], field: str) -> str:
+    command: str = tomllib.loads(files[".codex/config.toml"])["hooks"]["PreToolUse"][0]["hooks"][0][field]
+    return command
+
+
+#: Where each agent's kit keeps what its hook before a tool runs, and what in it names the session's branch.
+NAMES_THE_BRANCH: dict[str, tuple[Callable[[dict[str, str]], str], str]] = {
+    "Codex": (
+        lambda files: codex_before_tool(files, "command"),
+        f'-H "X-Shared-Memory-Branch: {working_folder_branch()}"',
+    ),
+    "Codex on Windows": (
+        lambda files: codex_before_tool(files, "command_windows"),
+        "$headers['X-Shared-Memory-Branch']",
+    ),
+    "Cursor": (
+        lambda files: json.loads(files[".cursor/hooks.json"])["hooks"]["preToolUse"][0]["command"],
+        f'-H "X-Shared-Memory-Branch: {working_folder_branch()}"',
+    ),
+    "Devin Desktop": (
+        lambda files: json.loads(files[".devin/hooks.v1.json"])["PreToolUse"][0]["hooks"][0]["command"],
+        f'-H "X-Shared-Memory-Branch: {repository_branch("DEVIN_PROJECT_DIR")}"',
+    ),
+    "Cline": (
+        lambda files: files[".clinerules/hooks/PreToolUse"],
+        f'-H "X-Shared-Memory-Branch: {working_folder_branch()}"',
+    ),
+    "Cline on Windows": (
+        lambda files: files[".clinerules/hooks/PreToolUse.ps1"],
+        "$headers['X-Shared-Memory-Branch']",
+    ),
+    "Gemini CLI": (lambda files: files[".gemini/hooks/shared-memory.mjs"], '"X-Shared-Memory-Branch"'),
+}
+
+
+@pytest.mark.parametrize("agent", list(NAMES_THE_BRANCH))
+def test_every_agents_hook_before_a_tool_names_the_sessions_branch(agent: str) -> None:
+    command, names = NAMES_THE_BRANCH[agent]
+
+    written = command(kit_files())
+
+    assert names in written
+    assert "symbolic-ref --short -q HEAD" in written or '"symbolic-ref", "--short", "-q", "HEAD"' in written
+
+
+def test_only_the_hook_before_a_tool_names_the_branch() -> None:
+    files = kit_files()
+
+    for path in (".clinerules/hooks/TaskStart", ".clinerules/hooks/UserPromptSubmit", ".clinerules/hooks/TaskComplete"):
+        assert "X-Shared-Memory-Branch" not in files[path], path
+    devin = json.loads(files[".devin/hooks.v1.json"])
+    assert "X-Shared-Memory-Branch" not in devin["PostToolUse"][0]["hooks"][0]["command"]
+
+
+def test_copilot_cli_posts_without_a_shell_so_names_no_branch() -> None:
+    hooks = json.loads(kit_files()[".github/hooks/shared-memory.json"])["hooks"]
+
+    assert "X-Shared-Memory-Branch" not in hooks["preToolUse"][0]["headers"]
+
+
+#: The kits whose hook before a tool takes no added context, and the hook after a tool each hears its news on.
+HEARS_AFTER_A_TOOL: dict[str, Callable[[dict[str, str]], str]] = {
+    "Gemini CLI": lambda files: json.loads(files[".gemini/settings.json"])["hooks"]["AfterTool"][0]["hooks"][0]["command"],
+    "GitHub Copilot": lambda files: json.loads(files[".github/hooks/shared-memory.json"])["hooks"]["postToolUse"][0]["url"],
+    "Cursor": lambda files: json.loads(files[".cursor/hooks.json"])["hooks"]["postToolUse"][0]["command"],
+    "Devin Desktop": lambda files: json.loads(files[".devin/hooks.v1.json"])["PostToolUse"][0]["hooks"][0]["command"],
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("agent", list(HEARS_AFTER_A_TOOL))
+def test_an_agent_whose_hook_before_a_tool_takes_no_context_hears_its_news_after_the_tool(agent: str) -> None:
+    assert "after-tool" in HEARS_AFTER_A_TOOL[agent](kit_files())
+
+
+def test_the_agents_whose_hook_before_a_tool_takes_context_have_no_hook_after_one() -> None:
+    files = kit_files()
+
+    assert "PostToolUse" not in tomllib.loads(files[".codex/config.toml"])["hooks"]
+    assert not any("PostToolUse" in path for path in files), "Cline"
+    plugin = json.loads((REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    assert "PostToolUse" not in plugin
+
+
+def test_the_cursor_hook_after_a_tool_answers_something_cursor_can_read_when_the_server_does_not() -> None:
+    after = json.loads(kit_files()[".cursor/hooks.json"])["hooks"]["postToolUse"][0]
+
+    assert after["command"].endswith("|| echo '{}'")
+    assert after["timeout"] == 4 and "--max-time 3 " in after["command"]
+
+
+def test_every_agents_guidance_says_news_can_arrive_mid_turn() -> None:
+    files = kit_files()
+
+    for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
+        said = " ".join(files[path].split())
+        assert "can arrive mid-turn" in said or "in the middle of a turn" in said, path
+        assert "then stop and tell the member" in said, path

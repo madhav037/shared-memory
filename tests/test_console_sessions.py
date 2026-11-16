@@ -4,11 +4,23 @@ console can ask changes a session, an activity or a lock (ADR-0009, spec #220)."
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
 from shared_memory.console_contract import DECLARATIONS
-from tests.support import Console, ConsoleClient, Session, add, ask, signed_in, signed_in_owner
+from tests.support import (
+    WORKING_FOLDER,
+    Console,
+    ConsoleClient,
+    Session,
+    add,
+    ask,
+    read_tool,
+    search_tool,
+    signed_in,
+    signed_in_owner,
+)
 
 RETRY = "src/webhooks/retry.py"
 QUEUE = "src/webhooks/queue.py"
@@ -189,3 +201,32 @@ def test_the_console_can_change_no_session_activity_or_lock(console: Console, si
     assert all(one.status_code in (404, 405) for one in tried), [one.status_code for one in tried]
     (still,) = sessions(signed_out, project)
     assert (still["activity"], [lock["path"] for lock in still["locks"]]) == ("Retrying failed webhooks", [RETRY])
+
+
+def test_a_session_shows_the_branch_and_the_files_its_tool_calls_named_but_never_the_tools_or_its_prompts(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-where", 1431)
+    olive.prompt("a secret plan for the webhook retries")
+    olive.use(read_tool(f"{WORKING_FOLDER}/{QUEUE}"), branch="feature/retries")
+    olive.use(search_tool("retries"))
+    olive.edit(RETRY)
+
+    (shown,) = sessions(signed_out, project)
+
+    assert shown["branch"] == "feature/retries"
+    assert shown["touched_files"] == [RETRY, QUEUE], "the most recent first"
+    said = json.dumps(shown)
+    assert "a secret plan" not in said
+    assert all(tool not in said for tool in ("Read", "Grep", "Edit")), "nor the tools it called"
+
+
+def test_a_session_whose_hooks_never_named_a_branch_or_a_file_shows_none(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-nowhere", 1432)
+    olive.start()
+
+    (shown,) = sessions(signed_out, project)
+
+    assert (shown["branch"], shown["touched_files"]) == (None, [])

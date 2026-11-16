@@ -1202,7 +1202,9 @@ export interface components {
          * @description One active session of a member's coding agent. agent is None until the session has said which coding agent it
          *     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
          *     for a session that stated none it is the title of its member's card in Doing, and from_card says so; None when
-         *     there is neither. last_seen_at is when the session last called the server.
+         *     there is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook
+         *     before a tool last named it, None until one has; touched_files are the files its tool calls named, each a path
+         *     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
          */
         ActiveSession: {
             /** Member Id */
@@ -1227,6 +1229,10 @@ export interface components {
              * Format: date-time
              */
             last_seen_at: string;
+            /** Branch */
+            branch: string | null;
+            /** Touched Files */
+            touched_files: string[];
             /** Locks */
             locks: components["schemas"]["HeldLock"][];
         };

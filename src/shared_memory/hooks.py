@@ -5,15 +5,20 @@ Every agent's hooks post to the same endpoints and name, as ?format=, the family
 - `claude`: `hookSpecificOutput`, for Claude Code, Codex, Gemini CLI, Devin Desktop and Copilot in VS Code;
 - `gemini` and `devin`: the same shape for context, and their own when an edit is blocked;
 - `copilot-cli`: `additionalContext` at the top level;
-- `cursor`: `additional_context`, which only Cursor's session start can take in;
+- `cursor`: `additional_context`, which Cursor's session start and its hook after a tool take in;
 - `cline`: `contextModification`, beside the `cancel` that keeps the task going.
 
 A format this server doesn't know, or none at all, is answered in Claude Code's shape, which is what these endpoints
 have always answered. Nothing here ever refuses or raises: a hook that cannot be answered is answered emptily, so no
 session is ever held up by the state of the team's memory.
 
-The before-edit hook is the one that can stop its agent, and for one reason only: another active session holds the
-file's lock. `blocked` shapes that answer for each family:
+The before-edit hook runs before every tool call, not only an edit (ADR-0025): it keeps the session active, records
+its branch and the files the tool names, and hands the session its waiting news where the agent's hook before a tool
+can take added context (`hears_before_tool`). Claude Code, Codex and Cline can; Gemini CLI, Devin Desktop, Copilot CLI
+and Cursor cannot, so their kits post the same news from their hook after a tool instead (the after-tool endpoint).
+
+It is the one hook that can stop its agent, and for one reason only: the tool is an edit and another active session
+holds the file's lock. `blocked` shapes that answer for each family:
 
 - `claude`: `permissionDecision: "deny"` and its reason inside `hookSpecificOutput`, which Codex reads too;
 - `gemini`: `decision: "deny"` with a `reason`;
@@ -43,6 +48,13 @@ CLAUDE = "claude"
 
 # The header a hook names its coding agent in: the plugin's hooks and every kit's send it.
 AGENT_HEADER = "X-Shared-Memory-Agent"
+
+# The header a before-edit hook names the session's git branch in, as git names it where the hook runs. Copilot CLI's
+# hooks post without a shell, so they cannot ask git and send none.
+BRANCH_HEADER = "X-Shared-Memory-Branch"
+
+# The longest branch name kept. Git allows longer, but nobody reads one past this.
+BRANCH_LIMIT = 200
 
 
 @dataclass(frozen=True)
@@ -90,6 +102,15 @@ _FILE_FIELDS = ("file_path", "notebook_path", "path")
 # file included, so for those two shapes the tool must be one that changes a file.
 _COPILOT_CLI_EDIT_TOOLS = frozenset({"edit", "create"})
 _CLINE_EDIT_TOOLS = frozenset({"write_to_file", "replace_in_file"})
+
+# Since the hook runs before every tool, the agents that send "tool_input" name a file in it for tools that only read
+# one too. These are their file-edit tools: Claude Code's Edit, Write, MultiEdit and NotebookEdit, Codex's apply_patch
+# (and its Edit and Write), Gemini CLI's write_file and replace, Cursor's Write, and Devin Desktop's write, edit and
+# notebook_edit. A payload that names no tool is taken to be an edit, as every before-edit hook was before it ran on
+# every tool.
+_EDIT_TOOLS = frozenset(
+    {"Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch", "write_file", "replace", "write", "edit", "notebook_edit"}
+)
 
 # Codex edits files with apply_patch, whose one argument is the patch: each file it changes is named on a line of its
 # own.
@@ -161,19 +182,23 @@ Shape = Callable[[str, str], dict[str, Any]]
 @dataclass(frozen=True)
 class Family:
     """One answer format's two shapes, each given the event and a text: the one that adds context to a session, and
-    the one that stops its agent before an edit."""
+    the one that stops its agent before an edit. `hears_before_tool` says whether the family's hook before a tool
+    takes added context: Claude Code's and Codex's PreToolUse and Cline's do; Gemini CLI's BeforeTool, Devin Desktop's
+    PreToolUse and Copilot CLI's and Cursor's preToolUse read only a decision, so their news waits for the hook after
+    the tool, which each of them reads added context from."""
 
     answered: Shape
     blocked: Shape
+    hears_before_tool: bool
 
 
 _FAMILIES: dict[str, Family] = {
-    CLAUDE: Family(_claude, _claude_blocked),
-    GEMINI_CLI.format: Family(_claude, _gemini_blocked),
-    DEVIN.format: Family(_claude, _devin_blocked),
-    COPILOT_CLI.format: Family(_copilot_cli, _copilot_cli_blocked),
-    CURSOR.format: Family(_cursor, _cursor_blocked),
-    CLINE.format: Family(_cline, _cline_blocked),
+    CLAUDE: Family(_claude, _claude_blocked, True),
+    GEMINI_CLI.format: Family(_claude, _gemini_blocked, False),
+    DEVIN.format: Family(_claude, _devin_blocked, False),
+    COPILOT_CLI.format: Family(_copilot_cli, _copilot_cli_blocked, False),
+    CURSOR.format: Family(_cursor, _cursor_blocked, False),
+    CLINE.format: Family(_cline, _cline_blocked, True),
 }
 
 
@@ -193,6 +218,18 @@ def blocked(format: str | None, event: str, reason: str) -> dict[str, Any]:
     return _FAMILIES[_named(format)].blocked(event, reason)
 
 
+def hears_before_tool(format: str | None) -> bool:
+    """Whether this family's hook before a tool takes added context, so a session's news can go to it there."""
+    return _FAMILIES[_named(format)].hears_before_tool
+
+
+def branch_named(value: str | None) -> str | None:
+    """The git branch a hook sent in `BRANCH_HEADER`, as it is kept: None for none, for git's word for a detached
+    head, or for one too long to keep."""
+    branch = (value or "").strip()
+    return branch if branch and branch != "HEAD" and len(branch) <= BRANCH_LIMIT else None
+
+
 def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[str]:
     """The files an edit tool is about to change, each as a path from its repository's root: none when the payload
     names no file, and without any it names outside that root.
@@ -205,7 +242,17 @@ def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[st
     or none under the root, it is taken as written from the root. On a Windows drive the two are compared without
     regard to case, as Windows does.
     """
-    given = _given_to_edit_tool(payload)
+    return _files_named(payload, root, edits_only=True)
+
+
+def named_files(payload: Mapping[str, Any], root: str | None = None) -> list[str]:
+    """The files any tool's input names, read as `edited_files` reads an edit's: what a session has touched, whether
+    it read them or changed them. Only ever shown beside the session; the tool itself is never kept."""
+    return _files_named(payload, root, edits_only=False)
+
+
+def _files_named(payload: Mapping[str, Any], root: str | None, *, edits_only: bool) -> list[str]:
+    given = _given_to_tool(payload, edits_only)
     if given is None:
         return []
     named = [given[field] for field in _FILE_FIELDS if isinstance(given.get(field), str)][:1]
@@ -218,12 +265,14 @@ def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[st
     return list(dict.fromkeys(file for file in files if file))
 
 
-def _given_to_edit_tool(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+def _given_to_tool(payload: Mapping[str, Any], edits_only: bool) -> Mapping[str, Any] | None:
     """What the tool a before-edit payload is about was given, in whichever shape its agent sends it, or None when
-    the payload shows no tool that changes a file."""
+    the payload shows none, or, with `edits_only`, shows no tool that changes a file."""
     given = payload.get("tool_input")
     if isinstance(given, Mapping):
-        return given
+        tool = payload.get("tool_name")
+        edits = tool is None or tool in _EDIT_TOOLS
+        return given if edits or not edits_only else None
     if "toolArgs" in payload:
         # Copilot CLI, which sends the arguments as an object or as the JSON text of one.
         given = payload["toolArgs"]
@@ -233,13 +282,13 @@ def _given_to_edit_tool(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
             except ValueError:
                 return None
         edits = payload.get("toolName") in _COPILOT_CLI_EDIT_TOOLS
-        return given if edits and isinstance(given, Mapping) else None
-    about = payload.get("preToolUse")
+        return given if (edits or not edits_only) and isinstance(given, Mapping) else None
+    about = payload.get("preToolUse") or payload.get("postToolUse")
     if isinstance(about, Mapping):
         # Cline, which nests the tool and its parameters under the event's own name.
         given = about.get("parameters")
         edits = (about.get("tool") or about.get("toolName")) in _CLINE_EDIT_TOOLS
-        return given if edits and isinstance(given, Mapping) else None
+        return given if (edits or not edits_only) and isinstance(given, Mapping) else None
     return None
 
 

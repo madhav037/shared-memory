@@ -18,9 +18,20 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import DIMENSIONS, FastEmbedEmbedder
-from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
+from tests.support import (
+    REPO_ROOT,
+    WORKING_FOLDER,
+    RunningServer,
+    Session,
+    Team,
+    TestClock,
+    added_context,
+    fresh_database,
+    read_tool,
+    search_tool,
+)
 from tests.test_board import card
-from tests.test_locks import refused, take
+from tests.test_locks import FILE, refused, take
 from tests.test_recall import promote
 
 HEADING = "[possible collision]"
@@ -460,3 +471,96 @@ def test_a_collision_is_kept_with_which_session_is_later_its_score_and_its_cause
         ("Dana Dev", "Olive Owner", 0.8, "prompt"),
         ("Cole Coder", "Olive Owner", 0.8, "activity"),
     }, "the earlier session's own warning does not make it the later one"
+
+
+# Heard on every tool call (ADR-0025)
+
+
+def test_a_waiting_warning_comes_with_the_next_tool_call_and_not_again_on_the_prompt(
+    owner: Session, dana: Session
+) -> None:
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+
+    heard = added_context(owner.use(search_tool("webhook")))
+
+    assert HEADING in heard and "Dana Dev" in heard
+    assert owner.use(search_tool("webhook")) == {}, "told once"
+    assert warnings(owner) == [], "not again on the next prompt"
+
+
+def test_a_waiting_warning_comes_with_the_next_edit_that_goes_ahead(owner: Session, dana: Session) -> None:
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+
+    heard = owner.edit(FILE)["hookSpecificOutput"]
+
+    assert "permissionDecision" not in heard, "news never stops a tool"
+    assert HEADING in heard["additionalContext"]
+
+
+def test_a_blocked_edit_leaves_the_warning_waiting_for_the_next_call(owner: Session, dana: Session) -> None:
+    take(dana)
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+
+    blocked = owner.edit(FILE)["hookSpecificOutput"]
+
+    assert blocked["permissionDecision"] == "deny"
+    assert HEADING not in blocked["permissionDecisionReason"]
+    assert "Dana Dev" in warning_of(owner)
+
+
+#: The families whose hook before a tool reads only a decision, and where each reads added context after the tool.
+HEARS_AFTER: dict[str, tuple[str, ...]] = {
+    "gemini": ("hookSpecificOutput", "additionalContext"),
+    "devin": ("hookSpecificOutput", "additionalContext"),
+    "copilot-cli": ("additionalContext",),
+    "cursor": ("additional_context",),
+}
+
+
+@pytest.mark.parametrize("format", list(HEARS_AFTER))
+def test_an_agent_whose_hook_before_a_tool_takes_no_context_hears_the_warning_after_the_tool(
+    owner: Session, dana: Session, format: str
+) -> None:
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+
+    before = owner.use(search_tool("webhook"), format)
+    after: Any = owner.use(search_tool("webhook"), format, after=True)
+
+    for field in HEARS_AFTER[format]:
+        after = after[field]
+    assert before == {}, "nothing it could not read, and nothing marked told"
+    assert HEADING in after and "Dana Dev" in after
+    assert owner.use(search_tool("webhook"), format, after=True) == {}, "told once"
+    assert warnings(owner) == []
+
+
+def test_cline_hears_the_warning_before_the_tool(owner: Session, dana: Session) -> None:
+    state(owner, WEBHOOKS)
+    state(dana, RETRIES)
+    read = {
+        "taskId": owner.identifier,
+        "hookName": "PreToolUse",
+        "workspaceRoots": [WORKING_FOLDER],
+        "preToolUse": {"tool": "read_file", "parameters": {"path": FILE}},
+    }
+
+    answer = owner.hook_payload("before-edit", read, "cline")
+
+    assert answer["cancel"] is False
+    assert HEADING in answer["contextModification"]
+
+
+def test_another_session_never_sees_the_prompt_or_the_tools_a_session_used(owner: Session, dana: Session) -> None:
+    state(owner, WEBHOOKS)
+    owner.prompt("a secret plan for the webhook retries")
+    owner.use(read_tool(f"{WORKING_FOLDER}/{FILE}"), branch="feature/retries")
+
+    briefed = added_context(dana.start())
+    (warned,) = state(dana, RETRIES)
+
+    assert "a secret plan" not in briefed and "a secret plan" not in warned
+    assert "Read" not in warned, "the tool's name is never kept"

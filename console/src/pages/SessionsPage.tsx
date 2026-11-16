@@ -1,4 +1,4 @@
-import { IconLayoutColumns } from "@tabler/icons-react";
+import { IconGitBranch, IconLayoutColumns } from "@tabler/icons-react";
 import { useParams } from "react-router";
 
 import { fetchSessions, type ActiveSession } from "../api/client";
@@ -7,8 +7,8 @@ import { moment, plural } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /**
- * A project's active sessions: whose each is, the coding agent it runs in, its activity and the files it holds a lock
- * on. It is read as it was when the page opened, and it changes nothing: a lock moves only from a session.
+ * A project's active sessions: whose each is, the coding agent it runs in, its branch, its activity, the files it holds
+ * a lock on and the files it has touched. It is read as it was when the page opened, and it changes nothing: a lock moves only from a session.
  */
 export function SessionsPage() {
   const { projectId = "" } = useParams();
@@ -72,6 +72,12 @@ function Session({ session }: { session: ActiveSession }) {
         </span>
         <span data-testid="session-agent">{session.agent ?? "Coding agent not yet known"}</span>
         {session.repository && <span className="session-repository">{session.repository}</span>}
+        {session.branch && (
+          <span className="session-branch" data-testid="session-branch" title="Its git branch">
+            <IconGitBranch size={14} stroke={1.6} aria-hidden />
+            {session.branch}
+          </span>
+        )}
       </div>
       {session.activity ? (
         <p className="session-activity" data-testid="session-activity">
@@ -108,6 +114,18 @@ function Session({ session }: { session: ActiveSession }) {
                 <span className="session-lock-times">
                   since <At at={lock.taken_at} />, last used <At at={lock.last_used_at} />
                 </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {session.touched_files.length > 0 && (
+        <section className="session-touched" aria-label="Files it touched" data-testid="session-touched">
+          <h3 className="card-section-head">Touched {plural(session.touched_files.length, "file")}, the latest first</h3>
+          <ul className="card-links">
+            {session.touched_files.map((path) => (
+              <li key={path}>
+                <span className="path">{path}</span>
               </li>
             ))}
           </ul>

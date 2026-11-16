@@ -629,6 +629,8 @@ class ConsoleApi:
                         from_card=each.from_card,
                         started_at=each.session.started_at,
                         last_seen_at=each.session.last_seen_at,
+                        branch=each.session.branch,
+                        touched_files=list(each.session.touched_files),
                         locks=held.get(each.session.id, []),
                     )
                     for each in self._activities.in_project(project.project_id)
