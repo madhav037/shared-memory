@@ -26,10 +26,13 @@ Kept in Postgres, so every worker agrees (ADR-0013):
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
   member answered it. Its primary key is what keeps it to one per collision.
+- `gate_hooked`: each session a hook of its coding agent has called for, so its edits can be refused (#518).
+- `gate_told_unhooked`: per later and earlier session, that the later session, which no hook reaches, has been told
+  its gate waits (#518).
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
-All but `project_waits` are cleared through `Sessions.on_gone` when either session ends or comes back from idle, as the
+All but `project_waits` and `gate_hooked` are cleared through `Sessions.on_gone` when either session ends or comes back from idle, as the
 collision is.
 
 What other modules stand on, all of it on `Gates`:
@@ -41,6 +44,10 @@ What other modules stand on, all of it on `Gates`:
   have on this session's work; the names of the members answered.
 - `waiting_notices(session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
   each one ended; as a later session, each answer to its gate.
+- `heard_by_hook(session)`, `unhooked_notices(caller, session)` and `can_be_gated(sessions)`: a coding agent with no
+  hooks (Copilot in VS Code, Cursor on Windows) can't be gated, since nothing refuses its edits (#518). Every hook
+  that names a session says so; a session no hook has reached is told once in its tools' notices that its gate waits,
+  and the console marks it.
 - `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
   session to this member would gate, refused unless one is not yet urgent; then keep each and audit it.
 - `replied(session, to)`: this session sent this member a message, which answers their urgent messages to it.
@@ -71,6 +78,7 @@ from shared_memory.collisions import Collision, Collisions
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
+from shared_memory.hooks import COPILOT_CLI, CURSOR
 from shared_memory.identity import Caller, Identity
 from shared_memory.messages import TEXT_LIMIT
 from shared_memory.sessions import Session, Sessions
@@ -117,6 +125,20 @@ CREATE TABLE IF NOT EXISTS gate_urgents (
 );
 CREATE INDEX IF NOT EXISTS gate_urgents_earlier ON gate_urgents (earlier_session_id) WHERE answered_at IS NULL;
 
+-- A hook of the session's coding agent has called the server (#518): its hook before a tool can refuse a gated edit.
+-- Kept for the session's life, since its coding agent stays the same. A session no hook has reached hears of its gate
+-- in the notices of its tools instead, and the console marks it as one that can't be gated.
+CREATE TABLE IF NOT EXISTS gate_hooked (
+    session_id BIGINT PRIMARY KEY REFERENCES sessions(id)
+);
+
+-- The later session, which no hook has reached, has been told that its gate waits for the earlier session (#518).
+CREATE TABLE IF NOT EXISTS gate_told_unhooked (
+    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    PRIMARY KEY (later_session_id, earlier_session_id)
+);
+
 CREATE TABLE IF NOT EXISTS project_waits (
     project_id TEXT PRIMARY KEY REFERENCES projects(project_id),
     minutes INTEGER NOT NULL,
@@ -127,6 +149,13 @@ CREATE TABLE IF NOT EXISTS project_waits (
 
 # The longest wait a project may set: a day, longer than any session stays active without a call.
 WAIT_LIMIT_MINUTES = 24 * 60
+
+# The coding agents, as `agents.agent_named` names them, that have no hooks in some setups: Copilot in VS Code
+# (GitHub Copilot, beside Copilot CLI, which has them) and Cursor on Windows (#518).
+WITHOUT_HOOKS_SOMETIMES = frozenset({COPILOT_CLI.name, CURSOR.name})
+
+# How many sessions a worker remembers a hook was seen for before it starts over, asking the database again.
+HOOKED_REMEMBERED = 10_000
 
 DIFFERENT = "different_work"
 TIMED_OUT = "timed_out"
@@ -182,10 +211,21 @@ def _left(now: datetime, until: datetime) -> str:
     return "less than a minute left" if minutes < 1 else f"{minutes} minute{'s' if minutes != 1 else ''} left"
 
 
-def refusal(waiting: Sequence[Waiting], now: datetime) -> str:
-    """Why a gated session's edit is refused: different work first, then who it waits for and how long."""
+# What a later session that no hook reaches is told once, in place of a refusal that nothing can give it (#518).
+UNHOOKED_GATED = (
+    "[gated] This session's edits on this work wait: another member's session is on nearly the same work. If it is "
+    "different work, your member can say so, and calling different_work with this session lifts the gate at once. "
+    "This coding agent has no hook to refuse an edit, so it is yours to hold them: edit no file of that work until "
+    "the gate lifts."
+)
+
+
+def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None) -> str:
+    """Why a gated session's edit is refused: different work first, then who it waits for and how long. `first` is
+    the line that opens it in place of the hook's, for a session no hook reaches."""
     lines = [
-        "[gated] This edit waits: another member's session is on nearly the same work. If it is different work, "
+        first
+        or "[gated] This edit waits: another member's session is on nearly the same work. If it is different work, "
         "your member can say so, and calling different_work with this session lifts the gate at once.",
     ]
     for each in waiting:
@@ -299,6 +339,8 @@ class Gates:
         self._collisions = collisions
         self._audit = audit
         self._clock = clock
+        # The sessions this worker has seen a hook for, so a hook's call keeps it with one write at most (#518).
+        self._hooked: set[int] = set()
         if db.sets_up:
             with db.transaction() as conn:
                 conn.execute(SCHEMA)
@@ -307,11 +349,57 @@ class Gates:
     @staticmethod
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         gone = list(ids)
-        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents"):
+        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents", "gate_told_unhooked"):
             conn.execute(
-                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
+                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of five names written here
                 (gone, gone),
             )
+
+    # Agents with no hooks (#518)
+
+    def heard_by_hook(self, session: Session) -> None:
+        """A hook of this session's coding agent has called: its hook before a tool can refuse a gated edit."""
+        if session.id in self._hooked:
+            return
+        with self._db.transaction() as conn:
+            conn.execute("INSERT INTO gate_hooked (session_id) VALUES (%s) ON CONFLICT DO NOTHING", (session.id,))
+        if len(self._hooked) >= HOOKED_REMEMBERED:
+            self._hooked.clear()
+        self._hooked.add(session.id)
+
+    def _hooked_among(self, ids: Sequence[int]) -> set[int]:
+        with self._db.transaction() as conn:
+            rows = conn.execute("SELECT session_id FROM gate_hooked WHERE session_id = ANY(%s)", (list(ids),)).fetchall()
+        return {row["session_id"] for row in rows}
+
+    def can_be_gated(self, sessions: Sequence[Session]) -> dict[int, bool]:
+        """Whether each session's edits can be refused, by its id. One can't be when its coding agent is one that
+        runs with no hooks in some setups (Copilot in VS Code, Cursor on Windows) and no hook of its has called: its
+        coding agent is known once a tool call has reported it. Any other can, as far as the server knows."""
+        unsure = [each.id for each in sessions if each.agent in WITHOUT_HOOKS_SOMETIMES]
+        hooked = self._hooked_among(unsure) if unsure else set()
+        return {each.id: each.id not in unsure or each.id in hooked for each in sessions}
+
+    def unhooked_notices(self, caller: Caller, session: Session) -> list[str]:
+        """What a later session no hook has reached is told once of the earlier sessions its gate waits for, since no
+        refusal can reach it: who, their activity and the time left, with different work first. Nothing for a session
+        a hook has reached, which hears of its gate when an edit is refused."""
+        if session.id in self._hooked or self._hooked_among([session.id]):
+            self._hooked.add(session.id)
+            return []
+        waiting = self._waiting(caller, session)
+        if not waiting:
+            return []
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "INSERT INTO gate_told_unhooked (later_session_id, earlier_session_id)"
+                " SELECT %s, earlier FROM unnest(%s::bigint[]) AS earlier"
+                " ON CONFLICT DO NOTHING RETURNING earlier_session_id",
+                (session.id, [each.earlier.id for each in waiting]),
+            ).fetchall()
+        fresh = {row["earlier_session_id"] for row in rows}
+        told = [each for each in waiting if each.earlier.id in fresh]
+        return [refusal(told, self._clock(), first=UNHOOKED_GATED)] if told else []
 
     # The project's wait
 

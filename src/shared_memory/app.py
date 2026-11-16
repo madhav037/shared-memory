@@ -359,16 +359,18 @@ def build_app(
             return None
         # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
         # tool call has reported one.
-        return sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
+        session = sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
+        gates.heard_by_hook(session)  # so its edits can be gated (#518)
+        return session
 
     def waiting_for(
         current: Caller, session: Session, prompt: list[float] | None = None, prompted: bool = False
     ) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
         takeover or other end of a lock it held, each possible collision, how each gate on its work ended, and each
-        message sent to it. The one place it is gathered: the
-        prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
-        no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
+        message sent to it; and, for a later session no hook has reached, that its gate waits (#518). The one place
+        it is gathered: the prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook
+        before a tool takes no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
         agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
         asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
         compares with the other sessions' activities, and says it is `prompted`: a muted session hears its messages
@@ -378,6 +380,7 @@ def build_app(
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
             *gates.waiting_notices(session),
+            *gates.unhooked_notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
         ]
 
