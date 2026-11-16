@@ -73,6 +73,8 @@ Kind = Literal[
     "gate_timed_out",
     "different_work",
     "project_wait_changed",
+    "gate_agreed",
+    "gate_refused",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -134,6 +136,11 @@ TEAM_EXPORTED: Kind = "team_exported"
 # and cause, never a prompt.
 GATE_TIMED_OUT: Kind = "gate_timed_out"
 DIFFERENT_WORK: Kind = "different_work"
+# An earlier session's member agreed to or refused a later session's gate on its work (#512). The entry's actor is the
+# earlier session's member, its target the later one's, and its detail holds the collision's score and cause, never
+# the answer's text.
+GATE_AGREED: Kind = "gate_agreed"
+GATE_REFUSED: Kind = "gate_refused"
 # A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
 PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
 
