@@ -330,6 +330,13 @@ wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GA
 in `.env`). Each timeout and each "different work" is in the audit log with the collision's score, for tuning the
 threshold above.
 
+## How long messages between sessions are kept
+
+A session can send a message to another session in its project with the `send_message` tool. A message is kept for
+`SHARED_MEMORY_MESSAGE_KEPT_DAYS` (default 7, optional in `.env`), delivered or not. One sent to a session that ended or
+went idle within `SHARED_MEMORY_RECENT_WORK_HOURS` (default 24, optional) waits for its member's next session in the
+project; one to a session gone longer is refused.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).
