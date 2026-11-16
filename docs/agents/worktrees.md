@@ -84,6 +84,9 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   `gate_urgents` (an urgent message from `send_message`, which gates the earlier session until answered) and
   `project_waits` (a project's own wait). The before-edit hook asks `gates.before_edit` before `locks.before_edit`; a gated edit takes
   no lock. `tests/test_gates.py` runs its own server with `test_collisions.py`'s chosen embeddings.
+- **Mute** (#514) is `muted` on `sessions`, set by the `mute` tool through `Sessions.mute`. `waiting_for` passes
+  `urgent_only` to `messages.waiting_notices` for a muted session on anything but the prompt hook, so a message that is
+  not urgent waits for the next prompt or the unmute; gate notices and answers are untouched. `tests/test_mute.py`.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
 
 ### Locks
