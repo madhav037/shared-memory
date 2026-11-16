@@ -29,7 +29,7 @@ from tests.support import (
     search_tool,
 )
 from tests.test_before_edit import ALLOWED, reason_in
-from tests.test_collisions import PROMPT, PROMPT_BELOW, WEBHOOKS, ChosenSimilarity, state, warnings
+from tests.test_collisions import PROMPT, PROMPT_BELOW, RETRIES, WEBHOOKS, ChosenSimilarity, state, warnings
 from tests.test_locks import FILE
 
 GATED = "[gated]"
@@ -618,3 +618,75 @@ def test_each_urgent_message_is_in_the_audit_log_without_its_text(team: Team, ow
         ("urgent_message", "emp-2", "owner-1", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"})
     ]
     assert URGENT not in str(rows)
+
+
+# Agents with no hooks (#518)
+
+
+def copilot_in_vs_code(session: Session) -> Session:
+    """The same member's session as Copilot in VS Code makes it: tool calls only, since no hook of its runs."""
+    return session.as_agent("Visual Studio Code").as_session("copilot-session")
+
+
+def notices_of(answer: dict[str, Any]) -> str:
+    return "\n".join(answer["notices"])
+
+
+def test_a_session_no_hook_reaches_is_told_in_its_next_tool_result_once_that_its_edits_wait(
+    owner: Session, dana: Session
+) -> None:
+    copilot = copilot_in_vs_code(dana)
+    state(owner, WEBHOOKS)
+
+    stated = copilot.call("set_activity", activity=RETRIES, session=copilot.identifier)["notices"]
+    again = notices_of(copilot.call("take_lock", path="docs/retries.md", session=copilot.identifier))
+
+    (gated,) = [notice for notice in stated if notice.startswith(GATED)]
+    first_line = gated.splitlines()[0]
+    assert "different work" in first_line and "different_work" in first_line
+    assert "no hook" in gated
+    assert "Olive Owner" in gated and f'"{WEBHOOKS}"' in gated and "5 minutes left" in gated
+    assert "ask your member" in gated
+    assert GATED not in again, "told once"
+
+
+def test_a_session_a_hook_has_reached_hears_of_its_gate_when_an_edit_is_refused_not_in_its_tool_results(
+    owner: Session, dana: Session
+) -> None:
+    dana.start()
+    state(owner, WEBHOOKS)
+
+    stated = notices_of(dana.call("set_activity", activity=RETRIES, session=dana.identifier))
+
+    assert GATED not in stated
+    assert GATED in reason_in(dana.edit(FILE))
+
+
+def test_a_session_no_hook_reaches_hears_messages_and_gate_answers_in_its_next_tool_result_once(
+    owner: Session, dana: Session
+) -> None:
+    copilot = copilot_in_vs_code(dana)
+    state(owner, WEBHOOKS)
+    copilot.call("set_activity", activity=RETRIES, session=copilot.identifier)
+    answer_gate(owner, "emp-2", "refuse", "I am halfway through the retries.")
+    owner.call("send_message", session=owner.identifier, to="emp-2", text="Take the back end?")
+
+    told = notices_of(copilot.call("mute", session=copilot.identifier, on=False))
+    again = notices_of(copilot.call("mute", session=copilot.identifier, on=False))
+
+    assert "Olive Owner (owner-1) refused" in told and "I am halfway through the retries." in told
+    assert "[message]" in told and "Take the back end?" in told
+    assert again == "", "each heard once"
+
+
+def test_the_earlier_session_no_hook_reaches_is_told_in_its_next_tool_result_that_a_gate_waits_on_its_work(
+    owner: Session, dana: Session
+) -> None:
+    copilot = copilot_in_vs_code(owner)
+    state(copilot, WEBHOOKS)
+    collided = warnings(dana, PROMPT)
+
+    told = notices_of(copilot.call("set_activity", activity=WEBHOOKS, session=copilot.identifier))
+
+    assert collided
+    assert "[gate]" in told and "Dana Dev (emp-2)" in told and "answer_gate" in told
