@@ -272,10 +272,13 @@ def test_nothing_crosses_projects(team: Team, owner: Session, dana: Session) -> 
 # Never a memory
 
 
-def test_a_note_is_never_a_memory(team: Team, owner: Session, server: RunningServer) -> None:
+def test_a_note_is_never_a_memory(team: Team, owner: Session, dana: Session) -> None:
     worked_on_webhooks_then_ended(team, owner)
+    heard(dana)
 
-    assert not [path for path in server.settings.memory_root.rglob("*.md") if ".git" not in path.parts]
+    folder = team.server.settings.memory_root / team.code
+    files = [path for path in folder.rglob("*") if path.is_file() and ".git" not in path.parts]
+    assert not [path for path in files if DONE in path.read_text(encoding="utf-8", errors="replace")]
 
 
 def test_the_note_retention_reads_its_environment_variable() -> None:
