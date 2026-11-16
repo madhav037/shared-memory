@@ -7,18 +7,50 @@ prompt scores 0.8 against it, so Dana's is the later session."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import psycopg
+import pytest
+from anyio.from_thread import start_blocking_portal
 
-from tests.support import WORKING_FOLDER, RunningServer, Session, Team, added_context, member
+from shared_memory.app import build_app
+from shared_memory.config import Settings
+from tests.support import (
+    REPO_ROOT,
+    WORKING_FOLDER,
+    RunningServer,
+    Session,
+    Team,
+    TestClock,
+    added_context,
+    fresh_database,
+    member,
+)
 from tests.test_before_edit import ALLOWED, reason_in
-from tests.test_collisions import PROMPT, PROMPT_BELOW, WEBHOOKS, embedder, server, state, warnings
+from tests.test_collisions import PROMPT, PROMPT_BELOW, WEBHOOKS, ChosenSimilarity, state, warnings
 from tests.test_locks import FILE
 
-__all__ = ["embedder", "server"]  # this module runs on test_collisions' server, with its chosen embeddings
-
 GATED = "[gated]"
+
+
+@pytest.fixture(scope="module")
+def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
+    """This module's own server, in place of the one every other module shares, for the chosen embeddings."""
+    settings = Settings(
+        database_url=fresh_database("shared_memory_gates"),
+        memory_root=tmp_path_factory.mktemp("gates-memory"),
+        model_cache=REPO_ROOT / ".cache" / "fastembed",
+        rate_limit_on=False,
+    )
+    clock = TestClock()
+    embedder = ChosenSimilarity(settings.model_cache)
+    with start_blocking_portal() as portal:
+        running = RunningServer(build_app(settings, clock=clock, embedder=embedder), settings, clock, portal)
+        try:
+            yield running
+        finally:
+            running.stop()
 
 
 def collide(earlier: Session, later: Session) -> None:
