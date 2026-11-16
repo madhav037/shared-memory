@@ -11,6 +11,8 @@ What other modules stand on, all of it on `Sessions`:
 - `start(caller)`: a session under an identifier made here, for an agent that was never told one.
 - `end(caller, identifier)`: the session-end hook.
 - `active(project_id)`: a project's active sessions, oldest first.
+- `lately(project_id, within)`: a project's active sessions and those that ended or went idle no longer ago than
+  `within`, for a module that reaches a session gone a little while, such as a message waiting for its member.
 - `still_active(ids)`: which of these sessions are active, for a module that keeps something per session and must
   count an ended or idle session's as gone wherever it reads it.
 - `on_gone(listener)`: called, inside the transaction, with the sessions that just ended or were found back from
@@ -65,6 +67,8 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS branch TEXT;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS touched_files TEXT[] NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS sessions_not_ended ON sessions (project_id, last_seen_at) WHERE ended_at IS NULL;
+-- A project's sessions by when they were last seen, ended or not, for those gone a little while.
+CREATE INDEX IF NOT EXISTS sessions_by_project ON sessions (project_id, last_seen_at);
 """
 
 # The longest identifier kept. Coding agents send a UUID or something as short.
@@ -259,6 +263,22 @@ class Sessions:
             ).fetchall()
         members = self._identity.named(row["member_id"] for row in rows)
         return [_session(row, *members[row["member_id"]]) for row in rows]
+
+    def lately(self, project_id: str, within: timedelta) -> list[tuple[Session, bool]]:
+        """A project's sessions that are active, or that ended or went idle no longer than `within` ago, the most
+        recently seen first, each with whether it is active now. An idle session went idle at its last call plus the
+        idle time."""
+        now = self._clock()
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
+                " touched_files, (ended_at IS NULL AND last_seen_at > %s) AS active FROM sessions"
+                " WHERE project_id = %s AND last_seen_at > %s AND COALESCE(ended_at, last_seen_at + %s) > %s"
+                " ORDER BY last_seen_at DESC, id DESC",
+                (now - self.idle_after, project_id, now - within - self.idle_after, self.idle_after, now - within),
+            ).fetchall()
+        members = self._identity.named(row["member_id"] for row in rows)
+        return [(_session(row, *members[row["member_id"]]), bool(row["active"])) for row in rows]
 
     def still_active(self, ids: Iterable[int], conn: Conn | None = None) -> set[int]:
         """Which of these sessions are active now. Pass the connection of a transaction already open to ask within

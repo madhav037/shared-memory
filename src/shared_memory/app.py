@@ -55,6 +55,7 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
+from shared_memory.messages import Messages
 from shared_memory.license import PUBLIC_KEYS
 from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import RateLimited, RateLimits
@@ -280,6 +281,7 @@ def build_app(
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
+    messages = Messages(settings, db, sessions, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -361,7 +363,8 @@ def build_app(
 
     def waiting_for(current: Caller, session: Session, prompt: list[float] | None = None) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
-        takeover or other end of a lock it held, and each possible collision. The one place it is gathered: the
+        takeover or other end of a lock it held, each possible collision, how each gate on its work ended, and each
+        message sent to it. The one place it is gathered: the
         prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
         no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
         agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
@@ -372,6 +375,7 @@ def build_app(
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
             *gates.waiting_notices(session),
+            *messages.waiting_notices(session),
         ]
 
     def told(current: Caller, session: Session) -> str | None:
@@ -1147,6 +1151,29 @@ def build_app(
         calling = sessions.touch(current, session)
         lifted = gates.different_work(current, calling)
         return {"session": calling.identifier, "lifted": lifted, "notices": waiting_for(current, calling)}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def send_message(session: str, to: str, text: str, ctx: Context) -> dict[str, Any]:
+        """Send a message to another member's session in this project, collided or not, to ask about their work or
+        to reply to a message. Send what your member asked you to say, never on your own judgment.
+
+        to is the member ID of the member it is for, as a gate or a message named them; it reaches each of their active
+        sessions in this project, on its next tool call or prompt. When none is active but one ended or went idle in
+        the last day, waiting is true: it reaches their next session here. text is at most 2000 characters. Messages
+        are kept seven days.
+
+        session is this session's identifier, as its briefing named it. notices in the answer is what this session is
+        told once, such as a message sent to it: finish the step you are on, then stop and show it to your member."""
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        sent = messages.send(current, calling, to, text)
+        return {
+            "session": calling.identifier,
+            "to": sent.to,
+            "waiting": sent.waiting,
+            "notices": waiting_for(current, calling),
+        }
 
     @server.tool()
     @_refusals_as_tool_errors
