@@ -18,7 +18,13 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
-from shared_memory.connection import BRIEFING_SECONDS, HOOK_SECONDS, connection_kit, repository_root
+from shared_memory.connection import (
+    BRIEFING_SECONDS,
+    HOOK_SECONDS,
+    connection_kit,
+    repository_branch,
+    repository_root,
+)
 from shared_memory.embeddings import LazyEmbedder
 from tests.support import (
     CLAUDE_EVENTS,
@@ -32,6 +38,8 @@ from tests.support import (
     fresh_database,
     member,
     new_team,
+    read_tool,
+    search_tool,
 )
 from tests.test_locks import FILE, refused, take
 from tests.test_sessions import active
@@ -421,6 +429,130 @@ def test_a_tool_that_only_reads_a_file_takes_no_lock(dana: Session, cole: Sessio
     assert take(cole)["locked"] is True, "nobody holds a file that was only read"
 
 
+# The hook before every tool call (ADR-0025)
+
+#: What each coding agent's hook before a tool sends for one that only reads a file, now that the hook runs on every
+#: tool. From each agent's hook reference; none was captured from the real agent.
+READS: dict[str, tuple[Callable[[Session, str], dict[str, Any]], str | None]] = {
+    "Claude Code": (
+        lambda session, file: {"session_id": session.identifier, "cwd": WORKING_FOLDER, "hook_event_name": "PreToolUse",
+                               **read_tool(f"{WORKING_FOLDER}/{file}")},
+        None,
+    ),
+    "Codex": (
+        lambda session, file: {
+            "session_id": session.identifier,
+            "cwd": WORKING_FOLDER,
+            "hook_event_name": "PreToolUse",
+            "tool_name": "shell",
+            "tool_input": {"command": f"cat {file}"},
+        },
+        None,
+    ),
+    "Gemini CLI": (
+        lambda session, file: {
+            "session_id": session.identifier,
+            "cwd": WORKING_FOLDER,
+            "hook_event_name": "BeforeTool",
+            "tool_name": "read_file",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}"},
+        },
+        "gemini",
+    ),
+    "Devin Desktop": (
+        lambda session, file: {
+            "session_id": session.identifier,
+            "hook_event_name": "PreToolUse",
+            "tool_name": "read",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}"},
+        },
+        "devin",
+    ),
+    "Cursor": (
+        lambda session, file: {
+            "conversation_id": session.identifier,
+            "hook_event_name": "preToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": f"{WORKING_FOLDER}/{file}"},
+            "workspace_roots": [WORKING_FOLDER],
+        },
+        "cursor",
+    ),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("agent", list(READS))
+def test_a_tool_that_changes_no_file_takes_no_lock_in_any_agent(dana: Session, cole: Session, agent: str) -> None:
+    payload, format = READS[agent]
+
+    answer = dana.hook_payload("before-edit", payload(dana, FILE), format, branch="main")
+
+    assert answer == ALLOWED
+    assert take(cole)["locked"] is True, "nobody holds a file that was only read"
+
+
+def test_a_tool_call_that_is_no_edit_keeps_its_session_active(team: Team, dana: Session) -> None:
+    dana.start()
+    team.server.clock.advance(minutes=20)
+
+    dana.use(search_tool("retries"))
+    team.server.clock.advance(minutes=20)
+
+    assert active(dana) == [("emp-2", "test-session")]
+
+
+def where(session: Session) -> tuple[str | None, tuple[str, ...]]:
+    """The branch and touched files the server keeps for this session, as its project's sessions show them."""
+    (known,) = [each for each in session.active_sessions() if each.identifier == session.identifier]
+    return known.branch, known.touched_files
+
+
+def test_a_tool_call_records_the_sessions_branch_and_the_files_its_tool_named(dana: Session) -> None:
+    dana.use(read_tool(f"{WORKING_FOLDER}/README.md"), branch="feature/retries")
+    dana.use(search_tool("retries"))
+    dana.edit(FILE)
+    dana.use(read_tool(f"{WORKING_FOLDER}/README.md"), branch="feature/backoff")
+
+    assert where(dana) == ("feature/backoff", ("README.md", FILE)), "the most recent first, each once"
+
+
+def test_a_file_outside_the_repository_is_not_recorded_and_a_detached_head_keeps_the_branch(dana: Session) -> None:
+    dana.use(read_tool(f"{WORKING_FOLDER}/README.md"), branch="main")
+
+    dana.use(read_tool("/etc/hosts"), branch="HEAD")
+    dana.use(search_tool("retries"), branch="")
+
+    assert where(dana) == ("main", ("README.md",))
+
+
+def test_only_the_latest_touched_files_are_kept(dana: Session) -> None:
+    for number in range(25):
+        dana.use(read_tool(f"{WORKING_FOLDER}/src/file{number}.py"))
+
+    _, touched = where(dana)
+
+    assert len(touched) == 20
+    assert touched[0] == "src/file24.py" and touched[-1] == "src/file5.py"
+
+
+def test_a_session_back_from_idle_starts_its_branch_and_touched_files_over(team: Team, dana: Session) -> None:
+    dana.use(read_tool(f"{WORKING_FOLDER}/README.md"), branch="main")
+    team.server.clock.advance(minutes=31)
+
+    dana.use(search_tool("retries"))
+
+    assert where(dana) == (None, ())
+
+
+def test_an_edit_is_still_locked_and_blocked_with_the_hook_on_every_tool(dana: Session, cole: Session) -> None:
+    dana.use(read_tool(f"{WORKING_FOLDER}/{FILE}"))
+    assert cole.edit(FILE) == ALLOWED
+
+    blocked = dana.edit(FILE)
+
+    assert "Cole Coder" in reason_in(blocked)
+
+
 def test_cursors_session_is_the_one_its_edits_name_when_its_end_names_two(dana: Session, cole: Session) -> None:
     """Cursor's session end sends a session_id beside the conversation_id that every one of its payloads carries."""
     own_edit(dana, "Cursor")
@@ -514,6 +646,25 @@ def test_a_kits_before_edit_command_lets_the_edit_through_when_the_server_is_dow
 
     assert ran.returncode == 0, ran.stderr
     assert ran.stdout.strip() in ("", "{}"), "nothing that blocks the edit"
+    assert "--max-time 3 " in command
+
+
+#: Where the kits whose hook before a tool takes no added context keep the command of their hook after one.
+KIT_AFTER_COMMANDS: dict[str, Callable[[dict[str, str]], str]] = {
+    "Cursor": lambda files: json.loads(files[".cursor/hooks.json"])["hooks"]["postToolUse"][0]["command"],
+    "Devin Desktop": lambda files: json.loads(files[".devin/hooks.v1.json"])["PostToolUse"][0]["hooks"][0]["command"],
+}
+
+
+@needs_a_shell
+@pytest.mark.parametrize("agent", list(KIT_AFTER_COMMANDS))
+def test_a_kits_after_tool_command_leaves_the_tool_alone_when_the_server_is_down(dana: Session, agent: str) -> None:
+    command = KIT_AFTER_COMMANDS[agent](kit(dana, "http://127.0.0.1:9"))
+
+    ran = run_kit(["sh", "-c", command], dana, agent)
+
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.strip() in ("", "{}")
     assert "--max-time 3 " in command
 
 
@@ -702,13 +853,13 @@ def plugin_command() -> str:
     return command
 
 
-def test_claude_codes_plugin_runs_the_hook_before_its_file_edit_tools_and_gives_up_at_three_seconds() -> None:
+def test_claude_codes_plugin_runs_the_hook_before_every_tool_and_gives_up_at_three_seconds() -> None:
     entry = plugin_entry()
     (hook,) = entry["hooks"]
     command = plugin_command()
     _, fallback = command.split(" || ")
 
-    assert entry["matcher"].split("|") == ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+    assert entry["matcher"] == "*", "every tool call reports where the session is and hears its news (ADR-0025)"
     assert '"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/before-edit"' in command
     assert "--max-time 3 " in command
     assert hook["timeout"] == 4, "Claude Code lets curl give up first, so its fallback runs"
@@ -779,6 +930,7 @@ def test_claude_codes_plugin_asks_git_for_the_repositorys_root_within_the_same_c
 
     assert f'-H "X-Shared-Memory-Root: {repository_root("CLAUDE_PROJECT_DIR")}"' in command
     assert 'git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-cdup 2>/dev/null' in command
+    assert f'-H "X-Shared-Memory-Branch: {repository_branch("CLAUDE_PROJECT_DIR")}"' in command
     assert command.count(" || ") == 1, "git failing is not what makes the command fall back to its warning"
 
 
@@ -795,6 +947,17 @@ def test_claude_code_started_in_a_subfolder_names_its_locks_from_the_repositorys
     assert "Dana Dev" in refused(cole, "console/src/App.tsx"), "as a session started at the root names it"
     assert "Dana Dev" in refused(cole, "README.md"), "a file above the subfolder is inside the repository"
     assert take(cole, "src/App.tsx")["locked"] is True, "and under no second name"
+
+
+@needs_a_shell
+@needs_git
+def test_claude_codes_plugin_names_the_branch_git_says_the_session_is_on(dana: Session, subfolder: Path) -> None:
+    subprocess.run(["git", "-C", str(subfolder), "checkout", "-q", "-b", "feature/retries"], check=True)
+
+    ran = run_plugin(dana.server.url, dana, dana.token, str(subfolder), str(subfolder / "src" / "App.tsx"))
+
+    assert json.loads(ran.stdout) == ALLOWED, ran.stderr
+    assert where(dana) == ("feature/retries", ("console/src/App.tsx",))
 
 
 @needs_a_shell

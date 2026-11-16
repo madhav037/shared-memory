@@ -357,14 +357,19 @@ def build_app(
     def waiting_for(current: Caller, session: Session) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
         takeover or other end of a lock it held, and each possible collision. The one place it is gathered: the
-        prompt hook asks it, and so do the tools that take `session` and answer with `notices`, for a coding agent
-        with no prompt hook. A module with something for a session adds it here. Asking marks it all told, so a tool
+        prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
+        no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
+        agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
         asks only once its own work has succeeded."""
         return [
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session),
         ]
+
+    def told(current: Caller, session: Session) -> str | None:
+        """What is waiting for a session, as one added context for a hook's answer, or None when nothing is."""
+        return "\n\n".join(waiting_for(current, session)) or None
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
 
@@ -500,16 +505,46 @@ def build_app(
 
     @server.custom_route("/hooks/before-edit", methods=["POST"])  # type: ignore[untyped-decorator]
     async def before_edit(request: Request) -> Response:
+        """The hook before every tool call (ADR-0025), named for the edits it can stop. It keeps the session active
+        and records its branch and the files the tool names; an edit takes or keeps each file's lock, or is blocked
+        because another active session holds one; and anything else is let through with the session's waiting news,
+        where the agent's hook before a tool takes added context. One whose hook doesn't hears it after the tool."""
         # Where the hook says its repository's root is. Without it the payload's working folder stands in.
         root = request.headers.get("x-shared-memory-root")
+        branch = hooks.branch_named(request.headers.get(hooks.BRANCH_HEADER.lower()))
+        hears = hooks.hears_before_tool(request.query_params.get("format"))
+        stopped = False
 
         def held(current: Caller, payload: dict[str, Any]) -> str | None:
-            """Why the edit is blocked: another active session holds the file. None lets it through, with the file's
-            lock taken or kept for this session where the file locks."""
+            """Why the edit is blocked: another active session holds the file. Otherwise the session's news, or None,
+            with the file's lock taken or kept for this session where the file locks. A blocked edit leaves the news
+            waiting for the session's next call."""
+            nonlocal stopped
             session = session_of(current, payload)
-            return locks.before_edit(session, hooks.edited_files(payload, root)) if session else None
+            if session is None:
+                return None
+            sessions.report(session, branch, hooks.named_files(payload, root))
+            reason = locks.before_edit(session, hooks.edited_files(payload, root))
+            if reason is not None:
+                stopped = True
+                return reason
+            return told(current, session) if hears else None
 
-        return await hook(request, "PreToolUse", held, answer=hooks.blocked)
+        def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
+            return hooks.blocked(format, event, text) if stopped else hooks.answered(format, event, text)
+
+        return await hook(request, "PreToolUse", held, answer=answer)
+
+    @server.custom_route("/hooks/after-tool", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def after_tool(request: Request) -> Response:
+        """The hook after every tool call, for the coding agents whose hook before a tool takes no added context
+        (Gemini CLI, Devin Desktop, Copilot CLI, Cursor): the session's waiting news, each item once (ADR-0025)."""
+
+        def news(current: Caller, payload: dict[str, Any]) -> str | None:
+            session = session_of(current, payload)
+            return told(current, session) if session else None
+
+        return await hook(request, "PostToolUse", news)
 
     def composed_briefing(
         current: Caller, named: str | None, session: Session | None, with_sessions: bool = True

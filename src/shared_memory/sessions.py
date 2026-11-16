@@ -17,6 +17,8 @@ What other modules stand on, all of it on `Sessions`:
   idle, so a module clears what it kept for them. A session that goes idle and never calls again is never reported:
   `still_active` is what says it is gone.
 - `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
+- `report(session, branch, files)`: where a session is, from its hook before a tool: its git branch and the files
+  that tool named, kept beside the session as the files it touched (ADR-0025).
 - `idle_after`: the idle time, from `Settings.session_idle_minutes`.
 
 A module keeping rows per session refers to `Session.id`. Only this module reads the `sessions` table, and it reads
@@ -57,11 +59,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- It called again after it had ended and has not yet been told that its activity and locks ended.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS back_from_end BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Where the session is, from its hook before each tool: its git branch, and the files its tools named, the most
+-- recent first. Both start over when the session comes back from idle or after it had ended. Never the tool's name.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS branch TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS touched_files TEXT[] NOT NULL DEFAULT '{}';
+
 CREATE INDEX IF NOT EXISTS sessions_not_ended ON sessions (project_id, last_seen_at) WHERE ended_at IS NULL;
 """
 
 # The longest identifier kept. Coding agents send a UUID or something as short.
 IDENTIFIER_LIMIT = 100
+
+# How many of the files a session touched are kept, the most recent first, and the longest path kept among them.
+TOUCHED_KEPT = 20
+TOUCHED_PATH_LIMIT = 500
 
 BACK_FROM_IDLE = (
     "[session] This session made no call to Shared Memory for longer than a session may sit idle, so its activity "
@@ -93,6 +104,9 @@ class Session:
     agent: str | None
     started_at: datetime
     last_seen_at: datetime
+    # Its git branch as its hooks last said, and the files its tools named, the most recent first (ADR-0025).
+    branch: str | None = None
+    touched_files: tuple[str, ...] = ()
 
 
 class UnusableIdentifier(Refused):
@@ -165,7 +179,7 @@ class Sessions:
             row = conn.execute(
                 "INSERT INTO sessions (member_id, project_id, identifier, repository, agent, started_at, last_seen_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (member_id, project_id, identifier) DO NOTHING"
-                " RETURNING id, repository, agent, started_at",
+                " RETURNING id, repository, agent, started_at, branch, touched_files",
                 (*key, caller.repository, caller.agent or hooked_by, now, now),
             ).fetchone()
             if row is None:
@@ -183,9 +197,14 @@ class Sessions:
                     "UPDATE sessions SET last_seen_at = %s, ended_at = NULL,"
                     " started_at = CASE WHEN %s THEN %s ELSE started_at END,"
                     " back_from_idle = (back_from_idle OR %s) AND NOT %s, back_from_end = back_from_end OR %s,"
-                    " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent, %s)"
-                    " WHERE id = %s RETURNING id, repository, agent, started_at",
-                    (now, ended, now, idle, ended, ended, caller.repository, caller.agent, hooked_by, known["id"]),
+                    " repository = COALESCE(%s, repository), agent = COALESCE(%s, agent, %s),"
+                    " branch = CASE WHEN %s THEN NULL ELSE branch END,"
+                    " touched_files = CASE WHEN %s THEN '{}' ELSE touched_files END"
+                    " WHERE id = %s RETURNING id, repository, agent, started_at, branch, touched_files",
+                    (
+                        now, ended, now, idle, ended, ended, caller.repository, caller.agent, hooked_by,
+                        idle or ended, idle or ended, known["id"],
+                    ),  # fmt: skip
                 ).fetchone()
                 assert row is not None
         return Session(
@@ -198,7 +217,23 @@ class Sessions:
             agent=row["agent"],
             started_at=row["started_at"],
             last_seen_at=now,
+            branch=row["branch"],
+            touched_files=tuple(row["touched_files"]),
         )
+
+    def report(self, session: Session, branch: str | None, files: Sequence[str]) -> None:
+        """Keep where this session is, as its hook before a tool says: its branch, where the hook named one, and the
+        files the tool named, ahead of those it touched before. Nothing is written when nothing changes."""
+        touched = [file for file in dict.fromkeys(files) if len(file) <= TOUCHED_PATH_LIMIT][:TOUCHED_KEPT]
+        kept = list(dict.fromkeys([*touched, *session.touched_files]))[:TOUCHED_KEPT]
+        moved = branch is not None and branch != session.branch
+        if not moved and kept == list(session.touched_files):
+            return
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE sessions SET branch = COALESCE(%s, branch), touched_files = %s WHERE id = %s",
+                (branch, kept, session.id),
+            )
 
     def end(self, caller: Caller, identifier: str) -> None:
         """End the calling session, as its session-end hook asks. One the server doesn't know, or that has already
@@ -217,7 +252,8 @@ class Sessions:
         check."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at FROM sessions"
+                "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
+                " touched_files FROM sessions"
                 " WHERE project_id = %s AND ended_at IS NULL AND last_seen_at > %s ORDER BY started_at, id",
                 (project_id, self._clock() - self.idle_after),
             ).fetchall()
@@ -286,4 +322,6 @@ def _session(row: dict[str, Any], member_id: str, member_name: str) -> Session:
         agent=row["agent"],
         started_at=row["started_at"],
         last_seen_at=row["last_seen_at"],
+        branch=row["branch"],
+        touched_files=tuple(row["touched_files"]),
     )

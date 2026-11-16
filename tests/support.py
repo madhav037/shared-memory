@@ -239,13 +239,16 @@ class Session:
         body = {"session_id": self.identifier, "cwd": WORKING_FOLDER, "hook_event_name": CLAUDE_EVENTS[event], **payload}
         return self.hook_payload(event, body, format)
 
-    def hook_payload(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
-        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format."""
+    def hook_payload(
+        self, event: str, payload: dict[str, Any], format: str | None = None, branch: str | None = None
+    ) -> dict[str, Any]:
+        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format, and
+        naming the session's git branch as the hook before a tool does."""
         response = httpx.post(
             f"{self.server.url}/hooks/{event}",
             json=payload,
             params={"format": format} if format else None,
-            headers=self.headers(),
+            headers={**self.headers(), **({"X-Shared-Memory-Branch": branch} if branch is not None else {})},
             timeout=60,
         )
         assert response.status_code == 200, response.text
@@ -268,6 +271,20 @@ class Session:
         """Fire the before-edit hook as Claude Code does before its Edit tool changes this file, named from the
         repository's root, and return its hook output. Claude Code names the file by its absolute path."""
         return self._hook("before-edit", edit_tool(f"{WORKING_FOLDER}/{path}"), format)
+
+    def use(
+        self, tool: dict[str, Any], format: str | None = None, branch: str | None = None, after: bool = False
+    ) -> dict[str, Any]:
+        """Fire the hook before a tool call (or, with `after`, the hook after it) as Claude Code does for this tool,
+        on this branch, and return its hook output."""
+        event = "after-tool" if after else "before-edit"
+        body = {
+            "session_id": self.identifier,
+            "cwd": WORKING_FOLDER,
+            "hook_event_name": "PostToolUse" if after else "PreToolUse",
+            **tool,
+        }
+        return self.hook_payload(event, body, format, branch)
 
     def active_sessions(self) -> list[KnownSession]:
         """The sessions active in this session's project, as the worker it talks to reads them. No tool lists them
@@ -301,6 +318,21 @@ def edit_tool(file_path: str) -> dict[str, Any]:
         "tool_input": {"file_path": file_path, "old_string": "retries = 3", "new_string": "retries = 5"},
         "tool_use_id": "toolu_01ABC123",
     }
+
+
+def read_tool(file_path: str) -> dict[str, Any]:
+    """What Claude Code's PreToolUse payload says of a Read tool call about to read this file."""
+    return {
+        "permission_mode": "default",
+        "tool_name": "Read",
+        "tool_input": {"file_path": file_path},
+        "tool_use_id": "toolu_02DEF456",
+    }
+
+
+def search_tool(pattern: str) -> dict[str, Any]:
+    """What Claude Code's PreToolUse payload says of a Grep tool call, which names no file."""
+    return {"permission_mode": "default", "tool_name": "Grep", "tool_input": {"pattern": pattern}, "tool_use_id": "t3"}
 
 
 def added_context_as_sent(hook_output: dict[str, Any]) -> str:
