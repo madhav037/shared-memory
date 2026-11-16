@@ -19,6 +19,8 @@ What other modules stand on, all of it on `Messages`:
 - `send(caller, session, to, text)`: send from this session; the name of the member it went to, and whether it waits
   for that member's next session.
 - `waiting_notices(session)`: what a session is told once: each message waiting for it. Asking marks them delivered.
+- `exchanged(project_id, member_id)`: the messages a member's sessions in a project sent or were sent, still kept,
+  changing nothing: what the console shows.
 """
 
 from __future__ import annotations
@@ -59,6 +61,18 @@ CREATE INDEX IF NOT EXISTS messages_sent ON messages (sent_at);
 
 # The longest message kept, in characters.
 TEXT_LIMIT = 2000
+
+
+@dataclass(frozen=True)
+class Exchanged:
+    """One message a member's sessions sent or were sent, once though it went to several of the recipient's sessions."""
+
+    sender_member_id: str
+    sender_name: str
+    recipient_member_id: str
+    text: str
+    sent_at: datetime
+    delivered_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -158,3 +172,27 @@ class Messages:
             for row in sorted(delivered, key=lambda row: (row["sent_at"], row["id"]))
         }
         return [notice(row["sender_name"], row["sender_member_id"], row["sent_at"], row["text"]) for row in told.values()]
+
+    def exchanged(self, project_id: str, member_id: str) -> list[Exchanged]:
+        """The messages this member's sessions in the project sent or were sent, still kept, the oldest first. Read
+        only: none is marked delivered."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT sender_member_id, sender_name, recipient_member_id, text, sent_at,"
+                " MIN(delivered_at) AS delivered_at FROM messages"
+                " WHERE project_id = %s AND (recipient_member_id = %s OR sender_member_id = %s) AND sent_at > %s"
+                " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at"
+                " ORDER BY sent_at, MIN(id)",
+                (project_id, member_id, member_id, self._clock() - self._kept),
+            ).fetchall()
+        return [
+            Exchanged(
+                row["sender_member_id"],
+                row["sender_name"],
+                row["recipient_member_id"],
+                row["text"],
+                row["sent_at"],
+                row["delivered_at"],
+            )
+            for row in rows
+        ]

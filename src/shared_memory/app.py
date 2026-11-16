@@ -1363,7 +1363,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(settings, db, activities, collisions, gates, clock),
+            SessionTalk(settings, sessions, collisions, gates, messages, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

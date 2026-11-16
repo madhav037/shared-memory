@@ -362,6 +362,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/sessions/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt. */
+        post: operations["send_message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sessions/gates/{member_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt. */
+        post: operations["answer_gate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/cards/{number}": {
         parameters: {
             query?: never;
@@ -1238,7 +1272,9 @@ export interface components {
         };
         /**
          * GateWait
-         * @description One earlier session a gate waits for, until the project's wait has passed (until).
+         * @description One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.
+         *     refused says its member refused: the gate then holds past until, while that session stays active. on_my_work says
+         *     the earlier session is the signed-in member's, so they may agree or refuse from the console.
          */
         GateWait: {
             earlier: components["schemas"]["NamedSession"];
@@ -1247,6 +1283,10 @@ export interface components {
              * Format: date-time
              */
             until: string;
+            /** Refused */
+            refused: boolean;
+            /** On My Work */
+            on_my_work: boolean;
         };
         /**
          * HeldLock
@@ -1365,6 +1405,34 @@ export interface components {
             gates: components["schemas"]["SessionGate"][];
             /** Messages */
             messages: components["schemas"]["SessionMessage"][];
+        };
+        /**
+         * MessageToSend
+         * @description A message from the signed-in member's session in the project to another member's sessions there, such as a
+         *     reply: the member it is for, by member ID, and its text, at most 2000 characters.
+         */
+        MessageToSend: {
+            /** To */
+            to: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * GateAnswer
+         * @description The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
+         *     at most 2000 characters.
+         */
+        GateAnswer: {
+            /**
+             * Answer
+             * @enum {string}
+             */
+            answer: "agree" | "refuse";
+            /**
+             * Text
+             * @default null
+             */
+            text: string | null;
         };
         /**
          * CardDetail
@@ -2820,6 +2888,59 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    send_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageToSend"];
+            };
+        };
+        responses: {
+            /** @description Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    answer_gate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GateAnswer"];
+            };
+        };
+        responses: {
+            /** @description Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt. */
             200: {
                 headers: {
                     [name: string]: unknown;
