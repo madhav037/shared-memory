@@ -134,12 +134,12 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "collision",
         "two sessions on the same work, the glossary's Collision; avoided only for a contradiction between memories",
-        (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py"),
+        (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py", SERVER + "gates.py"),
     ),
     Allow(
         "activity",
         "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
-        (SERVER + "collisions.py",),
+        (SERVER + "collisions.py", SERVER + "gates.py"),
     ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
     Allow(

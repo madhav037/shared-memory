@@ -275,8 +275,8 @@ def test_different_work_and_a_timeout_are_in_the_audit_log_with_the_score_and_no
     entries = gate_entries(team.server, owner.project or "")
 
     assert entries == [
-        ("different_work", "emp-2", {"earlier": "E1001", "score": 0.8, "cause": "prompt"}),
-        ("gate_timed_out", "emp-3", {"earlier": "E1001", "score": 0.8, "cause": "prompt"}),
+        ("different_work", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
+        ("gate_timed_out", "emp-3", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
     ], "each recorded once"
     assert PROMPT not in str(entries)
 
