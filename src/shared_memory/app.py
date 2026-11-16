@@ -1154,6 +1154,25 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
+    def answer_gate(session: str, gate: str, answer: str, ctx: Context, text: str | None = None) -> dict[str, Any]:
+        """Agree to or refuse another member's session going ahead with work nearly the same as this session's. Answer
+        only with your member's answer, never on your own judgment.
+
+        A later session's edits on colliding work are gated until each earlier session's member agrees, or the
+        project's wait passes with no answer. gate is the member ID of the gated member, as the gate's notice named
+        them; answer is "agree" or "refuse". A refusal holds the gate past the wait, until this session ends or goes
+        idle; it may later be changed to agree, but an agreement stands. text is your member's words for them, at
+        most 2000 characters, and is never written to the audit log. answered names the members answered; each hears
+        it on their next tool call or prompt.
+
+        session is this session's identifier, as its briefing named it."""
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        answered = gates.answer(current, calling, gate, answer, text)
+        return {"session": calling.identifier, "answered": answered, "notices": waiting_for(current, calling)}
+
+    @server.tool()
+    @_refusals_as_tool_errors
     def send_message(session: str, to: str, text: str, ctx: Context) -> dict[str, Any]:
         """Send a message to another member's session in this project, collided or not, to ask about their work or
         to reply to a message. Send what your member asked you to say, never on your own judgment.

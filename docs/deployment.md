@@ -324,11 +324,12 @@ doing the same work were not warned.
 ## How long a gated session waits
 
 When a session's prompt or activity collides with another member's active session, the later session's file edits are
-refused until the project's wait has passed or its member says it is different work
+refused until each earlier session's member agrees, or the project's wait has passed with no answer, or its member
+says it is different work; an earlier member's refusal holds past the wait, until their session ends or goes idle
 ([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
 wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
-in `.env`). Each timeout and each "different work" is in the audit log with the collision's score, for tuning the
-threshold above.
+in `.env`). Each agree, refuse, timeout and "different work" is in the audit log with the collision's score, never an
+answer's text, for tuning the threshold above.
 
 ## How long messages between sessions are kept
 

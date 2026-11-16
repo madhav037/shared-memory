@@ -458,6 +458,7 @@ SESSION_HABITS = (
     "collision",
     "gated",
     "different_work",
+    "answer_gate",
     "message from another session",
     "finish the step you are on, then stop and ask the member",
     "send_message",
