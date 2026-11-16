@@ -91,6 +91,7 @@ INSTRUCTIONS = (
 )
 
 F = TypeVar("F", bound=Callable[..., Any])
+T = TypeVar("T")
 log = logging.getLogger("shared_memory")
 
 # Before every tool call with arguments, the MCP SDK checks the call's `Mcp-Param-*` headers against the tool's input
@@ -251,7 +252,9 @@ def build_app(
     # The model loads here, before the server takes its first request.
     counts = QueryCacheCounts(clock, timedelta(minutes=settings.query_cache_log_minutes))
     model = embedder or FastEmbedEmbedder(settings.model_cache)
-    index = SearchIndex(db, CachedQueries(model, counts=counts))
+    # Shared with collisions, so a prompt embedded to compare with activities is not embedded again for recall.
+    queries = CachedQueries(model, counts=counts)
+    index = SearchIndex(db, queries)
     store = MemoryStore(settings.memory_root, listeners=[index], transaction=db.save_transaction, sets_up=setup)
     index.catch_up(store)
     history = MemoryHistory(settings.memory_root)
@@ -274,7 +277,7 @@ def build_app(
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
-    collisions = Collisions(settings, db, sessions, activities, model)
+    collisions = Collisions(settings, db, sessions, activities, queries, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -354,21 +357,25 @@ def build_app(
         # tool call has reported one.
         return sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
 
-    def waiting_for(current: Caller, session: Session) -> list[str]:
+    def waiting_for(current: Caller, session: Session, prompt: list[float] | None = None) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
         takeover or other end of a lock it held, and each possible collision. The one place it is gathered: the
         prompt hook asks it, and so do the tools that take `session` and answer with `notices`, for a coding agent
         with no prompt hook. A module with something for a session adds it here. Asking marks it all told, so a tool
-        asks only once its own work has succeeded."""
+        asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
+        compares with the other sessions' activities."""
         return [
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
-            *collisions.warnings(current, session),
+            *collisions.warnings(current, session, prompt),
         ]
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
+    Ready = Callable[[Caller, dict[str, Any]], bool]
 
-    async def within_recall_budget(part: HookPart, current: Caller, payload: dict[str, Any]) -> str | None:
+    async def within_recall_budget(
+        part: Callable[[Caller, dict[str, Any]], T], current: Caller, payload: dict[str, Any]
+    ) -> T | None:
         """Run a hook's optional part (recall) on a worker thread, or give up on it.
 
         It has the recall budget to reach a thread, and the whole budget again from the moment it starts running, so
@@ -382,7 +389,7 @@ def build_app(
                 if not scope.cancel_called:
                     scope.deadline = anyio.current_time() + budget
 
-            def run() -> str | None:
+            def run() -> T:
                 anyio.from_thread.run_sync(started)
                 return part(current, payload)
 
@@ -395,6 +402,7 @@ def build_app(
         required: HookPart,
         optional: HookPart | None = None,
         *,
+        first: Ready | None = None,
         report_refusals: bool = False,
         answer: Callable[[str | None, str, str], dict[str, Any]] = hooks.answered,
     ) -> Response:
@@ -406,7 +414,9 @@ def build_app(
         The caller is authenticated from the headers before the body is read, so a hook without a valid personal token
         costs next to nothing. The required part always runs to completion, because it marks news as delivered and so
         must reach the member. The optional part (recall) is dropped if it can't start within the recall budget, or
-        runs past the budget once started.
+        runs past the budget once started. A `first` step, which the parts stand on (the prompt's embedding), has the
+        recall budget too; given up on, the required part runs without it and the optional part is dropped, since it
+        would wait on the same model.
         """
         headers = Headers(scope=request.scope)
         answer_format = request.query_params.get("format")
@@ -434,8 +444,9 @@ def build_app(
             if payload is None:
                 return JSONResponse({})
             named_event = hooks.event_in(payload, event)
+            ready = first is None or await within_recall_budget(first, current, payload) is not None
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
-            if optional is not None:
+            if optional is not None and ready:
                 parts.append(await within_recall_budget(optional, current, payload))
         except Refused:
             return JSONResponse({})
@@ -464,18 +475,28 @@ def build_app(
 
     @server.custom_route("/hooks/prompt-submitted", methods=["POST"])  # type: ignore[untyped-decorator]
     async def prompt_submitted(request: Request) -> Response:
+        # The prompt's embedding, made first and only when another session's activity can be compared with it. It is
+        # held for this request alone: neither the prompt nor its embedding is ever kept.
+        embedded: list[list[float] | None] = [None]
+
+        def embed_prompt(current: Caller, payload: dict[str, Any]) -> bool:
+            prompt, session = hooks.prompt_in(payload), session_of(current, payload)
+            if prompt and session:
+                embedded[0] = collisions.prompt_embedding(current, session, prompt)
+            return True
+
         def notices(current: Caller, payload: dict[str, Any]) -> str | None:
             # The session's part comes after the member's: what this session is told once. A module that has
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
-            told = [challenges.prompt_notices(current), *(waiting_for(current, session) if session else [])]
+            told = [challenges.prompt_notices(current), *(waiting_for(current, session, embedded[0]) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
             prompt = hooks.prompt_in(payload)
             return recall.for_prompt(current, prompt, session_of(current, payload)) if prompt else None
 
-        return await hook(request, "UserPromptSubmit", notices, recalled)
+        return await hook(request, "UserPromptSubmit", notices, recalled, first=embed_prompt)
 
     @server.custom_route("/hooks/session-start", methods=["POST"])  # type: ignore[untyped-decorator]
     async def session_start(request: Request) -> Response:

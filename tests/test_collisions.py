@@ -1,5 +1,5 @@
 """Collision warnings: a session is told, on its next prompt, of another active session in its project whose activity
-means nearly the same thing as its own.
+means nearly the same thing as its own activity or as that prompt.
 
 The server here runs the real model for everything but the activities in `CHOSEN`, whose embeddings are picked so each
 pair's similarity is a number the test chose, not one the model measured."""
@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
+import psycopg
 import pytest
 from anyio.from_thread import start_blocking_portal
 
@@ -36,6 +37,9 @@ BELOW = "Rewriting the webhook docs"
 INVOICES = "Splitting the invoice module"
 # A card's title, scoring 0.8 against WEBHOOKS.
 CARD = "Retry failed webhooks"
+# Prompts, embedded as queries: the first scores 0.8 against WEBHOOKS, the second 0.6.
+PROMPT = "Make the webhook sender retry a delivery that failed"
+PROMPT_BELOW = "Explain how our webhooks are signed"
 
 # Small whole numbers, so every similarity above comes out exact: 3 / (1 * 4) is 0.75 with nothing lost to rounding.
 CHOSEN: dict[str, list[float]] = {
@@ -46,25 +50,30 @@ CHOSEN: dict[str, list[float]] = {
     BELOW: [3, 4],
     INVOICES: [0, 0, 0, 0, 0, 1],
     CARD: [4, 3],
+    PROMPT: [4, 3],
+    PROMPT_BELOW: [3, 4],
 }
 
 
+def chosen(text: str) -> list[float]:
+    return CHOSEN[text] + [0.0] * (DIMENSIONS - len(CHOSEN[text]))
+
+
 class ChosenSimilarity(FastEmbedEmbedder):
-    """The real model, except that the activities in `CHOSEN` get the embeddings chosen for them, and that a query can
-    be made slower than the recall budget."""
+    """The real model, except that the activities and prompts in `CHOSEN` get the embeddings chosen for them, and that
+    a query can be made slower than the recall budget."""
 
     slow = False
 
     def passages(self, texts: list[str]) -> list[list[float]]:
         return [
-            CHOSEN[text] + [0.0] * (DIMENSIONS - len(CHOSEN[text])) if text in CHOSEN else super().passages([text])[0]
-            for text in texts
+            chosen(text) if text in CHOSEN else super().passages([text])[0] for text in texts
         ]
 
     def query(self, text: str) -> list[float]:
         if self.slow:
             time.sleep(3)
-        return super().query(text)
+        return chosen(text) if text in CHOSEN else super().query(text)
 
 
 @pytest.fixture(scope="module")
@@ -363,3 +372,91 @@ def test_an_activity_stated_through_one_worker_is_warned_about_by_another(
     assert "Olive Owner" in to_dana
     assert warnings(dana) == [], "what one worker told with a tool's answer the other does not repeat on a prompt"
     assert warnings(owner) == [], "one worker's warning is not repeated by the other"
+
+
+def test_a_first_prompt_scoring_above_the_threshold_against_another_sessions_activity_warns_it_on_that_prompt(
+    owner: Session, dana: Session
+) -> None:
+    """Before Dana's agent has stated any activity."""
+    state(owner, WEBHOOKS)
+
+    (to_dana,) = warnings(dana, PROMPT)
+
+    assert "Olive Owner's session" in to_dana
+    assert f'"{WEBHOOKS}"' in to_dana
+    assert warnings(dana, PROMPT) == [], "told once"
+
+
+def test_a_first_prompt_scoring_below_the_threshold_gives_no_warning(owner: Session, dana: Session) -> None:
+    state(owner, WEBHOOKS)
+
+    assert warnings(dana, PROMPT_BELOW) == []
+
+
+def test_a_prompt_is_never_compared_with_another_projects_sessions(owner: Session, dana: Session) -> None:
+    checkout = owner.call("create_project", name="Checkout")["project_id"]
+    state(owner, WEBHOOKS)
+
+    assert warnings(dana.in_project(checkout, "billing-api"), PROMPT) == []
+
+
+def test_a_members_own_other_session_is_warned_about_on_a_first_prompt(owner: Session) -> None:
+    state(owner, WEBHOOKS)
+
+    (to_second,) = warnings(owner.as_session("second-session"), PROMPT)
+
+    assert "Olive Owner's other session" in to_second
+
+
+def everything_kept(server: RunningServer) -> str:
+    """Every row of every table, as text: what any session or the console could ever be shown."""
+    with psycopg.connect(server.settings.database_url, autocommit=True) as conn:
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+            ).fetchall()
+        ]
+        return "\n".join(
+            str(row) for table in tables for row in conn.execute(f'SELECT * FROM "{table}"').fetchall()  # noqa: S608
+        )
+
+
+def test_a_prompt_that_collides_is_kept_nowhere(owner: Session, dana: Session, server: RunningServer) -> None:
+    state(owner, WEBHOOKS)
+    (to_dana,) = warnings(dana, PROMPT)
+
+    assert PROMPT not in to_dana
+    assert PROMPT not in added_context(owner.prompt("write a haiku about cats"))
+    assert PROMPT not in str(owner.call("briefing", session=owner.identifier))
+    assert PROMPT not in everything_kept(server)
+
+
+def kept_collisions(server: RunningServer, project: str) -> set[tuple[str, str, float, str]]:
+    """A project's collisions as kept: the later session's member, the earlier one's, the score and the cause."""
+    with psycopg.connect(server.settings.database_url, autocommit=True) as conn:
+        rows = conn.execute(
+            "SELECT later_member.name, earlier_member.name, collisions.score, collisions.cause FROM collisions"
+            " JOIN sessions later ON later.id = collisions.later_session_id"
+            " JOIN members later_member ON later_member.id = later.member_id"
+            " JOIN sessions earlier ON earlier.id = collisions.earlier_session_id"
+            " JOIN members earlier_member ON earlier_member.id = earlier.member_id"
+            " WHERE collisions.project_id = %s",
+            (project,),
+        ).fetchall()
+    return {(later, earlier, round(score, 6), cause) for later, earlier, score, cause in rows}
+
+
+def test_a_collision_is_kept_with_which_session_is_later_its_score_and_its_cause(
+    owner: Session, dana: Session, cole: Session, server: RunningServer
+) -> None:
+    state(owner, WEBHOOKS)
+    warnings(dana, PROMPT)
+    (to_cole,) = state(cole, RETRIES)
+    warnings(owner)
+
+    assert "Olive Owner" in to_cole, "activity against activity still warns"
+    assert kept_collisions(server, owner.project or "") == {
+        ("Dana Dev", "Olive Owner", 0.8, "prompt"),
+        ("Cole Coder", "Olive Owner", 0.8, "activity"),
+    }, "the earlier session's own warning does not make it the later one"
