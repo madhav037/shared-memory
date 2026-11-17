@@ -215,8 +215,8 @@ class Collided:
 
 class SessionTalk:
     """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions and gates, one
-    member's sessions' messages, and that member's replies and answers. Reading changes nothing: it marks no message
-    delivered, which the sessions' own calls do. A reply and an answer are `Talk`'s, the same operations the session
+    member's sessions' messages, and that member's replies and answers. Reading marks no message delivered, which the
+    sessions' own calls do; it keeps a gate whose wait has passed as timed out, as every read of a gate does. A reply and an answer are `Talk`'s, the same operations the session
     tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
     edits or promotes a memory (ADR-0009, ADR-0026)."""
 
@@ -243,9 +243,10 @@ class SessionTalk:
             for one in sorted(found.values(), key=lambda one: one.found_at)
         ]
 
-    def gated(self, project_id: str) -> list[Gate]:
-        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included."""
-        return self._gates.in_project(project_id)
+    def gated(self, caller: Caller, project_id: str) -> list[Gate]:
+        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included. A wait found
+        passed is kept as timed out, as any read of a gate does."""
+        return self._gates.in_project(caller, project_id)
 
     def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
         """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
@@ -757,7 +758,7 @@ class ConsoleApi:
                         for one in gate.waiting
                     ],
                 )
-                for gate in self._talk.gated(project.project_id)
+                for gate in self._talk.gated(caller, project.project_id)
             ],
             messages=[
                 SessionMessage(

@@ -386,7 +386,7 @@ def build_app(
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
-            *gates.waiting_notices(session),
+            *gates.waiting_notices(current, session),
             *gates.unhooked_notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
             *talk.waiting_notices(session),

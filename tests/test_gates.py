@@ -690,3 +690,23 @@ def test_the_earlier_session_no_hook_reaches_is_told_in_its_next_tool_result_tha
 
     assert collided
     assert "[gate]" in told and "Dana Dev (emp-2)" in told and "answer_gate" in told
+
+
+# A timeout is kept when either side reads it (#507 stories 17, 31), so a later session that stays quiet is still
+# recorded and the earlier member still told.
+
+
+def test_a_timeout_is_kept_and_told_when_the_earlier_session_hears_it_though_the_later_one_stays_quiet(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    heard(owner)
+    team.server.clock.advance(minutes=5)
+
+    told = heard(owner)
+
+    assert "Dana Dev's session" in told and "with no answer and goes ahead" in told
+    assert gate_entries(team.server, owner.project or "") == [
+        ("gate_timed_out", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
+    ], "recorded once, as the later member's"
+    assert "with no answer" not in heard(owner), "told once"

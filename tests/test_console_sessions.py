@@ -620,3 +620,19 @@ def test_what_a_member_did_in_the_console_reaches_their_own_session_once(
     assert "refused Dana Dev (emp-2)" in told and "halfway through the retries" in told
     assert "Pick the docs instead?" in told
     assert "[console]" not in heard(olive), "told once"
+
+
+def test_a_gate_whose_wait_passed_is_recorded_when_the_page_reads_it(console: Console, signed_out: ConsoleClient) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-timeout", 1454)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    console.clock.advance(minutes=6)
+
+    shown = page(signed_out, project)
+    response = signed_out.get(f"/api/audit?project={project}")
+
+    assert shown["gates"] == []
+    assert response.status_code == 200, response.text
+    timed_out = [event for event in response.json()["events"] if event["kind"] == "gate_timed_out"]
+    assert [(event["actor"], event["target"]) for event in timed_out] == [("emp-2", "E1001")]
