@@ -423,12 +423,13 @@ def seeded(
         raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
-        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message, and Olive's
-        # second session, which has none until a journey asks for a gate on Olive's work.
+        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message (she works in
+        # Copilot in VS Code, which has no hooks, so her session can't be gated, #518), and Olive's second session,
+        # which has none until a journey asks for a gate on Olive's work.
         teammates = Teammates(
             portal,
             Settings("", memory, memory),
-            mira.as_agent("claude-code").as_session("mira-retries"),
+            mira.as_agent("Visual Studio Code").as_session("mira-retries"),
             in_project.as_agent("claude-code").as_session("olive-split"),
             teammates_port,
         )

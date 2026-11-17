@@ -119,6 +119,8 @@ Each of them but Copilot in VS Code also has a hook before a file edit, which ch
 
 On Windows, Cline runs the `.ps1` script beside each of its others, and Codex runs its own PowerShell command; Cursor launches hooks through PowerShell, where the generated commands don't run, so its rule carries memory instead and its locks are guidance only.
 
+Sessions that talk are limited in Copilot in VS Code and in Cursor on Windows. With no hooks, their sessions can't be gated: a gate on their edits is only guidance, which `AGENTS.md`, Cursor's rule and the skill state. They hear messages, gates and collision warnings only in the `notices` of a Shared Memory tool that takes `session`, each once, and the console's Sessions page marks them as sessions that can't be gated.
+
 Wherever a hook doesn't brief a session, the server's instructions and the `AGENTS.md` section ask the agent to call `briefing` at the start of a task and `search` before answering. Each change is recorded with the agent it came from, whichever way it was made.
 
 ### Bring what you already have

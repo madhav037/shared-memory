@@ -334,6 +334,29 @@ def test_an_agent_with_no_before_edit_hook_is_told_its_locks_are_guidance_only(t
     assert "locks are guidance only" in files[".cursor/hooks.json"]["how"], "on Windows, where Cursor's hooks don't run"
 
 
+def test_the_member_connecting_an_agent_with_no_hooks_is_told_sessions_that_talk_are_limited_there(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for path, agent in ((".vscode/mcp.json", "Copilot in VS Code"), (".cursor/hooks.json", "Cursor on Windows")):
+        how = files[path]["how"]
+        assert f"Sessions that talk are limited in {agent}" in how, path
+        assert "can't be gated" in how, path
+    assert "Sessions that talk" not in files[".github/hooks/shared-memory.json"]["how"], "Copilot CLI has hooks"
+
+
+def test_an_agent_with_no_hooks_is_told_to_respect_a_gate_itself(team: Team) -> None:
+    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    files = by_path(created["files"])
+
+    for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
+        said = " ".join(files[path]["contents"].split())
+        assert "Copilot in VS Code and Cursor on Windows have no hooks" in said, path
+        assert "respect a gate yourself" in said, path
+        assert "edit no file of that work until it lifts" in said, path
+        assert "`notices`" in said, path
+
+
 def test_only_an_agent_with_no_before_edit_hook_is_told_to_take_a_lock_before_every_edit(team: Team) -> None:
     created = team.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])

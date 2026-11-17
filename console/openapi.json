@@ -2612,7 +2612,7 @@
         "type": "object"
       },
       "ActiveSession": {
-        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.",
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called.",
         "properties": {
           "member_id": {
             "title": "Member Id",
@@ -2693,6 +2693,10 @@
             },
             "title": "Locks",
             "type": "array"
+          },
+          "can_be_gated": {
+            "title": "Can Be Gated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2706,7 +2710,8 @@
           "last_seen_at",
           "branch",
           "touched_files",
-          "locks"
+          "locks",
+          "can_be_gated"
         ],
         "title": "ActiveSession",
         "type": "object"

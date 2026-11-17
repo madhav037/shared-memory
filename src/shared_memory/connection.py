@@ -451,6 +451,15 @@ BEFORE_EDIT_HOOK = (
 )
 GUIDANCE_ONLY = ("Copilot in VS Code", "Cursor on Windows")
 
+# What the member connecting one of the agents in GUIDANCE_ONLY is told (#518). It is in that agent's own connect
+# output, not the instructions every agent is given, which run close to what Claude Code keeps of them.
+TALK_LIMITED = (
+    "Sessions that talk are limited in {agent}: with no hooks, its sessions can't be gated, so a gate on their edits "
+    "is only guidance, and they hear messages, gates and collision warnings only in the result of a Shared Memory "
+    "tool, never while the agent works on other tools. The console's Sessions page marks them as sessions that "
+    "can't be gated."
+)
+
 # The session habits every agent is given, in AGENTS.md and in Cursor's rule alike. The skill says the same at length.
 SESSION_HABITS = f"""\
 - Pass `session`, the identifier the briefing named, to every tool that takes one. State the session's activity with
@@ -481,6 +490,10 @@ SESSION_HABITS = f"""\
 - A before-edit hook takes each file's lock for you in {", ".join(BEFORE_EDIT_HOOK[:-1])} and {BEFORE_EDIT_HOOK[-1]}.
   In any other coding agent ({", ".join(GUIDANCE_ONLY)}), call `take_lock` with the file's path from the repository's
   root before you edit the file.
+- {" and ".join(GUIDANCE_ONLY)} have no hooks, so nothing refuses a gated edit and news arrives only in the
+  `notices` of the tools that take `session`: state the activity with `set_activity`, read every `notices`, and
+  respect a gate yourself. When told this session's edits wait on a gate, edit no file of that work until it lifts,
+  and stop and ask the member, as for a refused edit.
 """
 
 
@@ -726,7 +739,8 @@ def connection_kit(
             how="Merge the input and the server into the file, keeping anything already there. VS Code asks each "
             "member for their personal token the first time and keeps it, and asks once to trust the server. Copilot in "
             "VS Code gets no hook from Shared Memory, so locks are guidance only there: AGENTS.md asks it to call "
-            "take_lock before it edits a file, and nothing stops an edit of a file another session holds.",
+            "take_lock before it edits a file, and nothing stops an edit of a file another session holds. "
+            f"{TALK_LIMITED.format(agent='Copilot in VS Code')}",
             contents=_json(
                 {
                     "inputs": [
@@ -833,7 +847,8 @@ def connection_kit(
             "starts, check or take a file's lock before Cursor's Write tool changes it, letting the edit through "
             f"when the server hasn't answered in {HOOK_SECONDS} seconds, and end the session. Cursor launches hooks "
             "through PowerShell on Windows, where these commands don't run; there the rule is what keeps memory in reach, "
-            "and locks are guidance only: the rule asks Cursor to call take_lock before it edits a file.",
+            "and locks are guidance only: the rule asks Cursor to call take_lock before it edits a file. "
+            f"{TALK_LIMITED.format(agent='Cursor on Windows')}",
             contents=_json(cursor_hooks(hooks_url, project_id, repository)),
         ),
         ConnectionFile(

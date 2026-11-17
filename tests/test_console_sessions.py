@@ -240,6 +240,29 @@ def test_a_session_whose_hooks_never_named_a_branch_or_a_file_shows_none(
     assert (shown["branch"], shown["touched_files"]) == (None, [])
 
 
+def test_a_session_in_a_coding_agent_with_no_hooks_is_marked_as_one_that_cannot_be_gated(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    """Copilot in VS Code makes tool calls only. Copilot CLI's session is known by the same agent's name, but its hooks
+    have called, so it can be gated; so can a Claude Code session, and one that has not said its agent (#518)."""
+    project, olive = a_project(console, signed_out, "olive-sessions-unhooked", 1434)
+    in_vs_code = olive.as_agent("Visual Studio Code").as_session("vs-code")
+    in_the_cli = olive.as_agent("Visual Studio Code").as_session("copilot-cli")
+    state(in_vs_code, "Retrying failed webhooks")
+    in_the_cli.start(format="copilot-cli")
+    state(in_the_cli, "Splitting the invoice module")
+    state(olive.as_agent("claude-code").as_session("in-claude-code"), "Moving the cart to the new API")
+    olive.as_session("unsaid").start()
+
+    shown = {one["activity"]: one for one in sessions(signed_out, project)}
+
+    assert shown["Retrying failed webhooks"]["agent"] == "GitHub Copilot"
+    assert shown["Retrying failed webhooks"]["can_be_gated"] is False
+    assert shown["Splitting the invoice module"]["can_be_gated"] is True, "its hooks have called"
+    assert shown["Moving the cart to the new API"]["can_be_gated"] is True
+    assert shown[None]["can_be_gated"] is True, "its agent is not known"
+
+
 # Sessions that talk (#516): the project's collisions and gates for every member who can reach it, and the signed-in
 # member's own sessions' messages. The same activity scores 1 against itself, so stating it twice collides.
 

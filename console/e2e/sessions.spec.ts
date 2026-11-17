@@ -101,6 +101,10 @@ test("a new gate and a new message appear on the Sessions page without reloading
 
   await expect(miraGated).toHaveCount(1);
   await expect(page.getByTestId("session")).toHaveCount(3);
+  // Her coding agent, Copilot in VS Code, has no hooks: nothing refuses her edits, and the page says so. Raj's can be.
+  const miraSession = page.getByTestId("session").filter({ hasText: "Mira Maker" });
+  await expect(miraSession.getByTestId("cannot-be-gated")).toHaveText("Can’t be gated");
+  await expect(page.getByTestId("session").filter({ hasText: "Raj Raiser" }).getByTestId("cannot-be-gated")).toHaveCount(0);
   const waitsForRaj = miraGated.getByTestId("gate-wait").filter({ hasText: "Raj Raiser" });
   await expect(waitsForRaj).toContainText("Adding backoff to the webhook retries");
   await expect(page.getByTestId("collision").filter({ hasText: "Mira Maker" }).first()).toContainText("Raj Raiser");

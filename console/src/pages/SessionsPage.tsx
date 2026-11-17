@@ -1,5 +1,13 @@
 import { Button, Textarea } from "@mantine/core";
-import { IconArrowsCross, IconBell, IconGitBranch, IconHourglass, IconLayoutColumns, IconMessage } from "@tabler/icons-react";
+import {
+  IconArrowsCross,
+  IconBell,
+  IconGitBranch,
+  IconHourglass,
+  IconLayoutColumns,
+  IconMessage,
+  IconShieldOff,
+} from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 
@@ -187,6 +195,16 @@ function Session({ session }: { session: ActiveSession }) {
           <span className="mark" data-testid="from-card" title="This session stated no activity">
             <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
             From their card in Doing
+          </span>
+        )}
+        {!session.can_be_gated && (
+          <span
+            className="mark"
+            data-testid="cannot-be-gated"
+            title="Its coding agent has no hooks, so nothing refuses its edits: a gate on it is only guidance"
+          >
+            <IconShieldOff size={14} stroke={1.6} aria-hidden />
+            Can’t be gated
           </span>
         )}
         <span>
