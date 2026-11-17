@@ -1205,6 +1205,9 @@ export interface components {
          *     there is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook
          *     before a tool last named it, None until one has; touched_files are the files its tool calls named, each a path
          *     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
+         *     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
+         *     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
+         *     and no hook of the session has called.
          */
         ActiveSession: {
             /** Member Id */
@@ -1235,6 +1238,8 @@ export interface components {
             touched_files: string[];
             /** Locks */
             locks: components["schemas"]["HeldLock"][];
+            /** Can Be Gated */
+            can_be_gated: boolean;
         };
         /**
          * GateWait

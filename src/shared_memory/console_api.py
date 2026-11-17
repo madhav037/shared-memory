@@ -287,6 +287,10 @@ class SessionTalk:
     def wait(self, project_id: str) -> timedelta:
         return timedelta(minutes=self._gates.wait(project_id))
 
+    def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
+        """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
+        return self._gates.can_be_gated([each.session for each in active])
+
     def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
         """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
         with self._db.transaction() as conn:
@@ -747,6 +751,7 @@ class ConsoleApi:
             active = self._activities.in_project(project.project_id)
             collided = self._talk.collided(active)
             wait = self._talk.wait(project.project_id)
+            gateable = self._talk.can_be_gated(active)
             names = self._names(caller.member)
             mine = caller.member_id
             return ProjectSessions(
@@ -797,6 +802,7 @@ class ConsoleApi:
                         branch=each.session.branch,
                         touched_files=list(each.session.touched_files),
                         locks=held.get(each.session.id, []),
+                        can_be_gated=gateable[each.session.id],
                     )
                     for each in active
                 ],
