@@ -11,6 +11,11 @@ limit's pace, up to a burst of a quarter of a minute's allowance. The buckets ar
 writes, as saves' turns are (ADR-0013), so running more workers never multiplies the allowance. The clock is the
 server's, so a test moves it by hand.
 
+The hooks a coding agent calls on every tool call, before it and after it (ADR-0025), are counted per personal token
+in a bucket of their own, `TOOL_HOOKS_MULTIPLE` times the personal token's limit: a fast agent calls them two at a
+time, many times a minute, and they must neither use up its prompts' and tools' allowance nor be limited themselves
+in ordinary work.
+
 The limiter never refuses a call because of its own fault: when a bucket can't be read or written, the call is allowed
 and the failure logged.
 """
@@ -44,6 +49,10 @@ log = logging.getLogger("shared_memory")
 
 # A burst is a minute's allowance divided by this: 30 calls at the default 120 a minute.
 BURST_DIVISOR = 4
+
+# The hooks on every tool call, and how many times a personal token's limit they may make a minute between them.
+TOOL_HOOK_PATHS = ("/hooks/before-edit", "/hooks/after-tool")
+TOOL_HOOKS_MULTIPLE = 4
 
 # The most of a refused MCP call's body that is read, to answer it in its own JSON-RPC shape.
 REFUSED_BODY_LIMIT = 64_000
@@ -156,24 +165,28 @@ class RateLimits:
         )
         return limits
 
-    def check(self, token: str | None, session: str | None, address: str | None) -> int | None:
+    def check(
+        self, token: str | None, session: str | None, address: str | None, tool_hook: bool = False
+    ) -> int | None:
         """Count one call, carrying this personal token and console session's cookie, if it carries them, from this
-        address. None lets it through; otherwise the whole seconds the caller must wait before a call is allowed
-        again."""
+        address; `tool_hook` says it is a hook on a tool call, which a personal token makes from its own allowance.
+        None lets it through; otherwise the whole seconds the caller must wait before a call is allowed again."""
         limits = self.limits()
         if not limits.on:
             return None
         if token and (token_id := self._identity.token_id(token)) is not None:
-            wait = self._count_call(f"token:{token_id}", limits.token_per_minute)
+            per_minute = limits.token_per_minute * (TOOL_HOOKS_MULTIPLE if tool_hook else 1)
+            key = f"{'tool-hooks' if tool_hook else 'token'}:{token_id}"
+            wait = self._count_call(key, per_minute)
             if wait is not None:
-                self._audit_limited(token_id, limits.token_per_minute)
+                self._audit_limited(token_id, per_minute, key)
             return wait
         if session and (member := self._console_sessions.member_pk_of(session)) is not None:
             return self._count_call(f"console:{member}", limits.console_per_minute)
         self._prune_if_due()
         return self._count_call(f"address:{address or 'unknown'}", limits.address_per_minute)
 
-    def _audit_limited(self, token_id: int, per_minute: int) -> None:
+    def _audit_limited(self, token_id: int, per_minute: int, key: str) -> None:
         """Write to the audit log that this personal token was limited, unless that was written within the hour, so
         the log shows a leaked token or a runaway agent without a flood of entries. A fault here is logged only."""
         now = self._clock()
@@ -182,7 +195,7 @@ class RateLimits:
                 first = conn.execute(
                     "UPDATE rate_buckets SET limited_audited_at = %s WHERE key = %s"
                     " AND (limited_audited_at IS NULL OR limited_audited_at < %s) RETURNING key",
-                    (now, f"token:{token_id}", now - AUDITED_EVERY),
+                    (now, key, now - AUDITED_EVERY),
                 ).fetchone()
             who = self._identity.token_member(token_id) if first else None
             if who is not None:
@@ -253,7 +266,8 @@ class RateLimited:
         peer = scope.get("client")
         address = peer[0] if peer else None
         try:
-            wait = await anyio.to_thread.run_sync(self._limits.check, token, session, address)
+            tool_hook = scope["path"] in TOOL_HOOK_PATHS
+            wait = await anyio.to_thread.run_sync(self._limits.check, token, session, address, tool_hook)
         except Exception:
             log.exception("The rate limit could not be checked; the call was allowed")
             wait = None
@@ -271,7 +285,11 @@ class RateLimited:
             return JSONResponse(await _tool_error(receive, message), status_code=429, headers=headers)
         if path.startswith("/hooks/"):
             # Nothing to add: a coding agent that reads the answer finds none, and one that stops at the status is
-            # as it is when the server is unreachable.
+            # as it is when the server is unreachable. A limited hook before an edit lets the edit through, gate or
+            # lock notwithstanding, as an unreachable server does: Shared Memory must never stop a member's coding
+            # agent working because it is down, slow or overloaded, and a hook can't tell those apart from its side.
+            # The hooks on tool calls have an allowance of their own, larger than any agent's ordinary pace, so a
+            # gated session meets this only when it floods the server.
             return JSONResponse({}, status_code=429, headers=headers)
         # What the console reads: its usual refusal, `message`, and how long the wait is.
         return JSONResponse({"message": message, "retry_after_seconds": wait}, status_code=429, headers=headers)

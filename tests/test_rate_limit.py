@@ -20,7 +20,7 @@ from starlette.testclient import TestClient
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
-from shared_memory.ratelimit import burst_of
+from shared_memory.ratelimit import TOOL_HOOKS_MULTIPLE, burst_of
 from tests.support import (
     REPO_ROOT,
     Console,
@@ -141,17 +141,39 @@ def test_a_prompt_hook_over_the_limit_adds_nothing(limited: RunningServer) -> No
     assert refused.json() == {}
 
 
-def test_a_before_edit_hook_over_the_limit_is_answered_as_when_the_server_is_unreachable(
-    limited: RunningServer,
-) -> None:
-    token = a_token(limited)
-    used_up(limited, token)
-
-    refused = httpx.post(
-        f"{limited.url}/hooks/before-edit",
+def before_tool(server: RunningServer, token: str, hook: str = "before-edit") -> httpx.Response:
+    """One call of the hook before a tool, or after one, as every tool call of a coding agent makes it."""
+    return httpx.post(
+        f"{server.url}/hooks/{hook}",
         json={"session_id": "s", "tool_name": "Edit", "tool_input": {"file_path": "/work/app/a.py"}},
         headers={"Authorization": f"Bearer {token}"},
     )
+
+
+def test_the_hooks_on_each_tool_call_have_their_own_larger_allowance(limited: RunningServer) -> None:
+    token = a_token(limited)
+    used_up(limited, token)
+
+    # A fast coding agent calls the hooks before and after every tool: they never use up its prompts' and tools'
+    # allowance, and they have several times as much of their own.
+    answered = [before_tool(limited, token, hook).status_code for hook in ("before-edit", "after-tool") * BURST]
+
+    assert answered == [200] * 2 * BURST
+    assert prompt(limited, token).status_code == 429, "the rest stay limited"
+
+
+def test_a_before_edit_hook_over_its_limit_is_answered_as_when_the_server_is_unreachable(
+    limited: RunningServer,
+) -> None:
+    token = a_token(limited)
+    burst = burst_of(PER_MINUTE * TOOL_HOOKS_MULTIPLE)
+    for allowed in range(burst + 5):
+        refused = before_tool(limited, token)
+        if refused.status_code == 429:
+            assert allowed == burst
+            break
+    else:
+        raise AssertionError("the hooks on each tool call were never limited")
 
     # The plugin's hook calls curl with --fail, so a 429 is the same failure to it as no answer; the body blocks nothing.
     assert refused.status_code == 429
