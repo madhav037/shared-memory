@@ -389,10 +389,10 @@ def seeded(
         raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
-        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message.
-        teammates = Teammates(
-            portal, Settings("", memory, memory), mira.as_agent("claude-code").as_session("mira-retries"), teammates_port
-        )
+        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message. She works in
+        # Copilot in VS Code, which has no hooks, so her session can't be gated (#518).
+        in_vs_code = mira.as_agent("Visual Studio Code").as_session("mira-retries")
+        teammates = Teammates(portal, Settings("", memory, memory), in_vs_code, teammates_port)
         running.callback(teammates.stop)
         # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
         # Olive's GitHub account. It saves and searches nothing, so it loads no model.
