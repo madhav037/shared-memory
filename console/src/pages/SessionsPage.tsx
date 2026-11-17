@@ -6,6 +6,7 @@ import {
   IconHourglass,
   IconLayoutColumns,
   IconMessage,
+  IconNotes,
   IconShieldOff,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +21,7 @@ import {
   type ProjectSessions,
   type SessionCollision,
   type SessionGate,
+  type SessionHandoffNote,
   type SessionMessage,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
@@ -140,6 +142,7 @@ export function SessionsPage() {
 
       {found.gates.length > 0 && <Gates found={found} onChanged={changed} />}
       {found.collisions.length > 0 && <Collisions collisions={found.collisions} />}
+      {found.handoff_notes.length > 0 && <HandoffNotes notes={found.handoff_notes} />}
       {found.messages.length > 0 && (
         <Messages projectId={found.project_id} messages={found.messages} onChanged={changed} />
       )}
@@ -448,6 +451,50 @@ function Collisions({ collisions }: { collisions: SessionCollision[] }) {
             <p className="talk-meta">
               Found from the later session’s {one.cause === "prompt" ? "prompt" : "activity"},{" "}
               <time dateTime={one.found_at}>{moment(one.found_at)}</time>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** The handoff notes of sessions gone lately, written by those sessions or the server: read here, never written. */
+function HandoffNotes({ notes }: { notes: SessionHandoffNote[] }) {
+  return (
+    <section className="talk" aria-label="Handoff notes" data-testid="handoff-notes">
+      <h2 className="talk-head">
+        <IconNotes size={18} stroke={1.6} aria-hidden />
+        Handoff notes from sessions gone lately
+      </h2>
+      <ul className="talk-list">
+        {notes.map((one) => (
+          <li key={`${one.member_id} ${one.written_at}`} data-testid="handoff-note">
+            <p className="talk-line">
+              <b title={one.member_id}>{one.member_name}</b>’s session
+              {[one.agent, one.repository].filter(Boolean).length > 0 &&
+                ` in ${[one.agent, one.repository].filter(Boolean).join(", ")}`}
+              {one.activity && (
+                <>
+                  , on <q>{one.activity}</q>
+                </>
+              )}
+            </p>
+            {one.done && (
+              <p className="talk-text" data-testid="handoff-done">
+                <b>Done:</b> {one.done}
+              </p>
+            )}
+            {one.left && (
+              <p className="talk-text" data-testid="handoff-left">
+                <b>Left:</b> {one.left}
+              </p>
+            )}
+            <p className="talk-meta">
+              {one.by_server ? "Put together by the server, as the session left none" : "Left by the session"},{" "}
+              <time dateTime={one.written_at}>{moment(one.written_at)}</time>
+              {one.branch && <> · branch {one.branch}</>}
+              {one.touched_files.length > 0 && <> · {one.touched_files.join(", ")}</>}
             </p>
           </li>
         ))}

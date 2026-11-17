@@ -20,6 +20,7 @@ What other modules stand on, all of it on `HandoffNotes`:
 - `leave(session, done, left)`: write this session's note, in place of any before; the note as it is told.
 - `note_of(session)`: the note of a session gone, as a later session is told it, or None when there is nothing to say.
 - `for_briefing(caller, session)`: the notes of the project's sessions gone lately, as the briefing lists them.
+- `recent(project_id)`: the same notes, each with its session, as the console's Sessions page shows them (#515).
 
 Only this module reads the `handoff_notes` table.
 """
@@ -207,19 +208,24 @@ class HandoffNotes:
         note = self._notes([session]).get(session.id)
         return told(session, note) if note is not None else None
 
+    def recent(self, project_id: str, but: Session | None = None) -> list[tuple[Session, Note]]:
+        """The notes of the project's sessions that ended or went idle within the recent-work window, but this one's,
+        each with its session, the most recently seen first."""
+        gone = [
+            each
+            for each, active in self._sessions.lately(project_id, self._recent)
+            if not active and (but is None or each.id != but.id)
+        ]
+        notes = self._notes(gone)
+        return [(each, notes[each.id]) for each in gone if each.id in notes]
+
     def for_briefing(self, caller: Caller, session: Session | None) -> list[str]:
         """The notes of the project's sessions that ended or went idle within the recent-work window, but the asking
         one's, the most recently seen first, as the briefing lists them. Nothing outside a project, or in one the
         member can't reach."""
         if caller.project is None or caller.project.project_id in caller.unreachable:
             return []
-        gone = [
-            each
-            for each, active in self._sessions.lately(caller.project.project_id, self._recent)
-            if not active and (session is None or each.id != session.id)
-        ]
-        notes = self._notes(gone)
-        listed = [told(each, notes[each.id]) for each in gone if each.id in notes][:BRIEFING_NOTES]
+        listed = [told(each, note) for each, note in self.recent(caller.project.project_id, session)][:BRIEFING_NOTES]
         if not listed:
             return []
         hours = round(self._recent.total_seconds() / 3600)

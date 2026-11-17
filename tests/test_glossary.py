@@ -164,6 +164,16 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "handoff.py",)),
     Allow("notes", "sessions' handoff notes, the glossary's Handoff note; never memories", (SERVER + "handoff.py",)),
     Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "app.py",)),
+    Allow(
+        "note",
+        "a session's handoff note on the console's Sessions page, the glossary's Handoff note; never a memory",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
+    ),
+    Allow(
+        "notes",
+        "sessions' handoff notes on the console's Sessions page, the glossary's Handoff note; never memories",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
+    ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
     Allow(
         "context",

@@ -41,6 +41,7 @@ export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
 export type SessionGate = components["schemas"]["SessionGate"];
 export type SessionMessage = components["schemas"]["SessionMessage"];
+export type SessionHandoffNote = components["schemas"]["SessionHandoffNote"];
 export type RateLimits = components["schemas"]["RateLimits"];
 export type LicenseState = components["schemas"]["LicenseState"];
 export type RateLimitChange = components["schemas"]["RateLimitChange"];

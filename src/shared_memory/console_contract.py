@@ -788,11 +788,33 @@ class GateAnswer(BaseModel):
     text: str | None = None
 
 
+class SessionHandoffNote(BaseModel):
+    """The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose
+    session it was, in which coding agent and repository, on which branch and with which files touched, what is done
+    and what is left, the activity it was written beside, whether the server put it together because the session left
+    none, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026)."""
+
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    branch: str | None
+    touched_files: list[str]
+    done: str
+    left: str
+    activity: str | None
+    by_server: bool
+    written_at: datetime
+    last_seen_at: datetime
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
-    gates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.
-    now is the server's clock when it answered. The page asks again every few seconds; asking changes nothing."""
+    gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
+    the signed-in member sees: their own sessions' messages, the oldest first.
+    now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
+    delivers no message."""
 
     project_id: str
     project_name: str
@@ -800,6 +822,7 @@ class ProjectSessions(BaseModel):
     sessions: list[ActiveSession]
     collisions: list[SessionCollision]
     gates: list[SessionGate]
+    handoff_notes: list[SessionHandoffNote]
     messages: list[SessionMessage]
 
 

@@ -57,6 +57,10 @@ TEAMMATES_PORT = 8127
 
 # Raj's activity in Billing, which Mira's session states too when a journey asks, so the two collide.
 RAJS_ACTIVITY = "Adding backoff to the webhook retries"
+# What Raj's earlier session in Billing worked on, and the handoff note it left when it ended.
+RAJS_DOCS = "Writing the webhook retry docs"
+RAJS_DONE = "The retry docs page and its examples."
+RAJS_LEFT = "A section on the backoff settings."
 # What Mira's session sends Olive when a journey asks.
 MIRAS_MESSAGE = "Is the retry UI yours? I can take the back end."
 # The work Olive's second session in Billing states, and Mira's second session too, when a journey asks: Mira's is then
@@ -421,6 +425,12 @@ def seeded(
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
         # Its hook before a tool has named its branch and a file it read.
         raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
+        # Raj's earlier session, which wrote the retry docs, left a handoff note and ended: the page shows its note.
+        raj_docs = dana.as_agent("claude-code").as_session("raj-docs")
+        raj_docs.call("set_activity", activity=RAJS_DOCS, session=raj_docs.identifier)
+        raj_docs.use(read_tool(f"{WORKING_FOLDER}/docs/webhooks.md"), branch="docs/webhook-retries")
+        raj_docs.call("leave_handoff_note", session=raj_docs.identifier, done=RAJS_DONE, left=RAJS_LEFT)
+        raj_docs.end()
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
         # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message (she works in

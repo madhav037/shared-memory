@@ -1359,6 +1359,45 @@ export interface components {
             waits_for: components["schemas"]["GateWait"][];
         };
         /**
+         * SessionHandoffNote
+         * @description The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose
+         *     session it was, in which coding agent and repository, on which branch and with which files touched, what is done
+         *     and what is left, the activity it was written beside, whether the server put it together because the session left
+         *     none, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026).
+         */
+        SessionHandoffNote: {
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Touched Files */
+            touched_files: string[];
+            /** Done */
+            done: string;
+            /** Left */
+            left: string;
+            /** Activity */
+            activity: string | null;
+            /** By Server */
+            by_server: boolean;
+            /**
+             * Written At
+             * Format: date-time
+             */
+            written_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /**
          * SessionMessage
          * @description A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
          *         for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
@@ -1395,8 +1434,10 @@ export interface components {
          * ProjectSessions
          * @description A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
          *     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
-         *     gates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.
-         *     now is the server's clock when it answered. The page asks again every few seconds; asking changes nothing.
+         *     gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
+         *     the signed-in member sees: their own sessions' messages, the oldest first.
+         *     now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
+         *     delivers no message.
          */
         ProjectSessions: {
             /** Project Id */
@@ -1414,6 +1455,8 @@ export interface components {
             collisions: components["schemas"]["SessionCollision"][];
             /** Gates */
             gates: components["schemas"]["SessionGate"][];
+            /** Handoff Notes */
+            handoff_notes: components["schemas"]["SessionHandoffNote"][];
             /** Messages */
             messages: components["schemas"]["SessionMessage"][];
         };

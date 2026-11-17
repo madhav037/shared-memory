@@ -28,6 +28,15 @@ test("a project's Sessions page lists its active sessions, their activity and th
   await expect(raj.getByTestId("session-touched")).toContainText("src/webhooks/retry.ts");
   await expect(raj).not.toContainText("Read");
   await expect(raj).toContainText("Started");
+
+  // Raj's earlier session ended and left a handoff note, which the page shows and never lets anyone write.
+  const note = page.getByTestId("handoff-note").filter({ hasText: "Raj Raiser" });
+  await expect(note).toContainText("Writing the webhook retry docs");
+  await expect(note.getByTestId("handoff-done")).toHaveText("Done: The retry docs page and its examples.");
+  await expect(note.getByTestId("handoff-left")).toHaveText("Left: A section on the backoff settings.");
+  await expect(note).toContainText("branch docs/webhook-retries");
+  await expect(note).toContainText("docs/webhooks.md");
+  await expect(page.getByTestId("handoff-notes").getByRole("button")).toHaveCount(0);
   await expect(raj).toContainText("Last call");
 
   // Olive's stated none, so it shows her card in Doing, and says that is where it comes from.

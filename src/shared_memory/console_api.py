@@ -24,6 +24,7 @@ from shared_memory.activity import Activities, SessionActivity
 from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
+from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import Exchanged, Messages
 from shared_memory.sessions import Session
 from shared_memory.talk import Talk
@@ -70,7 +71,8 @@ from shared_memory.console_contract import (
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
-    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionMessage,
+    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
+    SessionMessage,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -220,10 +222,19 @@ class SessionTalk:
     tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
     edits or promotes a memory (ADR-0009, ADR-0026)."""
 
-    def __init__(self, collisions: Collisions, gates: Gates, messages: Messages, talk: Talk, clock: Clock) -> None:
+    def __init__(
+        self,
+        collisions: Collisions,
+        gates: Gates,
+        messages: Messages,
+        handoff_notes: HandoffNotes,
+        talk: Talk,
+        clock: Clock,
+    ) -> None:
         self._collisions = collisions
         self._gates = gates
         self._messages = messages
+        self._handoff_notes = handoff_notes
         self._talk = talk
         self._clock = clock
 
@@ -251,6 +262,11 @@ class SessionTalk:
     def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
         """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
         return self._gates.can_be_gated([each.session for each in active])
+
+    def handoff_notes(self, project_id: str) -> list[tuple[Session, Note]]:
+        """The handoff notes of the project's sessions gone lately, each with its session, the most recently seen
+        first. A session gone idle without one gets one put together the first time it is asked for (#515)."""
+        return self._handoff_notes.recent(project_id)
 
     def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
         """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
@@ -759,6 +775,23 @@ class ConsoleApi:
                     ],
                 )
                 for gate in self._talk.gated(caller, project.project_id)
+            ],
+            handoff_notes=[
+                SessionHandoffNote(
+                    member_id=gone.member_id,
+                    member_name=gone.member_name,
+                    agent=gone.agent,
+                    repository=gone.repository,
+                    branch=gone.branch,
+                    touched_files=list(gone.touched_files),
+                    done=note.done,
+                    left=note.left,
+                    activity=note.activity,
+                    by_server=note.by_server,
+                    written_at=note.written_at,
+                    last_seen_at=gone.last_seen_at,
+                )
+                for gone, note in self._talk.handoff_notes(project.project_id)
             ],
             messages=[
                 SessionMessage(

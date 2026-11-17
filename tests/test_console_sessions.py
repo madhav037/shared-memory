@@ -636,3 +636,19 @@ def test_a_gate_whose_wait_passed_is_recorded_when_the_page_reads_it(console: Co
     assert response.status_code == 200, response.text
     timed_out = [event for event in response.json()["events"] if event["kind"] == "gate_timed_out"]
     assert [(event["actor"], event["target"]) for event in timed_out] == [("emp-2", "E1001")]
+
+
+def test_the_handoff_notes_of_sessions_gone_lately_show_on_the_page(console: Console, signed_out: ConsoleClient) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-handoff", 1455)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev").as_agent("claude-code")
+    state(dana, WEBHOOKS)
+    dana.use(read_tool(f"{WORKING_FOLDER}/{RETRY}"), branch="webhook-retries")
+    dana.call("leave_handoff_note", session=dana.identifier, done="The retry loop.", left="The settings page.")
+    dana.end()
+    state(olive, "Tidying the invoices")
+
+    (note,) = page(signed_out, project)["handoff_notes"]
+
+    assert (note["member_name"], note["agent"], note["branch"]) == ("Dana Dev", "Claude Code", "webhook-retries")
+    assert (note["done"], note["left"], note["activity"]) == ("The retry loop.", "The settings page.", WEBHOOKS)
+    assert note["touched_files"] == [RETRY] and note["by_server"] is False
