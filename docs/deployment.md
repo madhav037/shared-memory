@@ -321,6 +321,30 @@ own model, at or above `SHARED_MEMORY_COLLISION_THRESHOLD` (default 0.75, option
 with a small embedding model. Raise it if members are warned about work that isn't the same; lower it if two sessions
 doing the same work were not warned.
 
+## How long a gated session waits
+
+When a session's prompt or activity collides with another member's active session, the later session's file edits are
+refused until each earlier session's member agrees, or the project's wait has passed with no answer, or its member
+says it is different work; an earlier member's refusal holds past the wait, until their session ends or goes idle
+([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
+wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
+in `.env`). The same wait bounds an urgent message: the later session may send one per collision, and the earlier
+session's edits wait until its member answers or the wait has passed since it was sent. Each agree, refuse, timeout,
+urgent message and "different work" is in the audit log with the collision's score, never an answer's or a message's
+text, for tuning the threshold above.
+
+## How long messages between sessions are kept
+
+A session can send a message to another session in its project with the `send_message` tool. A message is kept for
+`SHARED_MEMORY_MESSAGE_KEPT_DAYS` (default 7, optional in `.env`), delivered or not. One sent to a session that ended or
+went idle within `SHARED_MEMORY_RECENT_WORK_HOURS` (default 24, optional) waits for its member's next session in the
+project; one to a session gone longer is refused.
+
+The same window is how long a session that ended or went idle counts as recent work: a later session whose prompt
+matches its activity is reminded who worked on it, and given its handoff note. A handoff note, written with
+`leave_handoff_note` or put together by the server when a session ends or goes idle without one, is kept for
+`SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS` (default 7, optional). Notes are never saved as memory.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

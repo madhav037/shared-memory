@@ -30,9 +30,13 @@ BY_TOOL = "another agent, billing-api"
 BY_HOOK = "billing-api"
 
 
+#: The member ID of each member the tests' sessions belong to, which a briefing names to send a message to.
+MEMBER_IDS = {"Olive Owner": "owner-1", "Dana Dev": "emp-2", "Cole Coder": "emp-3"}
+
+
 def line(member: str, activity: str, where: str = BY_TOOL) -> str:
     """One active session as a briefing lists it."""
-    return f"- {member} ({where}): {activity}"
+    return f"- {member} ({MEMBER_IDS[member]}, {where}): {activity}"
 
 
 def state(session: Session, activity: str) -> None:

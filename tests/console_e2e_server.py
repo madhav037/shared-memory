@@ -4,9 +4,11 @@ lapsed, so it is read-only (#472)."""
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 import tempfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import date
@@ -14,12 +16,17 @@ from pathlib import Path
 
 import psycopg
 from anyio.from_thread import BlockingPortal, start_blocking_portal
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from tests.license_keys import TEST_PUBLIC_KEYS, a_key
 from tests.support import (
     REPO_ROOT,
+    WORKING_FOLDER,
     FakeGitHub,
     FakePlatform,
     RunningServer,
@@ -29,7 +36,10 @@ from tests.support import (
     challenge,
     fresh_database,
     promote_keeping_both,
+    added_context,
     promote_now,
+    read_tool,
+    search_tool,
 )
 
 CONSOLE = "http://127.0.0.1:4273"
@@ -44,6 +54,92 @@ DEFAULT_GITHUB_PORT = 8126
 HOSTED_CONSOLE = "http://127.0.0.1:4274"
 HOSTED_PORT = 8128
 PLATFORM_PORT = 8129
+# Where a journey asks a teammate's session to act while it watches the console (console/e2e/helpers.ts names it).
+TEAMMATES_PORT = 8127
+
+# Raj's activity in Billing, which Mira's session states too when a journey asks, so the two collide.
+RAJS_ACTIVITY = "Adding backoff to the webhook retries"
+# What Raj's earlier session in Billing worked on, and the handoff note it left when it ended.
+RAJS_DOCS = "Writing the webhook retry docs"
+RAJS_DONE = "The retry docs page and its examples."
+RAJS_LEFT = "A section on the backoff settings."
+# What Mira's session sends Olive when a journey asks.
+MIRAS_MESSAGE = "Is the retry UI yours? I can take the back end."
+# The work Olive's second session in Billing states, and Mira's second session too, when a journey asks: Mira's is then
+# gated on Olive's work, for Olive to answer from the console.
+SPLIT_ACTIVITY = "Splitting the invoice module into its own package"
+# What Mira's second session asks Olive, for Olive to reply to from the console.
+MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
+
+
+def olives_token(settings: Settings, seeded: str) -> str:
+    """A new personal token for the member the seeded token is for, issued beside any she has. The my-token journey
+    replaces Olive's own token, which revokes every one she had, so the teammate stand-in can't keep the seeded one:
+    whichever journey runs first, it asks for a token that works."""
+    token = "smt_" + secrets.token_urlsafe(32)
+    with psycopg.connect(settings.database_url, autocommit=True) as conn:
+        conn.execute(
+            "INSERT INTO tokens (member_id, token_hash, created_at)"
+            " SELECT member_id, %s, now() FROM tokens WHERE token_hash = %s",
+            (hashlib.sha256(token.encode()).hexdigest(), hashlib.sha256(seeded.encode()).hexdigest()),
+        )
+    return token
+
+
+class Teammates:
+    """Stands in for a teammate at her coding agent while a journey watches the Sessions page: on `POST /collide` Mira's
+    session in Billing states Raj's activity, so it collides with his and is gated; on `POST /message` it sends Olive a
+    message. On `POST /gate-olive` a second session of Olive's states a piece of work and a second session of Mira's
+    states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
+    question; `GET /heard` says what Mira's second session hears on its next tool call. Each is the session's own call
+    over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
+    personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
+
+    def __init__(
+        self,
+        portal: BlockingPortal,
+        settings: Settings,
+        mira: Session,
+        olive: Callable[[], Session],
+        port: int = 0,
+    ) -> None:
+        mira_split = mira.as_session("mira-split")
+
+        def collide(request: Request) -> Response:
+            mira.call("set_activity", activity=RAJS_ACTIVITY, session=mira.identifier)
+            return JSONResponse({"collided": True})
+
+        def message(request: Request) -> Response:
+            mira.call("send_message", session=mira.identifier, to="E1001", text=MIRAS_MESSAGE)
+            return JSONResponse({"sent": True})
+
+        def gate_olive(request: Request) -> Response:
+            olives = olive()
+            olives.call("set_activity", activity=SPLIT_ACTIVITY, session=olives.identifier)
+            mira_split.call("set_activity", activity=SPLIT_ACTIVITY, session=mira_split.identifier)
+            return JSONResponse({"gated": True})
+
+        def ask_olive(request: Request) -> Response:
+            mira_split.call("send_message", session=mira_split.identifier, to="E1001", text=MIRAS_QUESTION)
+            return JSONResponse({"sent": True})
+
+        def heard(request: Request) -> Response:
+            return JSONResponse({"heard": added_context(mira_split.use(search_tool("invoices")))})
+
+        app = Starlette(
+            routes=[
+                Route("/collide", collide, methods=["POST"]),
+                Route("/message", message, methods=["POST"]),
+                Route("/gate-olive", gate_olive, methods=["POST"]),
+                Route("/ask-olive", ask_olive, methods=["POST"]),
+                Route("/heard", heard, methods=["GET"]),
+            ]
+        )
+        self._server = RunningServer(app, settings, TestClock(), portal, port=port)
+        self.url = self._server.url
+
+    def stop(self) -> None:
+        self._server.stop()
 
 
 def github_port(env: Mapping[str, str] = os.environ) -> int:
@@ -60,6 +156,7 @@ class Seeded:
     hosted: RunningServer
     platform: FakePlatform
     project: str
+    teammates: Teammates
 
 
 @contextmanager
@@ -72,6 +169,7 @@ def seeded(
     github_port: int = 0,
     hosted_port: int = 0,
     platform_port: int = 0,
+    teammates_port: int = 0,
 ) -> Iterator[Seeded]:
     """Start the journeys' servers and seed them, and stop them on the way out. Port 0 takes any free port. A seed that
     no longer holds raises here, so tests/test_e2e_seed.py catches it without a browser (#373)."""
@@ -346,10 +444,31 @@ def seeded(
         # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the
         # journeys' clock never moves. Reporting has no session, for the page that says so.
         raj = dana.as_agent("claude-code").as_session("raj-backoff")
-        raj.call("set_activity", activity="Adding backoff to the webhook retries", session=raj.identifier)
+        raj.call("set_activity", activity=RAJS_ACTIVITY, session=raj.identifier)
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
+        # Its hook before a tool has named its branch and a file it read.
+        raj.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.ts"), branch="feature/webhook-backoff")
+        # Raj's earlier session, which wrote the retry docs, left a handoff note and ended: the page shows its note.
+        raj_docs = dana.as_agent("claude-code").as_session("raj-docs")
+        raj_docs.call("set_activity", activity=RAJS_DOCS, session=raj_docs.identifier)
+        raj_docs.use(read_tool(f"{WORKING_FOLDER}/docs/webhooks.md"), branch="docs/webhook-retries")
+        raj_docs.call("leave_handoff_note", session=raj_docs.identifier, done=RAJS_DONE, left=RAJS_LEFT)
+        raj_docs.end()
         olive = in_project.as_agent("codex").as_session("olive-invoices")
         olive.call("take_lock", path="src/invoices/split.ts", session=olive.identifier)
+        # Mira, who has no session until a journey asks her teammate stand-in to collide or send a message (she works in
+        # Copilot in VS Code, which has no hooks, so her session can't be gated, #518), and Olive's second session,
+        # which has none until a journey asks for a gate on Olive's work.
+        teammates = Teammates(
+            portal,
+            Settings("", memory, memory),
+            mira.as_agent("Visual Studio Code").as_session("mira-retries"),
+            lambda: Session(
+                server, olives_token(settings, token), project, "billing-api", "claude-code", "olive-split"
+            ),
+            teammates_port,
+        )
+        running.callback(teammates.stop)
         # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
         # Olive's GitHub account. It saves and searches nothing, so it loads no model.
         hosted_memory = memory.parent / "hosted-memory"
@@ -391,7 +510,7 @@ def seeded(
             a_key(team="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
         )
 
-        yield Seeded(server, github, hosted, platform, project)
+        yield Seeded(server, github, hosted, platform, project, teammates)
 
 
 if __name__ == "__main__":
@@ -404,6 +523,7 @@ if __name__ == "__main__":
             github_port=github_port(),
             hosted_port=HOSTED_PORT,
             platform_port=PLATFORM_PORT,
+            teammates_port=TEAMMATES_PORT,
         ) as seed,
     ):
         print(f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True)

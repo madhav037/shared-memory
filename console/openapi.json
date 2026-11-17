@@ -697,7 +697,7 @@
     "/api/projects/{project_id}/sessions": {
       "get": {
         "operationId": "project_sessions",
-        "summary": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        "summary": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,7 +710,91 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+            "description": "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sessions/messages": {
+      "post": {
+        "operationId": "send_message",
+        "summary": "Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageToSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sessions/gates/{member_id}/answer": {
+      "post": {
+        "operationId": "answer_gate",
+        "summary": "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GateAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2528,7 +2612,7 @@
         "type": "object"
       },
       "ActiveSession": {
-        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server.",
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called.",
         "properties": {
           "member_id": {
             "title": "Member Id",
@@ -2585,12 +2669,34 @@
             "title": "Last Seen At",
             "type": "string"
           },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "touched_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Touched Files",
+            "type": "array"
+          },
           "locks": {
             "items": {
               "$ref": "#/components/schemas/HeldLock"
             },
             "title": "Locks",
             "type": "array"
+          },
+          "can_be_gated": {
+            "title": "Can Be Gated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2602,9 +2708,41 @@
           "from_card",
           "started_at",
           "last_seen_at",
-          "locks"
+          "branch",
+          "touched_files",
+          "locks",
+          "can_be_gated"
         ],
         "title": "ActiveSession",
+        "type": "object"
+      },
+      "GateWait": {
+        "description": "One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.\nrefused says its member refused: the gate then holds past until, while that session stays active. on_my_work says\nthe earlier session is the signed-in member's, so they may agree or refuse from the console.",
+        "properties": {
+          "earlier": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "boolean"
+          },
+          "on_my_work": {
+            "title": "On My Work",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "earlier",
+          "until",
+          "refused",
+          "on_my_work"
+        ],
+        "title": "GateWait",
         "type": "object"
       },
       "HeldLock": {
@@ -2638,8 +2776,279 @@
         "title": "HeldLock",
         "type": "object"
       },
+      "NamedSession": {
+        "description": "An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has\nsaid which) and its activity (None when it has none). session_number tells it apart from the same member's other\nsessions, so the page can tell two gates between the same two members apart; it is not the identifier its coding\nagent sends, which never leaves its member (ADR-0018).",
+        "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          }
+        },
+        "required": [
+          "session_number",
+          "member_id",
+          "member_name",
+          "agent",
+          "activity"
+        ],
+        "title": "NamedSession",
+        "type": "object"
+      },
+      "SessionCollision": {
+        "description": "Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made\nthe collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown.",
+        "properties": {
+          "later": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "earlier": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "cause": {
+            "enum": [
+              "prompt",
+              "activity"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "found_at": {
+            "format": "date-time",
+            "title": "Found At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "later",
+          "earlier",
+          "cause",
+          "found_at"
+        ],
+        "title": "SessionCollision",
+        "type": "object"
+      },
+      "SessionGate": {
+        "description": "A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the\ngate stops waiting for each when the project's wait has passed, or at once when its member says it is different\nwork. The page counts the time left down from now (the server's clock when it answered) to each until.",
+        "properties": {
+          "later": {
+            "$ref": "#/components/schemas/NamedSession"
+          },
+          "waits_for": {
+            "items": {
+              "$ref": "#/components/schemas/GateWait"
+            },
+            "title": "Waits For",
+            "type": "array"
+          }
+        },
+        "required": [
+          "later",
+          "waits_for"
+        ],
+        "title": "SessionGate",
+        "type": "object"
+      },
+      "SessionHandoffNote": {
+        "description": "The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose\nsession it was, in which coding agent and repository, on which branch and with which files touched, what is done\nand what is left, the activity it was written beside, whether the server put it together because the session left\nnone, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026).",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "touched_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Touched Files",
+            "type": "array"
+          },
+          "done": {
+            "title": "Done",
+            "type": "string"
+          },
+          "left": {
+            "title": "Left",
+            "type": "string"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          },
+          "by_server": {
+            "title": "By Server",
+            "type": "boolean"
+          },
+          "written_at": {
+            "format": "date-time",
+            "title": "Written At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "branch",
+          "touched_files",
+          "done",
+          "left",
+          "activity",
+          "by_server",
+          "written_at",
+          "last_seen_at"
+        ],
+        "title": "SessionHandoffNote",
+        "type": "object"
+      },
+      "SessionMessage": {
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message. urgent says it gates the recipient's session on the colliding work until their member\nanswers it, which a reply does.",
+        "properties": {
+          "message_id": {
+            "title": "Message Id",
+            "type": "integer"
+          },
+          "sender_member_id": {
+            "title": "Sender Member Id",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "recipient_member_id": {
+            "title": "Recipient Member Id",
+            "type": "string"
+          },
+          "recipient_name": {
+            "title": "Recipient Name",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "sent_at": {
+            "format": "date-time",
+            "title": "Sent At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "sent_by_me": {
+            "title": "Sent By Me",
+            "type": "boolean"
+          },
+          "urgent": {
+            "title": "Urgent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message_id",
+          "sender_member_id",
+          "sender_name",
+          "recipient_member_id",
+          "recipient_name",
+          "text",
+          "sent_at",
+          "delivered_at",
+          "sent_by_me",
+          "urgent"
+        ],
+        "title": "SessionMessage",
+        "type": "object"
+      },
       "ProjectSessions": {
-        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them.",
+        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its\ngates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only\nthe signed-in member sees: their own sessions' messages, the oldest first.\nnow is the server's clock when it answered. The page asks again every few seconds; asking changes no session and\ndelivers no message. text_limit is the most characters a reply or an answer's words may have.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2649,20 +3058,114 @@
             "title": "Project Name",
             "type": "string"
           },
+          "now": {
+            "format": "date-time",
+            "title": "Now",
+            "type": "string"
+          },
+          "text_limit": {
+            "title": "Text Limit",
+            "type": "integer"
+          },
           "sessions": {
             "items": {
               "$ref": "#/components/schemas/ActiveSession"
             },
             "title": "Sessions",
             "type": "array"
+          },
+          "collisions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionCollision"
+            },
+            "title": "Collisions",
+            "type": "array"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/SessionGate"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "handoff_notes": {
+            "items": {
+              "$ref": "#/components/schemas/SessionHandoffNote"
+            },
+            "title": "Handoff Notes",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/SessionMessage"
+            },
+            "title": "Messages",
+            "type": "array"
           }
         },
         "required": [
           "project_id",
           "project_name",
-          "sessions"
+          "now",
+          "text_limit",
+          "sessions",
+          "collisions",
+          "gates",
+          "handoff_notes",
+          "messages"
         ],
         "title": "ProjectSessions",
+        "type": "object"
+      },
+      "MessageToSend": {
+        "description": "A message from the signed-in member's session in the project to another member's sessions there, such as a\nreply: the member it is for, by member ID, and its text, at most text_limit characters.",
+        "properties": {
+          "to": {
+            "title": "To",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "text"
+        ],
+        "title": "MessageToSend",
+        "type": "object"
+      },
+      "GateAnswer": {
+        "description": "The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,\nat most text_limit characters.",
+        "properties": {
+          "answer": {
+            "enum": [
+              "agree",
+              "refuse"
+            ],
+            "title": "Answer",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "GateAnswer",
         "type": "object"
       },
       "CardDetail": {
@@ -3423,7 +3926,13 @@
               "rate_limits_changed",
               "license_installed",
               "token_limited",
-              "team_exported"
+              "team_exported",
+              "gate_timed_out",
+              "different_work",
+              "project_wait_changed",
+              "gate_agreed",
+              "gate_refused",
+              "urgent_message"
             ],
             "title": "Kind",
             "type": "string"

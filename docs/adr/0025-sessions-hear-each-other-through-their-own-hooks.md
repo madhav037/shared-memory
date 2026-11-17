@@ -11,3 +11,5 @@ Members on different networks want their sessions to know what the others are do
 
 - A hook on every tool call is one more small call to the server per tool call.
 - An idle agent cannot be reached; only its member can.
+- Four agents hear their news on a hook after each tool instead (Gemini CLI's AfterTool, Copilot CLI's postToolUse, Cursor's and Devin Desktop's postToolUse/PostToolUse): their hook before a tool can stop it but takes no added context, so news given there would be thrown away. Their hook before a tool still reports the session's place and refuses gated or locked edits. Those hooks on every tool call have an allowance of their own under the rate limit, so a fast agent calling two per tool is not limited in ordinary work.
+- Copilot CLI's hooks post to the server themselves and run no shell, so they cannot name the session's git branch: its sessions show their touched files but no branch.

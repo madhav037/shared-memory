@@ -352,10 +352,44 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+        /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
         get: operations["project_sessions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sessions/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt. */
+        post: operations["send_message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sessions/gates/{member_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt. */
+        post: operations["answer_gate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1202,7 +1236,12 @@ export interface components {
          * @description One active session of a member's coding agent. agent is None until the session has said which coding agent it
          *     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
          *     for a session that stated none it is the title of its member's card in Doing, and from_card says so; None when
-         *     there is neither. last_seen_at is when the session last called the server.
+         *     there is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook
+         *     before a tool last named it, None until one has; touched_files are the files its tool calls named, each a path
+         *     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
+         *     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
+         *     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
+         *     and no hook of the session has called.
          */
         ActiveSession: {
             /** Member Id */
@@ -1227,8 +1266,32 @@ export interface components {
              * Format: date-time
              */
             last_seen_at: string;
+            /** Branch */
+            branch: string | null;
+            /** Touched Files */
+            touched_files: string[];
             /** Locks */
             locks: components["schemas"]["HeldLock"][];
+            /** Can Be Gated */
+            can_be_gated: boolean;
+        };
+        /**
+         * GateWait
+         * @description One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.
+         *     refused says its member refused: the gate then holds past until, while that session stays active. on_my_work says
+         *     the earlier session is the signed-in member's, so they may agree or refuse from the console.
+         */
+        GateWait: {
+            earlier: components["schemas"]["NamedSession"];
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+            /** Refused */
+            refused: boolean;
+            /** On My Work */
+            on_my_work: boolean;
         };
         /**
          * HeldLock
@@ -1251,17 +1314,185 @@ export interface components {
             last_used_at: string;
         };
         /**
+         * NamedSession
+         * @description An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has
+         *     said which) and its activity (None when it has none). session_number tells it apart from the same member's other
+         *     sessions, so the page can tell two gates between the same two members apart; it is not the identifier its coding
+         *     agent sends, which never leaves its member (ADR-0018).
+         */
+        NamedSession: {
+            /** Session Number */
+            session_number: number;
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Activity */
+            activity: string | null;
+        };
+        /**
+         * SessionCollision
+         * @description Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made
+         *     the collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown.
+         */
+        SessionCollision: {
+            later: components["schemas"]["NamedSession"];
+            earlier: components["schemas"]["NamedSession"];
+            /**
+             * Cause
+             * @enum {string}
+             */
+            cause: "prompt" | "activity";
+            /**
+             * Found At
+             * Format: date-time
+             */
+            found_at: string;
+        };
+        /**
+         * SessionGate
+         * @description A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the
+         *     gate stops waiting for each when the project's wait has passed, or at once when its member says it is different
+         *     work. The page counts the time left down from now (the server's clock when it answered) to each until.
+         */
+        SessionGate: {
+            later: components["schemas"]["NamedSession"];
+            /** Waits For */
+            waits_for: components["schemas"]["GateWait"][];
+        };
+        /**
+         * SessionHandoffNote
+         * @description The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose
+         *     session it was, in which coding agent and repository, on which branch and with which files touched, what is done
+         *     and what is left, the activity it was written beside, whether the server put it together because the session left
+         *     none, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026).
+         */
+        SessionHandoffNote: {
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Touched Files */
+            touched_files: string[];
+            /** Done */
+            done: string;
+            /** Left */
+            left: string;
+            /** Activity */
+            activity: string | null;
+            /** By Server */
+            by_server: boolean;
+            /**
+             * Written At
+             * Format: date-time
+             */
+            written_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /**
+         * SessionMessage
+         * @description A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
+         *         for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
+         *         (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
+         *     apart from every other message. urgent says it gates the recipient's session on the colliding work until their member
+         *     answers it, which a reply does.
+         */
+        SessionMessage: {
+            /** Message Id */
+            message_id: number;
+            /** Sender Member Id */
+            sender_member_id: string;
+            /** Sender Name */
+            sender_name: string;
+            /** Recipient Member Id */
+            recipient_member_id: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Text */
+            text: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Sent By Me */
+            sent_by_me: boolean;
+            /** Urgent */
+            urgent: boolean;
+        };
+        /**
          * ProjectSessions
          * @description A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
-         *     or gone idle is not among them.
+         *     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
+         *     gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
+         *     the signed-in member sees: their own sessions' messages, the oldest first.
+         *     now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
+         *     delivers no message. text_limit is the most characters a reply or an answer's words may have.
          */
         ProjectSessions: {
             /** Project Id */
             project_id: string;
             /** Project Name */
             project_name: string;
+            /**
+             * Now
+             * Format: date-time
+             */
+            now: string;
+            /** Text Limit */
+            text_limit: number;
             /** Sessions */
             sessions: components["schemas"]["ActiveSession"][];
+            /** Collisions */
+            collisions: components["schemas"]["SessionCollision"][];
+            /** Gates */
+            gates: components["schemas"]["SessionGate"][];
+            /** Handoff Notes */
+            handoff_notes: components["schemas"]["SessionHandoffNote"][];
+            /** Messages */
+            messages: components["schemas"]["SessionMessage"][];
+        };
+        /**
+         * MessageToSend
+         * @description A message from the signed-in member's session in the project to another member's sessions there, such as a
+         *     reply: the member it is for, by member ID, and its text, at most text_limit characters.
+         */
+        MessageToSend: {
+            /** To */
+            to: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * GateAnswer
+         * @description The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
+         *     at most text_limit characters.
+         */
+        GateAnswer: {
+            /**
+             * Answer
+             * @enum {string}
+             */
+            answer: "agree" | "refuse";
+            /**
+             * Text
+             * @default null
+             */
+            text: string | null;
         };
         /**
          * CardDetail
@@ -1557,7 +1788,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -2716,7 +2947,60 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds. */
+            /** @description A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    send_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageToSend"];
+            };
+        };
+        responses: {
+            /** @description Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    answer_gate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GateAnswer"];
+            };
+        };
+        responses: {
+            /** @description Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt. */
             200: {
                 headers: {
                     [name: string]: unknown;

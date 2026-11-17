@@ -37,6 +37,11 @@ export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
+export type NamedSession = components["schemas"]["NamedSession"];
+export type SessionCollision = components["schemas"]["SessionCollision"];
+export type SessionGate = components["schemas"]["SessionGate"];
+export type SessionMessage = components["schemas"]["SessionMessage"];
+export type SessionHandoffNote = components["schemas"]["SessionHandoffNote"];
 export type RateLimits = components["schemas"]["RateLimits"];
 export type LicenseState = components["schemas"]["LicenseState"];
 export type RateLimitChange = components["schemas"]["RateLimitChange"];
@@ -327,6 +332,20 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
 /** A project's active sessions, the oldest first, each with its activity and the files it holds a lock on. */
 export function fetchSessions(projectId: string, signal?: AbortSignal): Promise<ProjectSessions> {
   return ask<ProjectSessions>(`/api/projects/${encodeURIComponent(projectId)}/sessions`, { signal });
+}
+
+function sessionsPath(projectId: string, rest: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/sessions/${rest}`;
+}
+
+/** Send a message, such as a reply, from the signed-in member's session in the project; answers with the page anew. */
+export function sendMessage(projectId: string, to: string, text: string): Promise<ProjectSessions> {
+  return change<ProjectSessions>(sessionsPath(projectId, "messages"), { to, text });
+}
+
+/** Agree to or refuse the gate a member's session has on the signed-in member's session's work. */
+export function answerGate(projectId: string, memberId: string, answer: "agree" | "refuse"): Promise<ProjectSessions> {
+  return change<ProjectSessions>(sessionsPath(projectId, `gates/${encodeURIComponent(memberId)}/answer`), { answer });
 }
 
 /** One card whole, with its links and comments. */

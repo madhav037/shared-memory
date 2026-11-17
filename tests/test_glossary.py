@@ -134,12 +134,45 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "collision",
         "two sessions on the same work, the glossary's Collision; avoided only for a contradiction between memories",
-        (SERVER + "app.py", SERVER + "collisions.py", SERVER + "config.py"),
+        (
+            SERVER + "app.py",
+            SERVER + "collisions.py",
+            SERVER + "config.py",
+            SERVER + "gates.py",
+            SERVER + "talk.py",
+            SERVER + "console_api.py",
+            SERVER + "console_contract.py",
+            PAGES + "SessionsPage.tsx",
+            "console/src/api/client.ts",
+        ),
     ),
     Allow(
         "activity",
         "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
-        (SERVER + "collisions.py",),
+        (SERVER + "collisions.py", SERVER + "gates.py"),
+    ),
+    Allow(
+        "activity",
+        "the activity a handoff note is put together from, the glossary's Activity; avoided only for the audit log",
+        (SERVER + "handoff.py",),
+    ),
+    Allow(
+        "collision",
+        "the recent work a handoff note's session collides with, the glossary's Collision; not a contradiction",
+        (SERVER + "handoff.py",),
+    ),
+    Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "handoff.py",)),
+    Allow("notes", "sessions' handoff notes, the glossary's Handoff note; never memories", (SERVER + "handoff.py",)),
+    Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "app.py",)),
+    Allow(
+        "note",
+        "a session's handoff note on the console's Sessions page, the glossary's Handoff note; never a memory",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
+    ),
+    Allow(
+        "notes",
+        "sessions' handoff notes on the console's Sessions page, the glossary's Handoff note; never memories",
+        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
     ),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
     Allow(
