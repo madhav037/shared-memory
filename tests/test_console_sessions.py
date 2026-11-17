@@ -301,7 +301,7 @@ def test_a_collision_and_the_gate_it_makes_show_who_is_later_who_it_waits_for_an
 def test_a_gate_leaves_the_page_when_its_member_says_different_work_or_the_wait_has_passed(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    project, olive = a_project(console, signed_out, "olive-sessions-lifted", 1434)
+    project, olive = a_project(console, signed_out, "olive-sessions-lifted", 1457)
     dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
     cole = member_session(signed_out, console, project, "emp-3", "Cole Coder")
     state(olive, WEBHOOKS)
@@ -564,7 +564,8 @@ def test_a_reply_from_the_console_answers_the_urgent_message_that_gates_the_memb
 
     assert "[gated]" in json.dumps(gated)
     assert replied.status_code == 200, replied.text
-    assert olive.edit(RETRY) == {}, "the urgent message is answered, so the edit goes ahead"
+    allowed = olive.edit(RETRY).get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+    assert allowed, "the urgent message is answered, so the edit goes ahead, whatever news its answer carries"
 
 
 def test_an_urgent_message_shows_as_urgent_on_the_page(console: Console, signed_out: ConsoleClient) -> None:
