@@ -253,7 +253,7 @@ def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
         lines.append(
             f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {_left(now, each.until)} of the project's "
             f"wait (until {each.until.isoformat()}), unless your member answers. To answer in your member's words, "
-            f'call send_message with to "{who.member_id}", or answer_gate with gate "{who.member_id}".'
+            f'call send_message with to "{who.member_id}", or answer_gate with member "{who.member_id}".'
         )
     lines.append(
         "Don't edit, and don't decide alone: finish the step you are on, then stop, show your member the urgent "
@@ -282,7 +282,7 @@ def _started(later: Session, until: datetime) -> str:
         "same work as this "
         "one: its edits on that work wait until your member agrees, or until the project's wait passes with no answer "
         f"(at {until.isoformat()}). Finish the step you are on, then stop and ask your member whether that session may "
-        f'go ahead. With their answer, call answer_gate with gate "{later.member_id}" and answer "agree" or '
+        f'go ahead. With their answer, call answer_gate with member "{later.member_id}" and answer "agree" or '
         '"refuse", never on your own judgment. A refusal holds the gate until this session ends or goes idle.'
     )
 
@@ -687,8 +687,8 @@ class Gates:
         theirs = self._gates_of(session, later_member)
         if not theirs:
             raise Refused(
-                f"No gate of {later_member!r} waits on this session's work. Pass the member ID the gate's notice "
-                "named, with this session's identifier as session: only the earlier session's own member answers."
+                f"No gate of {later_member!r} waits on this session's work. Pass as member the member ID the gate's "
+                "notice named, with this session's identifier as session: only the earlier session's own member answers."
             )
         # An answer to their gate answers each urgent message of theirs too, whatever became of the gate.
         urgents = [later.member_name for later, _ in self._answer_urgents(session, later_member)]

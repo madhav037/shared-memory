@@ -299,8 +299,8 @@ def test_a_change_to_the_wait_is_in_the_audit_log(team: Team, dana: Session) -> 
 # The earlier member's answer (#512)
 
 
-def answer_gate(session: Session, gate: str, answer: str, text: str | None = None) -> dict[str, Any]:
-    arguments: dict[str, Any] = {"session": session.identifier, "gate": gate, "answer": answer}
+def answer_gate(session: Session, member: str, answer: str, text: str | None = None) -> dict[str, Any]:
+    arguments: dict[str, Any] = {"session": session.identifier, "member": member, "answer": answer}
     if text is not None:
         arguments["text"] = text
     answered: dict[str, Any] = session.call("answer_gate", **arguments)
@@ -390,7 +390,7 @@ def test_an_agreement_cannot_be_turned_into_a_refusal(owner: Session, dana: Sess
     collide(owner, dana)
     answer_gate(owner, "emp-2", "agree")
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="refuse")
 
     assert "agreed" in refused
 
@@ -447,8 +447,8 @@ def test_with_two_earlier_sessions_one_refusal_keeps_the_gate(
 def test_only_the_earlier_sessions_own_member_can_answer(owner: Session, dana: Session, cole: Session) -> None:
     collide(owner, dana)
 
-    by_another = cole.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="agree")
-    by_the_later = dana.refusal("answer_gate", session=dana.identifier, gate="emp-2", answer="agree")
+    by_another = cole.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="agree")
+    by_the_later = dana.refusal("answer_gate", session=dana.identifier, member="emp-2", answer="agree")
 
     assert "No gate" in by_another and "No gate" in by_the_later
     assert GATED in reason_in(dana.edit(FILE)), "still gated"
@@ -458,7 +458,7 @@ def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Sessi
     collide(owner, dana)
     team.server.clock.advance(minutes=5)
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="refuse")
 
     assert "wait" in refused
     assert dana.edit(FILE) == ALLOWED
@@ -467,7 +467,7 @@ def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Sessi
 def test_an_answer_other_than_agree_or_refuse_is_refused(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="maybe")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="maybe")
 
     assert '"agree"' in refused and '"refuse"' in refused
 

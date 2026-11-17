@@ -1181,13 +1181,13 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
-    def answer_gate(session: str, gate: str, answer: str, ctx: Context, text: str | None = None) -> dict[str, Any]:
-        """Send your member's answer, never your own, to another member's gate on this session's work. gate is the
+    def answer_gate(session: str, member: str, answer: str, ctx: Context, text: str | None = None) -> dict[str, Any]:
+        """Send your member's answer, never your own, to another member's gate on this session's work. member is the
         gated member's member ID, as the notice named them; answer is "agree" or "refuse". A refusal holds until this
         session ends or goes idle and may become agree; an agreement stands. text is your member's words for them."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        answered = talk.answer(current, calling, gate, answer, text)
+        answered = talk.answer(current, calling, member, answer, text)
         return {"session": calling.identifier, "answered": answered, "notices": waiting_for(current, calling)}
 
     @server.tool()
