@@ -82,7 +82,7 @@ def told(session: Session, note: Note) -> str:
     whose = f"{session.member_name}'s session ({where})"
     if note.by_server:
         head = (
-            f"[handoff note] Put together by the server from {whose}'s activity, branch and touched files, because it "
+            f"[handoff note] This note was put together by the server from {whose}'s activity, branch and touched files, because it "
             f"ended or went idle without one, at {note.written_at.isoformat()}."
         )
     else:
