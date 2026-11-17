@@ -544,3 +544,79 @@ def test_an_answer_is_agree_or_refuse_and_a_gate_that_has_ended_takes_none(
     assert too_late.status_code == 403
     assert dana.edit(RETRY) == {}
 
+
+
+# A reply or an answer from the console is the same operation as the session tool's (ADR-0026), and what the member
+# did there reaches their own session on its next hook (story 38).
+
+
+def test_a_reply_from_the_console_answers_the_urgent_message_that_gates_the_members_session(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-urgent", 1449)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Can I take the retries?", urgent=True)
+    gated = olive.edit(RETRY)
+
+    replied = reply(signed_out, project, "emp-2", "Yes, take them.")
+
+    assert "[gated]" in json.dumps(gated)
+    assert replied.status_code == 200, replied.text
+    assert olive.edit(RETRY) == {}, "the urgent message is answered, so the edit goes ahead"
+
+
+def test_an_urgent_message_shows_as_urgent_on_the_page(console: Console, signed_out: ConsoleClient) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-urgent-shown", 1450)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Are you on the retries?")
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Please answer.", urgent=True)
+
+    shown = page(signed_out, project)["messages"]
+
+    assert [(one["text"], one["urgent"]) for one in shown] == [
+        ("Are you on the retries?", False),
+        ("Please answer.", True),
+    ]
+
+
+def test_a_reply_from_the_console_stops_the_recent_work_reminder(console: Console, signed_out: ConsoleClient) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-heed", 1451)
+    dana_token = add(signed_out, "emp-2", "Dana Dev", "dana-console-heed")["personal_token"]
+    dana = Session(console.server, dana_token).in_project(project, "billing-api").as_session("dana-first")
+    state(olive, WEBHOOKS)
+    olive.end()
+    console.clock.advance(minutes=10)
+    state(dana, WEBHOOKS)
+    reminded = added_context(dana.prompt("Retry the failed webhooks."))
+    danas_console = signed_in(console, "dana-console-heed", 1452)
+
+    replied = reply(danas_console, project, "E1001", "I am picking up the retries.")
+
+    assert "[recent work]" in reminded
+    assert replied.status_code == 200, replied.text
+    assert "[recent work]" not in added_context(dana.prompt("Retry the failed webhooks."))
+    danas_console.close()
+
+
+def test_what_a_member_did_in_the_console_reaches_their_own_session_once(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-own", 1453)
+    olive.start()
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    heard(olive)
+
+    answer(signed_out, project, "emp-2", "refuse", "I am halfway through the retries.")
+    reply(signed_out, project, "emp-2", "Pick the docs instead?")
+    told = heard(olive)
+
+    assert "[console]" in told
+    assert "refused Dana Dev (emp-2)" in told and "halfway through the retries" in told
+    assert "Pick the docs instead?" in told
+    assert "[console]" not in heard(olive), "told once"

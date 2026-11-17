@@ -80,6 +80,7 @@ class Exchanged:
     text: str
     sent_at: datetime
     delivered_at: datetime | None
+    urgent: bool = False
 
 
 @dataclass(frozen=True)
@@ -209,9 +210,9 @@ class Messages:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT MIN(id) AS message_id, sender_member_id, sender_name, recipient_member_id, text, sent_at,"
-                " MIN(delivered_at) AS delivered_at FROM messages"
+                " urgent, MIN(delivered_at) AS delivered_at FROM messages"
                 " WHERE project_id = %s AND (recipient_member_id = %s OR sender_member_id = %s) AND sent_at > %s"
-                " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at"
+                " GROUP BY sender_session_id, sender_member_id, sender_name, recipient_member_id, text, sent_at, urgent"
                 " ORDER BY sent_at, MIN(id)",
                 (project_id, member_id, member_id, self._clock() - self._kept),
             ).fetchall()
@@ -224,6 +225,7 @@ class Messages:
                 row["text"],
                 row["sent_at"],
                 row["delivered_at"],
+                row["urgent"],
             )
             for row in rows
         ]

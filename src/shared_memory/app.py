@@ -64,6 +64,7 @@ from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
+from shared_memory.talk import Talk
 from shared_memory.store import MemoryStore
 from shared_memory.uses import Uses
 
@@ -283,6 +284,7 @@ def build_app(
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
     messages = Messages(settings, db, sessions, clock)
+    talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
 
@@ -371,7 +373,8 @@ def build_app(
     ) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
         takeover or other end of a lock it held, each possible collision, how each gate on its work ended, each
-        message sent to it, the recent work of sessions gone that it matches, with their handoff notes (#515), and,
+        message sent to it, what its member did for it from the console, the recent work of sessions gone that it
+        matches, with their handoff notes (#515), and,
         for a later session no hook has reached, that its gate waits (#518). The one place it is gathered: the
         prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
         no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
@@ -386,6 +389,7 @@ def build_app(
             *gates.waiting_notices(session),
             *gates.unhooked_notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
+            *talk.waiting_notices(session),
             *recent_work(current, session, prompt),
         ]
 
@@ -1181,7 +1185,7 @@ def build_app(
         session ends or goes idle and may become agree; an agreement stands. text is your member's words for them."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        answered = gates.answer(current, calling, gate, answer, text)
+        answered = talk.answer(current, calling, gate, answer, text)
         return {"session": calling.identifier, "answered": answered, "notices": waiting_for(current, calling)}
 
     @server.tool()
@@ -1194,14 +1198,7 @@ def build_app(
         earlier session's edits until its member answers or the wait passes; one per collision."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        if urgent:
-            messages.check(text)
-            gated = gates.urgent_for(calling, to)
-        sent = messages.send(current, calling, to, text, urgent=urgent)
-        if urgent:
-            gates.send_urgent(current, calling, gated)
-        gates.replied(calling, to)
-        collisions.heed(calling, to.strip())
+        sent = talk.send(current, calling, to, text, urgent=urgent)
         return {
             "session": calling.identifier,
             "to": sent.to,
@@ -1395,7 +1392,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(settings, sessions, collisions, gates, messages, clock),
+            SessionTalk(collisions, gates, messages, talk, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

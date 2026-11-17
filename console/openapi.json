@@ -2873,7 +2873,7 @@
         "type": "object"
       },
       "SessionMessage": {
-        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message.",
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message. urgent says it gates the recipient's session on the colliding work until their member\nanswers it, which a reply does.",
         "properties": {
           "message_id": {
             "title": "Message Id",
@@ -2919,6 +2919,10 @@
           "sent_by_me": {
             "title": "Sent By Me",
             "type": "boolean"
+          },
+          "urgent": {
+            "title": "Urgent",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2930,7 +2934,8 @@
           "text",
           "sent_at",
           "delivered_at",
-          "sent_by_me"
+          "sent_by_me",
+          "urgent"
         ],
         "title": "SessionMessage",
         "type": "object"

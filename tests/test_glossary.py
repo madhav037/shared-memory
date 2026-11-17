@@ -139,6 +139,7 @@ ALLOWED: tuple[Allow, ...] = (
             SERVER + "collisions.py",
             SERVER + "config.py",
             SERVER + "gates.py",
+            SERVER + "talk.py",
             SERVER + "console_api.py",
             SERVER + "console_contract.py",
             PAGES + "SessionsPage.tsx",

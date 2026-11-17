@@ -1363,7 +1363,8 @@ export interface components {
          * @description A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
          *         for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
          *         (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
-         *     apart from every other message.
+         *     apart from every other message. urgent says it gates the recipient's session on the colliding work until their member
+         *     answers it, which a reply does.
          */
         SessionMessage: {
             /** Message Id */
@@ -1387,6 +1388,8 @@ export interface components {
             delivered_at: string | null;
             /** Sent By Me */
             sent_by_me: boolean;
+            /** Urgent */
+            urgent: boolean;
         };
         /**
          * ProjectSessions

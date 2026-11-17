@@ -555,6 +555,16 @@ function Messages({
               ) : (
                 `waiting for ${one.sent_by_me ? "their" : "your"} session`
               )}
+              {one.urgent && (
+                <>
+                  {" · "}
+                  <b className="talk-urgent" data-testid="message-urgent">
+                    {one.sent_by_me
+                      ? "urgent: their session’s edits on this work wait for an answer"
+                      : "urgent: your session’s edits on this work wait until you reply"}
+                  </b>
+                </>
+              )}
             </p>
             <p className="talk-text" data-testid="message-text">
               {one.text}

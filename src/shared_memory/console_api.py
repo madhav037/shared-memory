@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time
 from typing import Any
 from urllib.parse import quote
 
@@ -25,7 +25,8 @@ from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
 from shared_memory.messages import Exchanged, Messages
-from shared_memory.sessions import Session, Sessions
+from shared_memory.sessions import Session
+from shared_memory.talk import Talk
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -215,25 +216,16 @@ class Collided:
 class SessionTalk:
     """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions and gates, one
     member's sessions' messages, and that member's replies and answers. Reading changes nothing: it marks no message
-    delivered and keeps no gate as timed out, which the sessions' own calls do. A reply and an answer go through the
-    same `Messages.send` and `Gates.answer` the session tools call, from one of the member's own sessions, and are
-    audited as those are. Nothing here saves, edits or promotes a memory (ADR-0009, ADR-0026)."""
+    delivered, which the sessions' own calls do. A reply and an answer are `Talk`'s, the same operations the session
+    tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
+    edits or promotes a memory (ADR-0009, ADR-0026)."""
 
-    def __init__(
-        self,
-        settings: Settings,
-        sessions: Sessions,
-        collisions: Collisions,
-        gates: Gates,
-        messages: Messages,
-        clock: Clock,
-    ) -> None:
-        self._sessions = sessions
+    def __init__(self, collisions: Collisions, gates: Gates, messages: Messages, talk: Talk, clock: Clock) -> None:
         self._collisions = collisions
         self._gates = gates
         self._messages = messages
+        self._talk = talk
         self._clock = clock
-        self._recent = timedelta(hours=settings.recent_work_hours)
 
     def now(self) -> datetime:
         return self._clock()
@@ -264,44 +256,16 @@ class SessionTalk:
         return self._messages.exchanged(project_id, member_id)
 
     def send(self, caller: Caller, to: str, text: str) -> None:
-        """Send a message from the caller's session in the project: an active one, the most recently seen first, or
-        else the one last seen in the recent-work window."""
-        project_id = caller.require_project().project_id
-        own = [
-            (each, active)
-            for each, active in self._sessions.lately(project_id, self._recent)
-            if each.member_id == caller.member_id
-        ]
-        if not own:
-            hours = round(self._recent.total_seconds() / 3600)
-            raise Refused(
-                f"None of your sessions is active in this project, or was in the last {hours} hours, so the message "
-                "has no session to come from. Start a coding agent in this project, then send it."
-            )
-        sender = next((each for each, active in own if active), own[0][0])
-        self._messages.send(caller, sender, to, text)
+        """Send a message from the caller's session in the project that `Talk.speaking` picks."""
+        self._talk.send(caller, self._talk.speaking(caller), to, text, from_console=True)
 
-    def answer(self, caller: Caller, gate: str, answer: str, text: str | None) -> list[str]:
-        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions' work,
-        from each of the caller's sessions it waits for. The names of the members answered."""
-        project_id = caller.require_project().project_id
-        member_id = gate.strip()
-        mine: dict[int, Session] = {}
-        for one in self._gates.in_project(project_id):
-            if one.later.session.member_id != member_id:
-                continue
-            for wait in one.waiting:
-                if wait.earlier.member_id == caller.member_id:
-                    mine.setdefault(wait.earlier.id, wait.earlier)
-        if not mine:
-            raise Refused(
-                f"No gate of {member_id!r} waits on your sessions' work now: its member may have said it is different "
-                "work, the project's wait may have passed, or you have already agreed. To tell them something, send "
-                "them a message."
-            )
+    def answer(self, caller: Caller, member_id: str, answer: str, text: str | None) -> list[str]:
+        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions'
+        work, or answers their urgent message, from each of the caller's sessions it concerns. The names of the members
+        answered."""
         answered: list[str] = []
-        for session in mine.values():
-            for name in self._gates.answer(caller, session, member_id, answer, text):
+        for session in self._talk.answering(caller, member_id):
+            for name in self._talk.answer(caller, session, member_id, answer, text, from_console=True):
                 if name not in answered:
                     answered.append(name)
         return answered
@@ -806,6 +770,7 @@ class ConsoleApi:
                     sent_at=one.sent_at,
                     delivered_at=one.delivered_at,
                     sent_by_me=one.sender_member_id == mine,
+                    urgent=one.urgent,
                 )
                 for one in self._talk.messages(project.project_id, mine)
             ],

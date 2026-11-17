@@ -757,7 +757,8 @@ class SessionMessage(BaseModel):
     """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
     (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
-apart from every other message."""
+apart from every other message. urgent says it gates the recipient's session on the colliding work until their member
+answers it, which a reply does."""
 
     message_id: int
     sender_member_id: str
@@ -768,6 +769,7 @@ apart from every other message."""
     sent_at: datetime
     delivered_at: datetime | None
     sent_by_me: bool
+    urgent: bool
 
 
 class MessageToSend(BaseModel):
