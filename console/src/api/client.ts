@@ -333,6 +333,20 @@ export function fetchSessions(projectId: string, signal?: AbortSignal): Promise<
   return ask<ProjectSessions>(`/api/projects/${encodeURIComponent(projectId)}/sessions`, { signal });
 }
 
+function sessionsPath(projectId: string, rest: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/sessions/${rest}`;
+}
+
+/** Send a message, such as a reply, from the signed-in member's session in the project; answers with the page anew. */
+export function sendMessage(projectId: string, to: string, text: string): Promise<ProjectSessions> {
+  return change<ProjectSessions>(sessionsPath(projectId, "messages"), { to, text });
+}
+
+/** Agree to or refuse the gate a member's session has on the signed-in member's session's work. */
+export function answerGate(projectId: string, memberId: string, answer: "agree" | "refuse"): Promise<ProjectSessions> {
+  return change<ProjectSessions>(sessionsPath(projectId, `gates/${encodeURIComponent(memberId)}/answer`), { answer });
+}
+
 /** One card whole, with its links and comments. */
 export function fetchCard(projectId: string, number: number, signal?: AbortSignal): Promise<CardDetail> {
   return ask<CardDetail>(`/api/projects/${encodeURIComponent(projectId)}/cards/${number}`, { signal });

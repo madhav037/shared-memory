@@ -1,6 +1,7 @@
 """A project's active sessions in the console: who is working in it, on what, and the files each session holds a lock
-on. Read through the console's JSON API under the same reach as the project's board, and read only: nothing the
-console can ask changes a session, an activity or a lock (ADR-0009, spec #220)."""
+on. Read through the console's JSON API under the same reach as the project's board. Nothing the console can ask
+changes a session, an activity or a lock (ADR-0009, spec #220); a member may only reply to a message and agree to or
+refuse a gate on their own session's work (ADR-0026, #517)."""
 
 from __future__ import annotations
 
@@ -8,6 +9,9 @@ import json
 from datetime import datetime
 from typing import Any
 
+import httpx
+
+from shared_memory.console_api import SAVING
 from shared_memory.console_contract import DECLARATIONS
 from tests.support import (
     WORKING_FOLDER,
@@ -15,6 +19,7 @@ from tests.support import (
     ConsoleClient,
     Session,
     add,
+    added_context,
     ask,
     read_tool,
     search_tool,
@@ -196,8 +201,11 @@ def test_the_console_can_change_no_session_activity_or_lock(console: Console, si
     tried = [signed_out.post(f"/api/projects/{project}/sessions"), signed_out.post(f"/api/projects/{project}/locks")]
 
     assert [(one.operation_id, one.method, one.changes) for one in about_sessions] == [
-        ("project_sessions", "GET", False)
-    ]
+        ("project_sessions", "GET", False),
+        ("send_message", "POST", True),
+        ("answer_gate", "POST", True),
+    ], "the only changes are a message and a gate's answer (ADR-0026)"
+    assert not SAVING & {"send_message", "answer_gate"}, "neither saves, edits or promotes a memory (ADR-0009)"
     assert all(one.status_code in (404, 405) for one in tried), [one.status_code for one in tried]
     (still,) = sessions(signed_out, project)
     assert (still["activity"], [lock["path"] for lock in still["locks"]]) == ("Retrying failed webhooks", [RETRY])
@@ -348,7 +356,8 @@ def test_a_member_sees_their_own_sessions_messages_and_no_one_elses(
         ("Dana Dev", "Olive Owner", "Do you have the retry UI?", False),
         ("Olive Owner", "Dana Dev", "Yes, take the back end.", True),
     ]
-    assert all(one["delivered_at"] is None for one in olives), "neither has reached its recipient's session yet"
+    assert olives[0]["delivered_at"] is not None, "Olive's send_message call was told of Dana's message"
+    assert olives[1]["delivered_at"] is None, "Dana's session has made no call since"
     assert [one["text"] for one in coles] == ["Lunch at one?"], "only what Cole's own session sent"
     coles_console.close()
 
@@ -388,3 +397,150 @@ def test_a_restricted_projects_collisions_gates_and_messages_stay_inside_its_acc
     assert shut_out.status_code == 403
     assert WEBHOOKS not in shut_out.text and "retry UI" not in shut_out.text and "Dana Dev" not in shut_out.text
     cole.close()
+
+
+# Answering from the console (#517, ADR-0026): a member replies to a message and agrees to or refuses a gate on their
+# own session's work, through the same operations their session's tools use. The other session hears it on its next
+# hook.
+
+
+def reply(client: ConsoleClient, project: str, to: str, text: str) -> httpx.Response:
+    return client.post_json(f"/api/projects/{project}/sessions/messages", {"to": to, "text": text})
+
+
+def answer(client: ConsoleClient, project: str, gate: str, said: str, text: str | None = None) -> httpx.Response:
+    return client.post_json(f"/api/projects/{project}/sessions/gates/{gate}/answer", {"answer": said, "text": text})
+
+
+def heard(session: Session) -> str:
+    """What the session hears on its next tool call, in Claude Code's hook before a tool."""
+    return added_context(session.use(search_tool("webhook")))
+
+
+def gate_events(client: ConsoleClient, project: str) -> list[dict[str, Any]]:
+    response = client.get(f"/api/audit?project={project}")
+    assert response.status_code == 200, response.text
+    return [event for event in response.json()["events"] if event["kind"] in ("gate_agreed", "gate_refused")]
+
+
+def test_a_reply_from_the_console_reaches_the_other_session_on_its_next_hook(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-reply", 1441)
+    olive.start()
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    dana.start()
+    dana.call("send_message", session=dana.identifier, to="E1001", text="Do you have the retry UI?")
+
+    replied = reply(signed_out, project, "emp-2", "Yes, take the back end.")
+    told = heard(dana)
+
+    assert replied.status_code == 200, replied.text
+    assert [(one["text"], one["sent_by_me"]) for one in replied.json()["messages"]] == [
+        ("Do you have the retry UI?", False),
+        ("Yes, take the back end.", True),
+    ]
+    assert len({one["message_id"] for one in replied.json()["messages"]}) == 2, "each known by its own number"
+    assert "Olive Owner (E1001)" in told and "Yes, take the back end." in told
+    assert "Yes, take the back end." not in heard(dana), "heard once"
+
+
+def test_a_reply_needs_a_session_of_the_members_own_in_the_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, _ = a_project(console, signed_out, "olive-console-no-session", 1442)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    dana.start()
+
+    refused = reply(signed_out, project, "emp-2", "Hello?")
+
+    assert refused.status_code == 403
+    assert "None of your sessions" in refused.json()["message"]
+    assert "Hello?" not in heard(dana)
+
+
+def test_agreeing_from_the_console_lifts_the_gate_and_the_later_session_hears_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-agree", 1443)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    (gate,) = page(signed_out, project)["gates"]
+
+    agreed = answer(signed_out, project, "emp-2", "agree", "Go ahead, I am only on the docs.")
+    told = heard(dana)
+
+    assert [(one["on_my_work"], one["refused"]) for one in gate["waits_for"]] == [(True, False)]
+    assert agreed.status_code == 200, agreed.text
+    assert agreed.json()["gates"] == []
+    assert "Olive Owner (E1001) agreed" in told and "Go ahead, I am only on the docs." in told
+    assert dana.edit(RETRY) == {}, "the edit goes ahead"
+    (event,) = gate_events(signed_out, project)
+    assert (event["kind"], event["actor"], event["target"]) == ("gate_agreed", "E1001", "emp-2")
+    assert "docs" not in json.dumps(event), "never the answer's words"
+
+
+def test_refusing_from_the_console_keeps_the_gate_past_the_wait_and_the_later_session_hears_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-refuse", 1444)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+
+    refused = answer(signed_out, project, "emp-2", "refuse", "I am halfway through the retries.")
+    told = heard(dana)
+    console.clock.advance(minutes=6)
+    olive.prompt("Carry on.")
+    still = page(signed_out, project)
+
+    assert refused.status_code == 200, refused.text
+    assert "Olive Owner (E1001) refused" in told and "halfway through the retries" in told
+    (gate,) = still["gates"]
+    assert [(one["earlier"]["member_id"], one["refused"]) for one in gate["waits_for"]] == [("E1001", True)]
+    assert "[gated]" in json.dumps(dana.edit(RETRY))
+    assert [event["kind"] for event in gate_events(signed_out, project)] == ["gate_refused"]
+
+
+def test_only_the_earlier_sessions_own_member_answers_a_gate_from_the_console(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-not-yours", 1445)
+    dana_token = add(signed_out, "emp-2", "Dana Dev", "dana-console-not-yours")["personal_token"]
+    dana = Session(console.server, dana_token).in_project(project, "billing-api").as_session("dana-first")
+    add(signed_out, "emp-3", "Cole Coder", "cole-console-not-yours")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    danas_console = signed_in(console, "dana-console-not-yours", 1446)
+    coles_console = signed_in(console, "cole-console-not-yours", 1447)
+
+    by_the_later_member = answer(danas_console, project, "emp-2", "agree")
+    by_another_member = answer(coles_console, project, "emp-2", "agree")
+    seen_by_cole = page(coles_console, project)["gates"]
+
+    assert by_the_later_member.status_code == 403 and by_another_member.status_code == 403
+    assert "No gate of 'emp-2' waits on your sessions' work" in by_another_member.json()["message"]
+    assert [one["on_my_work"] for gate in seen_by_cole for one in gate["waits_for"]] == [False]
+    assert "[gated]" in json.dumps(dana.edit(RETRY)), "still gated"
+    assert gate_events(signed_out, project) == []
+    danas_console.close()
+    coles_console.close()
+
+
+def test_an_answer_is_agree_or_refuse_and_a_gate_that_has_ended_takes_none(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-ended", 1448)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+
+    wrong = answer(signed_out, project, "emp-2", "maybe")
+    dana.call("different_work", session=dana.identifier)
+    too_late = answer(signed_out, project, "emp-2", "refuse")
+
+    assert wrong.status_code == 422
+    assert too_late.status_code == 403
+    assert dana.edit(RETRY) == {}
+

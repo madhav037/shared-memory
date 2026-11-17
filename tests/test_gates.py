@@ -529,7 +529,7 @@ def test_an_urgent_message_gates_the_earlier_sessions_edit_until_its_member_answ
 
     owner.call("send_message", session=owner.identifier, to="emp-2", text="Holding off; tell me when it is settled.")
 
-    assert owner.edit("src/other.py") == ALLOWED, "its member answered"
+    assert not denied(owner.edit("src/other.py")), "its member answered"
 
 
 def test_an_answer_to_the_gate_answers_the_urgent_message_too(owner: Session, dana: Session) -> None:
@@ -538,7 +538,7 @@ def test_an_answer_to_the_gate_answers_the_urgent_message_too(owner: Session, da
 
     answer_gate(owner, "emp-2", "agree")
 
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
 
 
 def test_without_an_answer_the_wait_lifts_an_urgent_messages_gate(team: Team, owner: Session, dana: Session) -> None:
@@ -550,7 +550,7 @@ def test_without_an_answer_the_wait_lifts_an_urgent_messages_gate(team: Team, ow
 
     team.server.clock.advance(seconds=1)
 
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
 
 
 def test_different_work_lifts_an_urgent_messages_gate(owner: Session, dana: Session) -> None:
@@ -560,7 +560,7 @@ def test_different_work_lifts_an_urgent_messages_gate(owner: Session, dana: Sess
     lifted = different_work(owner)
 
     assert lifted["lifted"] == ["Dana Dev"]
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
 
 
 def test_a_second_urgent_message_on_the_same_collision_is_refused(owner: Session, dana: Session) -> None:
@@ -582,7 +582,7 @@ def test_an_urgent_message_needs_a_collision_between_the_two_sessions(owner: Ses
     refused = refused_urgent(dana, "owner-1")
 
     assert "collision" in refused
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
     assert URGENT not in heard(owner), "nothing was sent"
 
 
@@ -592,7 +592,7 @@ def test_only_the_later_session_sends_an_urgent_message(owner: Session, dana: Se
     refused = refused_urgent(owner, "emp-2")
 
     assert "later" in refused
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
 
 
 def test_an_urgent_messages_gate_ends_when_its_later_session_ends(owner: Session, dana: Session) -> None:
@@ -601,7 +601,7 @@ def test_an_urgent_messages_gate_ends_when_its_later_session_ends(owner: Session
 
     dana.end()
 
-    assert owner.edit("src/other.py") == ALLOWED
+    assert not denied(owner.edit("src/other.py"))
 
 
 def test_each_urgent_message_is_in_the_audit_log_without_its_text(team: Team, owner: Session, dana: Session) -> None:

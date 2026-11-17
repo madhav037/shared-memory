@@ -13,6 +13,8 @@ What other modules stand on, all of it on `Sessions`:
 - `active(project_id)`: a project's active sessions, oldest first.
 - `lately(project_id, within)`: a project's active sessions and those that ended or went idle no longer ago than
   `within`, for a module that reaches a session gone a little while, such as a message waiting for its member.
+- `ended_among(conn, ids)`: which of these sessions have ended, each with where it was, for a module that keeps
+  something of a session past its end, such as its handoff note, from inside an `on_gone` listener.
 - `still_active(ids)`: which of these sessions are active, for a module that keeps something per session and must
   count an ended or idle session's as gone wherever it reads it.
 - `on_gone(listener)`: called, inside the transaction, with the sessions that just ended or were found back from
@@ -119,6 +121,16 @@ class Session:
     touched_files: tuple[str, ...] = ()
     # Its messages that are not urgent wait for its next prompt or its unmute (#514).
     muted: bool = False
+
+
+@dataclass(frozen=True)
+class Whereabouts:
+    """Where an ended session was: its project, its git branch and the files it touched, the most recent first."""
+
+    project_id: str
+    branch: str | None
+    touched_files: tuple[str, ...]
+    ended_at: datetime
 
 
 class UnusableIdentifier(Refused):
@@ -296,6 +308,19 @@ class Sessions:
             ).fetchall()
         members = self._identity.named(row["member_id"] for row in rows)
         return [(_session(row, *members[row["member_id"]]), bool(row["active"])) for row in rows]
+
+    def ended_among(self, conn: Conn, ids: Iterable[int]) -> dict[int, Whereabouts]:
+        """Which of these sessions have ended, each with where it was, read in a transaction already open. A session
+        reported gone because it came back from idle has not ended."""
+        rows = conn.execute(
+            "SELECT id, project_id, branch, touched_files, ended_at FROM sessions"
+            " WHERE id = ANY(%s) AND ended_at IS NOT NULL",
+            (list(ids),),
+        ).fetchall()
+        return {
+            row["id"]: Whereabouts(row["project_id"], row["branch"], tuple(row["touched_files"]), row["ended_at"])
+            for row in rows
+        }
 
     def still_active(self, ids: Iterable[int], conn: Conn | None = None) -> set[int]:
         """Which of these sessions are active now. Pass the connection of a transaction already open to ask within

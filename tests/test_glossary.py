@@ -150,6 +150,19 @@ ALLOWED: tuple[Allow, ...] = (
         "the activities two sessions collide over, the glossary's Activity; avoided only for the audit log",
         (SERVER + "collisions.py", SERVER + "gates.py"),
     ),
+    Allow(
+        "activity",
+        "the activity a handoff note is put together from, the glossary's Activity; avoided only for the audit log",
+        (SERVER + "handoff.py",),
+    ),
+    Allow(
+        "collision",
+        "the recent work a handoff note's session collides with, the glossary's Collision; not a contradiction",
+        (SERVER + "handoff.py",),
+    ),
+    Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "handoff.py",)),
+    Allow("notes", "sessions' handoff notes, the glossary's Handoff note; never memories", (SERVER + "handoff.py",)),
+    Allow("note", "a session's handoff note, the glossary's Handoff note; never a memory", (SERVER + "app.py",)),
     Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
     Allow(
         "context",

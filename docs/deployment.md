@@ -340,6 +340,11 @@ A session can send a message to another session in its project with the `send_me
 went idle within `SHARED_MEMORY_RECENT_WORK_HOURS` (default 24, optional) waits for its member's next session in the
 project; one to a session gone longer is refused.
 
+The same window is how long a session that ended or went idle counts as recent work: a later session whose prompt
+matches its activity is reminded who worked on it, and given its handoff note. A handoff note, written with
+`leave_handoff_note` or put together by the server when a session ends or goes idle without one, is kept for
+`SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS` (default 7, optional). Notes are never saved as memory.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

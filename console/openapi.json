@@ -722,6 +722,90 @@
         }
       }
     },
+    "/api/projects/{project_id}/sessions/messages": {
+      "post": {
+        "operationId": "send_message",
+        "summary": "Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageToSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Send a message, such as a reply, from the signed-in member's session in the project to another member's sessions there, which hear it on their next tool call or prompt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sessions/gates/{member_id}/answer": {
+      "post": {
+        "operationId": "answer_gate",
+        "summary": "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GateAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated session hears it on its next tool call or prompt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/cards/{number}": {
       "get": {
         "operationId": "card",
@@ -2633,7 +2717,7 @@
         "type": "object"
       },
       "GateWait": {
-        "description": "One earlier session a gate waits for, until the project's wait has passed (until).",
+        "description": "One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.\nrefused says its member refused: the gate then holds past until, while that session stays active. on_my_work says\nthe earlier session is the signed-in member's, so they may agree or refuse from the console.",
         "properties": {
           "earlier": {
             "$ref": "#/components/schemas/NamedSession"
@@ -2642,11 +2726,21 @@
             "format": "date-time",
             "title": "Until",
             "type": "string"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "boolean"
+          },
+          "on_my_work": {
+            "title": "On My Work",
+            "type": "boolean"
           }
         },
         "required": [
           "earlier",
-          "until"
+          "until",
+          "refused",
+          "on_my_work"
         ],
         "title": "GateWait",
         "type": "object"
@@ -2779,8 +2873,12 @@
         "type": "object"
       },
       "SessionMessage": {
-        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\nfor, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n(None while it waits). sent_by_me says it came from one of the signed-in member's sessions.",
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message.",
         "properties": {
+          "message_id": {
+            "title": "Message Id",
+            "type": "integer"
+          },
           "sender_member_id": {
             "title": "Sender Member Id",
             "type": "string"
@@ -2824,6 +2922,7 @@
           }
         },
         "required": [
+          "message_id",
           "sender_member_id",
           "sender_name",
           "recipient_member_id",
@@ -2891,6 +2990,55 @@
           "messages"
         ],
         "title": "ProjectSessions",
+        "type": "object"
+      },
+      "MessageToSend": {
+        "description": "A message from the signed-in member's session in the project to another member's sessions there, such as a\nreply: the member it is for, by member ID, and its text, at most 2000 characters.",
+        "properties": {
+          "to": {
+            "title": "To",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "text"
+        ],
+        "title": "MessageToSend",
+        "type": "object"
+      },
+      "GateAnswer": {
+        "description": "The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,\nat most 2000 characters.",
+        "properties": {
+          "answer": {
+            "enum": [
+              "agree",
+              "refuse"
+            ],
+            "title": "Answer",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Text"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "GateAnswer",
         "type": "object"
       },
       "CardDetail": {

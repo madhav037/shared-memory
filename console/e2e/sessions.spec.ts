@@ -37,8 +37,8 @@ test("a project's Sessions page lists its active sessions, their activity and th
   await expect(olive.getByTestId("session-locks")).toContainText("src/invoices/split.ts");
   await expect(olive.getByTestId("session-branch")).toHaveCount(0);
 
-  // The page changes nothing: there is nothing on it to press.
-  await expect(page.getByTestId("sessions-page").getByRole("button")).toHaveCount(0);
+  // Nothing on a session changes it: a lock and an activity move only from the session itself.
+  await expect(page.getByTestId("sessions").getByRole("button")).toHaveCount(0);
 
   await page.screenshot({ path: test.info().outputPath("sessions.png"), fullPage: true });
 });
@@ -118,8 +118,72 @@ test("a new gate and a new message appear on the Sessions page without reloading
 
   await expect(fromMira.first()).toContainText("Mira Maker to you");
   await expect(fromMira.first().getByTestId("message-text")).toHaveText("Is the retry UI yours? I can take the back end.");
-  // Still nothing on the page to press: it governs nothing here, and never writes memory (ADR-0009).
-  await expect(page.getByTestId("sessions-page").getByRole("button")).toHaveCount(0);
+  // Olive may reply to it (ADR-0026); nothing on a session changes it, and nothing here writes memory (ADR-0009).
+  await expect(fromMira.first().getByTestId("reply")).toBeVisible();
+  await expect(page.getByTestId("sessions").getByRole("button")).toHaveCount(0);
 
   await page.screenshot({ path: test.info().outputPath("sessions-that-talk.png"), fullPage: true });
+});
+
+// After the one above, and last: Olive's second session and Mira's second join Billing here and stay.
+test("Olive refuses, then agrees to, a gate on her work and replies to a message from the page, alerted as each arrives", async ({
+  page,
+  context,
+}) => {
+  // The browser has allowed the console's alerts; each one shown is noted, so the journey can see it fired.
+  await context.grantPermissions(["notifications"]);
+  await page.addInitScript(() => {
+    const Shown = window.Notification;
+    const shown: string[] = [];
+    (window as unknown as { alertsShown: string[] }).alertsShown = shown;
+    class Noted extends Shown {
+      constructor(title: string, options?: NotificationOptions) {
+        super(title, options);
+        shown.push(title);
+      }
+    }
+    window.Notification = Noted as typeof Notification;
+  });
+  const alertsShown = () => page.evaluate(() => (window as unknown as { alertsShown: string[] }).alertsShown);
+  const heard = async () => ((await (await page.request.get(`${teammates}/heard`)).json()) as { heard: string }).heard;
+
+  await openSessions(page, "Billing");
+  await expect(page.getByTestId("alerts")).toContainText("This browser alerts you");
+  const onMine = page.getByTestId("gate-wait").filter({ hasText: "your session" });
+  await expect(onMine).toHaveCount(0);
+
+  // Mira's second session states the work Olive's second session stated: hers is gated on Olive's work.
+  expect((await page.request.post(`${teammates}/gate-olive`)).ok()).toBe(true);
+
+  await expect(onMine).toHaveCount(1);
+  await expect.poll(alertsShown).toContain("Mira Maker’s session waits on your work");
+
+  await onMine.getByTestId("refuse").click();
+
+  await expect(onMine.getByTestId("gate-refused")).toHaveText("you refused, until that session ends or goes idle");
+  await expect(onMine.getByTestId("refuse")).toHaveCount(0);
+  expect(await heard()).toContain("Olive Owner (E1001) refused");
+
+  await onMine.getByTestId("agree").click();
+
+  await expect(onMine).toHaveCount(0);
+  expect(await heard()).toContain("Olive Owner (E1001) agreed");
+
+  // Then Mira's second session asks Olive something, and she replies from the page.
+  expect((await page.request.post(`${teammates}/ask-olive`)).ok()).toBe(true);
+  const question = page
+    .getByTestId("message")
+    .filter({ hasText: "May I take the invoice tests while you split the module?" });
+
+  await expect(question).toHaveCount(1);
+  await expect.poll(alertsShown).toContain("Mira Maker sent you a message");
+  await question.getByTestId("reply").click();
+  await question.getByTestId("reply-text").fill("Yes, the tests are yours.");
+  await question.getByTestId("reply-send").click();
+
+  const reply = page.getByTestId("message").filter({ hasText: "Yes, the tests are yours." });
+  await expect(reply).toContainText("You to Mira Maker");
+  expect(await heard()).toContain("Yes, the tests are yours.");
+
+  await page.screenshot({ path: test.info().outputPath("sessions-answered.png"), fullPage: true });
 });

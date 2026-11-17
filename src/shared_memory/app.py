@@ -42,10 +42,11 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
-from shared_memory.collisions import Collisions
+from shared_memory.collisions import Collisions, reminder
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
 from shared_memory.gates import Gates
+from shared_memory.handoff import HandoffNotes
 from shared_memory.export import TeamExport
 from shared_memory.history import MemoryHistory
 from shared_memory.connection import GUIDANCE_ONLY, skill_sections
@@ -282,6 +283,8 @@ def build_app(
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
     messages = Messages(settings, db, sessions, clock)
+    # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
+    handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -367,10 +370,11 @@ def build_app(
         current: Caller, session: Session, prompt: list[float] | None = None, prompted: bool = False
     ) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
-        takeover or other end of a lock it held, each possible collision, how each gate on its work ended, and each
-        message sent to it; and, for a later session no hook has reached, that its gate waits (#518). The one place
-        it is gathered: the prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook
-        before a tool takes no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
+        takeover or other end of a lock it held, each possible collision, how each gate on its work ended, each
+        message sent to it, the recent work of sessions gone that it matches, with their handoff notes (#515), and,
+        for a later session no hook has reached, that its gate waits (#518). The one place it is gathered: the
+        prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
+        no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
         agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
         asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
         compares with the other sessions' activities, and says it is `prompted`: a muted session hears its messages
@@ -382,7 +386,19 @@ def build_app(
             *gates.waiting_notices(session),
             *gates.unhooked_notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
+            *recent_work(current, session, prompt),
         ]
+
+    def recent_work(current: Caller, session: Session, prompt: list[float] | None) -> list[str]:
+        """The reminder of each session gone lately whose work this session's prompt or activity matches, on every
+        matching prompt until it is heeded, and that session's handoff note with the first."""
+        told = []
+        for overlap, first in collisions.reminders(current, session, prompt):
+            told.append(reminder(session, overlap))
+            note = handoff_notes.note_of(overlap.session) if first else None
+            if note:
+                told.append(note)
+        return told
 
     def told(current: Caller, session: Session) -> str | None:
         """What is waiting for a session, as one added context for a hook's answer, or None when nothing is."""
@@ -593,7 +609,11 @@ def build_app(
         work = Work(due, working, known_issues.titles(current))
         return briefing.for_session(
             current,
-            extra=[*lifecycle.foundation_lines(current), *challenges.briefing_notices(current)],
+            extra=[
+                *lifecycle.foundation_lines(current),
+                *challenges.briefing_notices(current),
+                *(handoff_notes.for_briefing(current, session) if with_sessions else []),
+            ],
             work=work,
             followed_by=named,
             sessions=activities.for_briefing(current, session) if with_sessions else None,
@@ -1156,6 +1176,7 @@ def build_app(
         current = caller(ctx)
         calling = sessions.touch(current, session)
         lifted = gates.different_work(current, calling)
+        collisions.heed(calling, None)
         return {"session": calling.identifier, "lifted": lifted, "notices": waiting_for(current, calling)}
 
     @server.tool()
@@ -1204,6 +1225,7 @@ def build_app(
         if urgent:
             gates.send_urgent(current, calling, gated)
         gates.replied(calling, to)
+        collisions.heed(calling, to.strip())
         return {
             "session": calling.identifier,
             "to": sent.to,
@@ -1227,6 +1249,23 @@ def build_app(
         current = caller(ctx)
         calling = sessions.mute(sessions.touch(current, session), on)
         return {"session": calling.identifier, "muted": calling.muted, "notices": waiting_for(current, calling)}
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def leave_handoff_note(session: str, done: str, left: str, ctx: Context) -> dict[str, Any]:
+        """Leave this session's handoff note, for whoever takes up its work: what is done and what is left. Write it
+        when your member asks, and when you finish a piece of work or stop before it is finished. Writing it again
+        replaces it. Its branch and the files it touched are added from what this session's hooks reported.
+
+        A later session whose work matches this one's after it ends or goes idle is given the note, and the briefing
+        lists it, for seven days. A session that ends without one gets one put together by the server from its
+        activity. It is never saved as a memory. done and left are each at most 2000 characters; give at least one.
+
+        session is this session's identifier, as its briefing named it."""
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        note = handoff_notes.leave(calling, done, left)
+        return {"session": calling.identifier, "note": note, "notices": waiting_for(current, calling)}
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -1397,7 +1436,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(settings, db, activities, collisions, gates, clock),
+            SessionTalk(settings, sessions, collisions, gates, messages, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

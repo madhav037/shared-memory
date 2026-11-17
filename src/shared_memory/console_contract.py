@@ -734,10 +734,14 @@ class SessionCollision(BaseModel):
 
 
 class GateWait(BaseModel):
-    """One earlier session a gate waits for, until the project's wait has passed (until)."""
+    """One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.
+    refused says its member refused: the gate then holds past until, while that session stays active. on_my_work says
+    the earlier session is the signed-in member's, so they may agree or refuse from the console."""
 
     earlier: NamedSession
     until: datetime
+    refused: bool
+    on_my_work: bool
 
 
 class SessionGate(BaseModel):
@@ -752,8 +756,10 @@ class SessionGate(BaseModel):
 class SessionMessage(BaseModel):
     """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
-    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions."""
+    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
+apart from every other message."""
 
+    message_id: int
     sender_member_id: str
     sender_name: str
     recipient_member_id: str
@@ -762,6 +768,22 @@ class SessionMessage(BaseModel):
     sent_at: datetime
     delivered_at: datetime | None
     sent_by_me: bool
+
+
+class MessageToSend(BaseModel):
+    """A message from the signed-in member's session in the project to another member's sessions there, such as a
+    reply: the member it is for, by member ID, and its text, at most 2000 characters."""
+
+    to: str
+    text: str
+
+
+class GateAnswer(BaseModel):
+    """The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
+    at most 2000 characters."""
+
+    answer: Literal["agree", "refuse"]
+    text: str | None = None
 
 
 class ProjectSessions(BaseModel):
@@ -993,6 +1015,30 @@ DECLARATIONS: tuple[Declaration, ...] = (
             "project's collisions and gates; and the signed-in member's own sessions' messages."
         ),
         answers=ProjectSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/messages",
+        method="POST",
+        operation_id="send_message",
+        summary=(
+            "Send a message, such as a reply, from the signed-in member's session in the project to another member's "
+            "sessions there, which hear it on their next tool call or prompt."
+        ),
+        answers=ProjectSessions,
+        changes=True,
+        accepts=MessageToSend,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/gates/{member_id}/answer",
+        method="POST",
+        operation_id="answer_gate",
+        summary=(
+            "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated "
+            "session hears it on its next tool call or prompt."
+        ),
+        answers=ProjectSessions,
+        changes=True,
+        accepts=GateAnswer,
     ),
     Declaration(
         path="/projects/{project_id}/cards/{number}",
