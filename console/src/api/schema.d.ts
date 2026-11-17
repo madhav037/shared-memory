@@ -1316,9 +1316,13 @@ export interface components {
         /**
          * NamedSession
          * @description An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has
-         *     said which) and its activity (None when it has none).
+         *     said which) and its activity (None when it has none). session_number tells it apart from the same member's other
+         *     sessions, so the page can tell two gates between the same two members apart; it is not the identifier its coding
+         *     agent sends, which never leaves its member (ADR-0018).
          */
         NamedSession: {
+            /** Session Number */
+            session_number: number;
             /** Member Id */
             member_id: string;
             /** Member Name */
