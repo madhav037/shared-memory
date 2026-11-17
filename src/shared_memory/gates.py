@@ -78,7 +78,7 @@ from shared_memory.audit import (
     Kind,
 )
 from shared_memory.clock import Clock
-from shared_memory.collisions import Collision, Collisions
+from shared_memory.collisions import Collision, Collisions, whereabouts
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
@@ -266,7 +266,7 @@ def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None)
             if who.muted
             else ""
         )
-        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {held}.{muted}")
+        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}{whereabouts(who)}: {held}.{muted}")
     lines.append(
         "Don't edit, and don't decide alone: stop and ask your member whether to wait (reading, searching and "
         "planning still work), to say it is different work, or to pick something else. When each member it waits for "
@@ -314,7 +314,8 @@ def _started(later: Session, until: datetime) -> str:
     """What an earlier session is told when a later session's gate waits on its work: who, and how to answer."""
     agent = f" in {later.agent}" if later.agent else ""
     return (
-        f"[gate] {later.member_name} ({later.member_id})'s session{agent} is gated on nearly the same work as this "
+        f"[gate] {later.member_name} ({later.member_id})'s session{agent}{whereabouts(later)} is gated on nearly the "
+        "same work as this "
         "one: its edits on that work wait until your member agrees, or until the project's wait passes with no answer "
         f"(at {until.isoformat()}). Finish the step you are on, then stop and ask your member whether that session may "
         f'go ahead. With their answer, call answer_gate with gate "{later.member_id}" and answer "agree" or '

@@ -26,6 +26,7 @@ from tests.support import (
     added_context,
     fresh_database,
     member,
+    read_tool,
     search_tool,
 )
 from tests.test_before_edit import ALLOWED, reason_in
@@ -710,3 +711,12 @@ def test_a_timeout_is_kept_and_told_when_the_earlier_session_hears_it_though_the
         ("gate_timed_out", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
     ], "recorded once, as the later member's"
     assert "with no answer" not in heard(owner), "told once"
+
+
+def test_a_refused_edit_names_the_earlier_sessions_branch_and_the_files_it_touched(owner: Session, dana: Session) -> None:
+    owner.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.py"), branch="webhook-retries")
+    collide(owner, dana)
+
+    refused = reason_in(dana.edit(FILE))
+
+    assert "branch webhook-retries" in refused and "src/webhooks/retry.py" in refused
