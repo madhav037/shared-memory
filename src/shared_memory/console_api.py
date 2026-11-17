@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time
 from typing import Any
 from urllib.parse import quote
 
@@ -24,8 +24,11 @@ from shared_memory.activity import Activities, SessionActivity
 from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
-from shared_memory.messages import Exchanged, Messages
-from shared_memory.sessions import Session, Sessions
+from shared_memory.handoff import HandoffNotes, Note
+from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
+from shared_memory.sessions import Session
+from shared_memory.talk import Talk
+from shared_memory.unhooked import Unhooked
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -69,7 +72,8 @@ from shared_memory.console_contract import (
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
-    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionMessage,
+    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
+    SessionMessage,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -214,26 +218,28 @@ class Collided:
 
 class SessionTalk:
     """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions and gates, one
-    member's sessions' messages, and that member's replies and answers. Reading changes nothing: it marks no message
-    delivered and keeps no gate as timed out, which the sessions' own calls do. A reply and an answer go through the
-    same `Messages.send` and `Gates.answer` the session tools call, from one of the member's own sessions, and are
-    audited as those are. Nothing here saves, edits or promotes a memory (ADR-0009, ADR-0026)."""
+    member's sessions' messages, and that member's replies and answers. Reading marks no message delivered, which the
+    sessions' own calls do; it keeps a gate whose wait has passed as timed out, as every read of a gate does. A reply and an answer are `Talk`'s, the same operations the session
+    tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
+    edits or promotes a memory (ADR-0009, ADR-0026)."""
 
     def __init__(
         self,
-        settings: Settings,
-        sessions: Sessions,
         collisions: Collisions,
         gates: Gates,
+        unhooked: Unhooked,
         messages: Messages,
+        handoff_notes: HandoffNotes,
+        talk: Talk,
         clock: Clock,
     ) -> None:
-        self._sessions = sessions
         self._collisions = collisions
         self._gates = gates
+        self._unhooked = unhooked
         self._messages = messages
+        self._handoff_notes = handoff_notes
+        self._talk = talk
         self._clock = clock
-        self._recent = timedelta(hours=settings.recent_work_hours)
 
     def now(self) -> datetime:
         return self._clock()
@@ -251,57 +257,35 @@ class SessionTalk:
             for one in sorted(found.values(), key=lambda one: one.found_at)
         ]
 
-    def gated(self, project_id: str) -> list[Gate]:
-        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included."""
-        return self._gates.in_project(project_id)
+    def gated(self, caller: Caller, project_id: str) -> list[Gate]:
+        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included. A wait found
+        passed is kept as timed out, as any read of a gate does."""
+        return self._gates.in_project(caller, project_id)
 
     def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
         """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
-        return self._gates.can_be_gated([each.session for each in active])
+        return self._unhooked.can_be_gated([each.session for each in active])
+
+    def handoff_notes(self, project_id: str) -> list[tuple[Session, Note]]:
+        """The handoff notes of the project's sessions gone lately, each with its session, the most recently seen
+        first. A session gone idle without one gets one put together the first time it is asked for (#515)."""
+        return self._handoff_notes.recent(project_id)
 
     def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
         """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
         return self._messages.exchanged(project_id, member_id)
 
     def send(self, caller: Caller, to: str, text: str) -> None:
-        """Send a message from the caller's session in the project: an active one, the most recently seen first, or
-        else the one last seen in the recent-work window."""
-        project_id = caller.require_project().project_id
-        own = [
-            (each, active)
-            for each, active in self._sessions.lately(project_id, self._recent)
-            if each.member_id == caller.member_id
-        ]
-        if not own:
-            hours = round(self._recent.total_seconds() / 3600)
-            raise Refused(
-                f"None of your sessions is active in this project, or was in the last {hours} hours, so the message "
-                "has no session to come from. Start a coding agent in this project, then send it."
-            )
-        sender = next((each for each, active in own if active), own[0][0])
-        self._messages.send(caller, sender, to, text)
+        """Send a message from the caller's session in the project that `Talk.speaking` picks."""
+        self._talk.send(caller, self._talk.speaking(caller), to, text, from_console=True)
 
-    def answer(self, caller: Caller, gate: str, answer: str, text: str | None) -> list[str]:
-        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions' work,
-        from each of the caller's sessions it waits for. The names of the members answered."""
-        project_id = caller.require_project().project_id
-        member_id = gate.strip()
-        mine: dict[int, Session] = {}
-        for one in self._gates.in_project(project_id):
-            if one.later.session.member_id != member_id:
-                continue
-            for wait in one.waiting:
-                if wait.earlier.member_id == caller.member_id:
-                    mine.setdefault(wait.earlier.id, wait.earlier)
-        if not mine:
-            raise Refused(
-                f"No gate of {member_id!r} waits on your sessions' work now: its member may have said it is different "
-                "work, the project's wait may have passed, or you have already agreed. To tell them something, send "
-                "them a message."
-            )
+    def answer(self, caller: Caller, member_id: str, answer: str, text: str | None) -> list[str]:
+        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions'
+        work, or answers their urgent message, from each of the caller's sessions it concerns. The names of the members
+        answered."""
         answered: list[str] = []
-        for session in mine.values():
-            for name in self._gates.answer(caller, session, member_id, answer, text):
+        for session in self._talk.answering(caller, member_id):
+            for name in self._talk.answer(caller, session, member_id, answer, text, from_console=True):
                 if name not in answered:
                     answered.append(name)
         return answered
@@ -771,6 +755,7 @@ class ConsoleApi:
             project_id=project.project_id,
             project_name=project.name,
             now=self._talk.now(),
+            text_limit=TEXT_LIMIT,
             collisions=[
                 SessionCollision(
                     later=_named(one.later),
@@ -793,7 +778,24 @@ class ConsoleApi:
                         for one in gate.waiting
                     ],
                 )
-                for gate in self._talk.gated(project.project_id)
+                for gate in self._talk.gated(caller, project.project_id)
+            ],
+            handoff_notes=[
+                SessionHandoffNote(
+                    member_id=gone.member_id,
+                    member_name=gone.member_name,
+                    agent=gone.agent,
+                    repository=gone.repository,
+                    branch=gone.branch,
+                    touched_files=list(gone.touched_files),
+                    done=note.done,
+                    left=note.left,
+                    activity=note.activity,
+                    by_server=note.by_server,
+                    written_at=note.written_at,
+                    last_seen_at=gone.last_seen_at,
+                )
+                for gone, note in self._talk.handoff_notes(project.project_id)
             ],
             messages=[
                 SessionMessage(
@@ -806,6 +808,7 @@ class ConsoleApi:
                     sent_at=one.sent_at,
                     delivered_at=one.delivered_at,
                     sent_by_me=one.sender_member_id == mine,
+                    urgent=one.urgent,
                 )
                 for one in self._talk.messages(project.project_id, mine)
             ],

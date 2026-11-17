@@ -28,6 +28,15 @@ test("a project's Sessions page lists its active sessions, their activity and th
   await expect(raj.getByTestId("session-touched")).toContainText("src/webhooks/retry.ts");
   await expect(raj).not.toContainText("Read");
   await expect(raj).toContainText("Started");
+
+  // Raj's earlier session ended and left a handoff note, which the page shows and never lets anyone write.
+  const note = page.getByTestId("handoff-note").filter({ hasText: "Raj Raiser" });
+  await expect(note).toContainText("Writing the webhook retry docs");
+  await expect(note.getByTestId("handoff-done")).toHaveText("Done: The retry docs page and its examples.");
+  await expect(note.getByTestId("handoff-left")).toHaveText("Left: A section on the backoff settings.");
+  await expect(note).toContainText("branch docs/webhook-retries");
+  await expect(note).toContainText("docs/webhooks.md");
+  await expect(page.getByTestId("handoff-notes").getByRole("button")).toHaveCount(0);
   await expect(raj).toContainText("Last call");
 
   // Olive's stated none, so it shows her card in Doing, and says that is where it comes from.
@@ -130,19 +139,23 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
   page,
   context,
 }) => {
-  // The browser has allowed the console's alerts; each one shown is noted, so the journey can see it fired.
+  // The browser has allowed the console's alerts; each one shown is noted, so the journey can see it fired. Headless
+  // Chromium reports its notification permission as denied even once granted, so the page is handed a Notification
+  // that says granted and only notes each alert.
   await context.grantPermissions(["notifications"]);
   await page.addInitScript(() => {
-    const Shown = window.Notification;
     const shown: string[] = [];
     (window as unknown as { alertsShown: string[] }).alertsShown = shown;
-    class Noted extends Shown {
-      constructor(title: string, options?: NotificationOptions) {
-        super(title, options);
+    class Noted {
+      static readonly permission: NotificationPermission = "granted";
+      static requestPermission(): Promise<NotificationPermission> {
+        return Promise.resolve("granted");
+      }
+      constructor(title: string) {
         shown.push(title);
       }
     }
-    window.Notification = Noted as typeof Notification;
+    window.Notification = Noted as unknown as typeof Notification;
   });
   const alertsShown = () => page.evaluate(() => (window as unknown as { alertsShown: string[] }).alertsShown);
   const heard = async () => ((await (await page.request.get(`${teammates}/heard`)).json()) as { heard: string }).heard;

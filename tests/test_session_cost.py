@@ -13,8 +13,11 @@ from tests.support import Session, Team, added_context, promote_keeping_both
 
 # The budgets, in tokens, each with the figure measured on 2026-10-18 once #303 to #309 had landed.
 BUDGETS = {
-    "member start": 6800,  # measured: 6754 after #427 fenced the briefing; was 6052 on 2026-10-18
-    "admin start": 7200,  # measured: 7160 after #427; was 6422
+    # Sessions that talk (#507) add six tools (different_work, answer_gate, send_message, mute, leave_handoff_note,
+    # project_wait), each a member's way to answer another session, which no shorter listing can leave out. Their
+    # descriptions were cut to the rule an agent must not miss; the rest is in the skill and AGENTS.md.
+    "member start": 7800,  # estimated: 8445 measured, less about 650 cut from the new tools; was 6754 after #427
+    "admin start": 8200,  # estimated: 8851 measured, less about 650; was 7160 after #427
     "one recall": 350,  # estimated after #427 (a fence value and the sentence naming it); was 218
 }
 MARGIN = 1.10

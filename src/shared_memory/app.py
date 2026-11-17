@@ -64,6 +64,8 @@ from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
+from shared_memory.talk import Talk
+from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
 from shared_memory.uses import Uses
 
@@ -283,6 +285,8 @@ def build_app(
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
     messages = Messages(settings, db, sessions, clock)
+    unhooked = Unhooked(db, sessions, gates, clock)
+    talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
 
@@ -363,7 +367,7 @@ def build_app(
         # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
         # tool call has reported one.
         session = sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
-        gates.heard_by_hook(session)  # so its edits can be gated (#518)
+        unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
         return session
 
     def waiting_for(
@@ -371,7 +375,8 @@ def build_app(
     ) -> list[str]:
         """Everything waiting for a session, each told once: that it is back after going idle or ending, each
         takeover or other end of a lock it held, each possible collision, how each gate on its work ended, each
-        message sent to it, the recent work of sessions gone that it matches, with their handoff notes (#515), and,
+        message sent to it, what its member did for it from the console, the recent work of sessions gone that it
+        matches, with their handoff notes (#515), and,
         for a later session no hook has reached, that its gate waits (#518). The one place it is gathered: the
         prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
         no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
@@ -383,9 +388,10 @@ def build_app(
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
-            *gates.waiting_notices(session),
-            *gates.unhooked_notices(current, session),
+            *gates.waiting_notices(current, session),
+            *unhooked.notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
+            *talk.waiting_notices(session),
             *recent_work(current, session, prompt),
         ]
 
@@ -400,7 +406,7 @@ def build_app(
                 told.append(note)
         return told
 
-    def told(current: Caller, session: Session) -> str | None:
+    def news_for(current: Caller, session: Session) -> str | None:
         """What is waiting for a session, as one added context for a hook's answer, or None when nothing is."""
         return "\n\n".join(waiting_for(current, session)) or None
 
@@ -579,7 +585,7 @@ def build_app(
             if reason is not None:
                 stopped = True
                 return reason
-            return told(current, session) if hears else None
+            return news_for(current, session) if hears else None
 
         def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
             return hooks.blocked(format, event, text) if stopped else hooks.answered(format, event, text)
@@ -593,7 +599,7 @@ def build_app(
 
         def news(current: Caller, payload: dict[str, Any]) -> str | None:
             session = session_of(current, payload)
-            return told(current, session) if session else None
+            return news_for(current, session) if session else None
 
         return await hook(request, "PostToolUse", news)
 
@@ -1165,14 +1171,8 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def different_work(session: str, ctx: Context) -> dict[str, Any]:
-        """Lift this session's gate at once, because its member says the work is different from the earlier
-        session's. Call it only once your member has said so, never on your own judgment.
-
-        A session is gated when its prompt or activity collides with another member's active session: its edits are
-        refused until the project's wait has passed, or until this is called. lifted names the members it was waiting
-        for; each is told, and the verdict is recorded with the collision's score so the threshold can be tuned.
-
-        session is this session's identifier, as its briefing named it."""
+        """Lift this session's gate at once, only once your member says the work is different from the earlier
+        session's. lifted names the members it waited for; each is told."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
         lifted = gates.different_work(current, calling)
@@ -1181,51 +1181,26 @@ def build_app(
 
     @server.tool()
     @_refusals_as_tool_errors
-    def answer_gate(session: str, gate: str, answer: str, ctx: Context, text: str | None = None) -> dict[str, Any]:
-        """Agree to or refuse another member's session going ahead with work nearly the same as this session's. Answer
-        only with your member's answer, never on your own judgment.
-
-        A later session's edits on colliding work are gated until each earlier session's member agrees, or the
-        project's wait passes with no answer. gate is the member ID of the gated member, as the gate's notice named
-        them; answer is "agree" or "refuse". A refusal holds the gate past the wait, until this session ends or goes
-        idle; it may later be changed to agree, but an agreement stands. text is your member's words for them, at
-        most 2000 characters, and is never written to the audit log. answered names the members answered; each hears
-        it on their next tool call or prompt.
-
-        session is this session's identifier, as its briefing named it."""
+    def answer_gate(session: str, member: str, answer: str, ctx: Context, text: str | None = None) -> dict[str, Any]:
+        """Send your member's answer, never your own, to another member's gate on this session's work. member is the
+        gated member's member ID, as the notice named them; answer is "agree" or "refuse". A refusal holds until this
+        session ends or goes idle and may become agree; an agreement stands. text is your member's words for them."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        answered = gates.answer(current, calling, gate, answer, text)
+        answered = talk.answer(current, calling, member, answer, text)
         return {"session": calling.identifier, "answered": answered, "notices": waiting_for(current, calling)}
 
     @server.tool()
     @_refusals_as_tool_errors
     def send_message(session: str, to: str, text: str, ctx: Context, urgent: bool = False) -> dict[str, Any]:
-        """Send a message to another member's session in this project, collided or not, to ask about their work or
-        to reply to a message. Send what your member asked you to say, never on your own judgment.
-
-        to is the member ID of the member it is for, as a gate or a message named them; it reaches each of their active
-        sessions in this project, on its next tool call or prompt. When none is active but one ended or went idle in
-        the last day, waiting is true: it reaches their next session here. text is at most 2000 characters. Messages
-        are kept seven days. A message to a member whose urgent message gates this session answers it. muted is true
-        when every session it reached is muted: one that is not urgent reaches them at their next prompt or unmute.
-
-        urgent is only for when your member asks, and only from the later session of a collision to the earlier: the
-        earlier session's edits on the colliding work then wait until its member answers or the project's wait passes.
-        One per collision; a second is refused.
-
-        session is this session's identifier, as its briefing named it. notices in the answer is what this session is
-        told once, such as a message sent to it: finish the step you are on, then stop and show it to your member."""
+        """Send what your member asked you to say, never your own words, to another member's sessions in this
+        project. to is their member ID, as a gate or message named them. waiting is true when none is active and it
+        waits for their next session; muted, when every session it reached is muted. It answers their urgent message
+        to this session. urgent, only when your member asks and only from the later session of a collision, holds the
+        earlier session's edits until its member answers or the wait passes; one per collision."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
-        if urgent:
-            messages.check(text)
-            gated = gates.urgent_for(calling, to)
-        sent = messages.send(current, calling, to, text, urgent=urgent)
-        if urgent:
-            gates.send_urgent(current, calling, gated)
-        gates.replied(calling, to)
-        collisions.heed(calling, to.strip())
+        sent = talk.send(current, calling, to, text, urgent=urgent)
         return {
             "session": calling.identifier,
             "to": sent.to,
@@ -1237,15 +1212,8 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def mute(session: str, on: bool, ctx: Context) -> dict[str, Any]:
-        """Mute this session, or unmute it, only when your member asks. While muted, a message that is not urgent waits
-        for this session's next prompt, or for its unmute, rather than arriving beside a tool's result; urgent
-        messages, gate answers and other news still arrive. A sender is told it is muted, and so is a session gated
-        on this session's work, whose wait runs the same.
-
-        on is true to mute, false to unmute. muted is whether it now is; notices is what this session is told once,
-        with what was held back when it unmutes.
-
-        session is this session's identifier, as its briefing named it."""
+        """Mute (on true) or unmute this session, only when your member asks. Muted, a message that is not urgent
+        waits for the next prompt or the unmute; everything else still arrives."""
         current = caller(ctx)
         calling = sessions.mute(sessions.touch(current, session), on)
         return {"session": calling.identifier, "muted": calling.muted, "notices": waiting_for(current, calling)}
@@ -1253,15 +1221,9 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def leave_handoff_note(session: str, done: str, left: str, ctx: Context) -> dict[str, Any]:
-        """Leave this session's handoff note, for whoever takes up its work: what is done and what is left. Write it
-        when your member asks, and when you finish a piece of work or stop before it is finished. Writing it again
-        replaces it. Its branch and the files it touched are added from what this session's hooks reported.
-
-        A later session whose work matches this one's after it ends or goes idle is given the note, and the briefing
-        lists it, for seven days. A session that ends without one gets one put together by the server from its
-        activity. It is never saved as a memory. done and left are each at most 2000 characters; give at least one.
-
-        session is this session's identifier, as its briefing named it."""
+        """Leave this session's handoff note, what is done and what is left, for whoever takes up its work: when your
+        member asks, and when you finish or stop a piece of work. It replaces the last one, is kept seven days and
+        is never a memory."""
         current = caller(ctx)
         calling = sessions.touch(current, session)
         note = handoff_notes.leave(calling, done, left)
@@ -1270,12 +1232,8 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def project_wait(ctx: Context, minutes: int | None = None) -> dict[str, Any]:
-        """Read, or change, the project's wait: how many minutes a gated session's edits wait for the earlier
-        session's member before they go ahead. Call it with nothing to read it; five minutes unless the project set
-        its own.
-
-        minutes is for the project's leads and the team's admins, and only when the member asks: a whole number from
-        1 to 1440."""
+        """Read (with nothing) or change the project's wait: the minutes a gated session's edits wait for the earlier
+        member's answer. minutes is for leads and admins, only when the member asks."""
         current = caller(ctx)
         project_id = current.require_project().project_id
         if minutes is not None:
@@ -1436,7 +1394,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(settings, sessions, collisions, gates, messages, clock),
+            SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

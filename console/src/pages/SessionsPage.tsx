@@ -6,6 +6,7 @@ import {
   IconHourglass,
   IconLayoutColumns,
   IconMessage,
+  IconNotes,
   IconShieldOff,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +21,7 @@ import {
   type ProjectSessions,
   type SessionCollision,
   type SessionGate,
+  type SessionHandoffNote,
   type SessionMessage,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
@@ -140,8 +142,14 @@ export function SessionsPage() {
 
       {found.gates.length > 0 && <Gates found={found} onChanged={changed} />}
       {found.collisions.length > 0 && <Collisions collisions={found.collisions} />}
+      {found.handoff_notes.length > 0 && <HandoffNotes notes={found.handoff_notes} />}
       {found.messages.length > 0 && (
-        <Messages projectId={found.project_id} messages={found.messages} onChanged={changed} />
+        <Messages
+          projectId={found.project_id}
+          messages={found.messages}
+          textLimit={found.text_limit}
+          onChanged={changed}
+        />
       )}
 
       {found.sessions.length === 0 ? (
@@ -456,14 +464,60 @@ function Collisions({ collisions }: { collisions: SessionCollision[] }) {
   );
 }
 
+/** The handoff notes of sessions gone lately, written by those sessions or the server: read here, never written. */
+function HandoffNotes({ notes }: { notes: SessionHandoffNote[] }) {
+  return (
+    <section className="talk" aria-label="Handoff notes" data-testid="handoff-notes">
+      <h2 className="talk-head">
+        <IconNotes size={18} stroke={1.6} aria-hidden />
+        Handoff notes from sessions gone lately
+      </h2>
+      <ul className="talk-list">
+        {notes.map((one) => (
+          <li key={`${one.member_id} ${one.written_at}`} data-testid="handoff-note">
+            <p className="talk-line">
+              <b title={one.member_id}>{one.member_name}</b>’s session
+              {[one.agent, one.repository].filter(Boolean).length > 0 &&
+                ` in ${[one.agent, one.repository].filter(Boolean).join(", ")}`}
+              {one.activity && (
+                <>
+                  , on <q>{one.activity}</q>
+                </>
+              )}
+            </p>
+            {one.done && (
+              <p className="talk-text" data-testid="handoff-done">
+                <b>Done:</b> {one.done}
+              </p>
+            )}
+            {one.left && (
+              <p className="talk-text" data-testid="handoff-left">
+                <b>Left:</b> {one.left}
+              </p>
+            )}
+            <p className="talk-meta">
+              {one.by_server ? "Put together by the server, as the session left none" : "Left by the session"},{" "}
+              <time dateTime={one.written_at}>{moment(one.written_at)}</time>
+              {one.branch && <> · branch {one.branch}</>}
+              {one.touched_files.length > 0 && <> · {one.touched_files.join(", ")}</>}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** A reply to one message, sent from the signed-in member's session in the project to the message's sender. */
 function Reply({
   projectId,
   message,
+  textLimit,
   onChanged,
 }: {
   projectId: string;
   message: SessionMessage;
+  textLimit: number;
   onChanged: (answer: ProjectSessions) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -497,7 +551,7 @@ function Reply({
         autosize
         minRows={2}
         maxRows={8}
-        maxLength={2000}
+        maxLength={textLimit}
         value={text}
         error={tried && !text.trim() ? "Write the reply first." : undefined}
         onChange={(event) => setText(event.currentTarget.value)}
@@ -520,10 +574,12 @@ function Reply({
 function Messages({
   projectId,
   messages,
+  textLimit,
   onChanged,
 }: {
   projectId: string;
   messages: SessionMessage[];
+  textLimit: number;
   onChanged: (answer: ProjectSessions) => void;
 }) {
   return (
@@ -555,11 +611,21 @@ function Messages({
               ) : (
                 `waiting for ${one.sent_by_me ? "their" : "your"} session`
               )}
+              {one.urgent && (
+                <>
+                  {" · "}
+                  <b className="talk-urgent" data-testid="message-urgent">
+                    {one.sent_by_me
+                      ? "urgent: their session’s edits on this work wait for an answer"
+                      : "urgent: your session’s edits on this work wait until you reply"}
+                  </b>
+                </>
+              )}
             </p>
             <p className="talk-text" data-testid="message-text">
               {one.text}
             </p>
-            {!one.sent_by_me && <Reply projectId={projectId} message={one} onChanged={onChanged} />}
+            {!one.sent_by_me && <Reply projectId={projectId} message={one} textLimit={textLimit} onChanged={onChanged} />}
           </li>
         ))}
       </ul>

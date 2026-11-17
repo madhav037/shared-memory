@@ -3275,6 +3275,9 @@ div.dotted {
   font-size: 0.8125rem;
   color: var(--ink-3);
 }
+.talk-urgent {
+  color: var(--danger);
+}
 .talk-text {
   margin: 6px 0 0;
   max-width: 68ch;

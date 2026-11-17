@@ -26,6 +26,7 @@ from tests.support import (
     added_context,
     fresh_database,
     member,
+    read_tool,
     search_tool,
 )
 from tests.test_before_edit import ALLOWED, reason_in
@@ -298,8 +299,8 @@ def test_a_change_to_the_wait_is_in_the_audit_log(team: Team, dana: Session) -> 
 # The earlier member's answer (#512)
 
 
-def answer_gate(session: Session, gate: str, answer: str, text: str | None = None) -> dict[str, Any]:
-    arguments: dict[str, Any] = {"session": session.identifier, "gate": gate, "answer": answer}
+def answer_gate(session: Session, member: str, answer: str, text: str | None = None) -> dict[str, Any]:
+    arguments: dict[str, Any] = {"session": session.identifier, "member": member, "answer": answer}
     if text is not None:
         arguments["text"] = text
     answered: dict[str, Any] = session.call("answer_gate", **arguments)
@@ -389,7 +390,7 @@ def test_an_agreement_cannot_be_turned_into_a_refusal(owner: Session, dana: Sess
     collide(owner, dana)
     answer_gate(owner, "emp-2", "agree")
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="refuse")
 
     assert "agreed" in refused
 
@@ -446,8 +447,8 @@ def test_with_two_earlier_sessions_one_refusal_keeps_the_gate(
 def test_only_the_earlier_sessions_own_member_can_answer(owner: Session, dana: Session, cole: Session) -> None:
     collide(owner, dana)
 
-    by_another = cole.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="agree")
-    by_the_later = dana.refusal("answer_gate", session=dana.identifier, gate="emp-2", answer="agree")
+    by_another = cole.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="agree")
+    by_the_later = dana.refusal("answer_gate", session=dana.identifier, member="emp-2", answer="agree")
 
     assert "No gate" in by_another and "No gate" in by_the_later
     assert GATED in reason_in(dana.edit(FILE)), "still gated"
@@ -457,7 +458,7 @@ def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Sessi
     collide(owner, dana)
     team.server.clock.advance(minutes=5)
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="refuse")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="refuse")
 
     assert "wait" in refused
     assert dana.edit(FILE) == ALLOWED
@@ -466,7 +467,7 @@ def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Sessi
 def test_an_answer_other_than_agree_or_refuse_is_refused(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 
-    refused = owner.refusal("answer_gate", session=owner.identifier, gate="emp-2", answer="maybe")
+    refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="maybe")
 
     assert '"agree"' in refused and '"refuse"' in refused
 
@@ -690,3 +691,43 @@ def test_the_earlier_session_no_hook_reaches_is_told_in_its_next_tool_result_tha
 
     assert collided
     assert "[gate]" in told and "Dana Dev (emp-2)" in told and "answer_gate" in told
+
+
+# A timeout is kept when either side reads it (#507 stories 17, 31), so a later session that stays quiet is still
+# recorded and the earlier member still told.
+
+
+def test_a_timeout_is_kept_and_told_when_the_earlier_session_hears_it_though_the_later_one_stays_quiet(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    heard(owner)
+    team.server.clock.advance(minutes=5)
+
+    told = heard(owner)
+
+    assert "Dana Dev's session" in told and "with no answer and goes ahead" in told
+    assert gate_entries(team.server, owner.project or "") == [
+        ("gate_timed_out", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
+    ], "recorded once, as the later member's"
+    assert "with no answer" not in heard(owner), "told once"
+
+
+def test_a_refused_edit_names_the_earlier_sessions_branch_and_the_files_it_touched(owner: Session, dana: Session) -> None:
+    owner.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.py"), branch="webhook-retries")
+    collide(owner, dana)
+
+    refused = reason_in(dana.edit(FILE))
+
+    assert "branch webhook-retries" in refused and "src/webhooks/retry.py" in refused
+
+
+def test_a_session_in_a_coding_agent_with_hooks_is_never_told_it_has_none_before_its_first_hook(
+    owner: Session, dana: Session
+) -> None:
+    in_claude_code = dana.as_agent("claude-code").as_session("claude-code-first-tool")
+    state(owner, WEBHOOKS)
+
+    stated = notices_of(in_claude_code.call("set_activity", activity=RETRIES, session=in_claude_code.identifier))
+
+    assert GATED not in stated, "its hook before the edit refuses it, so it is not told to hold the gate itself"

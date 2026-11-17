@@ -2872,8 +2872,110 @@
         "title": "SessionGate",
         "type": "object"
       },
+      "SessionHandoffNote": {
+        "description": "The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose\nsession it was, in which coding agent and repository, on which branch and with which files touched, what is done\nand what is left, the activity it was written beside, whether the server put it together because the session left\nnone, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026).",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "touched_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Touched Files",
+            "type": "array"
+          },
+          "done": {
+            "title": "Done",
+            "type": "string"
+          },
+          "left": {
+            "title": "Left",
+            "type": "string"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          },
+          "by_server": {
+            "title": "By Server",
+            "type": "boolean"
+          },
+          "written_at": {
+            "format": "date-time",
+            "title": "Written At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "branch",
+          "touched_files",
+          "done",
+          "left",
+          "activity",
+          "by_server",
+          "written_at",
+          "last_seen_at"
+        ],
+        "title": "SessionHandoffNote",
+        "type": "object"
+      },
       "SessionMessage": {
-        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message.",
+        "description": "A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is\n    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it\n    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it\napart from every other message. urgent says it gates the recipient's session on the colliding work until their member\nanswers it, which a reply does.",
         "properties": {
           "message_id": {
             "title": "Message Id",
@@ -2919,6 +3021,10 @@
           "sent_by_me": {
             "title": "Sent By Me",
             "type": "boolean"
+          },
+          "urgent": {
+            "title": "Urgent",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2930,13 +3036,14 @@
           "text",
           "sent_at",
           "delivered_at",
-          "sent_by_me"
+          "sent_by_me",
+          "urgent"
         ],
         "title": "SessionMessage",
         "type": "object"
       },
       "ProjectSessions": {
-        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its\ngates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.\nnow is the server's clock when it answered. The page asks again every few seconds; asking changes nothing.",
+        "description": "A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended\nor gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its\ngates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only\nthe signed-in member sees: their own sessions' messages, the oldest first.\nnow is the server's clock when it answered. The page asks again every few seconds; asking changes no session and\ndelivers no message. text_limit is the most characters a reply or an answer's words may have.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2950,6 +3057,10 @@
             "format": "date-time",
             "title": "Now",
             "type": "string"
+          },
+          "text_limit": {
+            "title": "Text Limit",
+            "type": "integer"
           },
           "sessions": {
             "items": {
@@ -2972,6 +3083,13 @@
             "title": "Gates",
             "type": "array"
           },
+          "handoff_notes": {
+            "items": {
+              "$ref": "#/components/schemas/SessionHandoffNote"
+            },
+            "title": "Handoff Notes",
+            "type": "array"
+          },
           "messages": {
             "items": {
               "$ref": "#/components/schemas/SessionMessage"
@@ -2984,22 +3102,25 @@
           "project_id",
           "project_name",
           "now",
+          "text_limit",
           "sessions",
           "collisions",
           "gates",
+          "handoff_notes",
           "messages"
         ],
         "title": "ProjectSessions",
         "type": "object"
       },
       "MessageToSend": {
-        "description": "A message from the signed-in member's session in the project to another member's sessions there, such as a\nreply: the member it is for, by member ID, and its text, at most 2000 characters.",
+        "description": "A message from the signed-in member's session in the project to another member's sessions there, such as a\nreply: the member it is for, by member ID, and its text, at most text_limit characters.",
         "properties": {
           "to": {
             "title": "To",
             "type": "string"
           },
           "text": {
+            "maxLength": 2000,
             "title": "Text",
             "type": "string"
           }
@@ -3012,7 +3133,7 @@
         "type": "object"
       },
       "GateAnswer": {
-        "description": "The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,\nat most 2000 characters.",
+        "description": "The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,\nat most text_limit characters.",
         "properties": {
           "answer": {
             "enum": [
@@ -3025,6 +3146,7 @@
           "text": {
             "anyOf": [
               {
+                "maxLength": 2000,
                 "type": "string"
               },
               {

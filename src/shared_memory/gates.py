@@ -26,13 +26,10 @@ Kept in Postgres, so every worker agrees (ADR-0013):
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
   member answered it. Its primary key is what keeps it to one per collision.
-- `gate_hooked`: each session a hook of its coding agent has called for, so its edits can be refused (#518).
-- `gate_told_unhooked`: per later and earlier session, that the later session, which no hook reaches, has been told
-  its gate waits (#518).
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
-All but `project_waits` and `gate_hooked` are cleared through `Sessions.on_gone` when either session ends or comes back from idle, as the
+All but `project_waits` are cleared through `Sessions.on_gone` when either session ends or comes back from idle, as the
 collision is.
 
 What other modules stand on, all of it on `Gates`:
@@ -40,16 +37,15 @@ What other modules stand on, all of it on `Gates`:
 - `before_edit(caller, session, paths)`: why the before-edit hook refuses an edit of these files, or None. Its first
   line always offers different work, since a wrong collision now stops real work.
 - `different_work(caller, session)`: lift this session's gate at once; the names of the members it was waiting for.
-- `answer(caller, session, gate, answer, text)`: the earlier member agrees to or refuses the gates a member's sessions
-  have on this session's work; the names of the members answered.
-- `in_project(project_id)`: each session gated now and whom it waits for, answers included, changing nothing: what
-  the console shows.
-- `waiting_notices(session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
+- `answer(caller, session, member_id, answer, text)`: the earlier member agrees to or refuses the gates a member's
+  sessions have on this session's work; the names of the members answered. `answerable(session, member_id)` says
+  whether one would be taken now, for the console, which picks the member's sessions it answers from.
+- `in_project(caller, project_id)`: each session gated now and whom it waits for, answers included: what the console
+  shows. A wait it finds passed is kept as timed out, as every read of a gate does.
+- `waiting_notices(caller, session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
   each one ended; as a later session, each answer to its gate.
-- `heard_by_hook(session)`, `unhooked_notices(caller, session)` and `can_be_gated(sessions)`: a coding agent with no
-  hooks (Copilot in VS Code, Cursor on Windows) can't be gated, since nothing refuses its edits (#518). Every hook
-  that names a session says so; a session no hook has reached is told once in its tools' notices that its gate waits,
-  and the console marks it.
+- `waiting(caller, session)`: the earlier sessions this session's gate waits for now, for `Unhooked` to tell a
+  session no hook reaches (#518).
 - `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
   session to this member would gate, refused unless one is not yet urgent; then keep each and audit it.
 - `replied(session, to)`: this session sent this member a message, which answers their urgent messages to it.
@@ -62,6 +58,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 
 from shared_memory import fence
 from shared_memory.activity import Activities, SessionActivity
@@ -76,11 +73,10 @@ from shared_memory.audit import (
     Kind,
 )
 from shared_memory.clock import Clock
-from shared_memory.collisions import Collision, Collisions
+from shared_memory.collisions import Collision, Collisions, whereabouts
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.hooks import COPILOT_CLI, CURSOR
 from shared_memory.identity import Caller, Identity
 from shared_memory.messages import TEXT_LIMIT
 from shared_memory.sessions import Session, Sessions
@@ -127,20 +123,6 @@ CREATE TABLE IF NOT EXISTS gate_urgents (
 );
 CREATE INDEX IF NOT EXISTS gate_urgents_earlier ON gate_urgents (earlier_session_id) WHERE answered_at IS NULL;
 
--- A hook of the session's coding agent has called the server (#518): its hook before a tool can refuse a gated edit.
--- Kept for the session's life, since its coding agent stays the same. A session no hook has reached hears of its gate
--- in the notices of its tools instead, and the console marks it as one that can't be gated.
-CREATE TABLE IF NOT EXISTS gate_hooked (
-    session_id BIGINT PRIMARY KEY REFERENCES sessions(id)
-);
-
--- The later session, which no hook has reached, has been told that its gate waits for the earlier session (#518).
-CREATE TABLE IF NOT EXISTS gate_told_unhooked (
-    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
-    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
-    PRIMARY KEY (later_session_id, earlier_session_id)
-);
-
 CREATE TABLE IF NOT EXISTS project_waits (
     project_id TEXT PRIMARY KEY REFERENCES projects(project_id),
     minutes INTEGER NOT NULL,
@@ -152,26 +134,29 @@ CREATE TABLE IF NOT EXISTS project_waits (
 # The longest wait a project may set: a day, longer than any session stays active without a call.
 WAIT_LIMIT_MINUTES = 24 * 60
 
-# The coding agents, as `agents.agent_named` names them, that have no hooks in some setups: Copilot in VS Code
-# (GitHub Copilot, beside Copilot CLI, which has them) and Cursor on Windows (#518).
-WITHOUT_HOOKS_SOMETIMES = frozenset({COPILOT_CLI.name, CURSOR.name})
 
-# How many sessions a worker remembers a hook was seen for before it starts over, asking the database again.
-HOOKED_REMEMBERED = 10_000
+class Ending(StrEnum):
+    """How a gate between two sessions ended, as `gate_ends` keeps it."""
 
-DIFFERENT = "different_work"
-TIMED_OUT = "timed_out"
-AGREED = "agreed"
-REFUSED = "refused"
+    DIFFERENT_WORK = "different_work"
+    TIMED_OUT = "timed_out"
+
+
+class Answer(StrEnum):
+    """An earlier member's answer to a gate, as `gate_answers` keeps it."""
+
+    AGREED = "agreed"
+    REFUSED = "refused"
+
 
 # What an earlier member may answer, as `answer_gate` takes it, and what is kept.
-ANSWERS = {"agree": AGREED, "refuse": REFUSED}
+ANSWERS = {"agree": Answer.AGREED, "refuse": Answer.REFUSED}
 
-_AUDITED: dict[str, Kind] = {
-    DIFFERENT: DIFFERENT_WORK,
-    TIMED_OUT: GATE_TIMED_OUT,
-    AGREED: GATE_AGREED,
-    REFUSED: GATE_REFUSED,
+_AUDITED: dict[Ending | Answer, Kind] = {
+    Ending.DIFFERENT_WORK: DIFFERENT_WORK,
+    Ending.TIMED_OUT: GATE_TIMED_OUT,
+    Answer.AGREED: GATE_AGREED,
+    Answer.REFUSED: GATE_REFUSED,
 }
 
 
@@ -213,21 +198,12 @@ class OnWork:
     later: Session
     collision: Collision
     ended: bool
-    answer: str | None
+    answer: Answer | None
 
 
 def _left(now: datetime, until: datetime) -> str:
     minutes = math.ceil((until - now).total_seconds() / 60)
     return "less than a minute left" if minutes < 1 else f"{minutes} minute{'s' if minutes != 1 else ''} left"
-
-
-# What a later session that no hook reaches is told once, in place of a refusal that nothing can give it (#518).
-UNHOOKED_GATED = (
-    "[gated] This session's edits on this work wait: another member's session is on nearly the same work. If it is "
-    "different work, your member can say so, and calling different_work with this session lifts the gate at once. "
-    "This coding agent has no hook to refuse an edit, so it is yours to hold them: edit no file of that work until "
-    "the gate lifts."
-)
 
 
 def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None) -> str:
@@ -254,7 +230,7 @@ def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None)
             if who.muted
             else ""
         )
-        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {held}.{muted}")
+        lines.append(f"- {who.member_name} ({who.member_id}) in {agent}, {activity}{whereabouts(who)}: {held}.{muted}")
     lines.append(
         "Don't edit, and don't decide alone: stop and ask your member whether to wait (reading, searching and "
         "planning still work), to say it is different work, or to pick something else. When each member it waits for "
@@ -277,7 +253,7 @@ def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
         lines.append(
             f"- {who.member_name} ({who.member_id}) in {agent}, {activity}: {_left(now, each.until)} of the project's "
             f"wait (until {each.until.isoformat()}), unless your member answers. To answer in your member's words, "
-            f'call send_message with to "{who.member_id}", or answer_gate with gate "{who.member_id}".'
+            f'call send_message with to "{who.member_id}", or answer_gate with member "{who.member_id}".'
         )
     lines.append(
         "Don't edit, and don't decide alone: finish the step you are on, then stop, show your member the urgent "
@@ -286,8 +262,8 @@ def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
     return "\n".join(lines)
 
 
-def _ended(by: str, row_name: str, minutes: int) -> str:
-    if by == DIFFERENT:
+def _ended(by: Ending, row_name: str, minutes: int) -> str:
+    if by == Ending.DIFFERENT_WORK:
         return (
             f"[gate] {row_name}'s session, gated on nearly the same work as this one, said it is different work and "
             "goes ahead. Tell your member."
@@ -302,18 +278,19 @@ def _started(later: Session, until: datetime) -> str:
     """What an earlier session is told when a later session's gate waits on its work: who, and how to answer."""
     agent = f" in {later.agent}" if later.agent else ""
     return (
-        f"[gate] {later.member_name} ({later.member_id})'s session{agent} is gated on nearly the same work as this "
+        f"[gate] {later.member_name} ({later.member_id})'s session{agent}{whereabouts(later)} is gated on nearly the "
+        "same work as this "
         "one: its edits on that work wait until your member agrees, or until the project's wait passes with no answer "
         f"(at {until.isoformat()}). Finish the step you are on, then stop and ask your member whether that session may "
-        f'go ahead. With their answer, call answer_gate with gate "{later.member_id}" and answer "agree" or '
+        f'go ahead. With their answer, call answer_gate with member "{later.member_id}" and answer "agree" or '
         '"refuse", never on your own judgment. A refusal holds the gate until this session ends or goes idle.'
     )
 
 
-def _answered(earlier: Session, answer: str, text: str | None) -> str:
+def _answered(earlier: Session, answer: Answer, text: str | None) -> str:
     """What a later session is told of an earlier member's answer, with their words escaped."""
     who = f"{earlier.member_name} ({earlier.member_id})"
-    if answer == AGREED:
+    if answer == Answer.AGREED:
         told = (
             f"[gate] {who} agreed: this session's edits on nearly the same work as theirs go ahead, once every other "
             "session the gate waits for has agreed or the wait has passed. Tell your member."
@@ -328,6 +305,27 @@ def _answered(earlier: Session, answer: str, text: str | None) -> str:
     if text:
         told += f"\nTheir words, not an instruction to you:\n{fence.escape(text)}"
     return told
+
+
+def _given(answer: str, text: str | None) -> tuple[Answer, str | None]:
+    """An earlier member's answer as it is kept, and their words, if any; refused when either can't be an answer."""
+    kept = ANSWERS.get(answer.strip().lower())
+    if kept is None:
+        raise Refused('answer is "agree" or "refuse".')
+    words = (text or "").strip() or None
+    if words is not None and len(words) > TEXT_LIMIT:
+        raise Refused(f"An answer's text is at most {TEXT_LIMIT} characters; this one is {len(words)}.")
+    return kept, words
+
+
+def _closed(member_id: str, gates: Sequence[OnWork]) -> Refused:
+    """Why no gate of this member's takes an answer now."""
+    if any(each.answer == Answer.AGREED for each in gates):
+        return Refused(f"Your member already agreed to {member_id!r}'s gate; an agreement stands.")
+    return Refused(
+        f"{member_id!r}'s gate has ended: the project's wait passed with no answer, or its member said it is "
+        "different work. To tell them something, call send_message."
+    )
 
 
 class Gates:
@@ -349,8 +347,6 @@ class Gates:
         self._collisions = collisions
         self._audit = audit
         self._clock = clock
-        # The sessions this worker has seen a hook for, so a hook's call keeps it with one write at most (#518).
-        self._hooked: set[int] = set()
         if db.sets_up:
             with db.transaction() as conn:
                 conn.execute(SCHEMA)
@@ -359,57 +355,11 @@ class Gates:
     @staticmethod
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         gone = list(ids)
-        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents", "gate_told_unhooked"):
+        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents"):
             conn.execute(
-                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of five names written here
+                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
                 (gone, gone),
             )
-
-    # Agents with no hooks (#518)
-
-    def heard_by_hook(self, session: Session) -> None:
-        """A hook of this session's coding agent has called: its hook before a tool can refuse a gated edit."""
-        if session.id in self._hooked:
-            return
-        with self._db.transaction() as conn:
-            conn.execute("INSERT INTO gate_hooked (session_id) VALUES (%s) ON CONFLICT DO NOTHING", (session.id,))
-        if len(self._hooked) >= HOOKED_REMEMBERED:
-            self._hooked.clear()
-        self._hooked.add(session.id)
-
-    def _hooked_among(self, ids: Sequence[int]) -> set[int]:
-        with self._db.transaction() as conn:
-            rows = conn.execute("SELECT session_id FROM gate_hooked WHERE session_id = ANY(%s)", (list(ids),)).fetchall()
-        return {row["session_id"] for row in rows}
-
-    def can_be_gated(self, sessions: Sequence[Session]) -> dict[int, bool]:
-        """Whether each session's edits can be refused, by its id. One can't be when its coding agent is one that
-        runs with no hooks in some setups (Copilot in VS Code, Cursor on Windows) and no hook of its has called: its
-        coding agent is known once a tool call has reported it. Any other can, as far as the server knows."""
-        unsure = [each.id for each in sessions if each.agent in WITHOUT_HOOKS_SOMETIMES]
-        hooked = self._hooked_among(unsure) if unsure else set()
-        return {each.id: each.id not in unsure or each.id in hooked for each in sessions}
-
-    def unhooked_notices(self, caller: Caller, session: Session) -> list[str]:
-        """What a later session no hook has reached is told once of the earlier sessions its gate waits for, since no
-        refusal can reach it: who, their activity and the time left, with different work first. Nothing for a session
-        a hook has reached, which hears of its gate when an edit is refused."""
-        if session.id in self._hooked or self._hooked_among([session.id]):
-            self._hooked.add(session.id)
-            return []
-        waiting = self._waiting(caller, session)
-        if not waiting:
-            return []
-        with self._db.transaction() as conn:
-            rows = conn.execute(
-                "INSERT INTO gate_told_unhooked (later_session_id, earlier_session_id)"
-                " SELECT %s, earlier FROM unnest(%s::bigint[]) AS earlier"
-                " ON CONFLICT DO NOTHING RETURNING earlier_session_id",
-                (session.id, [each.earlier.id for each in waiting]),
-            ).fetchall()
-        fresh = {row["earlier_session_id"] for row in rows}
-        told = [each for each in waiting if each.earlier.id in fresh]
-        return [refusal(told, self._clock(), first=UNHOOKED_GATED)] if told else []
 
     # The project's wait
 
@@ -454,7 +404,7 @@ class Gates:
             if each.session.member_id != session.member_id
         }
 
-    def _answers(self, conn: Conn, column: str, session: Session) -> dict[int, str]:
+    def _answers(self, conn: Conn, column: str, session: Session) -> dict[int, Answer]:
         """The answers given on gates this session is in, by the other session's id. `column` is the one naming this
         session."""
         other = "earlier_session_id" if column == "later_session_id" else "later_session_id"
@@ -462,7 +412,7 @@ class Gates:
             f"SELECT {other} AS other, answer FROM gate_answers WHERE {column} = %s",  # noqa: S608  # both columns are names written here
             (session.id,),
         ).fetchall()
-        return {row["other"]: row["answer"] for row in rows}
+        return {row["other"]: Answer(row["answer"]) for row in rows}
 
     def _work_out(
         self, session: Session, active: Sequence[SessionActivity] | None = None
@@ -487,11 +437,11 @@ class Gates:
         waiting, passed = [], []
         for each in colliding:
             answer = answers.get(each.earlier_session_id)
-            if each.earlier_session_id in ended or answer == AGREED:
+            if each.earlier_session_id in ended or answer == Answer.AGREED:
                 continue
             earlier = others[each.earlier_session_id]
             until = each.found_at + wait
-            if answer == REFUSED:
+            if answer == Answer.REFUSED:
                 waiting.append(Waiting(earlier.session, earlier.activity, each, until, refused=True))
             elif now >= until:
                 passed.append((earlier.session, each))
@@ -499,29 +449,54 @@ class Gates:
                 waiting.append(Waiting(earlier.session, earlier.activity, each, until))
         return waiting, passed
 
-    def _waiting(self, caller: Caller, session: Session) -> list[Waiting]:
+    def waiting(self, caller: Caller, session: Session) -> list[Waiting]:
         """The earlier sessions this session's gate waits for now. A pair whose wait has just been found passed with no
         answer is kept as timed out, and written to the audit log once."""
         waiting, passed = self._work_out(session)
         for earlier, collision in passed:
-            self._end(caller, session, earlier, collision, TIMED_OUT)
+            self._end(caller, session, earlier, collision, Ending.TIMED_OUT)
         return waiting
 
-    def in_project(self, project_id: str) -> list[Gate]:
+    def in_project(self, caller: Caller, project_id: str) -> list[Gate]:
         """Each of the project's active sessions gated now, the oldest gate first, with the earlier sessions it waits
-        for, answers included: what the console's Sessions page shows. Read only: a wait found passed is left for the
-        gated session's own next call to keep as timed out."""
+        for, answers included: what the console's Sessions page shows. A wait found passed is kept as timed out, so a
+        later session that stays quiet is still recorded and its earlier session told (stories 17, 31)."""
         active = self._activities.in_project(project_id)
         gates = []
         for each in active:
-            waiting, _ = self._work_out(each.session, active)
+            waiting, passed = self._work_out(each.session, active)
+            for earlier, collision in passed:
+                self._end(caller, each.session, earlier, collision, Ending.TIMED_OUT)
             if waiting:
                 gates.append(Gate(each, waiting))
         return sorted(gates, key=lambda gate: min(one.collision.found_at for one in gate.waiting))
 
-    def _end(self, caller: Caller, later: Session, earlier: Session, collision: Collision, by: str) -> bool:
-        """Keep how the gate between these two sessions ended, and write it to the audit log, unless another call
-        already did."""
+    def _audited(
+        self,
+        kind: Ending | Answer | Kind,
+        caller: Caller,
+        project_id: str,
+        other: str,
+        side: str,
+        collision: Collision,
+        actor: str | None = None,
+    ) -> None:
+        """Write one gate event to the audit log: the other session's member, as `side` ("earlier" or "later"), and
+        the collision's score and cause, so the threshold can be tuned (#338). Never a message's text. `actor` names
+        the member it is recorded as when that is not the caller, such as a timeout another member's read found."""
+        self._audit.record(
+            _AUDITED[kind] if isinstance(kind, Ending | Answer) else kind,
+            member=None if actor else caller.member,
+            team_pk=caller.member.team_pk if actor else None,
+            actor=actor,
+            project_id=project_id,
+            target=other,
+            detail={side: other, "score": round(collision.score, 4), "cause": collision.cause.value},
+        )
+
+    def _end(self, caller: Caller, later: Session, earlier: Session, collision: Collision, by: Ending) -> bool:
+        """Keep how the gate between these two sessions ended, and write it to the audit log as the later member's,
+        whoever's call found it, unless another call already did."""
         with self._db.transaction() as conn:
             kept = conn.execute(
                 "INSERT INTO gate_ends (later_session_id, earlier_session_id, ended_by, ended_at)"
@@ -530,13 +505,8 @@ class Gates:
             ).fetchone()
         if kept is None:
             return False
-        self._audit.record(
-            _AUDITED[by],
-            member=caller.member,
-            project_id=later.project_id,
-            target=earlier.member_id,
-            detail={"earlier": earlier.member_id, "score": round(collision.score, 4), "cause": collision.cause.value},
-        )
+        actor = None if caller.member_id == later.member_id else later.member_id
+        self._audited(by, caller, later.project_id, earlier.member_id, "earlier", collision, actor)
         return True
 
     def before_edit(self, caller: Caller, session: Session, paths: Sequence[str]) -> str | None:
@@ -544,7 +514,7 @@ class Gates:
         tool that names no file is not an edit, and is never gated."""
         if not paths:
             return None
-        waiting = self._waiting(caller, session)
+        waiting = self.waiting(caller, session)
         urgents = self._urgents(session)
         now = self._clock()
         reasons = [*([refusal(waiting, now)] if waiting else []), *([urgent_refusal(urgents, now)] if urgents else [])]
@@ -555,17 +525,11 @@ class Gates:
         waiting for, each recorded in the audit log with the collision's score. A refusal is lifted too, and so is each
         urgent message waiting for this session's answer."""
         lifted = []
-        for each in self._waiting(caller, session):
-            if self._end(caller, session, each.earlier, each.collision, DIFFERENT):
+        for each in self.waiting(caller, session):
+            if self._end(caller, session, each.earlier, each.collision, Ending.DIFFERENT_WORK):
                 lifted.append(each.earlier.member_name)
         for later, collision in self._answer_urgents(session, None):
-            self._audit.record(
-                DIFFERENT_WORK,
-                member=caller.member,
-                project_id=session.project_id,
-                target=later.member_id,
-                detail={"later": later.member_id, "score": round(collision.score, 4), "cause": collision.cause.value},
-            )
+            self._audited(Ending.DIFFERENT_WORK, caller, session.project_id, later.member_id, "later", collision)
             if later.member_name not in lifted:
                 lifted.append(later.member_name)
         return lifted
@@ -650,13 +614,7 @@ class Gates:
             earlier = active.get(each.earlier_session_id)
             if kept is None or earlier is None:
                 continue
-            self._audit.record(
-                URGENT_MESSAGE,
-                member=caller.member,
-                project_id=session.project_id,
-                target=earlier.session.member_id,
-                detail={"earlier": earlier.session.member_id, "score": round(each.score, 4), "cause": each.cause.value},
-            )
+            self._audited(URGENT_MESSAGE, caller, session.project_id, earlier.session.member_id, "earlier", each)
 
     def replied(self, session: Session, to: str) -> None:
         """This session sent the member with this member ID a message: it answers each urgent message of theirs that
@@ -717,72 +675,80 @@ class Gates:
             if each.later_session_id in active
         ]
 
-    def answer(self, caller: Caller, session: Session, gate: str, answer: str, text: str | None = None) -> list[str]:
+    def answer(
+        self, caller: Caller, session: Session, member_id: str, answer: str, text: str | None = None
+    ) -> list[str]:
         """This earlier session's member agrees to or refuses the gate each session of the member with this member ID
-        has on its work. A refusal may be changed to agree; an agreement stands, and a gate that has ended takes no
-        answer. The names of the members answered, each answer recorded in the audit log without its text."""
-        kept = ANSWERS.get(answer.strip().lower())
-        if kept is None:
-            raise Refused('answer is "agree" or "refuse".')
-        words = (text or "").strip() or None
-        if words is not None and len(words) > TEXT_LIMIT:
-            raise Refused(f"An answer's text is at most {TEXT_LIMIT} characters; this one is {len(words)}.")
-        member_id = gate.strip()
-        gates = [each for each in self._on_work(session) if each.later.member_id == member_id]
-        if not gates:
+        has on its work, which answers their urgent messages to it too. A refusal may be changed to agree; an
+        agreement stands, and a gate that has ended takes no answer. The names of the members answered, each answer
+        recorded in the audit log without its text."""
+        kept, words = _given(answer, text)
+        later_member = member_id.strip()
+        theirs = self._gates_of(session, later_member)
+        if not theirs:
             raise Refused(
-                f"No gate of {member_id!r} waits on this session's work. Pass as gate the member ID the gate's notice "
-                "named, with this session's identifier as session: only the earlier session's own member answers."
+                f"No gate of {later_member!r} waits on this session's work. Pass as member the member ID the gate's "
+                "notice named, with this session's identifier as session: only the earlier session's own member answers."
             )
         # An answer to their gate answers each urgent message of theirs too, whatever became of the gate.
-        urgents = [later.member_name for later, _ in self._answer_urgents(session, member_id)]
-        now = self._clock()
-        wait = timedelta(minutes=self.wait(session.project_id))
-        open_ = [
-            each
-            for each in gates
-            if not each.ended
-            and each.answer != AGREED
-            and (each.answer == REFUSED or now < each.collision.found_at + wait)
-        ]
+        urgents = [later.member_name for later, _ in self._answer_urgents(session, later_member)]
+        open_ = self._open(session, theirs)
         if not open_ and urgents:
             return list(dict.fromkeys(urgents))
         if not open_:
-            if any(each.answer == AGREED for each in gates):
-                raise Refused(f"Your member already agreed to {member_id!r}'s gate; an agreement stands.")
-            raise Refused(
-                f"{member_id!r}'s gate has ended: the project's wait passed with no answer, or its member said it is "
-                "different work. To tell them something, call send_message."
-            )
-        answered = []
-        for each in open_:
+            raise _closed(later_member, theirs)
+        return self._keep_answers(caller, session, open_, kept, words)
+
+    def answerable(self, session: Session, member_id: str) -> bool:
+        """Whether this earlier session's member can answer the member with this member ID now: a gate of theirs on
+        its work is open, or an urgent message of theirs to it waits for an answer."""
+        return bool(self._open(session, self._gates_of(session, member_id))) or any(
+            each.later.member_id == member_id for each in self._urgents(session)
+        )
+
+    def _gates_of(self, session: Session, member_id: str) -> list[OnWork]:
+        """The gates the sessions of the member with this member ID have on this session's work, open or not."""
+        return [each for each in self._on_work(session) if each.later.member_id == member_id]
+
+    def _open(self, session: Session, gates: Sequence[OnWork]) -> list[OnWork]:
+        """Those of these gates an answer still changes: not ended, not agreed to, and refused or within the wait."""
+        now = self._clock()
+        wait = timedelta(minutes=self.wait(session.project_id))
+        return [
+            each
+            for each in gates
+            if not each.ended
+            and each.answer != Answer.AGREED
+            and (each.answer == Answer.REFUSED or now < each.collision.found_at + wait)
+        ]
+
+    def _keep_answers(
+        self, caller: Caller, session: Session, gates: Sequence[OnWork], kept: Answer, words: str | None
+    ) -> list[str]:
+        """Keep the answer to each of these gates, for its later session to be told, and audit each without its
+        words. The names of the members answered."""
+        now = self._clock()
+        answered: list[str] = []
+        for each in gates:
             with self._db.transaction() as conn:
                 conn.execute(
                     "INSERT INTO gate_answers (later_session_id, earlier_session_id, answer, text, answered_at)"
                     " VALUES (%s, %s, %s, %s, %s) ON CONFLICT (later_session_id, earlier_session_id) DO UPDATE SET"
                     " answer = EXCLUDED.answer, text = EXCLUDED.text, answered_at = EXCLUDED.answered_at, told = FALSE",
-                    (each.later.id, session.id, kept, words, now),
+                    (each.later.id, session.id, kept.value, words, now),
                 )
-            self._audit.record(
-                _AUDITED[kept],
-                member=caller.member,
-                project_id=session.project_id,
-                target=each.later.member_id,
-                detail={
-                    "later": each.later.member_id,
-                    "score": round(each.collision.score, 4),
-                    "cause": each.collision.cause.value,
-                },
-            )
+            self._audited(kept, caller, session.project_id, each.later.member_id, "later", each.collision)
             if each.later.member_name not in answered:
                 answered.append(each.later.member_name)
         return answered
 
     # News
 
-    def waiting_notices(self, session: Session) -> list[str]:
+    def waiting_notices(self, caller: Caller, session: Session) -> list[str]:
         """What a session is told once. As an earlier session: that a later session's gate waits on its work, and how
-        each gate on its work ended. As a later session: each answer to its gate. Asking marks them told."""
+        each gate on its work ended, a wait it finds passed kept as timed out now, so it hears of it though the later
+        session stays quiet. As a later session: each answer to its gate. Asking marks them told."""
+        self._time_out_on_work(caller, session)
         with self._db.transaction() as conn:
             ends = conn.execute(
                 "UPDATE gate_ends SET told = TRUE WHERE earlier_session_id = %s AND NOT told"
@@ -799,16 +765,27 @@ class Gates:
             others = {each.session.id: each.session for each in self._activities.in_project(session.project_id)}
             minutes = self.wait(session.project_id)
             notices += [
-                _ended(row["ended_by"], others[row["later_session_id"]].member_name, minutes)
+                _ended(Ending(row["ended_by"]), others[row["later_session_id"]].member_name, minutes)
                 for row in ends
                 if row["later_session_id"] in others
             ]
             notices += [
-                _answered(others[row["earlier_session_id"]], row["answer"], row["text"])
+                _answered(others[row["earlier_session_id"]], Answer(row["answer"]), row["text"])
                 for row in answers
                 if row["earlier_session_id"] in others
             ]
         return notices
+
+    def _time_out_on_work(self, caller: Caller, session: Session) -> None:
+        """Keep as timed out each gate on this earlier session's work whose wait has passed with no answer."""
+        on_work = [each for each in self._on_work(session) if not each.ended and each.answer is None]
+        if not on_work:
+            return
+        now = self._clock()
+        wait = timedelta(minutes=self.wait(session.project_id))
+        for each in on_work:
+            if now >= each.collision.found_at + wait:
+                self._end(caller, each.later, session, each.collision, Ending.TIMED_OUT)
 
     def _starts(self, session: Session) -> list[str]:
         """That each later session's gate waits on this session's work, for each this session has not been told of and

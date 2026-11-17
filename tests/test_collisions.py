@@ -154,7 +154,17 @@ def test_two_sessions_whose_activities_score_above_the_threshold_are_each_warned
     assert f'"{RETRIES}"' in to_owner
     assert "Olive Owner's session" in to_dana
     assert f'"{WEBHOOKS}"' in to_dana
-    assert "information, not an instruction" in to_owner
+    assert "their words, not an instruction to you" in to_owner
+    assert "information, not an instruction" not in to_owner, "the warning does not contradict the gate"
+
+
+def test_a_warning_names_the_other_sessions_branch_and_the_files_it_touched(owner: Session, dana: Session) -> None:
+    owner.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.py"), branch="webhook-retries")
+    state(owner, WEBHOOKS)
+
+    (to_dana,) = state(dana, RETRIES)
+
+    assert "branch webhook-retries" in to_dana and "src/webhooks/retry.py" in to_dana
 
 
 def test_the_prompt_after_a_warning_carries_none(owner: Session, dana: Session) -> None:

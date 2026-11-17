@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
 from shared_memory.challenges import DecidesAs
+from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
@@ -757,7 +758,8 @@ class SessionMessage(BaseModel):
     """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
     for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
     (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
-apart from every other message."""
+apart from every other message. urgent says it gates the recipient's session on the colliding work until their member
+answers it, which a reply does."""
 
     message_id: int
     sender_member_id: str
@@ -768,36 +770,61 @@ apart from every other message."""
     sent_at: datetime
     delivered_at: datetime | None
     sent_by_me: bool
+    urgent: bool
 
 
 class MessageToSend(BaseModel):
     """A message from the signed-in member's session in the project to another member's sessions there, such as a
-    reply: the member it is for, by member ID, and its text, at most 2000 characters."""
+    reply: the member it is for, by member ID, and its text, at most text_limit characters."""
 
     to: str
-    text: str
+    text: str = Field(max_length=TEXT_LIMIT)
 
 
 class GateAnswer(BaseModel):
     """The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
-    at most 2000 characters."""
+    at most text_limit characters."""
 
     answer: Literal["agree", "refuse"]
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=TEXT_LIMIT)
+
+
+class SessionHandoffNote(BaseModel):
+    """The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose
+    session it was, in which coding agent and repository, on which branch and with which files touched, what is done
+    and what is left, the activity it was written beside, whether the server put it together because the session left
+    none, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026)."""
+
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    branch: str | None
+    touched_files: list[str]
+    done: str
+    left: str
+    activity: str | None
+    by_server: bool
+    written_at: datetime
+    last_seen_at: datetime
 
 
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
-    gates, the oldest first; and what only the signed-in member sees: their own sessions' messages, the oldest first.
-    now is the server's clock when it answered. The page asks again every few seconds; asking changes nothing."""
+    gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
+    the signed-in member sees: their own sessions' messages, the oldest first.
+    now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
+    delivers no message. text_limit is the most characters a reply or an answer's words may have."""
 
     project_id: str
     project_name: str
     now: datetime
+    text_limit: int
     sessions: list[ActiveSession]
     collisions: list[SessionCollision]
     gates: list[SessionGate]
+    handoff_notes: list[SessionHandoffNote]
     messages: list[SessionMessage]
 
 
