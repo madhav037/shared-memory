@@ -162,7 +162,12 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
 
   await openSessions(page, "Billing");
   await expect(page.getByTestId("alerts")).toContainText("This browser alerts you");
-  const onMine = page.getByTestId("gate-wait").filter({ hasText: "your session" });
+  // The journey before this one left Mira's first session gated on Olive's first too (its activity is her card in
+  // Doing, on the same webhook retries), so this one watches the wait on Olive's second session's work alone.
+  const onMine = page
+    .getByTestId("gate-wait")
+    .filter({ hasText: "your session" })
+    .filter({ hasText: "Splitting the invoice module into its own package" });
   await expect(onMine).toHaveCount(0);
 
   // Mira's second session states the work Olive's second session stated: hers is gated on Olive's work.
