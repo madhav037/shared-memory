@@ -4,9 +4,11 @@ lapsed, so it is read-only (#472)."""
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 import tempfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import date
@@ -70,16 +72,36 @@ SPLIT_ACTIVITY = "Splitting the invoice module into its own package"
 MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 
 
+def olives_token(settings: Settings, seeded: str) -> str:
+    """A new personal token for the member the seeded token is for, issued beside any she has. The my-token journey
+    replaces Olive's own token, which revokes every one she had, so the teammate stand-in can't keep the seeded one:
+    whichever journey runs first, it asks for a token that works."""
+    token = "smt_" + secrets.token_urlsafe(32)
+    with psycopg.connect(settings.database_url, autocommit=True) as conn:
+        conn.execute(
+            "INSERT INTO tokens (member_id, token_hash, created_at)"
+            " SELECT member_id, %s, now() FROM tokens WHERE token_hash = %s",
+            (hashlib.sha256(token.encode()).hexdigest(), hashlib.sha256(seeded.encode()).hexdigest()),
+        )
+    return token
+
+
 class Teammates:
     """Stands in for a teammate at her coding agent while a journey watches the Sessions page: on `POST /collide` Mira's
     session in Billing states Raj's activity, so it collides with his and is gated; on `POST /message` it sends Olive a
     message. On `POST /gate-olive` a second session of Olive's states a piece of work and a second session of Mira's
     states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
     question; `GET /heard` says what Mira's second session hears on its next tool call. Each is the session's own call
-    over HTTP, as its coding agent makes it."""
+    over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
+    personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
     def __init__(
-        self, portal: BlockingPortal, settings: Settings, mira: Session, olive: Session, port: int = 0
+        self,
+        portal: BlockingPortal,
+        settings: Settings,
+        mira: Session,
+        olive: Callable[[], Session],
+        port: int = 0,
     ) -> None:
         mira_split = mira.as_session("mira-split")
 
@@ -92,7 +114,8 @@ class Teammates:
             return JSONResponse({"sent": True})
 
         def gate_olive(request: Request) -> Response:
-            olive.call("set_activity", activity=SPLIT_ACTIVITY, session=olive.identifier)
+            olives = olive()
+            olives.call("set_activity", activity=SPLIT_ACTIVITY, session=olives.identifier)
             mira_split.call("set_activity", activity=SPLIT_ACTIVITY, session=mira_split.identifier)
             return JSONResponse({"gated": True})
 
@@ -440,7 +463,9 @@ def seeded(
             portal,
             Settings("", memory, memory),
             mira.as_agent("Visual Studio Code").as_session("mira-retries"),
-            in_project.as_agent("claude-code").as_session("olive-split"),
+            lambda: Session(
+                server, olives_token(settings, token), project, "billing-api", "claude-code", "olive-split"
+            ),
             teammates_port,
         )
         running.callback(teammates.stop)
