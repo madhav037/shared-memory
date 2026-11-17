@@ -652,3 +652,18 @@ def test_the_handoff_notes_of_sessions_gone_lately_show_on_the_page(console: Con
     assert (note["member_name"], note["agent"], note["branch"]) == ("Dana Dev", "Claude Code", "webhook-retries")
     assert (note["done"], note["left"], note["activity"]) == ("The retry loop.", "The settings page.", WEBHOOKS)
     assert note["touched_files"] == [RETRY] and note["by_server"] is False
+
+
+def test_the_page_is_told_the_longest_reply_and_a_longer_one_is_refused(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-console-limit", 1456)
+    olive.start()
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    dana.start()
+
+    limit = page(signed_out, project)["text_limit"]
+    too_long = reply(signed_out, project, "emp-2", "x" * (limit + 1))
+
+    assert limit == 2000
+    assert too_long.status_code == 422

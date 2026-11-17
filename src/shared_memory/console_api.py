@@ -25,7 +25,7 @@ from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
 from shared_memory.handoff import HandoffNotes, Note
-from shared_memory.messages import Exchanged, Messages
+from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
@@ -755,6 +755,7 @@ class ConsoleApi:
             project_id=project.project_id,
             project_name=project.name,
             now=self._talk.now(),
+            text_limit=TEXT_LIMIT,
             collisions=[
                 SessionCollision(
                     later=_named(one.later),

@@ -40,6 +40,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
+from shared_memory.messages import TEXT_LIMIT
 from shared_memory.sessions import Session, Sessions
 from shared_memory.validation import refuse_secret
 
@@ -57,9 +58,6 @@ CREATE TABLE IF NOT EXISTS handoff_notes (
 );
 CREATE INDEX IF NOT EXISTS handoff_notes_written ON handoff_notes (written_at);
 """
-
-# The longest "done" and "left" kept, in characters, each.
-TEXT_LIMIT = 2000
 
 # How many notes of sessions gone the briefing lists, the most recently seen first.
 BRIEFING_NOTES = 3

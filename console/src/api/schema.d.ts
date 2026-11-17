@@ -1437,7 +1437,7 @@ export interface components {
          *     gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
          *     the signed-in member sees: their own sessions' messages, the oldest first.
          *     now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
-         *     delivers no message.
+         *     delivers no message. text_limit is the most characters a reply or an answer's words may have.
          */
         ProjectSessions: {
             /** Project Id */
@@ -1449,6 +1449,8 @@ export interface components {
              * Format: date-time
              */
             now: string;
+            /** Text Limit */
+            text_limit: number;
             /** Sessions */
             sessions: components["schemas"]["ActiveSession"][];
             /** Collisions */
@@ -1463,7 +1465,7 @@ export interface components {
         /**
          * MessageToSend
          * @description A message from the signed-in member's session in the project to another member's sessions there, such as a
-         *     reply: the member it is for, by member ID, and its text, at most 2000 characters.
+         *     reply: the member it is for, by member ID, and its text, at most text_limit characters.
          */
         MessageToSend: {
             /** To */
@@ -1474,7 +1476,7 @@ export interface components {
         /**
          * GateAnswer
          * @description The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
-         *     at most 2000 characters.
+         *     at most text_limit characters.
          */
         GateAnswer: {
             /**

@@ -64,7 +64,8 @@ CREATE INDEX IF NOT EXISTS messages_waiting ON messages (project_id, recipient_m
 CREATE INDEX IF NOT EXISTS messages_sent ON messages (sent_at);
 """
 
-# The longest message kept, in characters.
+# The longest text one session hands another, in characters: a message, an answer's words, and each of what is
+# done and what is left in a handoff note. The console reads it from the API's description.
 TEXT_LIMIT = 2000
 
 

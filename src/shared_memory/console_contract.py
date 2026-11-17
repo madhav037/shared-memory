@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
 from shared_memory.challenges import DecidesAs
+from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
@@ -774,18 +775,18 @@ answers it, which a reply does."""
 
 class MessageToSend(BaseModel):
     """A message from the signed-in member's session in the project to another member's sessions there, such as a
-    reply: the member it is for, by member ID, and its text, at most 2000 characters."""
+    reply: the member it is for, by member ID, and its text, at most text_limit characters."""
 
     to: str
-    text: str
+    text: str = Field(max_length=TEXT_LIMIT)
 
 
 class GateAnswer(BaseModel):
     """The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
-    at most 2000 characters."""
+    at most text_limit characters."""
 
     answer: Literal["agree", "refuse"]
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=TEXT_LIMIT)
 
 
 class SessionHandoffNote(BaseModel):
@@ -814,11 +815,12 @@ class ProjectSessions(BaseModel):
     gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
     the signed-in member sees: their own sessions' messages, the oldest first.
     now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
-    delivers no message."""
+    delivers no message. text_limit is the most characters a reply or an answer's words may have."""
 
     project_id: str
     project_name: str
     now: datetime
+    text_limit: int
     sessions: list[ActiveSession]
     collisions: list[SessionCollision]
     gates: list[SessionGate]

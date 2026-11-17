@@ -144,7 +144,12 @@ export function SessionsPage() {
       {found.collisions.length > 0 && <Collisions collisions={found.collisions} />}
       {found.handoff_notes.length > 0 && <HandoffNotes notes={found.handoff_notes} />}
       {found.messages.length > 0 && (
-        <Messages projectId={found.project_id} messages={found.messages} onChanged={changed} />
+        <Messages
+          projectId={found.project_id}
+          messages={found.messages}
+          textLimit={found.text_limit}
+          onChanged={changed}
+        />
       )}
 
       {found.sessions.length === 0 ? (
@@ -507,10 +512,12 @@ function HandoffNotes({ notes }: { notes: SessionHandoffNote[] }) {
 function Reply({
   projectId,
   message,
+  textLimit,
   onChanged,
 }: {
   projectId: string;
   message: SessionMessage;
+  textLimit: number;
   onChanged: (answer: ProjectSessions) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -544,7 +551,7 @@ function Reply({
         autosize
         minRows={2}
         maxRows={8}
-        maxLength={2000}
+        maxLength={textLimit}
         value={text}
         error={tried && !text.trim() ? "Write the reply first." : undefined}
         onChange={(event) => setText(event.currentTarget.value)}
@@ -567,10 +574,12 @@ function Reply({
 function Messages({
   projectId,
   messages,
+  textLimit,
   onChanged,
 }: {
   projectId: string;
   messages: SessionMessage[];
+  textLimit: number;
   onChanged: (answer: ProjectSessions) => void;
 }) {
   return (
@@ -616,7 +625,7 @@ function Messages({
             <p className="talk-text" data-testid="message-text">
               {one.text}
             </p>
-            {!one.sent_by_me && <Reply projectId={projectId} message={one} onChanged={onChanged} />}
+            {!one.sent_by_me && <Reply projectId={projectId} message={one} textLimit={textLimit} onChanged={onChanged} />}
           </li>
         ))}
       </ul>
