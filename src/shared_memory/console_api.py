@@ -28,6 +28,7 @@ from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import Exchanged, Messages
 from shared_memory.sessions import Session
 from shared_memory.talk import Talk
+from shared_memory.unhooked import Unhooked
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -226,6 +227,7 @@ class SessionTalk:
         self,
         collisions: Collisions,
         gates: Gates,
+        unhooked: Unhooked,
         messages: Messages,
         handoff_notes: HandoffNotes,
         talk: Talk,
@@ -233,6 +235,7 @@ class SessionTalk:
     ) -> None:
         self._collisions = collisions
         self._gates = gates
+        self._unhooked = unhooked
         self._messages = messages
         self._handoff_notes = handoff_notes
         self._talk = talk
@@ -261,7 +264,7 @@ class SessionTalk:
 
     def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
         """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
-        return self._gates.can_be_gated([each.session for each in active])
+        return self._unhooked.can_be_gated([each.session for each in active])
 
     def handoff_notes(self, project_id: str) -> list[tuple[Session, Note]]:
         """The handoff notes of the project's sessions gone lately, each with its session, the most recently seen

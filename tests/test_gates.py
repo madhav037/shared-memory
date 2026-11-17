@@ -720,3 +720,14 @@ def test_a_refused_edit_names_the_earlier_sessions_branch_and_the_files_it_touch
     refused = reason_in(dana.edit(FILE))
 
     assert "branch webhook-retries" in refused and "src/webhooks/retry.py" in refused
+
+
+def test_a_session_in_a_coding_agent_with_hooks_is_never_told_it_has_none_before_its_first_hook(
+    owner: Session, dana: Session
+) -> None:
+    in_claude_code = dana.as_agent("claude-code").as_session("claude-code-first-tool")
+    state(owner, WEBHOOKS)
+
+    stated = notices_of(in_claude_code.call("set_activity", activity=RETRIES, session=in_claude_code.identifier))
+
+    assert GATED not in stated, "its hook before the edit refuses it, so it is not told to hold the gate itself"

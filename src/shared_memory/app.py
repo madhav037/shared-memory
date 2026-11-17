@@ -65,6 +65,7 @@ from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
 from shared_memory.talk import Talk
+from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
 from shared_memory.uses import Uses
 
@@ -284,6 +285,7 @@ def build_app(
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
     messages = Messages(settings, db, sessions, clock)
+    unhooked = Unhooked(db, sessions, gates, clock)
     talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
@@ -365,7 +367,7 @@ def build_app(
         # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
         # tool call has reported one.
         session = sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
-        gates.heard_by_hook(session)  # so its edits can be gated (#518)
+        unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
         return session
 
     def waiting_for(
@@ -387,7 +389,7 @@ def build_app(
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
             *gates.waiting_notices(current, session),
-            *gates.unhooked_notices(current, session),
+            *unhooked.notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
             *talk.waiting_notices(session),
             *recent_work(current, session, prompt),
@@ -404,7 +406,7 @@ def build_app(
                 told.append(note)
         return told
 
-    def told(current: Caller, session: Session) -> str | None:
+    def news_for(current: Caller, session: Session) -> str | None:
         """What is waiting for a session, as one added context for a hook's answer, or None when nothing is."""
         return "\n\n".join(waiting_for(current, session)) or None
 
@@ -583,7 +585,7 @@ def build_app(
             if reason is not None:
                 stopped = True
                 return reason
-            return told(current, session) if hears else None
+            return news_for(current, session) if hears else None
 
         def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
             return hooks.blocked(format, event, text) if stopped else hooks.answered(format, event, text)
@@ -597,7 +599,7 @@ def build_app(
 
         def news(current: Caller, payload: dict[str, Any]) -> str | None:
             session = session_of(current, payload)
-            return told(current, session) if session else None
+            return news_for(current, session) if session else None
 
         return await hook(request, "PostToolUse", news)
 
@@ -1392,7 +1394,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(collisions, gates, messages, handoff_notes, talk, clock),
+            SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.
