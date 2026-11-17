@@ -2777,8 +2777,12 @@
         "type": "object"
       },
       "NamedSession": {
-        "description": "An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has\nsaid which) and its activity (None when it has none).",
+        "description": "An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has\nsaid which) and its activity (None when it has none). session_number tells it apart from the same member's other\nsessions, so the page can tell two gates between the same two members apart; it is not the identifier its coding\nagent sends, which never leaves its member (ADR-0018).",
         "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
           "member_id": {
             "title": "Member Id",
             "type": "string"
@@ -2811,6 +2815,7 @@
           }
         },
         "required": [
+          "session_number",
           "member_id",
           "member_name",
           "agent",

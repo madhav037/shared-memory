@@ -199,6 +199,7 @@ def _moment(asked: str | None, edge: time) -> datetime | None:
 def _named_session(session: Session, activity: str | None) -> NamedSession:
     """An active session as a collision, a gate or a message names it on the Sessions page."""
     return NamedSession(
+        session_number=session.id,
         member_id=session.member_id, member_name=session.member_name, agent=session.agent, activity=activity
     )
 

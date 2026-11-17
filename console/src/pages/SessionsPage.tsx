@@ -34,8 +34,9 @@ const EVERY_MS = 4000;
 /** What the page shows: the server's answer, and, per gate and earlier session, when its wait ends on this browser's clock. */
 type Shown = ProjectSessions & { ends: Map<string, number> };
 
+/** One wait of one gate: the two sessions, not only their members, since one member's two sessions can each be gated. */
 function waitKey(gate: SessionGate, earlier: NamedSession, until: string): string {
-  return `${gate.later.member_id} ${earlier.member_id} ${until}`;
+  return `${gate.later.session_number} ${earlier.session_number} ${until}`;
 }
 
 /** Whether this browser can show alerts at all: the Notification API is missing in some browsers and webviews. */
