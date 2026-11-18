@@ -259,3 +259,21 @@ def test_a_self_hosted_server_whose_key_has_lapsed_still_saves(hosted: RunningSe
     assert owner.call("decide_challenge", challenge_id=team.challenge_id, decision="reject")
     assert owner.call("retire", path=team.project_memory)["status"] == "retired"
     assert owner.call("add_card", title="Retry failed webhooks")["number"]
+
+
+def test_a_lapsed_hosted_server_refuses_to_raise_a_doubt(hosted: RunningServer) -> None:
+    hosted.clock.now = TestClock().now
+    under(hosted, "")
+    made = new_team(hosted)
+    project = made.owner().call("create_project", name="Billing")["project_id"]
+    owner = made.owner().in_project(project, "billing-api")
+    dana = member(made, project, "emp-2", "Dana Dev")
+    doubted = promote(owner, CENTS)["path"]
+    under(hosted, hosted_key())
+    try:
+        refusal = dana.refusal("challenge", path=doubted, reason="misled")
+
+        assert read_only_refusal(refusal)
+        assert owner.call("read", path=doubted)["open_challenges"] == []
+    finally:
+        under(hosted, "")
