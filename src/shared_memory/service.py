@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -14,7 +14,7 @@ from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
-from shared_memory.index import Hit, SearchIndex, split_sections
+from shared_memory.index import Hit, Reach, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
@@ -33,6 +33,40 @@ def _promoting(path: str) -> str:
         f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'team' if it "
         f"holds for every project in the team. Anything written for the whole team, such as how-we-work notes or what a new "
         f"member reads first, belongs at one of those levels. Leave it personal if it is only this member's own note."
+    )
+
+
+# The most similar memories a save names.
+SAVE_SIMILAR_LIMIT = 3
+
+
+@dataclass(frozen=True)
+class SimilarMemory:
+    """A memory within the saving member's reach that a save found similar to the memory it saved."""
+
+    path: str
+    level: str
+    title: str
+    summary: str
+    similarity: float
+
+    def answer(self) -> dict[str, Any]:
+        """As the save's answer names it."""
+        return {
+            "path": self.path,
+            "level": self.level,
+            "title": self.title,
+            "summary": self.summary,
+            "similarity": round(self.similarity, 3),
+        }
+
+
+def _resolving(similar: list[SimilarMemory]) -> str:
+    """What to do about the similar memories a save named."""
+    return (
+        f"`similar` names {len(similar)} similar memor{'y' if len(similar) == 1 else 'ies'} in reach. Judge each with "
+        "the member: supersede it if this one replaces it, promote this one if the team should follow it, or leave "
+        "both if both hold."
     )
 
 
@@ -172,9 +206,34 @@ class MemoryService:
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type))
         saved: dict[str, Any] = {"path": str(path), "level": "personal", "next": _promoting(str(path))}
+        if similar := self.similar_on_save(caller, path, memory):
+            saved["similar"] = [each.answer() for each in similar]
+            saved["next"] += " " + _resolving(similar)
         if reasons := reasons_for(memory):
             saved.update(answer_for(reasons))
         return saved
+
+    def similar_on_save(self, caller: Caller, path: PurePosixPath, memory: Memory) -> list[SimilarMemory]:
+        """The memories within the caller's reach most similar to one they have just saved. It runs once the save's
+        turn is over, and the saved memory's vectors are stored by then, so no model runs (ADR-0012, ADR-0013)."""
+        project = caller.require_project()
+        close = self._index.similar_to(
+            caller.team,
+            memory,
+            reach=Reach.of_member(caller.member_id, project.project_id, caller.unreachable),
+            threshold=self._settings.save_similar_threshold,
+            excluding=path,
+        )
+        similar: list[SimilarMemory] = []
+        for found, similarity in close:
+            try:
+                other = self._store.read(caller.team, PurePosixPath(found))
+            except Refused:
+                continue  # moved or deleted since the index was read
+            similar.append(SimilarMemory(found, locate(found).level, other.title, other.summary, similarity))
+            if len(similar) == SAVE_SIMILAR_LIMIT:
+                break
+        return similar
 
     def read(self, caller: Caller, path: str) -> dict[str, Any]:
         caller.require_project()
