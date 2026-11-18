@@ -26,8 +26,9 @@ import pytest
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
-from shared_memory.config import Settings
+from shared_memory.config import STAND_BY_TOOL_CAP_SECONDS, Settings
 from shared_memory.connection import connection_kit
+from shared_memory.standby import STAND_BY_SECONDS
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
 from tests.test_connection_kit import (
@@ -39,8 +40,9 @@ from tests.test_connection_kit import (
     without_plugin_settings,
     without_the_token,
 )
-from tests.test_gates import URGENT, answer_gate, collide, heard, send_urgent
-from tests.test_locks import take
+from tests.test_before_edit import reason_in
+from tests.test_gates import GATED, URGENT, answer_gate, collide, heard, send_urgent
+from tests.test_locks import FILE, take
 from tests.test_messages import ASKED, PROMPT, REPLIED, send
 from tests.test_mute import mute
 
@@ -204,6 +206,44 @@ def test_a_standby_ends_with_the_gate_lifting_at_the_projects_wait(
 
     news = news_in(held)
     assert "[gate]" in news and "Olive Owner" in news and "wait" in news
+
+
+def test_a_standby_ends_with_the_gate_lifting_when_the_earlier_session_ends(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    held = standing_by(dana)
+
+    owner.end()
+
+    news = news_in(held)
+    assert "[gate]" in news and "Olive Owner" in news and "ended or went idle" in news
+    assert "Olive Owner" not in heard(dana), "told once"
+
+
+def test_a_standby_ends_with_the_gate_lifting_when_the_earlier_session_goes_idle(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    owner.call("project_wait", minutes=60)
+    collide(owner, dana)
+    team.server.clock.advance(minutes=27)
+    assert GATED in reason_in(dana.edit(FILE)), "Dana's session stays active"
+    held = standing_by(dana)
+
+    team.server.clock.advance(minutes=4)
+
+    news = news_in(held)
+    assert "[gate]" in news and "Olive Owner" in news and "ended or went idle" in news
+
+
+def test_a_gate_lifted_by_an_answer_is_not_told_again_when_the_earlier_session_ends(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "agree")
+    assert "agreed" in heard(dana)
+
+    owner.end()
+
+    assert "ended or went idle" not in heard(dana)
 
 
 # Other news
@@ -495,6 +535,18 @@ def test_a_standby_started_through_the_endpoint_is_replaced_by_one_through_the_t
     assert end_tool(dana, through_the_tool)["ended"] == "moved_on"
 
 
+def test_a_stand_by_call_whose_asker_went_away_holds_the_standby_no_longer(owner: Session) -> None:
+    owner.start()
+    held = standing_by_the_tool(owner)
+
+    held.cancel()
+
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while owner.identifier in owner.on_standby():
+        assert time.monotonic() < deadline, "the standby was held for an asker that had gone"
+        time.sleep(CHECK_SECONDS / 2)
+
+
 def test_stand_by_says_to_call_it_again_until_the_projects_wait_has_passed(dana: Session) -> None:
     _, described = dana.on_connecting()
 
@@ -666,3 +718,25 @@ def test_the_standby_settings_read_their_environment_variables() -> None:
 
     assert settings.standby_cap_minutes == 3
     assert settings.standby_check_seconds == 0.5
+
+
+def test_the_deployment_docs_and_the_compose_file_give_the_standby_settings_their_defaults() -> None:
+    """A limit is named once: the docs and the compose file are static text, so this holds their defaults to the
+    settings'."""
+    settings = Settings.from_env({})
+    compose = (REPO_ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+    docs = " ".join((REPO_ROOT / "docs" / "deployment.md").read_text(encoding="utf-8").split())
+
+    for name, default in (
+        ("SHARED_MEMORY_STANDBY_CAP_MINUTES", settings.standby_cap_minutes),
+        ("SHARED_MEMORY_STANDBY_CHECK_SECONDS", settings.standby_check_seconds),
+        ("SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS", settings.standby_tool_cap_seconds),
+    ):
+        assert f"{name}: ${{{name}:-{default:g}}}" in compose, name
+        assert f"`{name}` (default {default:g}" in docs, name
+    assert f"held {STAND_BY_SECONDS} seconds unless it asks for more" in docs
+    assert (settings.standby_cap_minutes, settings.standby_check_seconds, settings.standby_tool_cap_seconds) == (
+        Settings.standby_cap_minutes,
+        Settings.standby_check_seconds,
+        STAND_BY_TOOL_CAP_SECONDS,
+    ), "the environment's defaults are the settings' own"

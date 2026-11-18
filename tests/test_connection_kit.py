@@ -15,15 +15,18 @@ from typing import Any
 import pytest
 
 from shared_memory.agents import agent_named
-from shared_memory.config import Settings
+from shared_memory.config import STAND_BY_TOOL_CAP_SECONDS, Settings
 from shared_memory.connection import (
     STAND_BY_WITH_THE_TOOL,
+    STANDBY_COMMAND_SECONDS,
     connection_kit,
+    guidance_name,
     repository_branch,
     repository_root,
+    stands_by,
     working_folder_branch,
 )
-from shared_memory.hooks import AGENTS
+from shared_memory.hooks import AGENTS, CLAUDE_CODE, GEMINI_CLI
 from shared_memory.standby import STAND_BY_SECONDS
 from tests.support import REPO_ROOT, Session, Team, edit_tool, member
 
@@ -983,7 +986,7 @@ def test_the_connect_output_of_a_tool_agent_names_the_stand_by_tool_and_the_leng
 
 
 def test_the_lengths_the_tool_agents_are_given_fit_the_servers_cap_and_each_agents_tool_timeout() -> None:
-    given = {each.agent: each for each in STAND_BY_WITH_THE_TOOL}
+    given = {guidance_name(each.agent): each for each in STAND_BY_WITH_THE_TOOL}
     cap = Settings.from_env({}).standby_tool_cap_seconds
 
     assert {agent: each.seconds for agent, each in given.items()} == {
@@ -1142,3 +1145,20 @@ def test_the_skill_names_each_agents_route_to_stand_by_and_the_tool_agents_lengt
     )
     assert "`seconds` 300 in Gemini CLI and 45 in the others" in said
     assert "`wait_left_seconds` above 0, call it again" in said
+
+
+def test_the_skill_names_the_lengths_the_server_and_the_kit_hold_a_standby_to() -> None:
+    """A limit is named once: the skill is static text, so this holds its numbers to the constants the server and the
+    kit use."""
+    skill = claude_code_skill()
+    said = " ".join(standing_by_section(skill).split())
+    (gemini,) = [each for each in STAND_BY_WITH_THE_TOOL if each.agent == GEMINI_CLI]
+
+    assert f"--max-time {STANDBY_COMMAND_SECONDS} " in standby_command(skill)
+    assert gemini.seconds == STAND_BY_TOOL_CAP_SECONDS
+    assert f"`seconds` {STAND_BY_TOOL_CAP_SECONDS} in Gemini CLI and {STAND_BY_SECONDS} in the others" in said
+
+
+def test_an_agent_with_no_route_to_stand_by_is_refused_by_name() -> None:
+    with pytest.raises(ValueError, match="Claude Code"):
+        stands_by(CLAUDE_CODE)

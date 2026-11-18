@@ -71,7 +71,8 @@ class Ending(StrEnum):
     NOTHING_YET = "nothing_yet"
     REPLACED = "replaced"
     MOVED_ON = "moved_on"
-    # The asker went away before anything else ended it; nobody reads this answer.
+    # Internal, not one of the answers `/hooks/standby` and `stand_by` document: the asker went away before anything
+    # else ended the standby, so the standby lets go without taking its news, and nobody is there to read the answer.
     GONE = "gone"
 
 
@@ -168,7 +169,7 @@ class Standbys:
                     return ended
                 now = self._clock()
                 if now >= wait.ends_at:
-                    ended = Ended(Ending.NOTHING_YET, wait_left=max(timedelta(), wait.started_at + wait.whole - now))
+                    ended = Ended(Ending.NOTHING_YET, wait_left=max(timedelta(), wait.started_at + wait.project_wait - now))
                     return ended
                 await anyio.sleep(self._every)
         finally:
@@ -192,7 +193,7 @@ class Standbys:
                 " moved_on = FALSE",
                 (session.id, session.project_id, request, now, now + held, list(awaits)),
             )
-        return _Held(now, now + held, whole)
+        return _Held(now, now + held, project_wait=whole)
 
     def _still_held(self, session: Session, request: str) -> Ended | None:
         """None while this request is still the session's standby; otherwise how it ended: replaced by a newer one, or
@@ -233,8 +234,9 @@ class Standbys:
 
 @dataclass(frozen=True)
 class _Held:
-    """How long one standby is held: from its start to its end, out of the project's whole wait."""
+    """How long one standby is held: from its start to its end, and the project's wait, which may run longer and which
+    the time left is told out of."""
 
     started_at: datetime
     ends_at: datetime
-    whole: timedelta
+    project_wait: timedelta

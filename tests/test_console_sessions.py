@@ -26,7 +26,7 @@ from tests.support import (
     signed_in,
     signed_in_owner,
 )
-from tests.test_messages import PROMPT
+from tests.test_messages import ASKED, PROMPT, REPLIED
 from tests.test_standby import answer_of, standing_by
 
 RETRY = "src/webhooks/retry.py"
@@ -711,3 +711,54 @@ def test_a_session_standing_by_for_no_one_in_particular_awaits_no_member(
     answer_of(held)
 
     assert during["standby"] == {**during["standby"], "awaits": []}
+
+
+def test_a_session_standing_by_after_an_urgent_message_awaits_its_recipients_answer(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-standby-urgent", 1492)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    dana.call("different_work", session=dana.identifier)
+    dana.call("send_message", session=dana.identifier, to="E1001", text=ASKED, urgent=True)
+    held = standing_by(dana)
+
+    during = sessions(signed_out, project)[1]
+    olive.call("send_message", session=olive.identifier, to="emp-2", text=REPLIED)
+    answered = answer_of(held)
+    held_again = standing_by(dana)
+    after_the_answer = sessions(signed_out, project)[1]
+    dana.prompt(PROMPT)
+    answer_of(held_again)
+
+    assert during["member_id"] == "emp-2"
+    assert during["standby"]["awaits"] == [{"member_id": "E1001", "member_name": "Olive Owner"}], (
+        "its edit is no longer gated: it awaits the answer to its urgent message"
+    )
+    assert answered["ended"] == "news"
+    assert after_the_answer["standby"]["awaits"] == [], "the urgent message has been answered"
+
+
+def test_a_session_standing_by_after_a_message_awaits_its_recipients_reply_until_they_reply(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-standby-message", 1493)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    olive.start()
+    dana.start()
+    dana.call("send_message", session=dana.identifier, to="E1001", text=ASKED)
+    held = standing_by(dana)
+
+    during = sessions(signed_out, project)[1]
+    olive.call("send_message", session=olive.identifier, to="emp-2", text=REPLIED)
+    replied = answer_of(held)
+    held_again = standing_by(dana)
+    after_the_reply = sessions(signed_out, project)[1]
+    dana.prompt(PROMPT)
+    answer_of(held_again)
+
+    assert during["member_id"] == "emp-2"
+    assert during["standby"]["awaits"] == [{"member_id": "E1001", "member_name": "Olive Owner"}]
+    assert replied["ended"] == "news" and REPLIED in replied["message"]
+    assert after_the_reply["standby"]["awaits"] == [], "Olive has replied to its latest message"

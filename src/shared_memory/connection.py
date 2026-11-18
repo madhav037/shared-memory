@@ -14,7 +14,17 @@ from importlib import resources
 from typing import Any, Literal
 
 from shared_memory.config import STAND_BY_TOOL_CAP_SECONDS
-from shared_memory.hooks import AGENT_HEADER, BRANCH_HEADER, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI
+from shared_memory.hooks import (
+    AGENT_HEADER,
+    BRANCH_HEADER,
+    CLINE,
+    CODEX,
+    COPILOT_CLI,
+    CURSOR,
+    DEVIN,
+    GEMINI_CLI,
+    AgentHooks,
+)
 from shared_memory.standby import STAND_BY_SECONDS
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"  # noqa: S105  # a name, not a secret
@@ -440,6 +450,13 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
     }
 
 
+@dataclass(frozen=True)
+class NoHooks:
+    """A coding agent with no hooks, which no `AgentHooks` names: its guidance alone says what to do."""
+
+    name: str
+
+
 # Which coding agents have a before-edit hook from the plugin or the kit, and which have none and so are asked by
 # their guidance to take a file's lock themselves. Every agent's guidance names both, since they share AGENTS.md.
 BEFORE_EDIT_HOOK = (
@@ -452,6 +469,19 @@ BEFORE_EDIT_HOOK = (
     "Cline",
 )
 GUIDANCE_ONLY = ("Copilot in VS Code", "Cursor on Windows")
+COPILOT_IN_VS_CODE, CURSOR_ON_WINDOWS = (NoHooks(name) for name in GUIDANCE_ONLY)
+
+# A coding agent a kit is written for: by its hooks, or as one with none.
+KitAgent = AgentHooks | NoHooks
+
+# How the guidance names an agent whose hooks go by another name: Copilot CLI's hooks name GitHub Copilot, and
+# Cursor's run only on macOS and Linux.
+_GUIDANCE_NAMES: dict[KitAgent, str] = {COPILOT_CLI: "Copilot CLI", CURSOR: "Cursor on macOS and Linux"}
+
+
+def guidance_name(agent: KitAgent) -> str:
+    """The name the guidance and the connect output give this coding agent."""
+    return _GUIDANCE_NAMES.get(agent, agent.name)
 
 # What the member connecting one of the agents in GUIDANCE_ONLY is told (#518). It is in that agent's own connect
 # output, not the instructions every agent is given, which run close to what Claude Code keeps of them.
@@ -499,14 +529,14 @@ SESSION_HABITS = f"""\
 """
 
 
-# How each coding agent but Claude Code stands by while its session awaits an answer (ADR-0027). The agents whose
-# wake-up after their turn ends is not documented run the background command first, from the guidance named here, and
+# How each coding agent but Claude Code stands by while its session awaits an answer (ADR-0027). The agents not
+# documented as woken once their turn has ended run the background command first, from the guidance named here, and
 # call the `stand_by` tool where they aren't woken, until a hand-check settles which their kit names first. Claude Code
 # runs its own command from the plugin's skill.
-STAND_BY_IN_THE_BACKGROUND = {
-    "Copilot in VS Code": "AGENTS.md",
-    "Cursor on macOS and Linux": "its rule",
-    "Copilot CLI": "AGENTS.md",
+STAND_BY_IN_THE_BACKGROUND: dict[KitAgent, str] = {
+    COPILOT_IN_VS_CODE: "AGENTS.md",
+    CURSOR: "its rule",
+    COPILOT_CLI: "AGENTS.md",
 }
 
 
@@ -515,23 +545,25 @@ class ToolStandby:
     """A coding agent that stands by with the `stand_by` tool: the seconds each call asks for, and the tool timeout
     the agent documents, or the kit sets, which a call must end within (None where it documents none)."""
 
-    agent: str
+    agent: KitAgent
     seconds: float
     allows: int | None
 
 
 # Cline's timeout on a tool call of its MCP server, which the kit sets: its own default.
 CLINE_TOOL_TIMEOUT_SECONDS = 60
+# Codex's timeout on one tool call, by default (tool_timeout_sec), and Gemini CLI's on a call to an MCP server.
+CODEX_TOOL_TIMEOUT_SECONDS = 60
+GEMINI_CLI_TOOL_TIMEOUT_SECONDS = 10 * 60
 
 # Every other agent stands by with the tool, each call held up to the default unless its tool timeout allows more:
-# Codex's per-tool timeout is 60 seconds by default (tool_timeout_sec), and Gemini CLI's on an MCP server 10 minutes,
-# so it is asked for the most the server holds one call. Devin Desktop and Cursor document none.
+# Gemini CLI's does, so it is asked for the most the server holds one call. Devin Desktop and Cursor document none.
 STAND_BY_WITH_THE_TOOL = (
-    ToolStandby("Codex", STAND_BY_SECONDS, 60),
-    ToolStandby("Gemini CLI", STAND_BY_TOOL_CAP_SECONDS, 600),
-    ToolStandby("Cline", STAND_BY_SECONDS, CLINE_TOOL_TIMEOUT_SECONDS),
-    ToolStandby("Devin Desktop", STAND_BY_SECONDS, None),
-    ToolStandby("Cursor on Windows", STAND_BY_SECONDS, None),
+    ToolStandby(CODEX, STAND_BY_SECONDS, CODEX_TOOL_TIMEOUT_SECONDS),
+    ToolStandby(GEMINI_CLI, STAND_BY_TOOL_CAP_SECONDS, GEMINI_CLI_TOOL_TIMEOUT_SECONDS),
+    ToolStandby(CLINE, STAND_BY_SECONDS, CLINE_TOOL_TIMEOUT_SECONDS),
+    ToolStandby(DEVIN, STAND_BY_SECONDS, None),
+    ToolStandby(CURSOR_ON_WINDOWS, STAND_BY_SECONDS, None),
 )
 
 # How long the background command waits for the server, which holds a standby at most `Settings.standby_cap_minutes`
@@ -543,17 +575,24 @@ STANDBY_NOT_ANSWERED = "Shared Memory did not answer this standby."
 STANDBY_WITHOUT_TOKEN = f"{TOKEN_VARIABLE} is not set here: call stand_by instead."
 
 
-def stands_by(agent: str) -> str:
-    """What the member connecting this agent is told of how its sessions stand by."""
+def stands_by(agent: KitAgent) -> str:
+    """What the member connecting this agent is told of how its sessions stand by. An agent with no route in either
+    table is refused, naming it."""
+    named = guidance_name(agent)
     if agent in STAND_BY_IN_THE_BACKGROUND:
         return (
-            f"{agent} stands by with the background command in {STAND_BY_IN_THE_BACKGROUND[agent]}, written for a "
+            f"{named} stands by with the background command in {STAND_BY_IN_THE_BACKGROUND[agent]}, written for a "
             "POSIX shell and for PowerShell, and calls the stand_by tool instead where it isn't woken as the command "
             "ends."
         )
-    (tool,) = [each for each in STAND_BY_WITH_THE_TOOL if each.agent == agent]
+    tools = {each.agent: each for each in STAND_BY_WITH_THE_TOOL}
+    if agent not in tools:
+        raise ValueError(
+            f"No route to stand by is known for {named}: add it to STAND_BY_IN_THE_BACKGROUND or STAND_BY_WITH_THE_TOOL."
+        )
+    tool = tools[agent]
     within = f", within the {tool.allows}-second timeout it gives a tool" if tool.allows else ""
-    return f"{agent} stands by with the stand_by tool, each call held up to {tool.seconds:g} seconds{within}."
+    return f"{named} stands by with the stand_by tool, each call held up to {tool.seconds:g} seconds{within}."
 
 
 def background_standby(hooks_url: str, project_id: str, repository: str) -> str:
@@ -585,7 +624,8 @@ def background_standby_powershell(hooks_url: str, project_id: str, repository: s
     )
 
 
-def _listed(names: list[str]) -> str:
+def _joined_with_and(names: list[str]) -> str:
+    """These names in a sentence: "a, b and c"."""
     return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
@@ -593,15 +633,17 @@ def standby_habits(hooks_url: str, project_id: str, repository: str) -> str:
     """How every agent but Claude Code stands by, in AGENTS.md and in Cursor's rule alike: when, which route each
     agent takes, and what to do with the answer. The skill says the same at length."""
     longer = [each for each in STAND_BY_WITH_THE_TOOL if each.seconds != STAND_BY_SECONDS]
-    lengths = " and ".join([*(f"{each.seconds:g} in {each.agent}" for each in longer), f"{STAND_BY_SECONDS} in the others"])
-    tool_agents = ", ".join(each.agent for each in STAND_BY_WITH_THE_TOOL)
+    lengths = " and ".join(
+        [*(f"{each.seconds:g} in {guidance_name(each.agent)}" for each in longer), f"{STAND_BY_SECONDS} in the others"]
+    )
+    tool_agents = ", ".join(guidance_name(each.agent) for each in STAND_BY_WITH_THE_TOOL)
     return f"""\
 - Stand by when this session awaits an answer: when an edit is refused as gated and when you have sent an urgent
   message; after any other message, only when the member wants its answer. A standby ends with the session's news:
   show the member the news and what it means for the work, and ask what to do. When the project's wait passes with
   nothing, tell the member, and stand by at most once more. When Shared Memory doesn't answer, wait a few seconds
   and try once more, then tell the member Shared Memory isn't answering.
-- In {_listed(list(STAND_BY_IN_THE_BACKGROUND))}, run the standby command below in the background, with this
+- In {_joined_with_and([guidance_name(agent) for agent in STAND_BY_IN_THE_BACKGROUND])}, run the standby command below in the background, with this
   session's identifier in place of `<session>`, and end your turn: it ends with the session's news. If you can't run
   a background command, aren't woken when it ends, or it says {TOKEN_VARIABLE} is not set, call `stand_by` instead.
 - In {tool_agents} and any other coding agent, call `stand_by` with this session, and `seconds` {lengths}, as
@@ -846,7 +888,7 @@ def connection_kit(
             "the project is trusted; earlier versions ignore a repository's own configuration. The hooks brief each "
             "session, recall memory for each prompt, check or take a file's lock before apply_patch changes it and "
             "end the session, with curl, and each has a PowerShell command for Windows. An edit goes ahead unchecked "
-            f"when the server hasn't answered in {HOOK_SECONDS} seconds. {stands_by('Codex')}",
+            f"when the server hasn't answered in {HOOK_SECONDS} seconds. {stands_by(CODEX)}",
             contents=(
                 "[mcp_servers.shared-memory]\n"
                 f"url = {json.dumps(endpoint)}\n"
@@ -865,7 +907,7 @@ def connection_kit(
             "member for their personal token the first time and keeps it, and asks once to trust the server. Copilot in "
             "VS Code gets no hook from Shared Memory, so locks are guidance only there: AGENTS.md asks it to call "
             "take_lock before it edits a file, and nothing stops an edit of a file another session holds. "
-            f"{TALK_LIMITED.format(agent='Copilot in VS Code')} {stands_by('Copilot in VS Code')}",
+            f"{TALK_LIMITED.format(agent=COPILOT_IN_VS_CODE.name)} {stands_by(COPILOT_IN_VS_CODE)}",
             contents=_json(
                 {
                     "inputs": [
@@ -914,7 +956,7 @@ def connection_kit(
             "server's URL is https, and lets an edit through when the server is down or hasn't answered in "
             f"{HOOK_SECONDS} seconds. No prompt hook is here, because GitHub's reference says the CLI drops whatever one answers. "
             "In VS Code, Copilot calls briefing and search itself, and locks are guidance only. "
-            f"{stands_by('Copilot CLI')}",
+            f"{stands_by(COPILOT_CLI)}",
             contents=_json(copilot_cli_hook(hooks_url, project_id, repository)),
         ),
         ConnectionFile(
@@ -924,7 +966,7 @@ def connection_kit(
             how="Merge these keys into the file, keeping anything already there; add AGENTS.md to any context file "
             "names already listed, and the hooks to any hooks already there. Gemini CLI reads it in folders you "
             "trust, briefs each session as it starts, recalls memory for each prompt, checks or takes a file's lock "
-            f"before write_file or replace changes it, and ends the session. {stands_by('Gemini CLI')}",
+            f"before write_file or replace changes it, and ends the session. {stands_by(GEMINI_CLI)}",
             contents=_json(
                 {
                     "mcpServers": {
@@ -974,8 +1016,7 @@ def connection_kit(
             f"when the server hasn't answered in {HOOK_SECONDS} seconds, and end the session. Cursor launches hooks "
             "through PowerShell on Windows, where these commands don't run; there the rule is what keeps memory in reach, "
             "and locks are guidance only: the rule asks Cursor to call take_lock before it edits a file. "
-            f"{TALK_LIMITED.format(agent='Cursor on Windows')} {stands_by('Cursor on macOS and Linux')} "
-            f"{stands_by('Cursor on Windows')}",
+            f"{TALK_LIMITED.format(agent=CURSOR_ON_WINDOWS.name)} {stands_by(CURSOR)} {stands_by(CURSOR_ON_WINDOWS)}",
             contents=_json(cursor_hooks(hooks_url, project_id, repository)),
         ),
         ConnectionFile(
@@ -1013,7 +1054,7 @@ def connection_kit(
             "lock before Devin's write, edit or notebook_edit tool changes it, letting the edit through when the "
             f"server hasn't answered in {HOOK_SECONDS} seconds, and ends the session. Devin loads whatever hooks "
             ".claude/settings.json holds as well, so Shared Memory keeps none there and each hook runs once. "
-            f"{stands_by('Devin Desktop')}",
+            f"{stands_by(DEVIN)}",
             contents=_json(devin_hooks(hooks_url, project_id, repository)),
         ),
         ConnectionFile(
@@ -1022,7 +1063,7 @@ def connection_kit(
             action="merge",
             how="Cline keeps MCP servers in one file on each machine, not in the repository. Each member adds this "
             "entry to it once for this project. It names the project only, so every repository of the project reaches "
-            f"it through the same entry. {stands_by('Cline')}",
+            f"it through the same entry. {stands_by(CLINE)}",
             contents=_json(
                 {
                     "mcpServers": {

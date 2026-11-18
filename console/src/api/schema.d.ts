@@ -1448,8 +1448,9 @@ export interface components {
         /**
          * SessionStandby
          * @description A session standing by (ADR-0027): its coding agent waits for news without its member typing. awaits names the
-         *     members whose answer it awaits, as it was when the standby started (the earlier members its edit is gated on); it
-         *     is empty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the
+         *     members whose answer it awaits, as it was when the standby started: the earlier members its edit is gated on, those
+         *     its urgent messages not yet answered went to, and the member its latest message went to until they reply. It is
+         *     empty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the
          *     server's clock, unless news, a newer standby or the member's next prompt ends it first.
          */
         SessionStandby: {
