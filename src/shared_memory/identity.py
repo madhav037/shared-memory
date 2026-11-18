@@ -267,13 +267,17 @@ class Identity:
             " WHERE l.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
             (project_id,),
         ).fetchall()
-        if not leads:
-            leads = conn.execute(
-                "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
-                " ORDER BY member_id",
-                (team_pk,),
-            ).fetchall()
-        return [row["member_id"] for row in leads]
+        return [row["member_id"] for row in leads] or Identity.admins_in(conn, team_pk)
+
+    @staticmethod
+    def admins_in(conn: Conn, team_pk: int) -> list[str]:
+        """The team's owner and admins, by member ID. Asked inside a transaction already open."""
+        rows = conn.execute(
+            "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
+            " ORDER BY member_id",
+            (team_pk,),
+        ).fetchall()
+        return [row["member_id"] for row in rows]
 
     def _require_lead(self, caller: Caller, project_id: str) -> None:
         if not self.looks_after(caller.member, project_id):

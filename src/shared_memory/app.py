@@ -824,6 +824,7 @@ def build_app(
         tool and the briefing prompt. `named` is the line naming the session's identifier, which follows the briefing
         and shares its cap; `session` is the one being briefed, whose own line is left out. Without `with_sessions`
         the active sessions are left out, for an asker whose own session isn't known."""
+        questions.pass_on(current)
         due, working = board.for_briefing(current)
         work = Work(due, working, known_issues.titles(current))
         return briefing.for_session(

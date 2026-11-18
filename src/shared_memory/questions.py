@@ -18,12 +18,18 @@ What other modules stand on, all of it on `Questions`:
 - `ask(caller, path, text)`: ask the author of a memory the caller can read; its question ID and the author.
 - `answer(caller, question_id, text)`: answer a question about a memory the caller can read.
 - `on(caller, path)`: the memory's threads, oldest first, and how many are open: what a read of it carries.
+- `pass_on(caller)`: pass on the team's questions now due (#569), before a briefing is composed.
+
+A question its author has left unanswered for `PASS_ON_DAYS`, or whose author has been removed, is passed on to the
+memory's project leads (the team's owner and admins where it has none), or for team memory to the team's admins. There
+is no scheduler: it is worked out from the clock whenever questions are read, as a session's activity is (ADR-0018),
+and each question is passed on once. The author may still answer it, and so may anyone else who can read the memory.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from shared_memory.audit import QUESTION_ANSWERED, QUESTION_ASKED, Audit
@@ -58,6 +64,24 @@ CREATE TABLE IF NOT EXISTS answers (
     answered_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS answers_by_question ON answers (question_id, id);
+-- The memory's author when the question was asked, by member ID, so that a removed author's questions are passed on.
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS author TEXT;
+"""
+
+# How long a question waits for its author before it is passed on to the memory's project leads or the team's admins.
+PASS_ON_DAYS = 7
+
+# Passes on the team's open questions now due, each once: still with their author, and asked `PASS_ON_DAYS` ago or by
+# now about a removed author's memory.
+PASSED_ON = """
+UPDATE questions q SET routed_to = CASE WHEN q.memory_path LIKE 'projects/%%' THEN 'leads' ELSE 'admins' END,
+    routed_at = %(now)s
+WHERE q.team = %(team)s AND q.state = 'open' AND q.routed_to = 'author' AND (q.asked_at <= %(due)s OR EXISTS (
+    SELECT 1 FROM members m WHERE m.team_id = %(team_pk)s AND m.member_id = q.author AND m.removed_at IS NOT NULL
+))
+RETURNING q.id, q.memory_path, q.asker_id, q.author, q.text, EXISTS (
+    SELECT 1 FROM members m WHERE m.team_id = %(team_pk)s AND m.member_id = q.author AND m.removed_at IS NOT NULL
+) AS removed
 """
 
 State = Literal["open", "answered"]
@@ -94,9 +118,9 @@ class Questions:
         now = self._clock()
         with self._db.transaction() as conn:
             row = conn.execute(
-                "INSERT INTO questions (team, memory_path, asker_id, text, asked_at, routed_at)"
-                " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                (caller.team, str(location.path), caller.member.pk, said, now, now),
+                "INSERT INTO questions (team, memory_path, asker_id, author, text, asked_at, routed_at)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                (caller.team, str(location.path), caller.member.pk, author, said, now, now),
             ).fetchone()
         assert row is not None
         question_id = int(row["id"])
@@ -151,8 +175,68 @@ class Questions:
         state: State = "answered" if caller.member_id != asker else found["state"]
         return {"question_id": question_id, "path": str(location.path), "state": state}
 
+    def pass_on(self, caller: Caller) -> None:
+        """Pass on every open question in the caller's team that its author has left unanswered for `PASS_ON_DAYS`, or
+        whose author has been removed: the memory's project leads are told, or for team memory the team's admins. Each
+        question is passed on once, by whichever read finds it due first."""
+        now = self._clock()
+        with self._db.transaction() as conn:
+            due = conn.execute(
+                PASSED_ON,
+                {
+                    "now": now,
+                    "team": caller.team,
+                    "team_pk": caller.member.team_pk,
+                    "due": now - timedelta(days=PASS_ON_DAYS),
+                },
+            ).fetchall()
+            if not due:
+                return
+            askers = self._identity.named_in(conn, [row["asker_id"] for row in due])
+            authors = {
+                row["member_id"]: row["name"]
+                for row in conn.execute(
+                    "SELECT member_id, name FROM members WHERE team_id = %s AND member_id = ANY(%s)",
+                    (caller.member.team_pk, [row["author"] for row in due if row["author"] is not None]),
+                )
+            }
+            told: list[tuple[str, str]] = []
+            for row in sorted(due, key=lambda each: int(each["id"])):
+                location = locate(row["memory_path"])
+                if location.project_id is None:
+                    standing, hearing = (
+                        "one of the team's admins",
+                        self._identity.admins_in(conn, caller.member.team_pk),
+                    )
+                else:
+                    standing = "a lead of its project"
+                    hearing = self._identity.told_about(conn, caller.member.team_pk, location.project_id)
+                asker_id, asker_name = askers[row["asker_id"]]
+                author = row["author"] or "its author"
+                if row["author"] is not None:
+                    author = f"its author {_named(row['author'], authors.get(row['author'], row['author']))}"
+                why = (
+                    f"{author} has been removed"
+                    if row["removed"]
+                    else f"unanswered by {author} for {PASS_ON_DAYS} days"
+                )
+                text = (
+                    f"{_named(asker_id, asker_name)} asked about {location.path} (question {row['id']}), {why}: "
+                    f'"{escape(row["text"])}" It comes to you as {standing}. Show it to the member, and send an '
+                    "answer with answer_question."
+                )
+                others = [member_id for member_id in hearing if member_id not in (asker_id, row["author"])]
+                if not others:
+                    # The project's only leads are the asker or the silent author: its team's admins hear instead.
+                    admins = self._identity.admins_in(conn, caller.member.team_pk)
+                    others = [member_id for member_id in admins if member_id not in (asker_id, row["author"])]
+                told.extend((member_id, text) for member_id in others)
+        for member_id, text in told:
+            self._tell(caller.team, member_id, text)
+
     def on(self, caller: Caller, path: str) -> dict[str, Any]:
         """The threads on one memory the caller has already been let read, oldest first, and how many are open."""
+        self.pass_on(caller)
         with self._db.transaction() as conn:
             asked = conn.execute(
                 "SELECT id, text, asked_at, state, asker_id FROM questions WHERE team = %s AND memory_path = %s"

@@ -187,3 +187,78 @@ def test_a_restricted_projects_questions_are_hidden_from_members_outside_it(
 
     assert all("is restricted" in refusal for refusal in refusals)
     assert threads(in_billing, path)["open"] == 1
+
+
+# Passed on (#569): a question its author leaves unanswered for 7 days, or whose author has been removed, also goes to
+# the memory's project leads, or the team's admins for team memory. Worked out from the clock when questions are read.
+
+
+def test_a_question_unanswered_for_seven_days_reaches_the_projects_leads(
+    team: Team, owner: Session, dana: Session, cole: Session
+) -> None:
+    path = promote_now(dana, SERVICES)
+    asked = ask(cole, path)
+    briefing(owner)
+
+    team.server.clock.advance(days=6, hours=23)
+    too_soon = briefing(owner)
+    team.server.clock.advance(hours=1)
+    told = briefing(owner)
+
+    assert QUESTION not in too_soon
+    assert f"Cole Coder (emp-3) asked about {path} (question {asked['question_id']})" in told
+    assert "unanswered by its author Dana Dev (emp-2) for 7 days" in told
+    assert "a lead of its project" in told and QUESTION in told and "answer_question" in told
+    assert QUESTION not in briefing(owner), "a question is passed on once"
+
+
+def test_a_team_memorys_unanswered_question_reaches_the_teams_admins(
+    team: Team, owner: Session, dana: Session, cole: Session
+) -> None:
+    path = promote_now(dana, SERVICES, level="team")
+    asked = ask(cole, path)
+
+    team.server.clock.advance(days=7)
+    told = briefing(owner)
+
+    assert f"(question {asked['question_id']})" in told and QUESTION in told
+    assert "one of the team's admins" in told
+
+
+def test_a_removed_authors_question_reaches_the_leads_at_once(owner: Session, dana: Session, cole: Session) -> None:
+    path = promote_now(dana, SERVICES)
+    asked = ask(cole, path)
+    briefing(owner)
+
+    owner.call("remove_member", member_id="emp-2")
+    told = briefing(owner)
+
+    assert f"(question {asked['question_id']})" in told and QUESTION in told
+    assert "its author Dana Dev (emp-2) has been removed" in told
+
+
+def test_the_author_can_still_answer_once_it_has_been_passed_on(
+    team: Team, owner: Session, dana: Session, cole: Session
+) -> None:
+    path = promote_now(dana, SERVICES)
+    asked = ask(cole, path)
+    briefing(cole)
+    team.server.clock.advance(days=8)
+    briefing(owner)
+
+    answered = answer(dana, asked["question_id"])
+
+    assert answered["state"] == "answered"
+    assert threads(cole, path)["open"] == 0
+    assert ANSWER in briefing(cole)
+
+
+def test_an_answered_question_is_not_passed_on(team: Team, owner: Session, dana: Session, cole: Session) -> None:
+    path = promote_now(dana, SERVICES)
+    asked = ask(cole, path)
+    answer(dana, asked["question_id"])
+    briefing(owner)
+
+    team.server.clock.advance(days=8)
+
+    assert QUESTION not in briefing(owner)
