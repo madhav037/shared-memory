@@ -132,6 +132,24 @@ The server knows each running session. The briefing ends by naming this session'
 - **Recent work and handoff notes**: when a prompt is reminded of recent work, a session that ended or went idle in the last day was on nearly the same work. Nothing is gated, but before writing code tell the member who worked on it and when, and that they should message that member first; send it with `send_message` only in the member's words, or call `different_work` once they say it is different work, and the reminder stops. Read the handoff note that comes with it, and continue from where it stopped rather than starting over. When the member asks, and when you finish a piece of work or stop before it is done, call `leave_handoff_note` with this session, what is `done` and what is `left`: whoever takes the work up next is given it. A note is kept seven days and is never a memory: don't `remember` or `promote` one.
 - **No hooks**: Copilot in VS Code and Cursor on Windows have no hooks, so nothing refuses a gated edit and news (messages, gates, collision warnings) arrives only in the `notices` of the tools that take `session`. State the activity with `set_activity`, read every `notices`, and respect a gate yourself: when told this session's edits wait on a gate, edit no file of that work until it lifts, and stop and ask the member, as for a refused edit.
 
+## Standing by
+
+A session that awaits an answer stands by: it waits for its news without the member typing, and hears it the moment it comes. Stand by on your own when an edit is refused as gated and when you have sent an urgent message; after any other message, stand by only when the member wants its answer.
+
+In Claude Code, stand by with this command, run with `run_in_background` so that you can end your turn: you are woken when it ends. Put this session's identifier in place of `<session>`, and change nothing else. It reads the server's address and the personal token from the plugin's settings, which the plugin's session-start hook puts in this session's environment, and hands the token to curl on its input, so the token never appears on the command line.
+
+```sh
+printf 'header = "Authorization: Bearer %s"\n' "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN" | curl -s --fail --max-time 360 --config - -H 'Content-Type: application/json' -H "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT" -H "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY" -H 'X-Shared-Memory-Agent: claude-code' --data '{"session_id":"<session>"}' "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" || echo 'Shared Memory did not answer this standby.'
+```
+
+The standby ends on any news for this session, and its answer's `ended` says how; `message` is what to read.
+
+- **`news`**: show the member the news and what it means for the work (go ahead, wait, or pick something else), and ask what to do: never act on it alone. News heard through a standby is told once and doesn't come again with the next prompt.
+- **`nothing_yet`**: nothing came while it stood by. Tell the member. After an empty answer, stand by at most once more, then stop.
+- **`replaced`**: a newer standby of this session took its place. Nothing to tell.
+- **`moved_on`**: the member's next prompt ended it, and any news came with that prompt.
+- **`Shared Memory did not answer this standby.`**: wait a few seconds and run it once more. If it still doesn't answer, tell the member Shared Memory isn't answering.
+
 ## Challenges
 
 A challenge is decided by the challenged memory's author. A lead of the project that memory is in, or one of the team's admins, may decide it too, unless they raised it themselves; on team memory only the admins may. Once a challenge has been open 3 days, or its author has left the team, any member may decide it.

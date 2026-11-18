@@ -743,3 +743,180 @@ def test_every_agents_guidance_says_news_can_arrive_mid_turn() -> None:
         said = " ".join(files[path].split())
         assert "can arrive mid-turn" in said or "in the middle of a turn" in said, path
         assert "then stop and tell the member" in said, path
+
+
+# Claude Code stands by with a background command the skill gives (ADR-0027, #526)
+
+
+def claude_code_skill() -> str:
+    return (REPO_ROOT / "plugin" / "skills" / "shared-memory" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def standing_by_section(skill: str) -> str:
+    return skill.split("## Standing by", 1)[1].split("\n## ", 1)[0]
+
+
+def standby_command(skill: str) -> str:
+    """The background command the skill gives for standing by, as the agent copies it, `<session>` and all."""
+    return standing_by_section(skill).split("```sh\n", 1)[1].split("\n```", 1)[0]
+
+
+#: When Claude Code stands by and what it does with the answer, one marker each: run in the background, stand by when
+#: an edit is refused as gated, after an urgent message and after a message whose answer the member wants, at most once
+#: more after an empty answer, retry once after a few seconds then say the server isn't answering, and show the member
+#: the answer and ask what to do.
+STANDBY_HABITS = (
+    "run_in_background",
+    "an edit is refused as gated",
+    "urgent message",
+    "the member wants its answer",
+    "at most once more",
+    "a few seconds",
+    "Shared Memory isn't answering",
+    "show the member",
+    "ask what to do",
+)
+
+
+def test_the_skill_tells_claude_code_when_to_stand_by_and_what_to_do_with_the_answer() -> None:
+    said = " ".join(standing_by_section(claude_code_skill()).split())
+
+    for habit in STANDBY_HABITS:
+        assert habit in said, habit
+
+
+def test_claude_codes_standby_command_reaches_the_server_as_the_plugins_hooks_do() -> None:
+    command = standby_command(claude_code_skill())
+    hooks = (REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8")
+
+    assert "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" in command
+    for read in (
+        "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
+        "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT",
+        "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY",
+        "X-Shared-Memory-Agent: claude-code",
+    ):
+        assert read in command and read in hooks, read
+    assert '"session_id":"<session>"' in command
+
+
+def test_claude_codes_standby_command_never_puts_the_token_on_its_command_line(tmp_path: Path) -> None:
+    token = "smt_never-on-the-command-line"
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    curl = shims / "curl"
+    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > "$SEEN/input"\n', encoding="utf-8")
+    curl.chmod(0o755)
+    command = standby_command(claude_code_skill()).replace("<session>", "test-session")
+
+    ran = subprocess.run(
+        ["sh", "-c", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "PATH": f"{shims}{os.pathsep}{os.environ['PATH']}",
+            "SEEN": str(tmp_path),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": "https://memory.example.com",
+        },
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert token not in (tmp_path / "arguments").read_text(encoding="utf-8")
+    assert f"Authorization: Bearer {token}" in (tmp_path / "input").read_text(encoding="utf-8")
+
+
+# Claude Code gives the plugin's settings only to the plugin's own hooks and MCP server, not to the agent's commands, so
+# the session-start hook writes them to the file Claude Code reads before each of the agent's commands (CLAUDE_ENV_FILE).
+
+
+def claude_code_session_start_hook() -> str:
+    hooks = json.loads((REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    command: str = hooks["SessionStart"][0]["hooks"][0]["command"]
+    return command
+
+
+#: A token and an address with the characters a shell treats specially, which must come back exactly.
+AWKWARD_TOKEN = "smt_it's \"odd\" $HOME `id` \\ ; | & * ? \t end"
+AWKWARD_SERVER_URL = "http://127.0.0.1:1/a b'c$d"
+SESSION_START = json.dumps({"session_id": "test-session", "hook_event_name": "SessionStart", "source": "startup"})
+
+
+def recording_curl(folder: Path) -> dict[str, str]:
+    """The environment for a stand-in curl that records its arguments one per line in `folder` and answers `{}`."""
+    shims = folder / "bin"
+    shims.mkdir()
+    curl = shims / "curl"
+    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > /dev/null\necho \'{}\'\n', encoding="utf-8")
+    curl.chmod(0o755)
+    return {"PATH": f"{shims}{os.pathsep}{os.environ['PATH']}", "SEEN": str(folder)}
+
+
+def without_plugin_settings() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("CLAUDE_PLUGIN_OPTION_") and key != "CLAUDE_ENV_FILE"
+    }
+
+
+def test_claude_codes_session_start_hook_hands_the_agents_commands_its_settings_exactly(tmp_path: Path) -> None:
+    env_file = tmp_path / "claude-env"
+    env_file.write_text("export ALREADY_THERE='kept'\n", encoding="utf-8")
+
+    ran = subprocess.run(
+        ["sh", "-c", claude_code_session_start_hook()],
+        input=SESSION_START,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **without_plugin_settings(),
+            **recording_curl(tmp_path),
+            "CLAUDE_ENV_FILE": str(env_file),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": AWKWARD_TOKEN,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": AWKWARD_SERVER_URL,
+        },
+    )
+    sourced = subprocess.run(
+        [
+            "sh",
+            "-c",
+            '. "$1"; printf \'%s\\n%s\\n%s\' "$ALREADY_THERE" "$CLAUDE_PLUGIN_OPTION_SERVER_URL" '
+            '"$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN"',
+            "sh",
+            str(env_file),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=without_plugin_settings(),
+    )
+
+    assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", ""), "the briefing's answer, and nothing else"
+    assert sourced.stdout.split("\n") == ["kept", AWKWARD_SERVER_URL, AWKWARD_TOKEN]
+    arguments = (tmp_path / "arguments").read_text(encoding="utf-8")
+    assert [line for line in arguments.split("\n") if "smt_" in line] == [f"Authorization: Bearer {AWKWARD_TOKEN}"], (
+        "the token reaches curl only as the hooks have always sent it"
+    )
+
+
+def test_claude_codes_session_start_hook_without_an_environment_file_only_briefs(tmp_path: Path) -> None:
+    ran = subprocess.run(
+        ["sh", "-c", claude_code_session_start_hook()],
+        input=SESSION_START,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **without_plugin_settings(),
+            **recording_curl(tmp_path),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": AWKWARD_TOKEN,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": AWKWARD_SERVER_URL,
+        },
+    )
+
+    assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", "")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"]

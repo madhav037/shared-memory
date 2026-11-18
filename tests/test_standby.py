@@ -12,9 +12,13 @@ embeddings."""
 from __future__ import annotations
 
 import dataclasses
+import json
+import shutil
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -25,6 +29,12 @@ from shared_memory.app import build_app
 from shared_memory.config import Settings
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
+from tests.test_connection_kit import (
+    claude_code_session_start_hook,
+    claude_code_skill,
+    standby_command,
+    without_plugin_settings,
+)
 from tests.test_gates import URGENT, answer_gate, collide, heard, send_urgent
 from tests.test_locks import take
 from tests.test_messages import ASKED, PROMPT, REPLIED, send
@@ -486,6 +496,56 @@ def test_stand_by_says_to_call_it_again_until_the_projects_wait_has_passed(dana:
 
     said = described["stand_by"]
     assert "again" in said and "wait" in said and "once more" in said
+
+# Claude Code's background command (#526)
+
+
+@pytest.mark.skipif(shutil.which("curl") is None, reason="Claude Code's standby command runs curl, which isn't installed")
+def test_claude_codes_standby_command_run_in_a_posix_shell_hears_the_sessions_news(
+    owner: Session, dana: Session, tmp_path: Path
+) -> None:
+    """The session starts through the plugin's session-start hook, which alone is given the plugin's settings; the
+    agent's command, like every command of Claude Code's agent, runs after the environment file is read."""
+    assert dana.token is not None and dana.project is not None and dana.repository is not None
+    # What `.claude/settings.json` gives every command in the repository.
+    repository = {**without_plugin_settings(), "SHARED_MEMORY_PROJECT": dana.project, "SHARED_MEMORY_REPOSITORY": dana.repository}
+    env_file = tmp_path / "claude-env"
+    started = subprocess.run(
+        ["sh", "-c", claude_code_session_start_hook()],
+        input=json.dumps({"session_id": dana.identifier, "hook_event_name": "SessionStart", "source": "startup"}),
+        capture_output=True,
+        text=True,
+        timeout=ANSWERED_WITHIN_SECONDS,
+        env={
+            **repository,
+            "CLAUDE_ENV_FILE": str(env_file),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": dana.token,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": dana.server.url,
+        },
+    )
+    assert started.returncode == 0 and "hookSpecificOutput" in json.loads(started.stdout), started
+    collide(owner, dana)
+    command = standby_command(claude_code_skill()).replace("<session>", dana.identifier)
+    shell = subprocess.Popen(
+        ["sh", "-c", f'. "$1"; {command}', "sh", str(env_file)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=repository,
+    )
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while dana.identifier not in dana.on_standby():
+        assert shell.poll() is None, f"the standby ended at once: {shell.communicate()}"
+        assert time.monotonic() < deadline, "the standby was never held"
+        time.sleep(CHECK_SECONDS / 2)
+
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I'm on the docs.")
+
+    printed, errors = shell.communicate(timeout=ANSWERED_WITHIN_SECONDS)
+    assert shell.returncode == 0, errors
+    answer = json.loads(printed)
+    assert answer["ended"] == "news", answer
+    assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
 
 
 # Settings
