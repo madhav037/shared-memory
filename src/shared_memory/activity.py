@@ -2,8 +2,9 @@
 
 The coding agent states it with `set_activity`, and stating it again replaces it. A session that has stated none shows
 the title of its member's most recently claimed card in Doing on the project's board. Activity ends with its session:
-`Sessions.on_gone` clears it when the session ends or is found back from idle, and a session that went idle and never
-called again is simply not among the active sessions read here.
+it is cleared when the session is found back from idle, and an ended session, or one that went idle and never called
+again, is simply not among the active sessions read here. An ended session keeps its last stated activity, for its
+member's recent sessions (#566); started again, it counts only what it states since.
 
 What other modules stand on, all of it on `Activities`:
 
@@ -11,6 +12,7 @@ What other modules stand on, all of it on `Activities`:
 - `in_project(project_id)`: the project's active sessions, oldest first, each a `SessionActivity`: the `Session`, its
   activity (None when it stated none and its member has no card in Doing) and whether that activity is a card's title.
 - `for_briefing(caller, session)`: those sessions as the briefing lists them, one line each, without the asking one.
+- `last_stated(sessions)`: the activity each of these sessions last stated, active or not, kept past its end.
 
 Only this module reads the `session_activities` table.
 """
@@ -34,6 +36,10 @@ CREATE TABLE IF NOT EXISTS session_activities (
     activity TEXT NOT NULL,
     stated_at TIMESTAMPTZ NOT NULL
 );
+
+-- Its session ended with this activity, which is kept for its member's recent sessions but is not the activity of the
+-- session started again, which states its own.
+ALTER TABLE session_activities ADD COLUMN IF NOT EXISTS ended BOOLEAN NOT NULL DEFAULT FALSE;
 """
 
 # The longest activity kept, in characters: one line, as long as a card's title may be.
@@ -96,9 +102,14 @@ class Activities:
                 conn.execute(SCHEMA)
         sessions.on_gone(self._clear)
 
-    @staticmethod
-    def _clear(conn: Conn, ids: Sequence[int]) -> None:
-        conn.execute("DELETE FROM session_activities WHERE session_id = ANY(%s)", (list(ids),))
+    def _clear(self, conn: Conn, ids: Sequence[int]) -> None:
+        # An ended session keeps its last stated activity; one back from idle is active again, without it.
+        ended = self._sessions.ended_among(conn, ids)
+        if ended:
+            conn.execute("UPDATE session_activities SET ended = TRUE WHERE session_id = ANY(%s)", (list(ended),))
+        back = [one for one in ids if one not in ended]
+        if back:
+            conn.execute("DELETE FROM session_activities WHERE session_id = ANY(%s)", (back,))
 
     def state(self, session: Session, activity: str) -> str:
         """State the session's activity, in place of any it stated before. Returns it as it is kept."""
@@ -106,7 +117,8 @@ class Activities:
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO session_activities (session_id, activity, stated_at) VALUES (%s, %s, %s)"
-                " ON CONFLICT (session_id) DO UPDATE SET activity = EXCLUDED.activity, stated_at = EXCLUDED.stated_at",
+                " ON CONFLICT (session_id) DO UPDATE SET activity = EXCLUDED.activity, stated_at = EXCLUDED.stated_at,"
+                " ended = FALSE",
                 (session.id, stated, self._clock()),
             )
         return stated
@@ -119,7 +131,8 @@ class Activities:
             return []
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT session_id, activity, stated_at FROM session_activities WHERE session_id = ANY(%s)",
+                "SELECT session_id, activity, stated_at FROM session_activities"
+                " WHERE session_id = ANY(%s) AND NOT ended",
                 ([session.id for session in active],),
             ).fetchall()
         # An activity older than its session's start was stated before the session ended and started again.
@@ -133,6 +146,25 @@ class Activities:
             else SessionActivity(session, cards.get(session.member_id), session.member_id in cards)
             for session in active
         ]
+
+    def last_stated(self, sessions: Sequence[Session]) -> dict[int, str]:
+        """The activity each of these sessions last stated, by `Session.id`, whether it is active, idle or ended. A
+        session that stated none since it last started is left out: no card stands in for it here."""
+        if not sessions:
+            return {}
+        asked = [session.id for session in sessions]
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT session_id, activity, stated_at, ended FROM session_activities WHERE session_id = ANY(%s)",
+                (asked,),
+            ).fetchall()
+            active = self._sessions.still_active(asked, conn)
+        started = {session.id: session.started_at for session in sessions}
+        return {
+            row["session_id"]: row["activity"]
+            for row in rows
+            if row["stated_at"] >= started[row["session_id"]] and not (row["ended"] and row["session_id"] in active)
+        }
 
     def of(self, session: Session) -> str | None:
         """One session's activity, as `in_project` gives it: None when it has none, or is no longer active."""

@@ -352,7 +352,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+        /** A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing. */
         get: operations["project_health"];
         put?: never;
         post?: never;
@@ -371,6 +371,40 @@ export interface paths {
         };
         /** A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the project's collisions and gates; and the signed-in member's own sessions' messages. */
         get: operations["project_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sessions/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing. */
+        get: operations["recent_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sessions/{session_number}/told": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing. */
+        get: operations["session_told"];
         put?: never;
         post?: never;
         delete?: never;
@@ -680,6 +714,58 @@ export interface paths {
         put?: never;
         /** Retire a memory that is no longer true; another author's raises a challenge instead. */
         post: operations["retire_at"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing. */
+        get: operations["memory_questions"];
+        put?: never;
+        /** Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009). */
+        post: operations["ask_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/questions/{question_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009). */
+        post: operations["answer_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The open questions waiting for this member's answer, the oldest first. Changes nothing. */
+        get: operations["questions_waiting"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1249,6 +1335,21 @@ export interface components {
             cards: components["schemas"]["Card"][];
         };
         /**
+         * CoverageGap
+         * @description A file on project health's coverage gaps: the project's sessions edited it in the last coverage_days days and
+         *     no project or team memory is tied to it. file is written repository:path; edits is how many edits changed it.
+         */
+        CoverageGap: {
+            /** Repository */
+            repository: string;
+            /** Path */
+            path: string;
+            /** File */
+            file: string;
+            /** Edits */
+            edits: number;
+        };
+        /**
          * DoubtedMemory
          * @description A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the
          *     challenges screen, never here (ADR-0009).
@@ -1297,6 +1398,28 @@ export interface components {
             code_references: string[];
         };
         /**
+         * NearlyPopularMemory
+         * @description A personal memory in the project near the popular-memory bar: this many other members read it within the
+         *     popular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a
+         *     session, never from here (ADR-0009).
+         */
+        NearlyPopularMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Readers */
+            readers: number;
+        };
+        /**
          * PossiblyOutdatedMemory
          * @description A memory on project health's possibly outdated list: no coding agent has recalled or read it for
          *     `outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.
@@ -1318,10 +1441,35 @@ export interface components {
             last_used: string | null;
         };
         /**
+         * RecalledMemory
+         * @description A project memory on project health's most relied on list: recall told it in this many sessions within
+         *     relied_on_days, each session counting once.
+         */
+        RecalledMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Sessions */
+            sessions: number;
+        };
+        /**
          * ProjectHealth
          * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-         *     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
-         *     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.
+         *     that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage
+         *     gaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions
+         *     within relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other
+         *     readers, each the most first. Read-only: reading it is no use of any memory and changes nothing.
+         *     outdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps
+         *     count.
          */
         ProjectHealth: {
             /** Project Id */
@@ -1334,6 +1482,18 @@ export interface components {
             possibly_outdated: components["schemas"]["PossiblyOutdatedMemory"][];
             /** In Doubt */
             in_doubt: components["schemas"]["DoubtedMemory"][];
+            /** Coverage Days */
+            coverage_days: number;
+            /** Coverage Gaps */
+            coverage_gaps: components["schemas"]["CoverageGap"][];
+            /** Relied On Days */
+            relied_on_days: number;
+            /** Most Recalled */
+            most_recalled: components["schemas"]["RecalledMemory"][];
+            /** Popular Members */
+            popular_members: number;
+            /** Nearly Popular */
+            nearly_popular: components["schemas"]["NearlyPopularMemory"][];
         };
         /**
          * ActiveSession
@@ -1346,8 +1506,14 @@ export interface components {
          *     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
          *     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
          *     and no hook of the session has called. standby is the session's standby while it stands by, None otherwise.
+         *     session_number tells it apart, as NamedSession's does, and names it to its told record, which
+         *     you_may_read_told says the signed-in member may open: it is their own session, or they look after the project.
          */
         ActiveSession: {
+            /** Session Number */
+            session_number: number;
+            /** You May Read Told */
+            you_may_read_told: boolean;
             /** Member Id */
             member_id: string;
             /** Member Name */
@@ -1602,6 +1768,134 @@ export interface components {
             handoff_notes: components["schemas"]["SessionHandoffNote"][];
             /** Messages */
             messages: components["schemas"]["SessionMessage"][];
+        };
+        /**
+         * RecentSession
+         * @description One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None
+         *     when it stated none since it last started), its git branch as its hooks last said, when it started and was last
+         *     seen, and how many memories recall told it. session_number opens its told record.
+         */
+        RecentSession: {
+            /** Session Number */
+            session_number: number;
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Activity */
+            activity: string | null;
+            /** Active */
+            active: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Memories Told */
+            memories_told: number;
+        };
+        /**
+         * RecentSessions
+         * @description The project's sessions from the last told_days whose told record the signed-in member may read, the most
+         *     recently seen first: their own, or every one when they lead the project or are the team's owner or an admin.
+         *     Reading it changes nothing.
+         */
+        RecentSessions: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Told Days */
+            told_days: number;
+            /** Sessions */
+            sessions: components["schemas"]["RecentSession"][];
+        };
+        /**
+         * ToldEntry
+         * @description One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall
+         *     added (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind
+         *     before_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head
+         *     commit then, None before memory's first save.
+         */
+        ToldEntry: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "briefing" | "recall" | "before_edit";
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Commit */
+            commit: string | null;
+            /** Briefing */
+            briefing: string | null;
+            memory: components["schemas"]["ToldMemoryEntry"] | null;
+            /** File */
+            file: string | null;
+        };
+        /**
+         * ToldMemoryEntry
+         * @description A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.
+         *     Its text then is its version at the entry's commit.
+         */
+        ToldMemoryEntry: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Section */
+            section: string;
+        };
+        /**
+         * SessionToldRecord
+         * @description A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's
+         *     admins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.
+         *     The session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes
+         *     nothing.
+         */
+        SessionToldRecord: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Session Number */
+            session_number: number;
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Told Days */
+            told_days: number;
+            /** Told */
+            told: components["schemas"]["ToldEntry"][];
         };
         /**
          * MessageToSend
@@ -1925,7 +2219,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message" | "question_asked" | "question_answered";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -2254,6 +2548,123 @@ export interface components {
         MemoryPath: {
             /** Path */
             path: string;
+        };
+        /**
+         * QuestionAnswer
+         * @description One answer in a question's thread: who gave it, by member ID and name, when, and its text.
+         */
+        QuestionAnswer: {
+            /** By */
+            by: string;
+            /** By Name */
+            by_name: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * QuestionThread
+         * @description A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,
+         *     its text, and whether it is open or answered. It is open until someone other than its asker answers it.
+         */
+        QuestionThread: {
+            /** Question Id */
+            question_id: number;
+            /** Asked By */
+            asked_by: string;
+            /** Asked By Name */
+            asked_by_name: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Text */
+            text: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "answered";
+            /** Answers */
+            answers: components["schemas"]["QuestionAnswer"][];
+        };
+        /**
+         * MemoryQuestions
+         * @description The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its
+         *     author one: anyone who can read it but its author. text_limit is the most characters a question or an answer may
+         *     have. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009).
+         */
+        MemoryQuestions: {
+            /** Path */
+            path: string;
+            /** Open */
+            open: number;
+            /** May Ask */
+            may_ask: boolean;
+            /** Text Limit */
+            text_limit: number;
+            /** Threads */
+            threads: components["schemas"]["QuestionThread"][];
+        };
+        /**
+         * QuestionToAsk
+         * @description A question for the author of the memory at path, at most text_limit characters.
+         */
+        QuestionToAsk: {
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * AnswerToGive
+         * @description An answer to a question about the memory at path, at most text_limit characters.
+         */
+        AnswerToGive: {
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * WaitingQuestion
+         * @description An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to
+         *     them as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,
+         *     when, and its text.
+         */
+        WaitingQuestion: {
+            /** Question Id */
+            question_id: number;
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Asked By */
+            asked_by: string;
+            /** Asked By Name */
+            asked_by_name: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * QuestionsWaiting
+         * @description The questions waiting for the signed-in member's answer, the oldest first.
+         */
+        QuestionsWaiting: {
+            /** Questions */
+            questions: components["schemas"]["WaitingQuestion"][];
         };
         /** SearchHit */
         SearchHit: {
@@ -3119,7 +3530,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3148,6 +3559,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    recent_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentSessions"];
+                };
+            };
+        };
+    };
+    session_told: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                session_number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionToldRecord"];
                 };
             };
         };
@@ -3609,6 +4065,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Retired"];
+                };
+            };
+        };
+    };
+    memory_questions: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    ask_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionToAsk"];
+            };
+        };
+        responses: {
+            /** @description Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    answer_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerToGive"];
+            };
+        };
+        responses: {
+            /** @description Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    questions_waiting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The open questions waiting for this member's answer, the oldest first. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionsWaiting"];
                 };
             };
         };

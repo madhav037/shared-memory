@@ -697,7 +697,7 @@
     "/api/projects/{project_id}/health": {
       "get": {
         "operationId": "project_health",
-        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,7 +710,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -743,6 +743,70 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sessions/recent": {
+      "get": {
+        "operationId": "recent_sessions",
+        "summary": "A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sessions/{session_number}/told": {
+      "get": {
+        "operationId": "session_told",
+        "summary": "A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionToldRecord"
                 }
               }
             }
@@ -1444,6 +1508,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Retired"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/questions": {
+      "get": {
+        "operationId": "memory_questions",
+        "summary": "The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ask_question",
+        "summary": "Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionToAsk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/questions/{question_id}/answer": {
+      "post": {
+        "operationId": "answer_question",
+        "summary": "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009).",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerToGive"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/questions": {
+      "get": {
+        "operationId": "questions_waiting",
+        "summary": "The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+        "responses": {
+          "200": {
+            "description": "The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionsWaiting"
                 }
               }
             }
@@ -2639,6 +2813,35 @@
         "title": "BoardArchive",
         "type": "object"
       },
+      "CoverageGap": {
+        "description": "A file on project health's coverage gaps: the project's sessions edited it in the last coverage_days days and\nno project or team memory is tied to it. file is written repository:path; edits is how many edits changed it.",
+        "properties": {
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "edits": {
+            "title": "Edits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repository",
+          "path",
+          "file",
+          "edits"
+        ],
+        "title": "CoverageGap",
+        "type": "object"
+      },
       "DoubtedMemory": {
         "description": "A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the\nchallenges screen, never here (ADR-0009).",
         "properties": {
@@ -2740,6 +2943,50 @@
         "title": "InDoubtReason",
         "type": "object"
       },
+      "NearlyPopularMemory": {
+        "description": "A personal memory in the project near the popular-memory bar: this many other members read it within the\npopular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a\nsession, never from here (ADR-0009).",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "readers": {
+            "title": "Readers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "readers"
+        ],
+        "title": "NearlyPopularMemory",
+        "type": "object"
+      },
       "PossiblyOutdatedMemory": {
         "description": "A memory on project health's possibly outdated list: no coding agent has recalled or read it for\n`outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.",
         "properties": {
@@ -2792,8 +3039,52 @@
         "title": "PossiblyOutdatedMemory",
         "type": "object"
       },
+      "RecalledMemory": {
+        "description": "A project memory on project health's most relied on list: recall told it in this many sessions within\nrelied_on_days, each session counting once.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "sessions"
+        ],
+        "title": "RecalledMemory",
+        "type": "object"
+      },
       "ProjectHealth": {
-        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
+        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage\ngaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions\nwithin relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other\nreaders, each the most first. Read-only: reading it is no use of any memory and changes nothing.\noutdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps\ncount.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2820,6 +3111,39 @@
             },
             "title": "In Doubt",
             "type": "array"
+          },
+          "coverage_days": {
+            "title": "Coverage Days",
+            "type": "integer"
+          },
+          "coverage_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageGap"
+            },
+            "title": "Coverage Gaps",
+            "type": "array"
+          },
+          "relied_on_days": {
+            "title": "Relied On Days",
+            "type": "integer"
+          },
+          "most_recalled": {
+            "items": {
+              "$ref": "#/components/schemas/RecalledMemory"
+            },
+            "title": "Most Recalled",
+            "type": "array"
+          },
+          "popular_members": {
+            "title": "Popular Members",
+            "type": "integer"
+          },
+          "nearly_popular": {
+            "items": {
+              "$ref": "#/components/schemas/NearlyPopularMemory"
+            },
+            "title": "Nearly Popular",
+            "type": "array"
           }
         },
         "required": [
@@ -2827,14 +3151,28 @@
           "project_name",
           "outdated_after_days",
           "possibly_outdated",
-          "in_doubt"
+          "in_doubt",
+          "coverage_days",
+          "coverage_gaps",
+          "relied_on_days",
+          "most_recalled",
+          "popular_members",
+          "nearly_popular"
         ],
         "title": "ProjectHealth",
         "type": "object"
       },
       "ActiveSession": {
-        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.",
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.\nsession_number tells it apart, as NamedSession's does, and names it to its told record, which\nyou_may_read_told says the signed-in member may open: it is their own session, or they look after the project.",
         "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "you_may_read_told": {
+            "title": "You May Read Told",
+            "type": "boolean"
+          },
           "member_id": {
             "title": "Member Id",
             "type": "string"
@@ -2931,6 +3269,8 @@
           }
         },
         "required": [
+          "session_number",
+          "you_may_read_told",
           "member_id",
           "member_name",
           "agent",
@@ -3395,6 +3735,311 @@
           "messages"
         ],
         "title": "ProjectSessions",
+        "type": "object"
+      },
+      "RecentSession": {
+        "description": "One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None\nwhen it stated none since it last started), its git branch as its hooks last said, when it started and was last\nseen, and how many memories recall told it. session_number opens its told record.",
+        "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "memories_told": {
+            "title": "Memories Told",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_number",
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "branch",
+          "activity",
+          "active",
+          "started_at",
+          "last_seen_at",
+          "memories_told"
+        ],
+        "title": "RecentSession",
+        "type": "object"
+      },
+      "RecentSessions": {
+        "description": "The project's sessions from the last told_days whose told record the signed-in member may read, the most\nrecently seen first: their own, or every one when they lead the project or are the team's owner or an admin.\nReading it changes nothing.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "told_days": {
+            "title": "Told Days",
+            "type": "number"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/RecentSession"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "told_days",
+          "sessions"
+        ],
+        "title": "RecentSessions",
+        "type": "object"
+      },
+      "ToldEntry": {
+        "description": "One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall\nadded (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind\nbefore_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head\ncommit then, None before memory's first save.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "briefing",
+              "recall",
+              "before_edit"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "briefing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Briefing"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToldMemoryEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "commit",
+          "briefing",
+          "memory",
+          "file"
+        ],
+        "title": "ToldEntry",
+        "type": "object"
+      },
+      "ToldMemoryEntry": {
+        "description": "A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.\nIts text then is its version at the entry's commit.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "section"
+        ],
+        "title": "ToldMemoryEntry",
+        "type": "object"
+      },
+      "SessionToldRecord": {
+        "description": "A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's\nadmins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.\nThe session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes\nnothing.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "told_days": {
+            "title": "Told Days",
+            "type": "number"
+          },
+          "told": {
+            "items": {
+              "$ref": "#/components/schemas/ToldEntry"
+            },
+            "title": "Told",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "session_number",
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "started_at",
+          "last_seen_at",
+          "told_days",
+          "told"
+        ],
+        "title": "SessionToldRecord",
         "type": "object"
       },
       "MessageToSend": {
@@ -4212,7 +4857,9 @@
               "project_wait_changed",
               "gate_agreed",
               "gate_refused",
-              "urgent_message"
+              "urgent_message",
+              "question_asked",
+              "question_answered"
             ],
             "title": "Kind",
             "type": "string"
@@ -5158,6 +5805,239 @@
           "path"
         ],
         "title": "MemoryPath",
+        "type": "object"
+      },
+      "QuestionAnswer": {
+        "description": "One answer in a question's thread: who gave it, by member ID and name, when, and its text.",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "by_name": {
+            "title": "By Name",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "by_name",
+          "at",
+          "text"
+        ],
+        "title": "QuestionAnswer",
+        "type": "object"
+      },
+      "QuestionThread": {
+        "description": "A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,\nits text, and whether it is open or answered. It is open until someone other than its asker answers it.",
+        "properties": {
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          },
+          "asked_by": {
+            "title": "Asked By",
+            "type": "string"
+          },
+          "asked_by_name": {
+            "title": "Asked By Name",
+            "type": "string"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "answered"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            },
+            "title": "Answers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "question_id",
+          "asked_by",
+          "asked_by_name",
+          "asked_at",
+          "text",
+          "state",
+          "answers"
+        ],
+        "title": "QuestionThread",
+        "type": "object"
+      },
+      "MemoryQuestions": {
+        "description": "The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its\nauthor one: anyone who can read it but its author. text_limit is the most characters a question or an answer may\nhave. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009).",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "may_ask": {
+            "title": "May Ask",
+            "type": "boolean"
+          },
+          "text_limit": {
+            "title": "Text Limit",
+            "type": "integer"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionThread"
+            },
+            "title": "Threads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "open",
+          "may_ask",
+          "text_limit",
+          "threads"
+        ],
+        "title": "MemoryQuestions",
+        "type": "object"
+      },
+      "QuestionToAsk": {
+        "description": "A question for the author of the memory at path, at most text_limit characters.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "text"
+        ],
+        "title": "QuestionToAsk",
+        "type": "object"
+      },
+      "AnswerToGive": {
+        "description": "An answer to a question about the memory at path, at most text_limit characters.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "text"
+        ],
+        "title": "AnswerToGive",
+        "type": "object"
+      },
+      "WaitingQuestion": {
+        "description": "An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to\nthem as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,\nwhen, and its text.",
+        "properties": {
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "asked_by": {
+            "title": "Asked By",
+            "type": "string"
+          },
+          "asked_by_name": {
+            "title": "Asked By Name",
+            "type": "string"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "path",
+          "title",
+          "project_id",
+          "asked_by",
+          "asked_by_name",
+          "asked_at",
+          "text"
+        ],
+        "title": "WaitingQuestion",
+        "type": "object"
+      },
+      "QuestionsWaiting": {
+        "description": "The questions waiting for the signed-in member's answer, the oldest first.",
+        "properties": {
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "title": "QuestionsWaiting",
         "type": "object"
       },
       "SearchHit": {

@@ -1010,6 +1010,12 @@ class MemoryStore:
         except FileNotFoundError:
             return None
 
+    def head(self) -> str | None:
+        """The commit main is at now, or None before the first save: every memory's text now is its version at this
+        commit, so the told record keeps it in place of each memory's own commit."""
+        found = _main(self._repository())
+        return str(found) if found is not None else None
+
     def _repository(self) -> pygit2.Repository:
         """The memory folder's repository, opened for one save: libgit2's objects aren't shared between threads."""
         return pygit2.Repository(ordinary(self._root))

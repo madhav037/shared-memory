@@ -1,6 +1,6 @@
 """The audit log: who changed what, and when.
 
-It answers "who did this" for changes that leave no memory file behind — signing in, members, roles, access, tokens and a project's never-lock patterns —
+It answers "who did this" for changes that leave no memory file behind — signing in, members, roles, access, tokens, questions and answers, and a project's never-lock patterns —
 alongside the memory changes themselves. It is append-only and holds no memory content: it points at paths, and the
 memory folder's git history holds what they said.
 
@@ -76,6 +76,8 @@ Kind = Literal[
     "gate_agreed",
     "gate_refused",
     "urgent_message",
+    "question_asked",
+    "question_answered",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -146,6 +148,10 @@ GATE_REFUSED: Kind = "gate_refused"
 # session until its member answers. The entry's actor is the later session's member, its target the earlier one's, and
 # its detail holds the collision's score and cause, never the message's text.
 URGENT_MESSAGE: Kind = "urgent_message"
+# A member asked a memory's author about it, or answered a question about it (#568). The entry's target is the
+# memory's path and its detail holds the question's ID, never what was asked or answered.
+QUESTION_ASKED: Kind = "question_asked"
+QUESTION_ANSWERED: Kind = "question_answered"
 # A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
 PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
 

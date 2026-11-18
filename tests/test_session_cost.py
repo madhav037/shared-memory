@@ -19,8 +19,12 @@ BUDGETS = {
     # Draft learnings (#551) add three tools (draft_learnings, confirm_draft_learning, decline_draft_learning), about
     # 560 tokens, nearly all the input schema of a draft learning and its edits, which every coding agent needs since
     # an agent without hooks drafts through them (ADR-0011). Their descriptions are one line each.
-    "member start": 8360,  # 8802 measured; was 7800 (8238 measured) before #551
-    "admin start": 8760,  # 9208 measured; was 8200 (8645 measured) before #551
+    # Questions (#568) add two tools (ask_question, answer_question), about 290 tokens, and the skill's topic for
+    # them in guide's description: how a member asks a memory's author, which every coding agent needs since an
+    # agent without hooks hears questions only through the briefing tool (ADR-0011). Their descriptions are short and
+    # each names answer_gate, so neither is mistaken for answering a gate.
+    "member start": 8660,  # about 9100 estimated; was 8360 (8802 measured) before #568
+    "admin start": 9060,  # about 9510 estimated; was 8760 (9208 measured) before #568
     "one recall": 350,  # estimated after #427 (a fence value and the sentence naming it); was 218
 }
 MARGIN = 1.10

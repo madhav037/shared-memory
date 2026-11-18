@@ -238,13 +238,28 @@ Its docstring lists the interface. Only recall and the `read` tool call `uses.us
 memory is pinned comes from `briefing.pinned_among`. In tests, move the server's `TestClock` past
 `outdated_after_days`; `tests/test_outdated_memory.py` is the prior art.
 
+## The told record
+
+`ToldRecord` in `src/shared_memory/told.py`, built in `build_app` before `Recall`, owns `session_told`: each session's
+briefing as delivered (`briefed`, from the session-start hook and the `briefing` tool) and each memory a prompt's
+recall told (`recalled`, from `Telling.told()` in `recall.py`), with when and the memory repository's head commit
+(`MemoryStore.head()`). Rows outlive the session and are pruned past `Settings.told_days` as new ones are written.
+`of(caller, number)` reads one session's, by `Session.id` (`Sessions.numbered`), for its member, the project's leads
+and admins (`may_read`). `GET /api/projects/{project_id}/sessions/{session_number}/told` serves it; the console's page
+is `ToldPage.tsx`, linked from each session on the Sessions page when `you_may_read_told`. `tests/test_told_record.py`
+and `console/e2e/told.spec.ts`. A before-edit addition (#567) goes in through a new kind beside `recall`.
+
 ## Project health
 
 `ProjectHealth` in `src/shared_memory/health.py`, built in `build_app` beside `ConsoleApi`, is a read model with no
 table: `of(caller)` asks `Identity.looks_after`, `Uses` and `Challenges` about the project memory under
 `projects/<id>/shared` and gives a typed `Health`. `GET /api/projects/{project_id}/health` serves it; the console's
-page is `HealthPage.tsx`, linked from project settings when `you_may_change`. A later section of spec #504 adds a list
-to `Health` and to the `ProjectHealth` model. `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
+page is `HealthPage.tsx`, linked from project settings when `you_may_change`. Its coverage gaps (#572) come from
+`FileEdits` in `src/shared_memory/file_edits.py` (built in `build_app` as `file_edits`; it owns `file_edits`, which the
+before-edit hook counts each edit that went ahead in) and `TiedFiles.untied`. A later section of spec #504 adds a list
+to `Health` and to the `ProjectHealth` model. *Most relied on* (#571) asks `ToldRecord.most_recalled` (distinct sessions
+told each project memory) and `Popularity.nearly_popular` (personal memory with at least half the bar of distinct other
+readers, not yet all of it). `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
 
 ## Editing
 

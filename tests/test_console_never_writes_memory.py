@@ -76,6 +76,15 @@ def test_doing_everything_the_console_may_do_to_memory_never_writes_edits_or_pro
 
     reached = watch_for_writes(monkeypatch)
 
+    # Answering a question about a memory (ADR-0028) leaves the memory as it is: a change it calls for is a session's.
+    question = dana.call("ask_question", path=target, text="Does this hold for the ledger too?")["question_id"]
+    answered = signed_out.post_json(
+        f"/api/memory/questions/{question}/answer", {"path": target, "text": "Yes, the ledger uses npm as well."}
+    )
+    assert answered.status_code == 200, answered.text
+    ask(signed_out, "/api/questions")
+    ask(signed_out, "/api/memory/questions", path=target)
+
     # Everything ADR-0009 lets the console do to memory, including the two that change it.
     assert signed_out.post_json("/api/memory/pin", {"path": target}).status_code == 200
     assert signed_out.post_json("/api/memory/unpin", {"path": target}).status_code == 200

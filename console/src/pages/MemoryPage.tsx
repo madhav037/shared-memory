@@ -18,6 +18,7 @@ import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../a
 import { Dotted, InDoubtMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { Questions } from "../components/Questions";
 import { doubtsUrl, says } from "../lib/challenge";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -99,6 +100,8 @@ export function MemoryPage() {
         ) : (
           <Source text={memory.source} />
         )}
+
+        <Questions memory={memory} />
       </div>
 
       <div className="reading-history">

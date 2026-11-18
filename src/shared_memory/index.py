@@ -99,6 +99,11 @@ class Reach:
         return cls(projects=(project_id,))
 
     @classmethod
+    def project_and_team_memory_of(cls, project_id: str) -> Reach:
+        """One project's project memory and team memory, and no member's personal memory."""
+        return cls(team_memory=True, projects=(project_id,))
+
+    @classmethod
     def of_member(cls, member_id: str, project_id: str, unreachable: frozenset[str]) -> Reach:
         """What a member's save is compared with: their own personal memory in the project they work in, plus the
         team memory and the project memory of every project they can reach."""

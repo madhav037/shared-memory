@@ -3170,6 +3170,24 @@ div.dotted {
 .sessions {
   margin-top: 28px;
 }
+/* A session's told record: each briefing as it was delivered, in mono, wrapped at the column's measure. */
+.told {
+  margin-top: 28px;
+}
+.told-briefing {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  max-height: 24rem;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  background: var(--paper-2);
+  border-left: 2px solid var(--rule);
+}
 .session-who {
   display: flex;
   flex-wrap: wrap;
@@ -3358,6 +3376,19 @@ div.dotted {
   font-size: 0.9375rem;
 }
 /* Answering from the Sessions page: a reply or a gate's answer sits under its line; the alerts line under the meta. */
+/* A question's answers, set in under it the way a reply is set under what it answers. */
+.question-answers {
+  margin: 8px 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+  border-left: 2px solid var(--rule);
+}
+.question-answers > li + li {
+  margin-top: 8px;
+}
+.questions .talk-head .mark {
+  margin-left: 4px;
+}
 .talk-answer {
   margin-top: 8px;
   max-width: 68ch;

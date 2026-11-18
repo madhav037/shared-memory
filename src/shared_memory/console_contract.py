@@ -445,6 +445,75 @@ class MemoryDetail(BaseModel):
     in_doubt: InDoubtMark | None
 
 
+class QuestionAnswer(BaseModel):
+    """One answer in a question's thread: who gave it, by member ID and name, when, and its text."""
+
+    by: str
+    by_name: str
+    at: datetime
+    text: str
+
+
+class QuestionThread(BaseModel):
+    """A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,
+    its text, and whether it is open or answered. It is open until someone other than its asker answers it."""
+
+    question_id: int
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
+    state: Literal["open", "answered"]
+    answers: list[QuestionAnswer]
+
+
+class MemoryQuestions(BaseModel):
+    """The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its
+    author one: anyone who can read it but its author. text_limit is the most characters a question or an answer may
+    have. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009)."""
+
+    path: str
+    open: int
+    may_ask: bool
+    text_limit: int
+    threads: list[QuestionThread]
+
+
+class QuestionToAsk(BaseModel):
+    """A question for the author of the memory at path, at most text_limit characters."""
+
+    path: str
+    text: str = Field(max_length=TEXT_LIMIT)
+
+
+class AnswerToGive(BaseModel):
+    """An answer to a question about the memory at path, at most text_limit characters."""
+
+    path: str
+    text: str = Field(max_length=TEXT_LIMIT)
+
+
+class WaitingQuestion(BaseModel):
+    """An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to
+    them as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,
+    when, and its text."""
+
+    question_id: int
+    path: str
+    title: str
+    project_id: str | None
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
+
+
+class QuestionsWaiting(BaseModel):
+    """The questions waiting for the signed-in member's answer, the oldest first."""
+
+    questions: list[WaitingQuestion]
+
+
 class SearchHit(BaseModel):
     path: str
     project_id: str | None
@@ -762,8 +831,12 @@ class ActiveSession(BaseModel):
     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
-    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise."""
+    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise.
+    session_number tells it apart, as NamedSession's does, and names it to its told record, which
+    you_may_read_told says the signed-in member may open: it is their own session, or they look after the project."""
 
+    session_number: int
+    you_may_read_told: bool
     member_id: str
     member_name: str
     agent: str | None
@@ -903,16 +976,134 @@ class DoubtedMemory(BaseModel):
     in_doubt: InDoubtMark
 
 
+class CoverageGap(BaseModel):
+    """A file on project health's coverage gaps: the project's sessions edited it in the last coverage_days days and
+    no project or team memory is tied to it. file is written repository:path; edits is how many edits changed it."""
+
+    repository: str
+    path: str
+    file: str
+    edits: int
+
+
+class RecalledMemory(BaseModel):
+    """A project memory on project health's most relied on list: recall told it in this many sessions within
+    relied_on_days, each session counting once."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    sessions: int
+
+
+class NearlyPopularMemory(BaseModel):
+    """A personal memory in the project near the popular-memory bar: this many other members read it within the
+    popular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a
+    session, never from here (ADR-0009)."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    readers: int
+
+
 class ProjectHealth(BaseModel):
     """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-    that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
-    reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
+    that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage
+    gaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions
+    within relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other
+    readers, each the most first. Read-only: reading it is no use of any memory and changes nothing.
+    outdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps
+    count."""
 
     project_id: str
     project_name: str
     outdated_after_days: float
     possibly_outdated: list[PossiblyOutdatedMemory]
     in_doubt: list[DoubtedMemory]
+    coverage_days: int
+    coverage_gaps: list[CoverageGap]
+    relied_on_days: int
+    most_recalled: list[RecalledMemory]
+    popular_members: int
+    nearly_popular: list[NearlyPopularMemory]
+
+
+class ToldMemoryEntry(BaseModel):
+    """A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.
+    Its text then is its version at the entry's commit."""
+
+    path: str
+    title: str
+    section: str
+
+
+class ToldEntry(BaseModel):
+    """One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall
+    added (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind
+    before_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head
+    commit then, None before memory's first save."""
+
+    kind: Literal["briefing", "recall", "before_edit"]
+    at: datetime
+    commit: str | None
+    briefing: str | None
+    memory: ToldMemoryEntry | None
+    file: str | None
+
+
+class SessionToldRecord(BaseModel):
+    """A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's
+    admins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.
+    The session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes
+    nothing."""
+
+    project_id: str
+    project_name: str
+    session_number: int
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    started_at: datetime
+    last_seen_at: datetime
+    told_days: float
+    told: list[ToldEntry]
+
+
+class RecentSession(BaseModel):
+    """One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None
+    when it stated none since it last started), its git branch as its hooks last said, when it started and was last
+    seen, and how many memories recall told it. session_number opens its told record."""
+
+    session_number: int
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    branch: str | None
+    activity: str | None
+    active: bool
+    started_at: datetime
+    last_seen_at: datetime
+    memories_told: int
+
+
+class RecentSessions(BaseModel):
+    """The project's sessions from the last told_days whose told record the signed-in member may read, the most
+    recently seen first: their own, or every one when they lead the project or are the team's owner or an admin.
+    Reading it changes nothing."""
+
+    project_id: str
+    project_name: str
+    told_days: float
+    sessions: list[RecentSession]
 
 
 class ProjectSessions(BaseModel):
@@ -1144,8 +1335,9 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="project_health",
         summary=(
-            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
-            "doubt, with each one's count and reasons. Changes nothing."
+            "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in "
+            "doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is "
+            "tied to, and the memory it relies on most. Changes nothing."
         ),
         answers=ProjectHealth,
     ),
@@ -1158,6 +1350,27 @@ DECLARATIONS: tuple[Declaration, ...] = (
             "project's collisions and gates; and the signed-in member's own sessions' messages."
         ),
         answers=ProjectSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/recent",
+        method="GET",
+        operation_id="recent_sessions",
+        summary=(
+            "A project's sessions from the last told_days whose told record the signed-in member may read, the most "
+            "recently seen first, each with its last stated activity, branch, when it ran and how many memories it was "
+            "told. Changes nothing."
+        ),
+        answers=RecentSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/{session_number}/told",
+        method="GET",
+        operation_id="session_told",
+        summary=(
+            "A session's told record, for its own member, its project's leads and the team's admins: its briefing as "
+            "delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing."
+        ),
+        answers=SessionToldRecord,
     ),
     Declaration(
         path="/projects/{project_id}/sessions/messages",
@@ -1324,6 +1537,45 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=Retired,
         changes=True,
         accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/memory/questions",
+        method="GET",
+        operation_id="memory_questions",
+        summary="The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+        answers=MemoryQuestions,
+        query=("path",),
+    ),
+    Declaration(
+        path="/memory/questions",
+        method="POST",
+        operation_id="ask_question",
+        summary=(
+            "Ask the author of a memory a question about it; their next session is told. The memory itself is not "
+            "changed (ADR-0009)."
+        ),
+        answers=MemoryQuestions,
+        changes=True,
+        accepts=QuestionToAsk,
+    ),
+    Declaration(
+        path="/memory/questions/{question_id}/answer",
+        method="POST",
+        operation_id="answer_question",
+        summary=(
+            "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a "
+            "change it calls for is made in a session (ADR-0009)."
+        ),
+        answers=MemoryQuestions,
+        changes=True,
+        accepts=AnswerToGive,
+    ),
+    Declaration(
+        path="/questions",
+        method="GET",
+        operation_id="questions_waiting",
+        summary="The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+        answers=QuestionsWaiting,
     ),
     Declaration(
         path="/search",

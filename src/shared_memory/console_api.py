@@ -28,6 +28,7 @@ from shared_memory import health
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
+from shared_memory import told
 from shared_memory.standby import Standby, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
@@ -65,19 +66,20 @@ from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
+    ChangedMember, ConnectionFile, CoverageGap, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
     DoubtedMemory, HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
-    RaisedChallenge, RateLimitChange, RateLimits,
+    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, RecentSession, RecentSessions, SessionToldRecord, ToldEntry, ToldMemoryEntry, Projects,
+    NearlyPopularMemory, RaisedChallenge, RateLimitChange, RateLimits, RecalledMemory,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
     AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage,
+    AnswerToGive, MemoryQuestions, QuestionAnswer, QuestionThread, QuestionToAsk, QuestionsWaiting, WaitingQuestion,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -88,6 +90,7 @@ from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
 from shared_memory.memory import Memory, locate
+from shared_memory.questions import Questions, Thread
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
@@ -225,6 +228,19 @@ def _evidence(each: Evidence) -> DoubtEvidence:
 
 def _sign_in_first() -> Response:
     return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
+
+
+def _thread(one: Thread) -> QuestionThread:
+    """A question and its answers as the memory page shows them."""
+    return QuestionThread(
+        question_id=one.question_id,
+        asked_by=one.asked_by,
+        asked_by_name=one.asked_by_name,
+        asked_at=one.asked_at,
+        text=one.text,
+        state=one.state,
+        answers=[QuestionAnswer(by=each.by, by_name=each.by_name, at=each.at, text=each.text) for each in one.answers],
+    )
 
 
 def _moment(asked: str | None, edge: time) -> datetime | None:
@@ -376,7 +392,11 @@ class ConsoleApi:
         export: TeamExport,
         talk: SessionTalk,
         project_health: health.ProjectHealth,
+        told_record: told.ToldRecord,
+        questions: Questions,
     ) -> None:
+        self._questions = questions
+        self._told_record = told_record
         self._export_of = export
         self._health = project_health
         self._talk = talk
@@ -420,6 +440,8 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
+            "session_told": self._session_told,
+            "recent_sessions": self._recent_sessions,
             "project_health": self._project_health,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
@@ -441,6 +463,10 @@ class ConsoleApi:
             "pin_at": self._pin_at,
             "unpin_at": self._unpin_at,
             "retire_at": self._retire_at,
+            "memory_questions": self._memory_questions,
+            "ask_question": self._ask_question,
+            "answer_question": self._answer_question,
+            "questions_waiting": self._questions_waiting,
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
             "notices": self._notices,
@@ -784,6 +810,72 @@ class ConsoleApi:
     def _project_sessions(self, request: Request) -> Response:
         return self._browse(request, self._sessions_now)
 
+    # --- a session's told record, read: for its member, the project's leads and the team's admins (#565) ---
+
+    def _session_told(self, request: Request) -> Response:
+        def read(caller: Caller) -> SessionToldRecord:
+            session, entries = self._told_record.of(caller, int(request.path_params["session_number"]))
+            return SessionToldRecord(
+                project_id=session.project_id,
+                project_name=caller.require_project().name,
+                session_number=session.id,
+                member_id=session.member_id,
+                member_name=session.member_name,
+                agent=session.agent,
+                repository=session.repository,
+                started_at=session.started_at,
+                last_seen_at=session.last_seen_at,
+                told_days=self._settings.told_days,
+                told=[
+                    ToldEntry(
+                        kind=one.kind,
+                        at=one.at,
+                        commit=one.commit,
+                        briefing=one.briefing,
+                        memory=(
+                            ToldMemoryEntry(path=one.memory.path, title=one.memory.title, section=one.memory.section)
+                            if one.memory is not None
+                            else None
+                        ),
+                        file=one.file,
+                    )
+                    for one in entries
+                ],
+            )
+
+        return self._browse(request, read)
+
+    # --- a member's recent sessions, read: for the same readers as each one's told record (#566) ---
+
+    def _recent_sessions(self, request: Request) -> Response:
+        def read(caller: Caller) -> RecentSessions:
+            project = caller.require_project()
+            listed = self._told_record.recent(caller)
+            stated = self._activities.last_stated([one.session for one in listed])
+            return RecentSessions(
+                project_id=project.project_id,
+                project_name=project.name,
+                told_days=self._settings.told_days,
+                sessions=[
+                    RecentSession(
+                        session_number=one.session.id,
+                        member_id=one.session.member_id,
+                        member_name=one.session.member_name,
+                        agent=one.session.agent,
+                        repository=one.session.repository,
+                        branch=one.session.branch,
+                        activity=stated.get(one.session.id),
+                        active=one.active,
+                        started_at=one.session.started_at,
+                        last_seen_at=one.session.last_seen_at,
+                        memories_told=one.memories_told,
+                    )
+                    for one in listed
+                ],
+            )
+
+        return self._browse(request, read)
+
     # --- a project's health, read: nothing here pins, decides, retires or uses a memory (ADR-0009) ---
 
     def _project_health(self, request: Request) -> Response:
@@ -812,6 +904,20 @@ class ConsoleApi:
                 in_doubt=[
                     DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
                     for one in found.in_doubt
+                ],
+                coverage_days=health.COVERAGE_DAYS,
+                coverage_gaps=[
+                    CoverageGap(repository=one.repository, path=one.path, file=one.file, edits=one.edits)
+                    for one in found.coverage_gaps
+                ],
+                relied_on_days=health.RELIED_ON_DAYS,
+                most_recalled=[
+                    RecalledMemory(**about(one.path, one.memory), sessions=one.sessions) for one in found.most_recalled
+                ],
+                popular_members=self._settings.popular_members,
+                nearly_popular=[
+                    NearlyPopularMemory(**about(one.path, one.memory), readers=one.readers)
+                    for one in found.nearly_popular
                 ],
             )
 
@@ -918,6 +1024,8 @@ class ConsoleApi:
             ],
             sessions=[
                 ActiveSession(
+                    session_number=each.session.id,
+                    you_may_read_told=self._told_record.may_read(caller, each.session),
                     member_id=each.session.member_id,
                     member_name=each.session.member_name,
                     agent=each.session.agent,
@@ -1091,6 +1199,64 @@ class ConsoleApi:
             return Retired(status=done["status"], path=path, challenge_id=done.get("challenge_id"))
 
         return self._at(request, retire, request.state.asked.path)
+
+    # --- questions (ADR-0028), asked and answered through the operations a session's tools use. Neither changes the
+    # memory: a change an answer calls for is made in a session (ADR-0009). ---
+
+    def _memory_questions(self, request: Request) -> Response:
+        return self._at(request, self._threads_on)
+
+    def _ask_question(self, request: Request) -> Response:
+        asked: QuestionToAsk = request.state.asked
+
+        def ask(caller: Caller, path: str) -> MemoryQuestions:
+            return self._threads_on(caller, self._questions.ask(caller, path, asked.text)["path"])
+
+        return self._at(request, ask, asked.path)
+
+    def _answer_question(self, request: Request) -> Response:
+        asked: AnswerToGive = request.state.asked
+        try:
+            question_id = int(request.path_params["question_id"])
+        except ValueError:
+            return JSONResponse({"message": "That isn't a question."}, status_code=422)
+
+        def answer(caller: Caller, path: str) -> MemoryQuestions:
+            return self._threads_on(caller, self._questions.answer(caller, question_id, asked.text)["path"])
+
+        return self._at(request, answer, asked.path)
+
+    def _threads_on(self, caller: Caller, path: str) -> MemoryQuestions:
+        found = self._questions.threads(caller, path)
+        return MemoryQuestions(
+            path=found.path,
+            open=found.open,
+            may_ask=found.author != caller.member_id,
+            text_limit=TEXT_LIMIT,
+            threads=[_thread(one) for one in found.threads],
+        )
+
+    def _questions_waiting(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        waiting = self._questions.waiting_for(self._identity.caller_in(member, None))
+        answer = QuestionsWaiting(
+            questions=[
+                WaitingQuestion(
+                    question_id=one.question_id,
+                    path=one.path,
+                    title=one.title,
+                    project_id=one.project_id,
+                    asked_by=one.asked_by,
+                    asked_by_name=one.asked_by_name,
+                    asked_at=one.asked_at,
+                    text=one.text,
+                )
+                for one in waiting
+            ]
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _search_everywhere(self, request: Request) -> Response:
         member = self._member(request)

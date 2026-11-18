@@ -8,11 +8,15 @@ import { useAsked } from "../lib/useAsked";
 
 type Outdated = ProjectHealth["possibly_outdated"][number];
 type Doubted = ProjectHealth["in_doubt"][number];
+type Gap = ProjectHealth["coverage_gaps"][number];
+type Recalled = ProjectHealth["most_recalled"][number];
+type NearlyPopular = ProjectHealth["nearly_popular"][number];
 
 /**
  * A project's health (CONTEXT.md: Project health), for its leads and the team's admins: the project memory that may
- * no longer be true, and the memory sessions doubt. It only reads: pinning, retiring and deciding stay on the memory's
- * own page and the challenges page, which each entry links to (ADR-0009).
+ * no longer be true, the memory sessions doubt, the files sessions edit often that no memory is tied to, and the
+ * memory the project relies on most. It only reads: pinning, retiring and deciding stay on the memory's own page and
+ * the challenges page, which each entry links to (ADR-0009).
  */
 export function HealthPage() {
   const { projectId = "" } = useParams();
@@ -33,7 +37,8 @@ export function HealthPage() {
       <h1 className="page-title">Project health</h1>
       <p className="standfirst">
         What <b data-testid="project-name">{health.project_name}</b>’s project memory is doing now: what no coding agent
-        has used for a long time, and what sessions doubt. Nothing here changes it.
+        has used for a long time, what sessions doubt, where it is missing, and what sessions rely on most. Nothing here
+        changes it.
       </p>
       <div className="page-meta">
         <ProjectLinks projectId={health.project_id} />
@@ -67,6 +72,48 @@ export function HealthPage() {
           {health.in_doubt.length === 0 && <Nothing>No session doubts this project’s memory.</Nothing>}
           {health.in_doubt.map((memory) => (
             <DoubtedEntry key={memory.path} memory={memory} />
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="coverage-heading">
+        <h2 className="section-heading" id="coverage-heading">
+          Coverage gaps
+        </h2>
+        <p className="section-lede">
+          Files this project’s sessions edited in the last {plural(health.coverage_days, "day")} that no project or team
+          memory is tied to, the most edited first. What a session learns about them is saved from a session.
+        </p>
+        <ul className="entries" data-testid="coverage-gaps">
+          {health.coverage_gaps.length === 0 && <Nothing>No file edited lately lacks a tied memory.</Nothing>}
+          {health.coverage_gaps.map((gap) => (
+            <GapEntry key={gap.file} gap={gap} />
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="relied-on-heading">
+        <h2 className="section-heading" id="relied-on-heading">
+          Most relied on
+        </h2>
+        <p className="section-lede">
+          Recall told sessions these the most in the last {plural(health.relied_on_days, "day")}, each session counted
+          once.
+        </p>
+        <ul className="entries" data-testid="most-recalled">
+          {health.most_recalled.length === 0 && <Nothing>Recall told no session this project’s memory lately.</Nothing>}
+          {health.most_recalled.map((memory) => (
+            <RecalledEntry key={memory.path} memory={memory} />
+          ))}
+        </ul>
+        <p className="section-lede">
+          Personal memory other members keep reading: a memory {plural(health.popular_members, "other member")} read is
+          popular, and its author is asked to promote it. These are on their way.
+        </p>
+        <ul className="entries" data-testid="nearly-popular">
+          {health.nearly_popular.length === 0 && <Nothing>No personal memory here is near popular.</Nothing>}
+          {health.nearly_popular.map((memory) => (
+            <NearlyPopularEntry key={memory.path} memory={memory} />
           ))}
         </ul>
       </section>
@@ -121,6 +168,51 @@ function DoubtedEntry({ memory }: { memory: Doubted }) {
         <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
           See its challenges
         </Link>
+      </div>
+    </li>
+  );
+}
+
+function GapEntry({ gap }: { gap: Gap }) {
+  return (
+    <li className="entry" data-testid="coverage-gap">
+      <code className="entry-title" data-testid="gap-file">
+        {gap.file}
+      </code>
+      <div className="entry-meta">
+        <span data-testid="gap-edits">Edited {plural(gap.edits, "time")}</span>
+      </div>
+    </li>
+  );
+}
+
+function RecalledEntry({ memory }: { memory: Recalled }) {
+  return (
+    <li className="entry" data-testid="recalled-memory">
+      <Link className="entry-title" to={memoryUrl(memory.path)}>
+        {memory.title}
+      </Link>
+      <p className="entry-summary">{memory.summary}</p>
+      <div className="entry-meta">
+        <span data-testid="recalled-sessions">Recalled in {plural(memory.sessions, "session")}</span>
+        <span>{typeName(memory.type)}</span>
+        <span title={memory.author}>{memory.author_name}</span>
+      </div>
+    </li>
+  );
+}
+
+function NearlyPopularEntry({ memory }: { memory: NearlyPopular }) {
+  return (
+    <li className="entry" data-testid="nearly-popular-memory">
+      <Link className="entry-title" to={memoryUrl(memory.path)}>
+        {memory.title}
+      </Link>
+      <p className="entry-summary">{memory.summary}</p>
+      <div className="entry-meta">
+        <span data-testid="readers">Read by {plural(memory.readers, "other member")}</span>
+        <span>{typeName(memory.type)}</span>
+        <span title={memory.author}>{memory.author_name}</span>
       </div>
     </li>
   );

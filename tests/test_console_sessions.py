@@ -204,6 +204,8 @@ def test_the_console_can_change_no_session_activity_or_lock(console: Console, si
 
     assert [(one.operation_id, one.method, one.changes) for one in about_sessions] == [
         ("project_sessions", "GET", False),
+        ("recent_sessions", "GET", False),
+        ("session_told", "GET", False),
         ("send_message", "POST", True),
         ("answer_gate", "POST", True),
     ], "the only changes are a message and a gate's answer (ADR-0026)"

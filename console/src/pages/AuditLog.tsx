@@ -43,6 +43,8 @@ const WORDS: Record<Kind, string> = {
   gate_agreed: "Agreed to a gate",
   gate_refused: "Refused a gate",
   urgent_message: "Sent an urgent message",
+  question_asked: "Question asked",
+  question_answered: "Question answered",
   never_lock_pattern_added: "Never-lock pattern added",
   never_lock_pattern_removed: "Never-lock pattern removed",
   signed_in: "Signed in",

@@ -62,6 +62,7 @@ TEAMMATES_PORT = 8127
 
 # Raj's activity in Billing, which Mira's session states too when a journey asks, so the two collide.
 RAJS_ACTIVITY = "Adding backoff to the webhook retries"
+RAJS_PROMPT = "which package manager do we use?"
 # What Raj's earlier session in Billing worked on, and the handoff note it left when it ended.
 RAJS_DOCS = "Writing the webhook retry docs"
 RAJS_DONE = "The retry docs page and its examples."
@@ -76,6 +77,20 @@ MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 # The work a third session of Olive's states, and a third of Mira's too, when a journey asks Mira's to stand by: Mira's
 # is then gated on Olive's work, and stands by for Olive's answer.
 WAITED_ON_ACTIVITY = "Moving the currency formatting into one shared helper"
+# Kai's memories for the question journeys (#570), and the question Raj asked about the first.
+KAIS_EXPORTS = {
+    "title": "Report exports are CSV",
+    "summary": "Every report exports as CSV, never as a spreadsheet file.",
+    "type": "convention",
+    "body": "Every report exports as CSV with a header row, never as a spreadsheet file.",
+}
+KAIS_RETENTION = {
+    "title": "Reports keep 13 months of history",
+    "summary": "A report's past runs are kept for 13 months.",
+    "type": "convention",
+    "body": "A report's past runs are kept for 13 months, then dropped on the first of the month.",
+}
+RAJS_QUESTION = "Do the finance exports follow this too?"
 # How long the stand-in gives a standby to be held, or to end once Mira moves on.
 STANDBY_SECONDS = 15
 
@@ -385,7 +400,7 @@ def seeded(
             server, owner.call("add_member", member_id="emp-tess", name="Tess Treasurer", github="tess")["personal_token"]
         )
         treasury = tess.call("create_project", name="Treasury", repository="treasury-api")["project_id"]
-        owner.call("add_member", member_id="emp-kai", name="Kai Keeper", github="kai")
+        kai_token = owner.call("add_member", member_id="emp-kai", name="Kai Keeper", github="kai")["personal_token"]
         nell = Session(
             server, owner.call("add_member", member_id="emp-nell", name="Nell Raiser")["personal_token"]
         ).in_project(treasury, "treasury-api")
@@ -448,6 +463,36 @@ def seeded(
         )
         for doubter in (owner, tess):
             doubter.in_project(payments, "payments-api").call("challenge", path=payouts, reason="misled")
+        # Payments' coverage gaps, for the project health journey: a session of Tess's that edited the payout schedule
+        # three times and its retry once, files no memory is tied to, and then ended, so it holds no lock.
+        payouts_session = tess.in_project(payments, "payments-api").as_session("tess-payouts")
+        for edited in ("src/payouts/schedule.py",) * 3 + ("src/payouts/retry.py",):
+            payouts_session.edit(edited)
+        payouts_session.end()
+        # Payments' most relied on, for the project health journey: a memory of Wes's that recall told a session of
+        # Tess's and one of Olive's, and a personal memory of Wes's that Olive's session read, one reader short of the
+        # popular-memory bar.
+        promote_keeping_both(
+            wes.in_project(payments, "payments-api"),
+            {
+                "title": "Payout files go out at six",
+                "summary": "The bank payout file is sent at 18:00 UTC every working day.",
+                "type": "convention",
+                "body": "The payout file is uploaded to the bank's SFTP at 18:00 UTC each working day; later is next day.",
+            },
+        )
+        for relier, identifier in ((tess, "tess-payout-file"), (owner, "olive-payout-file")):
+            relying = relier.in_project(payments, "payments-api").as_session(identifier)
+            relying.prompt("what time is the bank payout file uploaded to the SFTP each day?")
+            relying.end()
+        nearly = wes.in_project(payments, "payments-api").call(
+            "remember",
+            title="Chargebacks freeze the payout",
+            summary="A merchant with an open chargeback gets no payout until it is settled.",
+            type="gotcha",
+            body="An open chargeback holds the merchant's whole payout, not just the disputed amount, until it settles.",
+        )["path"]
+        owner.in_project(payments, "payments-api").call("read", path=nearly)
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
         outdated = promote_now(
@@ -518,10 +563,21 @@ def seeded(
             conn.execute(
                 "UPDATE memory_uses SET last_used_at = last_used_at - interval '61 days' WHERE path = %s", (outdated,)
             )
+        # Questions (#570): two memories of Kai's in Reporting (a member of his own would pass the team's member cap,
+        # which the team journey adds one up to). Raj has asked about the first, so a question waits for Kai's answer;
+        # Olive asks about the second in her journey.
+        kai = Session(server, kai_token).in_project(reporting, "reporting-api")
+        exports = promote_keeping_both(kai, KAIS_EXPORTS)
+        promote_keeping_both(kai, KAIS_RETENTION)
+        dana.call("ask_question", path=exports, text=RAJS_QUESTION)
         # Billing's active sessions, for the Sessions journey: Raj's, in Claude Code, with an activity it stated and a
         # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the
         # journeys' clock never moves. Reporting has no session, for the page that says so.
         raj = dana.as_agent("claude-code").as_session("raj-backoff")
+        # Its told record, for the told record journey: its briefing, then the pnpm memory recall added to a prompt.
+        raj.start()
+        recalled = added_context(raj.prompt(RAJS_PROMPT))
+        assert pnpm in recalled, recalled
         raj.call("set_activity", activity=RAJS_ACTIVITY, session=raj.identifier)
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
         # Its hook before a tool has named its branch and a file it read.

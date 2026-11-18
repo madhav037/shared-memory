@@ -40,6 +40,10 @@ export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ProjectHealth = components["schemas"]["ProjectHealth"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
+export type SessionToldRecord = components["schemas"]["SessionToldRecord"];
+export type ToldEntry = components["schemas"]["ToldEntry"];
+export type RecentSessions = components["schemas"]["RecentSessions"];
+export type RecentSession = components["schemas"]["RecentSession"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
 export type SessionGate = components["schemas"]["SessionGate"];
@@ -48,6 +52,10 @@ export type SessionHandoffNote = components["schemas"]["SessionHandoffNote"];
 export type RateLimits = components["schemas"]["RateLimits"];
 export type LicenseState = components["schemas"]["LicenseState"];
 export type RateLimitChange = components["schemas"]["RateLimitChange"];
+export type MemoryQuestions = components["schemas"]["MemoryQuestions"];
+export type QuestionThread = components["schemas"]["QuestionThread"];
+export type QuestionsWaiting = components["schemas"]["QuestionsWaiting"];
+export type WaitingQuestion = components["schemas"]["WaitingQuestion"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
 export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
@@ -162,6 +170,26 @@ export function unpinAt(path: string): Promise<PinState> {
 /** Retire a memory by its path; another author's raises a challenge they decide. */
 export function retireAt(path: string): Promise<Retired> {
   return change<Retired>("/api/memory/retire", { path });
+}
+
+/** The questions on a memory, each with its answers, the oldest first. */
+export function fetchQuestionsOn(path: string, signal?: AbortSignal): Promise<MemoryQuestions> {
+  return ask<MemoryQuestions>(withQuery("/api/memory/questions", { path }), { signal });
+}
+
+/** Ask a memory's author a question about it; answers with the memory's questions anew. The memory is not changed. */
+export function askQuestion(path: string, text: string): Promise<MemoryQuestions> {
+  return change<MemoryQuestions>("/api/memory/questions", { path, text });
+}
+
+/** Answer a question about a memory; answers with the memory's questions anew. The memory is not changed. */
+export function answerQuestion(path: string, questionId: number, text: string): Promise<MemoryQuestions> {
+  return change<MemoryQuestions>(`/api/memory/questions/${questionId}/answer`, { path, text });
+}
+
+/** The open questions waiting for this member's answer, the oldest first. */
+export function fetchQuestionsWaiting(signal?: AbortSignal): Promise<QuestionsWaiting> {
+  return ask<QuestionsWaiting>("/api/questions", { signal });
 }
 
 /** Memories that match, across team memory and every project this member can reach. */
@@ -340,6 +368,16 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
 /** A project's active sessions, the oldest first, each with its activity and the files it holds a lock on. */
 export function fetchSessions(projectId: string, signal?: AbortSignal): Promise<ProjectSessions> {
   return ask<ProjectSessions>(`/api/projects/${encodeURIComponent(projectId)}/sessions`, { signal });
+}
+
+/** A session's told record: its briefing and each recall, oldest first, for its member, the project's leads and admins. */
+export function fetchTold(projectId: string, sessionNumber: string, signal?: AbortSignal): Promise<SessionToldRecord> {
+  return ask<SessionToldRecord>(sessionsPath(projectId, `${encodeURIComponent(sessionNumber)}/told`), { signal });
+}
+
+/** The project's recent sessions whose told record the signed-in member may read, the most recently seen first. */
+export function fetchRecentSessions(projectId: string, signal?: AbortSignal): Promise<RecentSessions> {
+  return ask<RecentSessions>(sessionsPath(projectId, "recent"), { signal });
 }
 
 function sessionsPath(projectId: string, rest: string): string {

@@ -194,6 +194,11 @@ A session stops counting as active once it has made no call for `SHARED_MEMORY_S
 optional in `.env`): its activity and its locks end with it. Any hook from the session, and any tool call that names
 it, counts as a call. Raise it if your members' sessions run long tasks with no prompt in between.
 
+## How long a session's told record is kept
+
+A session's told record (its briefing and each recall, never what its member typed) is kept for
+`SHARED_MEMORY_TOLD_DAYS` (default 30, optional in `.env`). Older records are pruned as new ones are written.
+
 ## How long before a memory is labelled possibly outdated
 
 A memory no coding agent has recalled or read for `SHARED_MEMORY_OUTDATED_AFTER_DAYS` (default 60, optional in `.env`)
@@ -372,6 +377,13 @@ A session's coding agent sends what the session learned as draft learnings, whic
 the member confirms each as personal memory or declines it. A member has at most
 `SHARED_MEMORY_DRAFT_LEARNING_MOST` (default 3, optional) waiting in a project, and one is dropped after
 `SHARED_MEMORY_DRAFT_LEARNING_DAYS` (default 7, optional).
+
+## When a personal memory counts as popular
+
+A personal memory is popular once `SHARED_MEMORY_POPULAR_MEMBERS` (default 2, optional) other members' sessions have
+read it within `SHARED_MEMORY_POPULAR_WINDOW_DAYS` (default 30, optional), each member counting once. Its author's next
+briefing suggests promoting it, and names it again only once that count has grown by
+`SHARED_MEMORY_POPULAR_REPROMPT_FACTOR` (default 2, optional) since the last time.
 
 ## The console
 

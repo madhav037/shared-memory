@@ -11,6 +11,8 @@ What other modules stand on, all of it on `Sessions`:
 - `start(caller)`: a session under an identifier made here, for an agent that was never told one.
 - `end(caller, identifier)`: the session-end hook.
 - `active(project_id)`: a project's active sessions, oldest first.
+- `numbered(project_id, number)`: one of a project's sessions by its number, active or not, such as for its told
+  record.
 - `lately(project_id, within)`: a project's active sessions and those that ended or went idle no longer ago than
   `within`, for a module that reaches a session gone a little while, such as a message waiting for its member.
 - `ended_among(conn, ids)`: which of these sessions have ended, each with where it was, for a module that keeps
@@ -292,6 +294,20 @@ class Sessions:
             ).fetchall()
         members = self._identity.named(row["member_id"] for row in rows)
         return [_session(row, *members[row["member_id"]]) for row in rows]
+
+    def numbered(self, project_id: str, number: int) -> Session | None:
+        """One of a project's sessions by its number (`Session.id`), active, idle or ended, or None when the project
+        has no session of that number. Whether the asker may reach it is the asker's to check."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
+                " touched_files, muted FROM sessions WHERE id = %s AND project_id = %s",
+                (number, project_id),
+            ).fetchone()
+        if row is None:
+            return None
+        members = self._identity.named([row["member_id"]])
+        return _session(row, *members[row["member_id"]])
 
     def lately(self, project_id: str, within: timedelta) -> list[tuple[Session, bool]]:
         """A project's sessions that are active, or that ended or went idle no longer than `within` ago, the most
