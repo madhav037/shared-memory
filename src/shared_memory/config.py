@@ -38,6 +38,9 @@ class Settings:
     # A hook payload is a prompt plus a little metadata; a body past this is not read.
     hook_body_limit_bytes: int = 1_000_000
     similar_threshold: float = 0.62
+    # How similar a memory in the saving member's reach must be for the save to name it. The same bar as promote's
+    # check, so what a save names is what promoting it would ask about.
+    save_similar_threshold: float = 0.62
     # The longest one database statement may run, waiting included, before its request fails.
     statement_timeout_seconds: float = 10.0
     allowed_hosts: tuple[str, ...] = ()
@@ -158,6 +161,7 @@ class Settings:
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
+            save_similar_threshold=float(env.get("SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD", "0.62")),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
             gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
             standby_cap_minutes=float(env.get("SHARED_MEMORY_STANDBY_CAP_MINUTES", "5")),

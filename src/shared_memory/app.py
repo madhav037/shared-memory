@@ -933,8 +933,16 @@ def build_app(
         type is one of: convention, decision, architecture, gotcha. summary is one line.
         related_files are written as repository:path, for example billing-api:package.json.
         topic groups several memories about one long subject into a folder; each stays its own memory.
+
+        It always saves. `similar` names up to three similar memories in your reach: judge each with the member, then
+        supersede it, promote yours, or leave both.
         """
-        return service.remember(caller(ctx), title, summary, type, body, related_files, topic)
+        saved = service.remember(caller(ctx), title, summary, type, body, related_files, topic)
+        token = new_token()
+        for each in saved.get("similar", []):
+            each["title"] = escape(each["title"])
+            each["summary"] = fenced(each["summary"], token, inline=True)
+        return saved
 
     @server.tool(name="list")
     @_refusals_as_tool_errors
