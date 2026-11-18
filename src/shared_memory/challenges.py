@@ -199,6 +199,59 @@ class Doubt:
         return len(self.evidence)
 
 
+@dataclass(frozen=True)
+class ReasonRaised:
+    """One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is."""
+
+    reason: Reason
+    count: int
+    # Each code reference quoted for it, written repository:path:line, first quoted first and each once.
+    code_references: tuple[str, ...] = ()
+
+    def in_words(self) -> str:
+        """As the in-doubt line says it, e.g. "1 says it contradicts billing-api:src/tax.py:42"."""
+        says = "says" if self.count == 1 else "say"
+        if self.reason == "contradicts_code" and self.code_references:
+            return f"{self.count} {says} it contradicts {', '.join(self.code_references)}"
+        return f"{self.count} {says} {_REASON_IN_WORDS[self.reason]}"
+
+
+@dataclass(frozen=True)
+class InDoubt:
+    """What marks a memory in doubt (CONTEXT.md) wherever it is shown: how many raises its open doubts have had, and
+    for which reasons, in the order of `REASONS`."""
+
+    reasons: tuple[ReasonRaised, ...]
+
+    @classmethod
+    def of(cls, doubts: Iterable[Doubt]) -> InDoubt:
+        counts: dict[Reason, int] = {}
+        references: dict[Reason, dict[str, None]] = {}
+        for doubt in doubts:
+            counts[doubt.reason] = counts.get(doubt.reason, 0) + doubt.count
+            quoted = references.setdefault(doubt.reason, {})
+            for each in doubt.evidence:
+                if each.code_reference is not None:
+                    quoted[str(each.code_reference)] = None
+        return cls(
+            tuple(ReasonRaised(r, counts[r], tuple(references[r])) for r in REASONS if counts.get(r)),
+        )
+
+    @property
+    def count(self) -> int:
+        """How many raises, across every reason."""
+        return sum(each.count for each in self.reasons)
+
+    def line(self) -> str:
+        """The in-doubt line, e.g. "In doubt: 3 say it misled them; 1 says it contradicts billing-api:src/tax.py:42"."""
+        return "In doubt: " + "; ".join(each.in_words() for each in self.reasons)
+
+
+def ranked(score: float, in_doubt: InDoubt | None, penalty: float) -> float:
+    """A score as recall and search rank it: a memory in doubt's multiplied by the penalty, a down-rank, not a filter."""
+    return score if in_doubt is None else score * penalty
+
+
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
 # of the team's admins (the owner is one), because the fallback period has passed, or because its author has left.
 DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left"]
@@ -370,6 +423,13 @@ class Challenges:
             assert challenge.reason is not None
             doubts[challenge.target_path].append(Doubt(challenge, challenge.reason, evidence.get(challenge.id, ())))
         return doubts
+
+    def in_doubt(self, team: str, paths: Iterable[str]) -> dict[str, InDoubt]:
+        """Those of these memories that are in doubt, each with what marks it so. One batch, however many paths."""
+        wanted = list(paths)
+        if not wanted:
+            return {}
+        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(team, wanted).items() if doubts}
 
     def _evidence(self, challenge_ids: list[int]) -> dict[int, tuple[Evidence, ...]]:
         """Each challenge's evidence, first raised first."""

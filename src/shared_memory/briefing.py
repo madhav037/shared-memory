@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory.audit import MEMORY_PINNED, MEMORY_UNPINNED, Audit
+from shared_memory.challenges import Challenges, InDoubt
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -129,8 +130,11 @@ def pin_target(path: str) -> PinTarget:
 
 
 class Briefing:
-    def __init__(self, settings: Settings, db: Database, store: MemoryStore, audit: Audit, clock: Clock) -> None:
+    def __init__(
+        self, settings: Settings, db: Database, store: MemoryStore, audit: Audit, clock: Clock, challenges: Challenges
+    ) -> None:
         self._settings = settings
+        self._challenges = challenges
         self._db = db
         self._store = store
         self._audit = audit
@@ -143,7 +147,7 @@ class Briefing:
         caller.require_project()
         target = pin_target(path)
         caller.require_reach(target.path)
-        rendered = self._render(caller.team, target)
+        [rendered] = self._rendered(caller.team, [target])
         if rendered is None:
             raise Refused(f"There is no active memory or topic at {target.path!r} to pin.")
         with self._db.transaction() as conn:
@@ -214,10 +218,9 @@ class Briefing:
                 " AND (level = 'team' OR project_id = %s) ORDER BY pinned_at, path",
                 (caller.team, project.project_id),
             ).fetchall()
+        targets = [PinTarget(row["path"], row["kind"], row["level"], row["project_id"]) for row in rows]
         pins = []
-        for row in rows:
-            target = PinTarget(row["path"], row["kind"], row["level"], row["project_id"])
-            rendered = self._render(caller.team, target)
+        for row, target, rendered in zip(rows, targets, self._rendered(caller.team, targets), strict=True):
             pins.append(
                 {
                     "path": target.path,
@@ -310,36 +313,53 @@ class Briefing:
 
     def _pinned_texts(self, team: str, project_id: str | None, token: str) -> list[tuple[str, str]]:
         """(path, rendered text) for each pin visible from a project, oldest first."""
-        texts = []
-        for target in self._rows(team, project_id):
-            rendered = self._render(team, target, token)
-            if rendered is not None:
-                texts.append((target.path, rendered))
-        return texts
+        targets = self._rows(team, project_id)
+        return [
+            (target.path, rendered)
+            for target, rendered in zip(targets, self._rendered(team, targets, token), strict=True)
+            if rendered is not None
+        ]
 
     def _pinned(self, team: str, project_id: str | None) -> list[tuple[str, int]]:
         """(path, approximate tokens) for each pin visible from a project."""
         return [(path, estimate_tokens(text)) for path, text in self._pinned_texts(team, project_id, new_token())]
 
-    def _render(self, team: str, target: PinTarget, token: str | None = None) -> str | None:
-        token = token or new_token()
+    def _shown(self, team: str, target: PinTarget) -> list[tuple[str, Memory]]:
+        """The active memories a pin shows, by path: its memory, or those in its topic folder."""
         if target.kind == "memory":
             try:
                 memory = self._store.read(team, PurePosixPath(target.path))
             except Refused:
-                return None
-            if memory.status != "active":
-                return None
-            warning = f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else ""
-            return f"[{target.level} memory] {escape(memory.title)} ({target.path}){warning}\n{fenced(memory.body, token)}"
+                return []
+            return [(target.path, memory)] if memory.status == "active" else []
         memories, _ = self._store.list_folder(team, PurePosixPath(target.path))
-        lines = [
-            f"- {escape(memory.title)}: {fenced(memory.summary, token, inline=True)}"
-            + (f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else "")
-            for _, memory in memories
-            if memory.status == "active"
+        return [(str(path), memory) for path, memory in memories if memory.status == "active"]
+
+    def _rendered(self, team: str, targets: list[PinTarget], token: str | None = None) -> list[str | None]:
+        """Each pin as the briefing shows it, or None for one with nothing active to show. Which of their memories are
+        in doubt is asked once for them all."""
+        shown = [self._shown(team, target) for target in targets]
+        in_doubt = self._challenges.in_doubt(team, [path for memories in shown for path, _ in memories])
+        return [
+            _render(target, memories, token or new_token(), in_doubt)
+            for target, memories in zip(targets, shown, strict=True)
         ]
-        if not lines:
-            return None
-        name = PurePosixPath(target.path).name
-        return f"[{target.level} memory topic] {name} ({target.path})\n" + "\n".join(lines)
+
+
+def _render(target: PinTarget, memories: list[tuple[str, Memory]], token: str, in_doubt: dict[str, InDoubt]) -> str | None:
+    """One pin's text: a memory in full, or a topic's memories one line each, each memory in doubt marked so."""
+    if not memories:
+        return None
+    if target.kind == "memory":
+        [(path, memory)] = memories
+        warning = f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else ""
+        doubted = f"\n{escape(marked.line())}" if (marked := in_doubt.get(path)) else ""
+        return f"[{target.level} memory] {escape(memory.title)} ({target.path}){warning}{doubted}\n{fenced(memory.body, token)}"
+    lines = [
+        f"- {escape(memory.title)}: {fenced(memory.summary, token, inline=True)}"
+        + (f" [{label_for(reasons)}]" if (reasons := reasons_for(memory)) else "")
+        + (f" {escape(marked.line())}" if (marked := in_doubt.get(path)) else "")
+        for path, memory in memories
+    ]
+    name = PurePosixPath(target.path).name
+    return f"[{target.level} memory topic] {name} ({target.path})\n" + "\n".join(lines)

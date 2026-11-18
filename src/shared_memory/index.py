@@ -77,6 +77,8 @@ class Hit:
     similarity: float
     # Whether the section has the words searched for, not only something close to them in meaning.
     words_match: bool = False
+    # How it ranked, by meaning and exact words together: the higher, the better the match.
+    score: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -356,12 +358,13 @@ class SearchIndex:
         member_id: str | None = None,
         levels: Iterable[str] | None = None,
         type: str | None = None,
-        limit: int = 10,
+        limit: int | None = 10,
         source: QuerySource,
     ) -> list[Hit]:
         """Active sections visible from a project, or from several, ranked by meaning and exact words together.
 
-        member_id, when given, limits personal memory to that member's own. `source` is where the query came from,
+        limit None returns every candidate, for a caller that ranks them again before it cuts them. member_id, when
+        given, limits personal memory to that member's own. `source` is where the query came from,
         for the query cache's counts.
         """
         projects = [project_id] if isinstance(project_id, str) else list(project_id)
@@ -411,6 +414,7 @@ class SearchIndex:
                 author=rows[key]["author"],
                 similarity=float(rows[key]["similarity"]),
                 words_match=key in worded,
+                score=scores[key],
             )
             for key in ordered[:limit]
         ]
