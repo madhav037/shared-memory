@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import threading
 import time
 from collections.abc import Iterator
+from typing import Any
 
 import httpx
 import pytest
@@ -11,6 +13,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
+from shared_memory.index import SearchIndex
 from tests.support import RunningServer, Session, Team, added_context, new_team, promote_keeping_both
 
 
@@ -168,6 +171,48 @@ def test_recall_that_takes_too_long_is_skipped(slow_server: RunningServer) -> No
 
     assert output == {}
     assert time.monotonic() - started < 2.5
+
+
+@pytest.fixture
+def short_budget_server(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
+    settings = dataclasses.replace(
+        server.settings, memory_root=tmp_path_factory.mktemp("short-budget-memory"), recall_budget_seconds=0.5
+    )
+    app = build_app(settings, clock=server.clock, embedder=FastEmbedEmbedder(settings.model_cache))
+    with start_blocking_portal() as portal:
+        running = RunningServer(app, settings, server.clock, portal)
+        try:
+            yield running
+        finally:
+            running.stop()
+
+
+def test_a_memory_dropped_past_the_recall_budget_is_recalled_on_the_next_prompt(
+    short_budget_server: RunningServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team = new_team(short_budget_server)
+    project = team.owner().call("create_project", name="Billing")["project_id"]
+    owner = team.owner().in_project(project)
+    body = "All money amounts are stored as integer cents, never floats."
+    path = remember(owner, "Money amounts", body)
+    searched = SearchIndex.search
+    finished = threading.Event()
+
+    def slowly_once(self: SearchIndex, *args: Any, **kwargs: Any) -> Any:
+        if finished.is_set():
+            return searched(self, *args, **kwargs)
+        time.sleep(1.5)
+        try:
+            return searched(self, *args, **kwargs)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(SearchIndex, "search", slowly_once)
+    assert owner.prompt(body) == {}, "dropped past the budget"
+    assert finished.wait(10)
+    time.sleep(1)  # the dropped part's thread runs on to its end
+
+    assert path in added_context(owner.prompt(body)), "what was dropped was never told"
 
 
 def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningServer) -> None:

@@ -17,7 +17,6 @@ from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, Reach, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.suspected import answer_for, reasons_for
-from shared_memory.locks import named
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.tied import Tie, TiedFiles, file_named
 from shared_memory.uses import Uses
@@ -283,12 +282,12 @@ class MemoryService:
         return memory
 
     def tied_memories(self, caller: Caller, file: str) -> dict[str, Any]:
-        """The memories within the caller's reach tied to one file, written repository:path: their own personal memory
-        in this project, project memory they can reach and team memory. A memory in doubt carries its in-doubt line."""
+        """The memories tied to one file, written repository:path, within recall's reach: their own personal memory in
+        this project, this project's memory and team memory. A memory in doubt carries its in-doubt line."""
         project = caller.require_project()
-        repository, path = file_named(file)
+        asked = file_named(file)
         ties = self._tied.tied_to(
-            caller.team, repository, path, Reach.of_member(caller.member_id, project.project_id, caller.unreachable)
+            caller.team, asked.repository, [asked.path], Reach.of_recall(caller.member_id, project.project_id)
         )
         found: list[TiedMemory] = []
         for tie in ties:
@@ -299,7 +298,7 @@ class MemoryService:
             found.append(TiedMemory(tie, locate(tie.memory_path).level, memory))
         in_doubt = self._challenges.in_doubt(caller.team, [each.tie.memory_path for each in found])
         return {
-            "file": named(repository, path),
+            "file": asked.written,
             "memories": [each.answer(in_doubt.get(each.tie.memory_path)) for each in found],
         }
 

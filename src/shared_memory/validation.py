@@ -115,5 +115,6 @@ def validate(memory: Memory, word_limit: int) -> None:
         raise Refused(
             f"This memory is {len(memory.body)} characters; the limit is {CHARACTER_LIMIT} characters. {_SPLIT_IT}"
         )
-    for text in (memory.title, memory.summary, memory.body, *memory.tied_files):
+    # Each tied file was checked for a secret with the rest of it, above.
+    for text in (memory.title, memory.summary, memory.body):
         refuse_secret(text)

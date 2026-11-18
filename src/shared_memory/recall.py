@@ -8,16 +8,21 @@ told, so every worker agrees (ADR-0013):
 The prompt hook and the before-edit hook share it, so neither tells a session what the other already told it:
 
 - `for_prompt(caller, prompt, session)`: the sections strongly matching a prompt that the session hasn't been told.
-- `for_edit(caller, files, session)`: the memories within the caller's reach tied to the files an edit changes (spec
-  #503). A tied memory is told whole, so each of its sections is marked told; it counts as told while the session was
-  told some section of it and every section it was told still reads as it did then.
+- `for_edit(caller, files, session)`: the memories within recall's reach tied to the files an edit changes (spec
+  #503). The first is told whole, so each of its sections is marked told; the rest are entries of one line, and as
+  with recall's own, each marks only the section it is told by, its first, so recall can still give the rest. A tied
+  memory counts as told while the session was told some section of it and every section it was told still reads as
+  it did then.
 - `forget(session)`: start the session over, as after a compaction.
+
+Both answer with a `Telling`: the text, and `told()`, which records it as told. A hook calls `told()` only once the
+text is in its answer, so what is dropped past the recall budget stays untold.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -34,7 +39,7 @@ from shared_memory.sessions import Session, Sessions
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import label_for, reasons_for
-from shared_memory.tied import Tie, TiedFiles
+from shared_memory.tied import TiedFiles
 from shared_memory.uses import Uses
 
 FRAMING = (
@@ -77,6 +82,18 @@ class _Found:
     sections: tuple[tuple[int, str], ...]
     # The tied file it was found by, for the before-edit hook.
     tied_file: str | None = None
+
+
+@dataclass(frozen=True)
+class Telling:
+    """What recall tells a session, not yet recorded as told: `told()` records it, once the hook's answer carries it."""
+
+    text: str
+    _record: Callable[[], None]
+
+    def told(self) -> None:
+        """Record it as told to the session, and as a use of each memory in it."""
+        self._record()
 
 
 def _digest(text: str) -> str:
@@ -150,21 +167,36 @@ class Recall:
                 untold.append(each)
         return untold
 
-    def _tell(self, session: Session, found: list[_Found]) -> None:
-        """Mark the sections as told, each with the text it was told."""
+    def _tell(self, session: Session, sections: list[tuple[str, int, str]]) -> None:
+        """Mark the sections as told, each by its memory's path and its number, with the text it was told, in one
+        batch."""
+        if not sections:
+            return
         with self._db.transaction() as conn:
-            for each in found:
-                for number, text in each.sections:
-                    conn.execute(
-                        "INSERT INTO recall_told (session_id, path, section_no, digest) VALUES (%s, %s, %s, %s)"
-                        " ON CONFLICT (session_id, path, section_no) DO UPDATE SET digest = EXCLUDED.digest",
-                        (session.id, each.path, number, _digest(text)),
-                    )
+            conn.cursor().executemany(
+                "INSERT INTO recall_told (session_id, path, section_no, digest) VALUES (%s, %s, %s, %s)"
+                " ON CONFLICT (session_id, path, section_no) DO UPDATE SET digest = EXCLUDED.digest",
+                [(session.id, path, number, _digest(text)) for path, number, text in sections],
+            )
 
-    def for_prompt(self, caller: Caller, prompt: str, session: Session | None = None) -> str | None:
+    def _telling(
+        self, caller: Caller, session: Session | None, found: list[_Found], sections: list[tuple[str, int, str]],
+        in_doubt: dict[str, InDoubt],
+    ) -> Telling:  # fmt: skip
+        """The memories as recall tells them, recorded as told, these sections of them, only by `told()`."""
+
+        def record() -> None:
+            if session is not None:
+                self._tell(session, sections)
+            # Told is used: each memory added to the session starts its clock again.
+            self._uses.used(caller.team, [each.path for each in found])
+
+        return Telling(self._told_as_recall(caller, found, in_doubt), record)
+
+    def for_prompt(self, caller: Caller, prompt: str, session: Session | None = None) -> Telling | None:
         """Up to a few strongly matching sections of accepted memory and the member's own personal memory, those
-        the session has not been told yet: the strongest in full, the rest as entries of one line. Without a session,
-        nothing is held back and nothing is kept."""
+        the session has not been told yet: the strongest in full, the rest as entries of one line, each entry marking
+        the section it matched. Without a session, nothing is held back and nothing is kept."""
         if caller.project is None or not prompt.strip():
             return None
         hits = self._index.search(
@@ -196,44 +228,46 @@ class Recall:
         found = found[: self._settings.recall_limit]
         if not found:
             return None
-        if session is not None:
-            self._tell(session, found)
-        return self._told_as_recall(caller, found, in_doubt)
+        told = [(each.path, number, text) for each in found for number, text in each.sections]
+        return self._telling(caller, session, found, told, in_doubt)
 
-    def for_edit(self, caller: Caller, files: Sequence[str], session: Session) -> str | None:
-        """The memories within the caller's reach tied to the files an edit is about to change, each a path from the
-        caller's repository's root, those the session has not been told, as recall tells them: the first in full, the
-        rest as entries of one line, up to recall's limit. Their own personal memory in this project, project memory
-        they can reach and team memory; never another member's personal memory."""
+    def for_edit(self, caller: Caller, files: Sequence[str], session: Session) -> Telling | None:
+        """The memories tied to the files an edit is about to change, each a path from the caller's repository's root,
+        those the session has not been told, as recall tells them: the first in full, the rest as entries of one
+        line, up to recall's limit. Recall's reach: their own personal memory in this project, this project's memory
+        and team memory; never another member's personal memory, nor another project's memory."""
         project, repository = caller.project, caller.repository
         if project is None or repository is None or not files:
             return None
-        reach = Reach.of_member(caller.member_id, project.project_id, caller.unreachable)
-        ties: dict[str, Tie] = {}
-        for file in files:
-            for tie in self._tied.tied_to(caller.team, repository, file, reach):
-                ties.setdefault(tie.memory_path, tie)
+        reach = Reach.of_recall(caller.member_id, project.project_id)
         found: list[_Found] = []
-        for path, tie in ties.items():
+        for tie in self._tied.tied_to(caller.team, repository, files, reach):
             try:
-                memory = self._store.read(caller.team, PurePosixPath(path))
+                memory = self._store.read(caller.team, PurePosixPath(tie.memory_path))
             except Refused:
                 continue  # moved or deleted since the index was read
-            location = locate(path)
+            location = locate(tie.memory_path)
             sections = tuple((number, text) for number, (_, text) in enumerate(split_sections(memory)))
             whole = f"{memory.summary}\n\n{memory.body}".strip()
             found.append(
-                _Found(path, location.level, location.member_id, memory, memory.title, whole, sections, tie.tied_file)
-            )
+                _Found(
+                    tie.memory_path, location.level, location.member_id, memory, memory.title, whole, sections,
+                    tie.tied_file,
+                )
+            )  # fmt: skip
         found = self._untold_whole(session, found)[: self._settings.recall_limit]
         if not found:
             return None
-        self._tell(session, found)
-        return self._told_as_recall(caller, found, self._challenges.in_doubt(caller.team, [each.path for each in found]))
+        # The first is told whole; an entry of one line is told by its first section alone, as recall's own entries
+        # are told by the section they matched.
+        told = [(each.path, number, text) for each in found[:1] for number, text in each.sections]
+        told += [(each.path, each.sections[0][0], each.sections[0][1]) for each in found[1:]]
+        in_doubt = self._challenges.in_doubt(caller.team, [each.path for each in found])
+        return self._telling(caller, session, found, told, in_doubt)
 
     def _told_as_recall(self, caller: Caller, found: list[_Found], in_doubt: dict[str, InDoubt]) -> str:
         """The memories as one block in recall's framing and fence: the first in full, the rest as entries of one
-        line, each labelled with its level and what else marks it. Telling them is a use of each."""
+        line, each labelled with its level and what else marks it."""
         # The label from before this use, which this use then clears.
         outdated = self._uses.possibly_outdated(caller.team, {each.path: each.memory.status for each in found})
         token = new_token()
@@ -263,8 +297,6 @@ class Recall:
             else:
                 summary = fenced(" ".join(memory.summary.split()), token, inline=True)
                 entries.append(f"[{kind}] {title} ({each.path}): {summary}{doubted}")
-        # Told is used: each memory added to the session starts its clock again.
-        self._uses.used(caller.team, [each.path for each in found])
         told = framing(token)
         told = f"{told} {self._uses.check_any()}" if outdated else told
         return "<shared-memory-recall>\n" + told +"\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"

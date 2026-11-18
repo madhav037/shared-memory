@@ -170,6 +170,25 @@ def test_tied_memories_finds_a_memory_tied_by_a_folder_glob(member: Session) -> 
     assert tied(member, "billing-api:lib/src/tax/vat.ts") == [], "a glob with a slash is matched from the root"
 
 
+def test_a_tied_file_without_glob_characters_ties_only_that_file_from_the_root(member: Session) -> None:
+    at_the_root = remember(member, tied_files=["billing-api:package.json"])
+    nested = remember(member, title="Tax rounding in one module", tied_files=["billing-api:src/tax/rounding.ts"])
+
+    assert tied(member, "billing-api:package.json") == [at_the_root]
+    assert tied(member, "billing-api:web/package.json") == [], "a plain path without a slash is not a file's name"
+    assert tied(member, "billing-api:src/tax/rounding.ts") == [nested]
+    assert tied(member, "billing-api:lib/src/tax/rounding.ts") == []
+
+
+def test_a_tied_glob_follows_the_never_lock_pattern_rules(member: Session) -> None:
+    by_name = remember(member, tied_files=["billing-api:*.json"])
+    in_one_folder = remember(member, title="Tax modules", tied_files=["billing-api:src/tax/*.ts"])
+
+    assert tied(member, "billing-api:web/package.json") == [by_name], "a glob without a slash matches a name anywhere"
+    assert tied(member, "billing-api:src/tax/vat.ts") == [in_one_folder]
+    assert tied(member, "billing-api:src/tax/rates/vat.ts") == [], "`*` stays within one folder"
+
+
 def test_tied_memories_ignores_a_tie_to_the_same_path_in_another_repository(member: Session) -> None:
     remember(member, tied_files=["billing-web:src/tax.ts"])
 
@@ -198,9 +217,14 @@ def test_tied_memories_never_gives_memory_of_a_restricted_project_the_caller_can
         owner.in_project(payments, "payments-api"), title="Payment keys rotate", tied_files=["shared-lib:src/keys.ts"]
     )
 
+    in_billing = promoted(
+        owner.in_project(billing, "billing-api"), title="Billing keys rotate", tied_files=["shared-lib:src/keys.ts"]
+    )
+
     found = tied(dana.in_project(billing, "billing-api"), "shared-lib:src/keys.ts")
 
-    assert found == [readable], "an open project's memory is in reach; the restricted project's isn't"
+    assert found == [in_billing], "recall's reach: this project's memory, never another project's"
+    assert tied(dana.in_project(payments, "payments-api"), "shared-lib:src/keys.ts") == [readable]
 
 
 def test_tied_memories_gives_own_personal_project_and_team_memory(owner: Session, dana: Session) -> None:
