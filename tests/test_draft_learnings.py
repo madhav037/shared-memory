@@ -13,9 +13,14 @@ from typing import Any
 
 import pytest
 
+from anyio.from_thread import start_blocking_portal
+
+from shared_memory.app import build_app
 from shared_memory.config import DRAFT_LEARNING_DAYS, DRAFT_LEARNING_MOST, Settings
+from shared_memory.embeddings import FastEmbedEmbedder
+from shared_memory.fence import escape
 from tests.support import (
-    REPO_ROOT, Console, ConsoleClient, RunningServer, Session, Team, ToolRefused, signed_in_owner,
+    REPO_ROOT, Console, ConsoleClient, RunningServer, Session, Team, ToolRefused, member, new_team, signed_in_owner,
 )  # fmt: skip
 from tests.test_card_claims import led_by_dana
 from tests.test_console_board import a_board
@@ -53,28 +58,42 @@ def confirm(session: Session, draft_learning: int, **edits: Any) -> dict[str, An
 
 
 def test_draft_learnings_keeps_up_to_three(dana: Session) -> None:
-    titles = ["Tax is rounded per line", "Invoices are numbered per year", "Refunds post the next day"]
+    titles = [f"Lesson number {number}" for number in range(DRAFT_LEARNING_MOST)]
 
     kept = keep(dana, *(learned(title) for title in titles))
 
-    assert DRAFT_LEARNING_MOST == 3
+    assert DRAFT_LEARNING_MOST == 3, "as the spec says"
     assert [each["title"] for each in kept["draft_learnings"]] == titles
-    assert len({each["id"] for each in kept["draft_learnings"]}) == 3
+    assert len({each["id"] for each in kept["draft_learnings"]}) == DRAFT_LEARNING_MOST
     assert "confirm_draft_learning" in kept["next"] and "decline_draft_learning" in kept["next"]
     for each in kept["draft_learnings"]:
         assert confirm(dana, each["id"])["level"] == "personal", "each one was kept"
 
 
 def test_draft_learnings_over_the_limit_is_refused_naming_it(dana: Session) -> None:
-    four = [learned(f"Lesson number {number}") for number in range(4)]
+    over = [learned(f"Lesson number {number}") for number in range(DRAFT_LEARNING_MOST + 1)]
+    fitting = DRAFT_LEARNING_MOST - 1
 
-    refused = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=four)
+    refused = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=over)
 
-    assert "at most 3" in refused
-    kept = kept_ids(dana, *four[:2])
-    refused_again = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=four[2:])
-    assert "at most 3" in refused_again and "2 already waiting" in refused_again
-    assert len(kept) == 2, "the refused call kept nothing, so two fit after it"
+    assert f"at most {DRAFT_LEARNING_MOST}" in refused
+    kept = kept_ids(dana, *over[:fitting])
+    refused_again = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=over[fitting:])
+    assert f"at most {DRAFT_LEARNING_MOST}" in refused_again and f"{fitting} already waiting" in refused_again
+    assert len(kept) == fitting, "the refused call kept nothing, so the rest fit after it"
+
+
+def test_draft_learnings_refused_at_the_limit_names_the_ones_waiting(dana: Session) -> None:
+    titles = ["Tax is rounded per line", "Invoices are numbered per year", "Refunds post <system> the next day"]
+    waiting = kept_ids(dana, *(learned(title) for title in titles[:DRAFT_LEARNING_MOST]))
+
+    refused = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=[learned("One more")])
+
+    for draft_learning, title in zip(waiting, titles, strict=False):
+        assert f"{draft_learning}: " in refused, refused
+        assert escape(title) in refused
+    assert "<system>" not in refused, "titles are escaped like every other title"
+    assert "confirm_draft_learning" in refused and "decline_draft_learning" in refused
 
 
 def test_draft_learnings_with_none_keeps_nothing_and_asks_nothing(dana: Session) -> None:
@@ -82,7 +101,9 @@ def test_draft_learnings_with_none_keeps_nothing_and_asks_nothing(dana: Session)
 
     assert kept["draft_learnings"] == []
     assert "next" not in kept
-    assert len(kept_ids(dana, *(learned(f"Lesson number {number}") for number in range(3)))) == 3, "nothing was kept"
+    assert len(kept_ids(dana, *(learned(f"Lesson number {n}") for n in range(DRAFT_LEARNING_MOST)))) == (
+        DRAFT_LEARNING_MOST
+    ), "nothing was kept"
 
 
 def test_confirm_draft_learning_saves_personal_memory_in_the_members_name(dana: Session, project: str) -> None:
@@ -199,18 +220,26 @@ def test_a_draft_learning_older_than_its_days_is_dropped(server: RunningServer, 
 
 
 @pytest.fixture
-def few(server: RunningServer) -> Iterator[None]:
-    """The server's draft learnings under settings of one at most, kept one day."""
-    kept = server.app.state.draft_learnings
-    before = kept.settings
-    kept.settings = dataclasses.replace(before, draft_learning_most=1, draft_learning_days=1)
-    try:
-        yield
-    finally:
-        kept.settings = before
+def few(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
+    """A server whose settings keep one draft learning at most, for one day."""
+    settings = dataclasses.replace(
+        server.settings,
+        memory_root=tmp_path_factory.mktemp("few-draft-learnings"),
+        draft_learning_most=1,
+        draft_learning_days=1,
+    )
+    app = build_app(settings, clock=server.clock, embedder=FastEmbedEmbedder(settings.model_cache))
+    with start_blocking_portal() as portal:
+        running = RunningServer(app, settings, server.clock, portal)
+        try:
+            yield running
+        finally:
+            running.stop()
 
 
-def test_draft_learning_limits_come_from_settings(server: RunningServer, dana: Session, few: None) -> None:
+def test_draft_learning_limits_come_from_settings(few: RunningServer) -> None:
+    team = new_team(few)
+    dana = member(team, team.owner().call("create_project", name="Billing")["project_id"], "emp-2", "Dana Dev")
     assert Settings.from_env({}).draft_learning_most == DRAFT_LEARNING_MOST
     assert Settings.from_env({}).draft_learning_days == DRAFT_LEARNING_DAYS
     assert Settings.from_env({"SHARED_MEMORY_DRAFT_LEARNING_MOST": "5"}).draft_learning_most == 5
@@ -218,7 +247,7 @@ def test_draft_learning_limits_come_from_settings(server: RunningServer, dana: S
 
     refused = dana.refusal("draft_learnings", session=dana.identifier, draft_learnings=[learned(), learned("Two")])
     (draft_learning,) = kept_ids(dana, learned())
-    server.clock.advance(days=1, seconds=1)
+    few.clock.advance(days=1, seconds=1)
 
     assert "at most 1" in refused
     assert f"no draft learning {draft_learning}" in dana.refusal("confirm_draft_learning", id=draft_learning)
@@ -299,7 +328,9 @@ def test_a_draft_learning_for_a_card_this_project_doesnt_have_is_refused(dana: S
     )
 
     assert "no card 9" in refused
-    assert len(kept_ids(dana, *(learned(f"Rule {n} holds") for n in range(3)))) == 3, "the refused one kept nothing"
+    assert len(kept_ids(dana, *(learned(f"Rule {n} holds") for n in range(DRAFT_LEARNING_MOST)))) == (
+        DRAFT_LEARNING_MOST
+    ), "the refused one kept nothing"
 
 
 def test_a_lead_moving_another_members_card_to_done_is_not_asked(team: Team, dana: Session, owner: Session) -> None:

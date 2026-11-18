@@ -4,6 +4,7 @@ the way recall tells a memory, and never in the way of the edit."""
 from __future__ import annotations
 
 import dataclasses
+import threading
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -18,6 +19,7 @@ from tests.support import (
     WORKING_FOLDER,
     RunningServer,
     Session,
+    Team,
     added_context,
     member,
     new_team,
@@ -117,6 +119,25 @@ def test_recall_leaves_out_a_memory_before_edit_already_gave_this_session(dana: 
     assert path in added_context(dana.as_session("second-session").prompt(PROMPT)), "recall finds it otherwise"
 
 
+def test_a_tied_memory_given_as_one_line_leaves_its_body_for_recall(dana: Session) -> None:
+    detail = "Detail only in the body: the fifth attempt waits a whole hour before it gives up."
+    in_full = tied_memory(dana, title="Alpha webhook retries back off")
+    one_line = tied_memory(
+        dana,
+        title="Beta webhook signatures",
+        summary="Webhook signatures are checked first.",
+        body=f"Signatures are checked before anything else.\n\n## Detail\n\n{detail}",
+    )
+    context = context_in(dana.edit(FILE))
+    assert in_full in context and one_line in context
+    assert detail not in context, "given as an entry of one line"
+
+    recalled = added_context(dana.prompt(detail))
+
+    assert one_line in recalled and detail in recalled, "recall still gives the body it wasn't told"
+    assert dana.edit(FILE) == ALLOWED, "and the before-edit hook still counts it told"
+
+
 def test_after_compaction_a_tied_memory_is_given_again(dana: Session) -> None:
     path = tied_memory(dana)
     dana.edit(FILE)
@@ -134,6 +155,16 @@ def test_before_edit_never_gives_another_members_personal_memory(owner: Session,
     assert owners in context_in(owner.edit("src/webhooks/backoff.py")), "its author is given it"
 
     assert dana.edit(FILE) == ALLOWED
+
+
+def test_before_edit_never_gives_another_projects_memory(team: Team, owner: Session, dana: Session) -> None:
+    payments = team.owner().call("create_project", name="Payments")["project_id"]
+    elsewhere = promoted(
+        owner.in_project(payments, "billing-api"), title="Webhook retries back off", body=BODY, tied_files=[TIED_FILE]
+    )
+    assert elsewhere in context_in(owner.in_project(payments, "billing-api").edit(FILE)), "given in its own project"
+
+    assert dana.edit(FILE) == ALLOWED, "recall's reach: this project's memory, not another project's"
 
 
 def test_before_edit_gives_project_memory_tied_to_the_file(owner: Session, dana: Session) -> None:
@@ -243,3 +274,30 @@ def test_before_edit_drops_tied_memories_past_the_recall_budget(
     assert answer == ALLOWED
     assert time.monotonic() - started < 2.5
     assert "Dana Dev (emp-2)" in reason_in(cole.edit(FILE)), "the lock check is still answered"
+
+
+def test_a_tied_memory_dropped_past_the_recall_budget_is_given_on_the_next_edit(
+    slow_server: RunningServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team = new_team(slow_server)
+    project = team.owner().call("create_project", name="Billing")["project_id"]
+    dana = member(team, project, "emp-2", "Dana Dev")
+    path = tied_memory(dana)
+    looked_up = TiedFiles.tied_to
+    finished = threading.Event()
+
+    def slowly_once(self: TiedFiles, *args: Any, **kwargs: Any) -> Any:
+        if finished.is_set():
+            return looked_up(self, *args, **kwargs)
+        time.sleep(1.5)
+        try:
+            return looked_up(self, *args, **kwargs)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(TiedFiles, "tied_to", slowly_once)
+    assert dana.edit(FILE) == ALLOWED, "dropped past the budget"
+    assert finished.wait(10)
+    time.sleep(1)  # the dropped part's thread runs on to its end
+
+    assert path in context_in(dana.edit(FILE)), "what was dropped was never told"

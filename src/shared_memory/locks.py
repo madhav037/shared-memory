@@ -148,6 +148,8 @@ PATTERN_LIMIT = 200
 
 # What a glob in another dialect uses and these patterns don't read.
 _UNREAD = "[]{}"
+# What these patterns read as a glob; a pattern without any of them is a plain path.
+GLOB_CHARACTERS = "*?"
 
 # How often taking a lock looks again when the file changed hands between two looks.
 _ATTEMPTS = 3

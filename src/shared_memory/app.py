@@ -31,7 +31,7 @@ from shared_memory import hooks, onboarding
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
-from shared_memory.board import Board, column_named
+from shared_memory.board import DONE, Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi, SessionTalk
 from shared_memory.console_memory import ConsoleMemory
@@ -63,7 +63,7 @@ from shared_memory.messages import Messages
 from shared_memory.license import PUBLIC_KEYS
 from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import RateLimited, RateLimits
-from shared_memory.recall import Recall
+from shared_memory.recall import Recall, Telling
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
@@ -205,6 +205,19 @@ def _fenced_save(saved: dict[str, Any]) -> dict[str, Any]:
         each["summary"] = fenced(each["summary"], token, inline=True)
         _escape_in_doubt(each)
     return saved
+
+
+def _fenced_memory(memory: dict[str, Any], token: str) -> dict[str, Any]:
+    """One memory as a coding agent is given it whole: its title escaped, its summary and body in this call's fence,
+    and its in-doubt line defanged."""
+    shown = {
+        **memory,
+        "title": escape(memory["title"]),
+        "summary": fenced(memory["summary"], token, inline=True),
+        "body": fenced(memory["body"], token),
+    }
+    _escape_in_doubt(shown)
+    return shown
 
 
 def _escape_in_doubt(shown: dict[str, Any]) -> None:
@@ -351,7 +364,7 @@ def build_app(
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
     standbys = Standbys(settings, db, sessions, gates.wait, clock)
-    draft_learnings_kept = DraftLearnings(settings, db, service, clock)
+    draft_learning_store = DraftLearnings(settings, db, service, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -481,6 +494,8 @@ def build_app(
         return "\n\n".join(waiting_for(current, session)) or None
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
+    # A hook's optional part: what recall tells, recorded as told only once the answer carries it.
+    OptionalPart = Callable[[Caller, dict[str, Any]], Telling | None]
     Ready = Callable[[Caller, dict[str, Any]], bool]
 
     async def within_recall_budget(
@@ -510,7 +525,7 @@ def build_app(
         request: Request,
         event: str,
         required: HookPart,
-        optional: HookPart | None = None,
+        optional: OptionalPart | None = None,
         *,
         first: Ready | None = None,
         report_refusals: bool = False,
@@ -524,7 +539,8 @@ def build_app(
         The caller is authenticated from the headers before the body is read, so a hook without a valid personal token
         costs next to nothing. The required part always runs to completion, because it marks news as delivered and so
         must reach the member. The optional part (recall) is dropped if it can't start within the recall budget, or
-        runs past the budget once started. A `first` step, which the parts stand on (the prompt's embedding), has the
+        runs past the budget once started; what it tells is recorded as told only once it is in the answer, so what
+        is dropped stays untold. A `first` step, which the parts stand on (the prompt's embedding), has the
         recall budget too; given up on, the required part runs without it and the optional part is dropped, since it
         would wait on the same model.
         """
@@ -544,7 +560,10 @@ def build_app(
             ready = first is None or await within_recall_budget(first, current, payload) is not None
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
             if optional is not None and ready:
-                parts.append(await within_recall_budget(optional, current, payload))
+                telling = await within_recall_budget(optional, current, payload)
+                if telling is not None:
+                    await anyio.to_thread.run_sync(telling.told)
+                    parts.append(telling.text)
         except Refused:
             return JSONResponse({})
         except Exception:
@@ -612,7 +631,7 @@ def build_app(
             told = [challenges.prompt_notices(current), *(waiting_for(current, session, embedded[0], prompted=True) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
-        def recalled(current: Caller, payload: dict[str, Any]) -> str | None:
+        def recalled(current: Caller, payload: dict[str, Any]) -> Telling | None:
             prompt = hooks.prompt_in(payload)
             return recall.for_prompt(current, prompt, session_of(current, payload)) if prompt else None
 
@@ -676,7 +695,7 @@ def build_app(
                 went_ahead = (session, files)
             return news_for(current, session) if hears else None
 
-        def tied_to_the_edit(current: Caller, payload: dict[str, Any]) -> str | None:
+        def tied_to_the_edit(current: Caller, payload: dict[str, Any]) -> Telling | None:
             """The memories tied to the files of an edit that went ahead, those the session hasn't been told, where
             the agent's hook before a tool takes added context."""
             if stopped or went_ahead is None or not hears:
@@ -1012,7 +1031,7 @@ def build_app(
         if card is not None:
             # A card on this project's board the member can see, refused as reading it would be.
             board.card(current, card)
-        kept = draft_learnings_kept.keep(
+        kept = draft_learning_store.keep(
             current, calling, [DraftLearning(**each) for each in draft_learnings], card
         )
         answer: dict[str, Any] = {
@@ -1034,13 +1053,13 @@ def build_app(
     def confirm_draft_learning(id: int, ctx: Context, edits: DraftLearningEdits | None = None) -> dict[str, Any]:
         """Save a draft learning the member chose, with their edits, as their personal memory."""
         changed = Edits(**edits) if edits is not None else None
-        return _fenced_save(draft_learnings_kept.confirm(caller(ctx), id, changed))
+        return _fenced_save(draft_learning_store.confirm(caller(ctx), id, changed))
 
     @server.tool()
     @_refusals_as_tool_errors
     def decline_draft_learning(id: int, ctx: Context) -> dict[str, Any]:
         """Drop a draft learning the member declined."""
-        return {"declined": draft_learnings_kept.decline(caller(ctx), id)}
+        return {"declined": draft_learning_store.decline(caller(ctx), id)}
 
     @server.tool(name="list")
     @_refusals_as_tool_errors
@@ -1100,14 +1119,7 @@ def build_app(
         current = caller(ctx)
         memory = service.read(current, path, for_agent=True)
         uses.used(current.team, [memory["path"]])
-        token = new_token()
-        _escape_in_doubt(memory)
-        return {
-            **memory,
-            "title": escape(memory["title"]),
-            "summary": fenced(memory["summary"], token, inline=True),
-            "body": fenced(memory["body"], token),
-        }
+        return _fenced_memory(memory, new_token())
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -1119,12 +1131,7 @@ def build_app(
         found = service.tied_memories(current, file)
         uses.used(current.team, [each["path"] for each in found["memories"]])
         token = new_token()
-        for each in found["memories"]:
-            each["title"] = escape(each["title"])
-            each["summary"] = fenced(each["summary"], token, inline=True)
-            each["body"] = fenced(each["body"], token)
-            _escape_in_doubt(each)
-        return found
+        return {**found, "memories": [_fenced_memory(each, token) for each in found["memories"]]}
 
     @server.tool()
     @saving
@@ -1609,9 +1616,7 @@ def build_app(
         """
         current = caller(ctx)
         # Read before the move, so only the move into Done asks, not one that tries a known issue's retiring again.
-        into_done = (
-            column is not None and column_named(column) == "done" and board.card(current, number)["column"] != "done"
-        )
+        into_done = board.moves_into_done(current, number, column)
         moved = board.update(
             current,
             number,
@@ -1630,7 +1635,7 @@ def build_app(
         )
         # The session finishing its own card is asked what the work taught (#552). Asked here, not in Board.update,
         # which the console's move shares: the console has no coding agent to draft them.
-        if into_done and moved["column"] == "done" and moved["assignee"] == current.member_id:
+        if into_done and moved["column"] == DONE and moved["assignee"] == current.member_id:
             moved["next"] = asked_for_card(number)
         return moved
 
@@ -1706,7 +1711,7 @@ def build_app(
     app.state.standbys = standbys
     app.state.locks = locks
     app.state.project_patterns = project_patterns
-    app.state.draft_learnings = draft_learnings_kept
+    app.state.draft_learnings = draft_learning_store
     return app
 
 

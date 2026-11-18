@@ -34,7 +34,8 @@ from shared_memory.validation import CHARACTER_LIMIT, refuse_secret
 log = logging.getLogger("shared_memory")
 
 # Each column and priority as the tools take and give it, and as the board shows it to a member.
-COLUMNS = {"to_do": "To do", "doing": "Doing", "blocked": "Blocked", "done": "Done"}
+DONE = "done"
+COLUMNS = {"to_do": "To do", "doing": "Doing", "blocked": "Blocked", DONE: "Done"}
 PRIORITIES = {"high": "High", "normal": "Normal", "low": "Low"}
 
 TITLE_LIMIT = 200
@@ -345,6 +346,18 @@ class Board:
                 raise Refused(f"This project's board has no card {number}. Read the board to find its cards' numbers.")
             (card,) = _shown_all(conn, [row])
         return card
+
+    def moves_into_done(self, caller: Caller, number: int, column: str | None) -> bool:
+        """Whether moving this card to this column would move it into Done from another column. Asked before the
+        move; a card already in Done moved to Done again is not moved into it."""
+        if column is None or column_named(column) != DONE:
+            return False
+        project_id = self._project(caller)
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT board_column FROM cards WHERE project_id = %s AND number = %s", (project_id, number)
+            ).fetchone()
+        return row is not None and row["board_column"] != DONE
 
     def add(
         self,
