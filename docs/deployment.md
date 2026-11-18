@@ -373,6 +373,13 @@ the member confirms each as personal memory or declines it. A member has at most
 `SHARED_MEMORY_DRAFT_LEARNING_MOST` (default 3, optional) waiting in a project, and one is dropped after
 `SHARED_MEMORY_DRAFT_LEARNING_DAYS` (default 7, optional).
 
+## When a personal memory counts as popular
+
+A personal memory is popular once `SHARED_MEMORY_POPULAR_MEMBERS` (default 2, optional) other members' sessions have
+read it within `SHARED_MEMORY_POPULAR_WINDOW_DAYS` (default 30, optional), each member counting once. Its author's next
+briefing suggests promoting it, and names it again only once that count has grown by
+`SHARED_MEMORY_POPULAR_REPROMPT_FACTOR` (default 2, optional) since the last time.
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

@@ -64,6 +64,7 @@ from shared_memory.messages import Messages
 from shared_memory.license import PUBLIC_KEYS
 from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import RateLimited, RateLimits
+from shared_memory.popularity import Popularity
 from shared_memory.recall import Recall, Telling
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
@@ -343,6 +344,8 @@ def build_app(
     store.subscribe(briefing)
     uses = Uses(settings, db, store, briefing.pinned_among, clock)
     store.subscribe(uses)
+    popularity = Popularity(settings, db, store, challenges, clock)
+    store.subscribe(popularity)
     service = MemoryService(settings, identity, store, history, index, challenges, audit, uses, tied)
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
     # A card moved to Done on a read-only server stays moved; its known issues stay active and say why.
@@ -803,6 +806,7 @@ def build_app(
             extra=[
                 *lifecycle.foundation_lines(current),
                 *challenges.briefing_notices(current),
+                *popularity.briefing_notices(current),
                 *(handoff_notes.for_briefing(current, session) if with_sessions else []),
             ],
             work=work,
@@ -1120,6 +1124,7 @@ def build_app(
         current = caller(ctx)
         memory = service.read(current, path, for_agent=True)
         uses.used(current.team, [memory["path"]])
+        popularity.read_by(current, memory["path"])
         return _fenced_memory(memory, new_token())
 
     @server.tool()

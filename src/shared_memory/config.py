@@ -29,6 +29,12 @@ SIMILAR_THRESHOLD = 0.62
 DRAFT_LEARNING_MOST = 3
 DRAFT_LEARNING_DAYS = 7
 
+# A personal memory is popular once this many other members' sessions read it within this many days, and its author is
+# named it again only once that count has grown by this factor, unless the server's settings say otherwise.
+POPULAR_MEMBERS = 2
+POPULAR_WINDOW_DAYS = 30
+POPULAR_REPROMPT_FACTOR = 2
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -102,6 +108,11 @@ class Settings:
     # The most draft learnings a member has waiting in one project, and how long one waits for them before it is dropped.
     draft_learning_most: int = DRAFT_LEARNING_MOST
     draft_learning_days: float = DRAFT_LEARNING_DAYS
+    # Popular memory (CONTEXT.md): how many distinct other members must read a personal memory within the window, and
+    # how far that count must grow past the one its author was last prompted with before they are prompted again.
+    popular_members: int = POPULAR_MEMBERS
+    popular_window_days: float = POPULAR_WINDOW_DAYS
+    popular_reprompt_factor: float = POPULAR_REPROMPT_FACTOR
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
@@ -190,6 +201,9 @@ class Settings:
             handoff_note_kept_days=float(env.get("SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS", "7")),
             draft_learning_most=int(env.get("SHARED_MEMORY_DRAFT_LEARNING_MOST", str(DRAFT_LEARNING_MOST))),
             draft_learning_days=float(env.get("SHARED_MEMORY_DRAFT_LEARNING_DAYS", str(DRAFT_LEARNING_DAYS))),
+            popular_members=int(env.get("SHARED_MEMORY_POPULAR_MEMBERS", str(POPULAR_MEMBERS))),
+            popular_window_days=float(env.get("SHARED_MEMORY_POPULAR_WINDOW_DAYS", str(POPULAR_WINDOW_DAYS))),
+            popular_reprompt_factor=float(env.get("SHARED_MEMORY_POPULAR_REPROMPT_FACTOR", str(POPULAR_REPROMPT_FACTOR))),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
