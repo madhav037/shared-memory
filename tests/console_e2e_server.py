@@ -62,6 +62,7 @@ TEAMMATES_PORT = 8127
 
 # Raj's activity in Billing, which Mira's session states too when a journey asks, so the two collide.
 RAJS_ACTIVITY = "Adding backoff to the webhook retries"
+RAJS_PROMPT = "which package manager do we use?"
 # What Raj's earlier session in Billing worked on, and the handoff note it left when it ended.
 RAJS_DOCS = "Writing the webhook retry docs"
 RAJS_DONE = "The retry docs page and its examples."
@@ -522,6 +523,10 @@ def seeded(
         # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the
         # journeys' clock never moves. Reporting has no session, for the page that says so.
         raj = dana.as_agent("claude-code").as_session("raj-backoff")
+        # Its told record, for the told record journey: its briefing, then the pnpm memory recall added to a prompt.
+        raj.start()
+        recalled = added_context(raj.prompt(RAJS_PROMPT))
+        assert pnpm in recalled, recalled
         raj.call("set_activity", activity=RAJS_ACTIVITY, session=raj.identifier)
         raj.call("take_lock", path="src/webhooks/backoff.ts", session=raj.identifier)
         # Its hook before a tool has named its branch and a file it read.

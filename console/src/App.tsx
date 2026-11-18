@@ -38,6 +38,7 @@ import { NotFound } from "./pages/NotFound";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { ToldPage } from "./pages/ToldPage";
 import { SignIn } from "./pages/SignIn";
 import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
 
@@ -255,6 +256,7 @@ function SignedIn({
             />
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
+            <Route path="/projects/:projectId/sessions/:sessionNumber/told" element={<ToldPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
             <Route path="/projects/:projectId/health" element={<HealthPage />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />

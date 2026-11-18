@@ -762,8 +762,12 @@ class ActiveSession(BaseModel):
     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
-    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise."""
+    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise.
+    session_number tells it apart, as NamedSession's does, and names it to its told record, which
+    you_may_read_told says the signed-in member may open: it is their own session, or they look after the project."""
 
+    session_number: int
+    you_may_read_told: bool
     member_id: str
     member_name: str
     agent: str | None
@@ -913,6 +917,46 @@ class ProjectHealth(BaseModel):
     outdated_after_days: float
     possibly_outdated: list[PossiblyOutdatedMemory]
     in_doubt: list[DoubtedMemory]
+
+
+class ToldMemoryEntry(BaseModel):
+    """A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.
+    Its text then is its version at the entry's commit."""
+
+    path: str
+    title: str
+    section: str
+
+
+class ToldEntry(BaseModel):
+    """One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall
+    added (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before
+    memory's first save."""
+
+    kind: Literal["briefing", "recall"]
+    at: datetime
+    commit: str | None
+    briefing: str | None
+    memory: ToldMemoryEntry | None
+
+
+class SessionToldRecord(BaseModel):
+    """A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's
+    admins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.
+    The session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes
+    nothing."""
+
+    project_id: str
+    project_name: str
+    session_number: int
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    started_at: datetime
+    last_seen_at: datetime
+    told_days: float
+    told: list[ToldEntry]
 
 
 class ProjectSessions(BaseModel):
@@ -1158,6 +1202,16 @@ DECLARATIONS: tuple[Declaration, ...] = (
             "project's collisions and gates; and the signed-in member's own sessions' messages."
         ),
         answers=ProjectSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/{session_number}/told",
+        method="GET",
+        operation_id="session_told",
+        summary=(
+            "A session's told record, for its own member, its project's leads and the team's admins: its briefing as "
+            "delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing."
+        ),
+        answers=SessionToldRecord,
     ),
     Declaration(
         path="/projects/{project_id}/sessions/messages",

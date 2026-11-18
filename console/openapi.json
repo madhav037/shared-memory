@@ -750,6 +750,42 @@
         }
       }
     },
+    "/api/projects/{project_id}/sessions/{session_number}/told": {
+      "get": {
+        "operationId": "session_told",
+        "summary": "A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionToldRecord"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/sessions/messages": {
       "post": {
         "operationId": "send_message",
@@ -2833,8 +2869,16 @@
         "type": "object"
       },
       "ActiveSession": {
-        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.",
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.\nsession_number tells it apart, as NamedSession's does, and names it to its told record, which\nyou_may_read_told says the signed-in member may open: it is their own session, or they look after the project.",
         "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "you_may_read_told": {
+            "title": "You May Read Told",
+            "type": "boolean"
+          },
           "member_id": {
             "title": "Member Id",
             "type": "string"
@@ -2931,6 +2975,8 @@
           }
         },
         "required": [
+          "session_number",
+          "you_may_read_told",
           "member_id",
           "member_name",
           "agent",
@@ -3395,6 +3441,172 @@
           "messages"
         ],
         "title": "ProjectSessions",
+        "type": "object"
+      },
+      "ToldEntry": {
+        "description": "One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall\nadded (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before\nmemory's first save.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "briefing",
+              "recall"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "briefing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Briefing"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToldMemoryEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "commit",
+          "briefing",
+          "memory"
+        ],
+        "title": "ToldEntry",
+        "type": "object"
+      },
+      "ToldMemoryEntry": {
+        "description": "A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.\nIts text then is its version at the entry's commit.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "section"
+        ],
+        "title": "ToldMemoryEntry",
+        "type": "object"
+      },
+      "SessionToldRecord": {
+        "description": "A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's\nadmins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.\nThe session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes\nnothing.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "told_days": {
+            "title": "Told Days",
+            "type": "number"
+          },
+          "told": {
+            "items": {
+              "$ref": "#/components/schemas/ToldEntry"
+            },
+            "title": "Told",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "session_number",
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "started_at",
+          "last_seen_at",
+          "told_days",
+          "told"
+        ],
+        "title": "SessionToldRecord",
         "type": "object"
       },
       "MessageToSend": {

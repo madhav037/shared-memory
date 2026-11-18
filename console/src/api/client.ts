@@ -40,6 +40,8 @@ export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ProjectHealth = components["schemas"]["ProjectHealth"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
+export type SessionToldRecord = components["schemas"]["SessionToldRecord"];
+export type ToldEntry = components["schemas"]["ToldEntry"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
 export type SessionGate = components["schemas"]["SessionGate"];
@@ -340,6 +342,11 @@ export function fetchArchive(projectId: string, filters: BoardFilters, signal?: 
 /** A project's active sessions, the oldest first, each with its activity and the files it holds a lock on. */
 export function fetchSessions(projectId: string, signal?: AbortSignal): Promise<ProjectSessions> {
   return ask<ProjectSessions>(`/api/projects/${encodeURIComponent(projectId)}/sessions`, { signal });
+}
+
+/** A session's told record: its briefing and each recall, oldest first, for its member, the project's leads and admins. */
+export function fetchTold(projectId: string, sessionNumber: string, signal?: AbortSignal): Promise<SessionToldRecord> {
+  return ask<SessionToldRecord>(sessionsPath(projectId, `${encodeURIComponent(sessionNumber)}/told`), { signal });
 }
 
 function sessionsPath(projectId: string, rest: string): string {

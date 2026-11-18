@@ -379,6 +379,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/sessions/{session_number}/told": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing. */
+        get: operations["session_told"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/sessions/messages": {
         parameters: {
             query?: never;
@@ -1346,8 +1363,14 @@ export interface components {
          *     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
          *     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
          *     and no hook of the session has called. standby is the session's standby while it stands by, None otherwise.
+         *     session_number tells it apart, as NamedSession's does, and names it to its told record, which
+         *     you_may_read_told says the signed-in member may open: it is their own session, or they look after the project.
          */
         ActiveSession: {
+            /** Session Number */
+            session_number: number;
+            /** You May Read Told */
+            you_may_read_told: boolean;
             /** Member Id */
             member_id: string;
             /** Member Name */
@@ -1602,6 +1625,79 @@ export interface components {
             handoff_notes: components["schemas"]["SessionHandoffNote"][];
             /** Messages */
             messages: components["schemas"]["SessionMessage"][];
+        };
+        /**
+         * ToldEntry
+         * @description One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall
+         *     added (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before
+         *     memory's first save.
+         */
+        ToldEntry: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "briefing" | "recall";
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Commit */
+            commit: string | null;
+            /** Briefing */
+            briefing: string | null;
+            memory: components["schemas"]["ToldMemoryEntry"] | null;
+        };
+        /**
+         * ToldMemoryEntry
+         * @description A memory a recall added to a session's prompt: its path, its title then, and the heading of the section told.
+         *     Its text then is its version at the entry's commit.
+         */
+        ToldMemoryEntry: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Section */
+            section: string;
+        };
+        /**
+         * SessionToldRecord
+         * @description A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's
+         *     admins: everything Shared Memory told it, oldest first, kept told_days. It never holds what its member typed.
+         *     The session is named as the Sessions page names it, whether it is active, idle or ended. Reading it changes
+         *     nothing.
+         */
+        SessionToldRecord: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Session Number */
+            session_number: number;
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Told Days */
+            told_days: number;
+            /** Told */
+            told: components["schemas"]["ToldEntry"][];
         };
         /**
          * MessageToSend
@@ -3148,6 +3244,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    session_told: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                session_number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A session's told record, for its own member, its project's leads and the team's admins: its briefing as delivered and each memory recall added, oldest first, each with when and the head commit. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionToldRecord"];
                 };
             };
         };
