@@ -115,6 +115,8 @@ class Settings:
     popular_reprompt_factor: float = POPULAR_REPROMPT_FACTOR
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
+    # How long a session's told record is kept: its briefing and each recall, never what its member typed.
+    told_days: float = 30
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
     rate_limit_on: bool = True
     rate_limit_token_per_minute: int = 120
@@ -205,6 +207,7 @@ class Settings:
             popular_window_days=float(env.get("SHARED_MEMORY_POPULAR_WINDOW_DAYS", str(POPULAR_WINDOW_DAYS))),
             popular_reprompt_factor=float(env.get("SHARED_MEMORY_POPULAR_REPROMPT_FACTOR", str(POPULAR_REPROMPT_FACTOR))),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
+            told_days=float(env.get("SHARED_MEMORY_TOLD_DAYS", "30")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),
             rate_limit_console_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_CONSOLE_PER_MINUTE", "300")),

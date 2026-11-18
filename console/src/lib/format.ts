@@ -115,6 +115,11 @@ export function healthUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/health`;
 }
 
+/** Where one session's told record is read: what Shared Memory told it. */
+export function toldUrl(projectId: string, sessionNumber: number): string {
+  return `/projects/${encodeURIComponent(projectId)}/sessions/${sessionNumber}/told`;
+}
+
 /** Where a project's active sessions are listed. */
 export function sessionsUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/sessions`;

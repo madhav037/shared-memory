@@ -194,6 +194,11 @@ A session stops counting as active once it has made no call for `SHARED_MEMORY_S
 optional in `.env`): its activity and its locks end with it. Any hook from the session, and any tool call that names
 it, counts as a call. Raise it if your members' sessions run long tasks with no prompt in between.
 
+## How long a session's told record is kept
+
+A session's told record (its briefing and each recall, never what its member typed) is kept for
+`SHARED_MEMORY_TOLD_DAYS` (default 30, optional in `.env`). Older records are pruned as new ones are written.
+
 ## How long before a memory is labelled possibly outdated
 
 A memory no coding agent has recalled or read for `SHARED_MEMORY_OUTDATED_AFTER_DAYS` (default 60, optional in `.env`)

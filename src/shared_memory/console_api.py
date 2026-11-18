@@ -28,6 +28,7 @@ from shared_memory import health
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
+from shared_memory import told
 from shared_memory.standby import Standby, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
@@ -71,7 +72,7 @@ from shared_memory.console_contract import (
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
+    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, SessionToldRecord, ToldEntry, ToldMemoryEntry, Projects,
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
@@ -376,7 +377,9 @@ class ConsoleApi:
         export: TeamExport,
         talk: SessionTalk,
         project_health: health.ProjectHealth,
+        told_record: told.ToldRecord,
     ) -> None:
+        self._told_record = told_record
         self._export_of = export
         self._health = project_health
         self._talk = talk
@@ -420,6 +423,7 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
+            "session_told": self._session_told,
             "project_health": self._project_health,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
@@ -784,6 +788,40 @@ class ConsoleApi:
     def _project_sessions(self, request: Request) -> Response:
         return self._browse(request, self._sessions_now)
 
+    # --- a session's told record, read: for its member, the project's leads and the team's admins (#565) ---
+
+    def _session_told(self, request: Request) -> Response:
+        def read(caller: Caller) -> SessionToldRecord:
+            session, entries = self._told_record.of(caller, int(request.path_params["session_number"]))
+            return SessionToldRecord(
+                project_id=session.project_id,
+                project_name=caller.require_project().name,
+                session_number=session.id,
+                member_id=session.member_id,
+                member_name=session.member_name,
+                agent=session.agent,
+                repository=session.repository,
+                started_at=session.started_at,
+                last_seen_at=session.last_seen_at,
+                told_days=self._settings.told_days,
+                told=[
+                    ToldEntry(
+                        kind=one.kind,
+                        at=one.at,
+                        commit=one.commit,
+                        briefing=one.briefing,
+                        memory=(
+                            ToldMemoryEntry(path=one.memory.path, title=one.memory.title, section=one.memory.section)
+                            if one.memory is not None
+                            else None
+                        ),
+                    )
+                    for one in entries
+                ],
+            )
+
+        return self._browse(request, read)
+
     # --- a project's health, read: nothing here pins, decides, retires or uses a memory (ADR-0009) ---
 
     def _project_health(self, request: Request) -> Response:
@@ -918,6 +956,8 @@ class ConsoleApi:
             ],
             sessions=[
                 ActiveSession(
+                    session_number=each.session.id,
+                    you_may_read_told=self._told_record.may_read(caller, each.session),
                     member_id=each.session.member_id,
                     member_name=each.session.member_name,
                     agent=each.session.agent,

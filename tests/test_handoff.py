@@ -259,7 +259,8 @@ def test_a_note_is_kept_seven_days_and_then_gone(
     state(cole_like, WEBHOOKS)
     leave_note(cole_like, done="Something else entirely.")
 
-    assert DONE not in everything_kept(server)
+    # A briefing that carried the note is kept in its session's told record, for the told record's own 30 days.
+    assert DONE not in everything_kept(server, leaving_out=("session_told",))
 
 
 def test_nothing_crosses_projects(team: Team, owner: Session, dana: Session) -> None:

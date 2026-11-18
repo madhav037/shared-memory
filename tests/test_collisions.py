@@ -429,8 +429,9 @@ def test_a_members_own_other_session_is_warned_about_on_a_first_prompt(owner: Se
     assert "Olive Owner's other session" in to_second
 
 
-def everything_kept(server: RunningServer) -> str:
-    """Every row of every table, as text: what any session or the console could ever be shown."""
+def everything_kept(server: RunningServer, leaving_out: tuple[str, ...] = ()) -> str:
+    """Every row of every table, as text: what any session or the console could ever be shown. `leaving_out` names
+    tables not read, such as the told record, which keeps each briefing as delivered for its own thirty days."""
     with psycopg.connect(server.settings.database_url, autocommit=True) as conn:
         tables = [
             row[0]
@@ -439,7 +440,10 @@ def everything_kept(server: RunningServer) -> str:
             ).fetchall()
         ]
         return "\n".join(
-            str(row) for table in tables for row in conn.execute(f'SELECT * FROM "{table}"').fetchall()  # noqa: S608
+            str(row)
+            for table in tables
+            if table not in leaving_out
+            for row in conn.execute(f'SELECT * FROM "{table}"').fetchall()  # noqa: S608
         )
 
 

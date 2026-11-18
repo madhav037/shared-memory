@@ -16,7 +16,8 @@ The prompt hook and the before-edit hook share it, so neither tells a session wh
 - `forget(session)`: start the session over, as after a compaction.
 
 Both answer with a `Telling`: the text, and `told()`, which records it as told. A hook calls `told()` only once the
-text is in its answer, so what is dropped past the recall budget stays untold.
+text is in its answer, so what is dropped past the recall budget stays untold. For a prompt, `told()` also adds what
+recall told to the session's told record (told.py).
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import label_for, reasons_for
 from shared_memory.tied import TiedFiles
+from shared_memory.told import ToldMemory, ToldRecord
 from shared_memory.uses import Uses
 
 FRAMING = (
@@ -111,8 +113,10 @@ class Recall:
         uses: Uses,
         challenges: Challenges,
         tied: TiedFiles,
+        told_record: ToldRecord,
     ) -> None:
         self._settings = settings
+        self._told_record = told_record
         self._challenges = challenges
         self._db = db
         if db.sets_up:
@@ -181,13 +185,18 @@ class Recall:
 
     def _telling(
         self, caller: Caller, session: Session | None, found: list[_Found], sections: list[tuple[str, int, str]],
-        in_doubt: dict[str, InDoubt],
+        in_doubt: dict[str, InDoubt], recorded: bool = False,
     ) -> Telling:  # fmt: skip
-        """The memories as recall tells them, recorded as told, these sections of them, only by `told()`."""
+        """The memories as recall tells them, recorded as told, these sections of them, only by `told()`. With
+        `recorded`, `told()` also puts them in the session's told record, as a recall."""
 
         def record() -> None:
             if session is not None:
                 self._tell(session, sections)
+                if recorded:
+                    self._told_record.recalled(
+                        session, [ToldMemory(each.path, each.memory.title, each.heading) for each in found]
+                    )
             # Told is used: each memory added to the session starts its clock again.
             self._uses.used(caller.team, [each.path for each in found])
 
@@ -229,7 +238,7 @@ class Recall:
         if not found:
             return None
         told = [(each.path, number, text) for each in found for number, text in each.sections]
-        return self._telling(caller, session, found, told, in_doubt)
+        return self._telling(caller, session, found, told, in_doubt, recorded=True)
 
     def for_edit(self, caller: Caller, files: Sequence[str], session: Session) -> Telling | None:
         """The memories tied to the files an edit is about to change, each a path from the caller's repository's root,

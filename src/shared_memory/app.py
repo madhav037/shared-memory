@@ -74,6 +74,7 @@ from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
 from shared_memory.tied import TiedFiles
+from shared_memory.told import ToldRecord
 from shared_memory.uses import Uses
 
 # What every coding agent is told when it connects. Agents may cut it short (Claude Code keeps 2 KB, Codex asks that
@@ -356,7 +357,8 @@ def build_app(
     saves = Saves()
     sessions = Sessions(settings, db, identity, clock)
     identity.on_access_lost(sessions.end_unreachable)
-    recall = Recall(settings, db, sessions, index, store, uses, challenges, tied)
+    told_record = ToldRecord(settings, db, store, sessions, identity, clock)
+    recall = Recall(settings, db, sessions, index, store, uses, challenges, tied, told_record)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
@@ -648,7 +650,11 @@ def build_app(
             if session and hooks.source_in(payload) == "compact":
                 recall.forget(session)
             named = briefing_line(session) if session else None
-            return "\n\n".join(part for part in (composed_briefing(current, named, session), named) if part) or None
+            delivered = "\n\n".join(part for part in (composed_briefing(current, named, session), named) if part)
+            if session and delivered:
+                # The required part always reaches the session, so what it says is what the session was told.
+                told_record.briefed(session, delivered)
+            return delivered or None
 
         return await hook(request, "SessionStart", briefed, report_refusals=True)
 
@@ -827,7 +833,9 @@ def build_app(
             "The briefing is empty: nothing is pinned in this project, nothing is waiting for you, none of your cards "
             "is due or in progress, it has no known issues, and no other session is active in it."
         )
-        return f"{briefed}\n\n{named}"
+        delivered = f"{briefed}\n\n{named}"
+        told_record.briefed(session, delivered)
+        return delivered
 
     def briefing_without_a_session(current: Caller) -> str:
         """The briefing as a prompt shows it. A prompt takes no arguments, so it cannot know which session asked:
@@ -1703,6 +1711,7 @@ def build_app(
             TeamExport(settings, identity, board, audit),
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
             ProjectHealth(identity, store, uses, challenges),
+            told_record,
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

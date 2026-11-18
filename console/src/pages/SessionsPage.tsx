@@ -10,7 +10,7 @@ import {
   IconShieldOff,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import {
   answerGate,
@@ -25,7 +25,7 @@ import {
   type SessionMessage,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
-import { moment, plural, waitingFor } from "../lib/format";
+import { moment, plural, toldUrl, waitingFor } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** How often the page asks again, so a new collision, gate or message shows without reloading. */
@@ -161,7 +161,7 @@ export function SessionsPage() {
       ) : (
         <ol className="entries sessions" data-testid="sessions">
           {found.sessions.map((one, place) => (
-            <Session key={place} session={one} />
+            <Session key={place} projectId={found.project_id} session={one} />
           ))}
         </ol>
       )}
@@ -174,7 +174,7 @@ function At({ at }: { at: string }) {
 }
 
 /** One active session, set out as an entry: who and where, what it is working on, when, and the files it holds. */
-function Session({ session }: { session: ActiveSession }) {
+function Session({ projectId, session }: { projectId: string; session: ActiveSession }) {
   return (
     <li className="entry session" data-testid="session">
       <div className="session-who">
@@ -232,6 +232,11 @@ function Session({ session }: { session: ActiveSession }) {
         <span>
           Last call <At at={session.last_seen_at} />
         </span>
+        {session.you_may_read_told && (
+          <Link to={toldUrl(projectId, session.session_number)} data-testid="to-told">
+            What it was told
+          </Link>
+        )}
       </div>
       {session.locks.length > 0 && (
         <section className="session-locks" aria-label="Files it holds" data-testid="session-locks">
