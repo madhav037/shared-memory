@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
+from shared_memory.challenges import Challenges, ranked
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.embeddings import QuerySource
@@ -69,9 +70,17 @@ def _digest(text: str) -> str:
 
 class Recall:
     def __init__(
-        self, settings: Settings, db: Database, sessions: Sessions, index: SearchIndex, store: MemoryStore, uses: Uses
+        self,
+        settings: Settings,
+        db: Database,
+        sessions: Sessions,
+        index: SearchIndex,
+        store: MemoryStore,
+        uses: Uses,
+        challenges: Challenges,
     ) -> None:
         self._settings = settings
+        self._challenges = challenges
         self._db = db
         if db.sets_up:
             with db.transaction() as conn:
@@ -126,10 +135,11 @@ class Recall:
             limit=self._settings.recall_limit * 3,
             source=QuerySource.RECALL,
         )
-        strong = sorted(
-            (hit for hit in hits if hit.similarity >= self._settings.recall_threshold),
-            key=lambda hit: -hit.similarity,
-        )
+        # The bar is the similarity itself; a memory in doubt that passes it ranks lower, but still ranks.
+        strong = [hit for hit in hits if hit.similarity >= self._settings.recall_threshold]
+        in_doubt = self._challenges.in_doubt(caller.team, [hit.path for hit in strong])
+        penalty = self._settings.in_doubt_penalty
+        strong.sort(key=lambda hit: -ranked(hit.similarity, in_doubt.get(hit.path), penalty))
         found: list[_Found] = []
         for hit in strong:
             try:
@@ -167,12 +177,13 @@ class Recall:
                 kind += ", possibly outdated"
             if reasons := reasons_for(memory):
                 kind += f", {label_for(reasons)}"
+            doubted = f"\n{escape(marked.line())}" if (marked := in_doubt.get(hit.path)) else ""
             # The strongest hit comes in full; the rest are entries of one line.
             if is_top:
-                entries.append(f"[{kind}] {title} ({hit.path})\n{fenced(each.text, token)}")
+                entries.append(f"[{kind}] {title} ({hit.path}){doubted}\n{fenced(each.text, token)}")
             else:
                 summary = fenced(" ".join(memory.summary.split()), token, inline=True)
-                entries.append(f"[{kind}] {title} ({hit.path}): {summary}")
+                entries.append(f"[{kind}] {title} ({hit.path}): {summary}{doubted}")
         # Recalled is used: each memory added to the prompt starts its clock again.
         self._uses.used(caller.team, [each.hit.path for each in found])
         told = framing(token)

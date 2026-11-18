@@ -166,6 +166,10 @@ _Avoid_: Approval, proposal, change request
 Which of two grounds a challenge that doubts a memory names: *misled me*, or *contradicts the code*, quoting the file and line. It is not the reasoning, which is free text.
 _Avoid_: Doubt kind, doubt type
 
+**Evidence**:
+What one raise of a challenge that doubts a memory brings: the raiser's reasoning and, for *contradicts the code*, the file and line with that line quoted. A raise that joins an open challenge adds its evidence, but a challenge counts members, not raises.
+_Avoid_: Proof, vote
+
 **Foundation challenge**:
 A challenge to add a memory to a foundation, or to supersede or retire one of its memories, even the challenger's own; a keeper of that foundation or a project lead decides it, and it is shown apart from other challenges.
 _Avoid_: Foundation request, merge request

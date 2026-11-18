@@ -56,7 +56,7 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenge, Challenges, Waiting, project_of
+from shared_memory.challenges import Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
@@ -64,7 +64,8 @@ from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
+    HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
@@ -182,6 +183,40 @@ def _may_be_pinned(path: str) -> bool:
 
 # Where the nonce cookie is sent: only to the sign-in's own addresses.
 NONCE_PATH = "/api/sign-in"
+
+
+def _marked(in_doubt: InDoubt | None) -> InDoubtMark | None:
+    """A memory's in-doubt mark as the console is sent it, or None when nobody doubts it."""
+    if in_doubt is None:
+        return None
+    return InDoubtMark(
+        count=in_doubt.count,
+        reasons=[
+            InDoubtReason(reason=each.reason, count=each.count, code_references=list(each.code_references))
+            for each in in_doubt.reasons
+        ],
+        line=in_doubt.line(),
+    )
+
+
+def _with_evidence(challenge: dict[str, Any], doubt: Doubt | None) -> dict[str, Any]:
+    """An open challenge against a memory, with a doubt's count and evidence for whoever reads the memory."""
+    return {
+        **challenge,
+        "count": None if doubt is None else doubt.count,
+        "evidence": [] if doubt is None else [_evidence(each) for each in doubt.evidence],
+    }
+
+
+def _evidence(each: Evidence) -> DoubtEvidence:
+    reference = each.code_reference
+    return DoubtEvidence(
+        member_id=each.member_id,
+        reasoning=each.reasoning,
+        code_reference=None if reference is None else str(reference),
+        quoted_line=None if reference is None else reference.quoted_line,
+        raised_at=each.raised_at,
+    )
 
 
 def _sign_in_first() -> Response:
@@ -692,6 +727,12 @@ class ConsoleApi:
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
+        against = self._challenging.doubts_against(caller.team, [memory["path"]])[memory["path"]]
+        doubts = {each.challenge.id: each for each in against}
+        memory["open_challenges"] = [
+            _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
+        ]
+        memory["in_doubt"] = _marked(InDoubt.of(doubts.values()) if doubts else None)
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:
@@ -1118,14 +1159,21 @@ class ConsoleApi:
         return JSONResponse(self._challenge_list(caller).model_dump(mode="json"))
 
     def _challenge_list(self, caller: Caller) -> ChallengeList:
-        waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
+        found = self._challenging.waiting_for(caller)
+        doubts = {
+            doubt.challenge.id: doubt
+            for each in self._challenging.doubts_against(caller.team, [one.challenge.target_path for one in found]).values()
+            for doubt in each
+        }
+        waiting = [self._dispute(caller, one, doubts.get(one.challenge.id)) for one in found]
         raised = [
             RaisedChallenge(**one, target_title=self._target(caller, one["kind"], one["foundation"], one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
         return ChallengeList(waiting=waiting, raised=raised)
 
-    def _dispute(self, caller: Caller, waiting: Waiting) -> ChallengeDetail:
+    def _dispute(self, caller: Caller, waiting: Waiting, doubt: Doubt | None) -> ChallengeDetail:
+        """A challenge waiting for this member, and for a doubt the evidence every raise of it brought."""
         challenge = waiting.challenge
         return ChallengeDetail(
             challenge_id=challenge.id,
@@ -1140,6 +1188,9 @@ class ConsoleApi:
             target=self._target(caller, challenge.kind, challenge.foundation, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,
+            reason=challenge.reason,
+            evidence=[] if doubt is None else [_evidence(each) for each in doubt.evidence],
+            count=None if doubt is None else doubt.count,
         )
 
     def _foundation_named(self, challenge: Challenge) -> str | None:

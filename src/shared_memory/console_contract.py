@@ -16,7 +16,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
-from shared_memory.challenges import DecidesAs
+from shared_memory.challenges import DecidesAs, Reason
 from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
@@ -230,6 +230,17 @@ class PendingChallenge(BaseModel):
     replaces: str | None
 
 
+class DoubtEvidence(BaseModel):
+    """What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
+    quote, written repository:path:line, as the code has it."""
+
+    member_id: str
+    reasoning: str | None
+    code_reference: str | None
+    quoted_line: str | None
+    raised_at: datetime
+
+
 class OpenChallenge(BaseModel):
     """A challenge raised against this memory."""
 
@@ -237,10 +248,16 @@ class OpenChallenge(BaseModel):
     kind: str
     raised_by: str
     challenger_path: str | None
+    # The reason it names when it doubts the memory (CONTEXT.md: Reason); none for a supersede or a retire.
+    reason: Reason | None
     # Whether the member reading this may decide it, and in what capacity: as its author, as a lead of its project, as
     # an admin, or as anyone may once the fallback has passed or its author has left.
     may_decide: bool
     decides_as: DecidesAs | None
+    # For a doubt, shown to every member who can read the memory, deciders or not: how many members raised it and the
+    # evidence each raise brought, the first raiser's first. A challenge that names no reason has neither.
+    count: int | None
+    evidence: list[DoubtEvidence]
 
 
 class Pin(BaseModel):
@@ -276,6 +293,24 @@ class MemoryPath(BaseModel):
     path: str
 
 
+class InDoubtReason(BaseModel):
+    """One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is."""
+
+    reason: Reason
+    count: int
+    # Each code reference quoted for it, written repository:path:line, first quoted first and each once.
+    code_references: list[str]
+
+
+class InDoubtMark(BaseModel):
+    """What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
+    a session is shown, which the console shows as it is."""
+
+    count: int
+    reasons: list[InDoubtReason]
+    line: str
+
+
 class ChallengedMemory(BaseModel):
     """One side of a challenge: a memory as it stands now."""
 
@@ -308,6 +343,11 @@ class ChallengeDetail(BaseModel):
     challenger: ChallengedMemory | None
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
     reasoning: str | None
+    # For a doubt: the reason it names, every raise's evidence (the first raiser's first) and how many raises it has
+    # had: how many members, the first and each +1. A challenge that names no reason has none of them.
+    reason: Reason | None
+    evidence: list[DoubtEvidence]
+    count: int | None
 
 
 class RaisedChallenge(BaseModel):
@@ -315,6 +355,8 @@ class RaisedChallenge(BaseModel):
 
     challenge_id: int
     kind: str
+    # The reason a doubt names; none for any other kind.
+    reason: Reason | None
     target_path: str
     target_title: str
     challenger_path: str | None
@@ -398,6 +440,9 @@ class MemoryDetail(BaseModel):
     suspected_instructions: list[str]
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
+    # The memory is in doubt: what its open doubts say, which the console shows and never clears (ADR-0009). None when
+    # nobody doubts it.
+    in_doubt: InDoubtMark | None
 
 
 class SearchHit(BaseModel):
