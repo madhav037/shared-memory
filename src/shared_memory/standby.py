@@ -18,7 +18,8 @@ What other modules stand on, all of it on `Standbys`:
 
 - `hold(session, news, awaits=(), seconds=None, gone=None)`: hold a standby for this session until it ends, and give
   how it ended. `news` is what the session would be told now, marking it told (`waiting_for`); `awaits` the member IDs
-  whose answer it awaits, kept for the console; `seconds` a shorter hold than the cap, for a held tool call; `gone`
+  whose answer it awaits, kept for the console; `seconds` a shorter hold than the cap, for the `stand_by` tool's held call
+  (`STAND_BY_SECONDS` unless it asks for another, at most `Settings.standby_tool_cap_seconds`); `gone`
   says the asker has gone away, which ends the standby before it can take news nobody would receive.
 - `end(session)`: the session's member moved on: its next prompt ends its standby.
 - `in_project(project_id)`: the standbys held now in a project, each with its session's id and whose answer it awaits.
@@ -58,6 +59,9 @@ CREATE TABLE IF NOT EXISTS standbys (
 );
 CREATE INDEX IF NOT EXISTS standbys_by_project ON standbys (project_id);
 """
+
+# How long one `stand_by` tool call is held when it names no seconds: within a coding agent's default tool timeout.
+STAND_BY_SECONDS = 45
 
 
 class Ending(StrEnum):

@@ -65,7 +65,7 @@ from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
-from shared_memory.standby import Standbys
+from shared_memory.standby import STAND_BY_SECONDS, Ended, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
@@ -195,6 +195,15 @@ def _bearer(value: str | None) -> str | None:
     if value and value.lower().startswith("bearer "):
         return value[7:].strip() or None
     return None
+
+
+def _standby_answer(ended: Ended) -> dict[str, Any]:
+    """How a standby ended, as `/hooks/standby` and the `stand_by` tool both answer it: `ended`, `news`, `message` and,
+    for nothing yet, `wait_left_seconds`."""
+    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message}
+    if ended.wait_left is not None:
+        answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
+    return answer
 
 
 async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
@@ -645,8 +654,7 @@ def build_app(
             def standing_by() -> tuple[Session, tuple[str, ...]]:
                 session = session_of(current, payload)
                 assert session is not None
-                awaits = tuple(dict.fromkeys(each.earlier.member_id for each in gates.waiting(current, session)))
-                return session, awaits
+                return session, awaited_by(current, session)
 
             session, awaits = await anyio.to_thread.run_sync(standing_by)
             ended = await standbys.hold(
@@ -657,10 +665,11 @@ def build_app(
         except Exception:
             log.exception("standby failed")
             return JSONResponse({"message": "Shared Memory could not hold this standby."}, status_code=503)
-        answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message}
-        if ended.wait_left is not None:
-            answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
-        return JSONResponse(answer)
+        return JSONResponse(_standby_answer(ended))
+
+    def awaited_by(current: Caller, session: Session) -> tuple[str, ...]:
+        """The member IDs of the members whose answer a session standing by awaits, kept for the console."""
+        return tuple(dict.fromkeys(each.earlier.member_id for each in gates.waiting(current, session)))
 
     def composed_briefing(
         current: Caller, named: str | None, session: Session | None, with_sessions: bool = True
@@ -1276,6 +1285,24 @@ def build_app(
         current = caller(ctx)
         calling = sessions.mute(sessions.touch(current, session), on)
         return {"session": calling.identifier, "muted": calling.muted, "notices": waiting_for(current, calling)}
+
+    @server.tool()
+    async def stand_by(session: str, ctx: Context, seconds: float = STAND_BY_SECONDS) -> dict[str, Any]:
+        """Stand by while this session awaits an answer: held up to seconds (the server caps it), ending with its news,
+        told once. On nothing_yet, call it again until the project's wait has passed, then once more at most."""
+
+        def standing_by() -> tuple[Caller, Session, tuple[str, ...]]:
+            current = caller(ctx)
+            calling = sessions.touch(current, session)
+            return current, calling, awaited_by(current, calling)
+
+        try:
+            current, calling, awaits = await anyio.to_thread.run_sync(standing_by)
+        except Refused as refused:
+            raise ToolError(str(refused)) from refused
+        held = min(seconds, settings.standby_tool_cap_seconds)
+        ended = await standbys.hold(calling, functools.partial(waiting_for, current, calling), awaits, seconds=held)
+        return _standby_answer(ended)
 
     @server.tool()
     @_refusals_as_tool_errors

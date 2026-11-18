@@ -1,11 +1,12 @@
 """Standby (ADR-0027, #524): a session awaiting an answer stands by through `/hooks/standby`, which the server holds
 until there is news for the session, the same news `waiting_for` gathers for every hook, and answers with it, told
 once. Otherwise it ends with "nothing yet" at its cap, "replaced" when a newer standby of the session starts, or
-"moved on" at the session's next prompt.
+"moved on" at the session's next prompt. The `stand_by` tool (#525) holds the same standby inside an MCP tool call,
+for a coding agent that can't be woken by a background command, and answers the same way.
 
 Each standby here is held on a thread of its own over real HTTP, as a coding agent's background command holds it, while
 the test drives the other sessions and moves the server's clock. The server checks every 50 milliseconds rather than
-every 2 seconds. The collisions are made as `test_gates.py` makes them, with this module's own server for the chosen
+every 2 seconds, and holds a `stand_by` call at most `TOOL_CAP_SECONDS`. The collisions are made as `test_gates.py` makes them, with this module's own server for the chosen
 embeddings."""
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ CHECK_SECONDS = 0.05
 # Long enough for a standby that should still be held to have been checked many times over.
 STILL_HELD_SECONDS = 0.4
 ANSWERED_WITHIN_SECONDS = 15
+# This module's server's cap on one `stand_by` call, below the default so that the cap is what ends it.
+TOOL_CAP_SECONDS = 60
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +48,7 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
         model_cache=REPO_ROOT / ".cache" / "fastembed",
         rate_limit_on=False,
         standby_check_seconds=CHECK_SECONDS,
+        standby_tool_cap_seconds=TOOL_CAP_SECONDS,
     )
     clock = TestClock()
     embedder = ChosenSimilarity(settings.model_cache)
@@ -79,11 +83,19 @@ def elsewhere(request: pytest.FixtureRequest) -> Callable[[Session], Session]:
 
 def standing_by(session: Session) -> Future[httpx.Response]:
     """Start a standby for the session, held on a thread of its own, and return once the server holds it."""
-    held = session.stand_by()
+    return held_by(session, session.stand_by())
+
+
+def standing_by_the_tool(session: Session, **arguments: Any) -> Future[Any]:
+    """Call `stand_by` for the session, the call held while the test goes on, and return once the server holds it."""
+    return held_by(session, session.call_soon("stand_by", session=session.identifier, **arguments))
+
+
+def held_by(session: Session, held: Future[Any]) -> Future[Any]:
     deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
     while session.identifier not in session.on_standby():
         if held.done():
-            raise AssertionError(f"the standby ended at once: {held.result().text}")
+            raise AssertionError(f"the standby ended at once: {held.result()}")
         if time.monotonic() > deadline:
             raise AssertionError("the standby was never held")
         time.sleep(CHECK_SECONDS / 2)
@@ -105,7 +117,13 @@ def news_in(held: Future[httpx.Response]) -> str:
     return "\n\n".join(news)
 
 
-def still_held(held: Future[httpx.Response]) -> bool:
+def tool_answer_of(held: Future[Any]) -> dict[str, Any]:
+    """How a held `stand_by` call ended, once it has."""
+    answer: dict[str, Any] = held.result(timeout=ANSWERED_WITHIN_SECONDS)
+    return answer
+
+
+def still_held(held: Future[Any]) -> bool:
     time.sleep(STILL_HELD_SECONDS)
     return not held.done()
 
@@ -114,6 +132,12 @@ def end(session: Session, held: Future[httpx.Response]) -> dict[str, Any]:
     """End a standby a test leaves held, by the session's next prompt."""
     session.prompt(PROMPT)
     return answer_of(held)
+
+
+def end_tool(session: Session, held: Future[Any]) -> dict[str, Any]:
+    """End a `stand_by` call a test leaves held, by the session's next prompt."""
+    session.prompt(PROMPT)
+    return tool_answer_of(held)
 
 
 # The answer the session awaits
@@ -363,6 +387,107 @@ def test_each_session_of_a_member_has_its_own_standby(dana: Session) -> None:
     end(other, second)
 
 
+# The stand_by tool (#525)
+
+
+def test_stand_by_ends_with_an_answer_given_meanwhile(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    held = standing_by_the_tool(dana)
+
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I'm on the docs.")
+
+    answer = tool_answer_of(held)
+    assert answer["ended"] == "news"
+    news = "\n\n".join(answer["news"])
+    assert "[gate]" in news and "Olive Owner" in news and "agreed" in news
+    assert "Go ahead, I'm on the docs." in news
+    assert answer["message"] == news
+
+
+def test_stand_by_answers_nothing_yet_after_its_seconds(team: Team, owner: Session) -> None:
+    owner.start()
+    held = standing_by_the_tool(owner, seconds=20)
+    team.server.clock.advance(seconds=19)
+    assert still_held(held), "a second short of its seconds"
+
+    team.server.clock.advance(seconds=1)
+
+    answer = tool_answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    assert answer["news"] == []
+    assert answer["wait_left_seconds"] == 5 * 60 - 20
+    assert "nothing yet" in answer["message"].lower() and "5 minutes" in answer["message"]
+
+
+def test_stand_by_seconds_above_the_servers_cap_are_held_only_to_the_cap(team: Team, owner: Session) -> None:
+    owner.start()
+    held = standing_by_the_tool(owner, seconds=600)
+    team.server.clock.advance(seconds=TOOL_CAP_SECONDS - 1)
+    assert still_held(held), "a second short of the cap"
+
+    team.server.clock.advance(seconds=1)
+
+    answer = tool_answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    assert answer["wait_left_seconds"] == 5 * 60 - TOOL_CAP_SECONDS
+
+
+def test_stand_by_is_held_45_seconds_by_default(team: Team, owner: Session) -> None:
+    owner.start()
+    held = standing_by_the_tool(owner)
+    team.server.clock.advance(seconds=44)
+    assert still_held(held), "a second short of 45"
+
+    team.server.clock.advance(seconds=1)
+
+    answer = tool_answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    assert answer["wait_left_seconds"] == 5 * 60 - 45
+
+
+def test_news_handed_over_by_stand_by_is_not_told_again_by_the_next_hook_or_tool_result(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    held = standing_by_the_tool(dana)
+    answer_gate(owner, "emp-2", "agree")
+    assert "agreed" in "\n\n".join(tool_answer_of(held)["news"])
+
+    assert not any("agreed" in notice for notice in mute(dana, on=False)["notices"]), "not by a tool's result"
+    assert "agreed" not in heard(dana), "nor on the next tool call"
+    assert "agreed" not in added_context(dana.prompt(PROMPT)), "nor on the next prompt"
+
+
+def test_a_standby_started_through_the_tool_is_replaced_by_one_through_the_endpoint(dana: Session) -> None:
+    dana.start()
+    through_the_tool = standing_by_the_tool(dana)
+
+    through_the_endpoint = dana.stand_by()
+
+    answer = tool_answer_of(through_the_tool)
+    assert answer["ended"] == "replaced"
+    assert "newer standby" in answer["message"]
+    assert end(dana, through_the_endpoint)["ended"] == "moved_on"
+
+
+def test_a_standby_started_through_the_endpoint_is_replaced_by_one_through_the_tool(dana: Session) -> None:
+    dana.start()
+    through_the_endpoint = standing_by(dana)
+
+    through_the_tool = dana.call_soon("stand_by", session=dana.identifier)
+
+    assert answer_of(through_the_endpoint)["ended"] == "replaced"
+    assert dana.on_standby().count(dana.identifier) == 1, "never more than one held"
+    assert end_tool(dana, through_the_tool)["ended"] == "moved_on"
+
+
+def test_stand_by_says_to_call_it_again_until_the_projects_wait_has_passed(dana: Session) -> None:
+    _, described = dana.on_connecting()
+
+    said = described["stand_by"]
+    assert "again" in said and "wait" in said and "once more" in said
+
+
 # Settings
 
 
@@ -371,6 +496,18 @@ def test_the_standby_settings_default_to_five_minutes_and_two_seconds() -> None:
 
     assert settings.standby_cap_minutes == 5
     assert settings.standby_check_seconds == 2
+
+
+def test_the_stand_by_tools_cap_defaults_to_five_minutes() -> None:
+    settings = Settings.from_env({})
+
+    assert settings.standby_tool_cap_seconds == 300
+
+
+def test_the_stand_by_tools_cap_reads_its_environment_variable() -> None:
+    settings = Settings.from_env({"SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS": "120"})
+
+    assert settings.standby_tool_cap_seconds == 120
 
 
 def test_the_standby_settings_read_their_environment_variables() -> None:
