@@ -477,9 +477,45 @@ class Challenges:
 
     def close_all_against(self, team: str, target_path: str, decider: str, explanation: str) -> None:
         """Close every open challenge against a memory, telling each member who raised one why."""
-        for challenge in self.open_challenges(team, target_path=target_path):
+        self._close(team, self.open_challenges(team, target_path=target_path), decider, explanation)
+
+    def resolve_doubts(self, team: str, target_path: str, decider: str, explanation: str) -> None:
+        """Close every open doubt against a memory as resolved, its author having put the memory right in a session,
+        telling each member who added evidence how."""
+        doubts = [one for one in self.open_challenges(team, target_path=target_path) if one.kind == DOUBT]
+        self._close(team, doubts, decider, f"resolved, {explanation}")
+
+    def _close(self, team: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
+        for challenge in challenges:
             self.decide(challenge, "closed", decider, explanation)
-            self.tell(team, challenge.raised_by, f"Your challenge {challenge.id} against {target_path} was closed: {explanation}")
+            self.tell_raisers(
+                team, challenge, f"Your challenge {challenge.id} against {challenge.target_path} was closed: {explanation}"
+            )
+
+    def raisers(self, challenges: Iterable[Challenge]) -> dict[int, tuple[str, ...]]:
+        """Who raised each challenge, first raiser first: for a doubt, every member who added evidence to it, each
+        once; for any other kind, the member who raised it."""
+        listed = list(challenges)
+        raised: dict[int, tuple[str, ...]] = {one.id: (one.raised_by,) for one in listed}
+        doubts = [one.id for one in listed if one.kind == DOUBT]
+        if not doubts:
+            return raised
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT challenge_id, member_id FROM challenge_evidence WHERE challenge_id = ANY(%s)"
+                " GROUP BY challenge_id, member_id ORDER BY challenge_id, min(id)",
+                (doubts,),
+            ).fetchall()
+        found: dict[int, list[str]] = {}
+        for row in rows:
+            found.setdefault(row["challenge_id"], []).append(row["member_id"])
+        raised.update({challenge_id: tuple(members) for challenge_id, members in found.items()})
+        return raised
+
+    def tell_raisers(self, team: str, challenge: Challenge, text: str) -> None:
+        """Tell every member who raised a challenge, each once: for a doubt, everyone who added evidence to it."""
+        for member_id in self.raisers([challenge])[challenge.id]:
+            self.tell(team, member_id, text)
 
     def tell(self, team: str, member_id: str, text: str) -> None:
         with self._db.transaction() as conn:
@@ -502,8 +538,10 @@ class Challenges:
     def against(self, caller: Caller, path: str) -> list[dict[str, Any]]:
         """Every open challenge against one memory, and whether this member may decide it and in what capacity."""
         listed = []
-        for c in self.open_challenges(caller.team, target_path=path):
-            decides_as = self.decides_as(caller, c)
+        challenges = self.open_challenges(caller.team, target_path=path)
+        raisers = self.raisers(challenges)
+        for c in challenges:
+            decides_as = self.decides_as(caller, c, raisers[c.id])
             listed.append(
                 {
                     "challenge_id": c.id,
@@ -521,10 +559,10 @@ class Challenges:
         theirs in."""
         reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
         waiting = []
-        for challenge in self.open_challenges(caller.team):
-            if project_of(challenge) not in reachable:
-                continue
-            decides_as = self.decides_as(caller, challenge)
+        reached = [one for one in self.open_challenges(caller.team) if project_of(one) in reachable]
+        raisers = self.raisers(reached)
+        for challenge in reached:
+            decides_as = self.decides_as(caller, challenge, raisers[challenge.id])
             if decides_as is not None:
                 waiting.append(Waiting(challenge, decides_as))
         return waiting
@@ -574,12 +612,15 @@ class Challenges:
 
     # Who decides
 
-    def decides_as(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
+    def decides_as(
+        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...] | None = None
+    ) -> DecidesAs | None:
         """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
-        the team's admins, unless they raised the challenge themselves; team memory has no project, so only admins
-        stand there. Once the author has left, or after the fallback period, any member may.
+        the team's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); team
+        memory has no project, so only admins stand there. Once the author has left, or after the fallback period,
+        any member may. `raisers` is the challenge's, from `raisers`, when the caller already has them.
 
         A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
         decides it, and never whoever raised it. No author, admin or fallback standing applies.
@@ -595,7 +636,7 @@ class Challenges:
             return None
         if challenge.target_author == caller.member_id:
             return "author"
-        if challenge.raised_by != caller.member_id:
+        if not self._raised(caller, challenge, raisers):
             if self._leads_the_challenged(caller, challenge):
                 return "lead"
             if caller.member.is_owner or caller.member.is_admin:
@@ -605,6 +646,11 @@ class Challenges:
         if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
             return "fallback"
         return None
+
+    def _raised(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...] | None = None) -> bool:
+        """Whether this member raised the challenge, or added evidence to it when it is a doubt."""
+        found = self.raisers([challenge])[challenge.id] if raisers is None else raisers
+        return caller.member_id in found
 
     def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
         """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
@@ -629,7 +675,7 @@ class Challenges:
             )
         days = self._settings.challenge_fallback_days
         in_project = project_in(challenge.target_path) is not None
-        if challenge.raised_by == caller.member_id and (
+        if self._raised(caller, challenge) and (
             caller.member.is_owner or caller.member.is_admin or self._leads_the_challenged(caller, challenge)
         ):
             raise Refused(
@@ -646,8 +692,9 @@ class Challenges:
 
     def tell_author(self, caller: Caller, challenge: Challenge, decides_as: DecidesAs, decision: str) -> None:
         """Tell the challenged memory's author that someone else decided a challenge against it, and in what
-        capacity. An author who decided it themselves, or who has left, is told nothing."""
-        if decides_as in ("author", "author_left") or challenge.target_author == challenge.raised_by:
+        capacity. An author who decided it themselves, or who has left, is told nothing, and nor is one who raised it,
+        who is told as a raiser."""
+        if decides_as in ("author", "author_left") or challenge.target_author in self.raisers([challenge])[challenge.id]:
             return
         if decision == "rejected":
             outcome = "your memory stands as it is"

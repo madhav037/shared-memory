@@ -15,7 +15,7 @@ from shared_memory.audit import (
     MEMORY_SUPERSEDED,
     Audit,
 )
-from shared_memory.challenges import Challenge, Challenges, DecidesAs, project_of
+from shared_memory.challenges import DOUBT, Challenge, Challenges, DecidesAs, project_of
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
@@ -230,9 +230,9 @@ class Lifecycle:
             foundation=into,
         )
         if supersede is not None:
-            self._challenges.close_all_against(
-                caller.team, supersede, caller.member_id, f"its author superseded it with {result['path']}."
-            )
+            superseded = f"its author superseded it with {result['path']}."
+            self._challenges.resolve_doubts(caller.team, supersede, caller.member_id, superseded)
+            self._challenges.close_all_against(caller.team, supersede, caller.member_id, superseded)
         return result
 
     def similar_before_promoting(
@@ -739,11 +739,11 @@ class Lifecycle:
         if decision == "reject":
             self._challenges.decide(challenge, "rejected", decider)
             self._decided(caller, challenge, "rejected", decides_as)
-            self._challenges.tell(
+            stands = "The memory stands as it is." if challenge.kind == DOUBT else "Your memory stays where it is."
+            self._challenges.tell_raisers(
                 caller.team,
-                challenge.raised_by,
-                f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. "
-                "Your memory stays where it is.",
+                challenge,
+                f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. {stands}",
             )
             return {"status": "rejected", "challenge_id": challenge.id}
 
@@ -763,7 +763,7 @@ class Lifecycle:
             result, outcome = self._accept_supersede(caller, challenge, challenge.challenger_path)
         self._challenges.decide(challenge, "accepted", decider)
         self._decided(caller, challenge, "accepted", decides_as)
-        self._challenges.tell(caller.team, challenge.raised_by, outcome)
+        self._challenges.tell_raisers(caller.team, challenge, outcome)
         self._challenges.close_all_against(
             caller.team,
             challenge.target_path,
@@ -774,9 +774,10 @@ class Lifecycle:
 
     def _decided(self, caller: Caller, challenge: Challenge, decision: str, decides_as: DecidesAs) -> None:
         """Record a decision with the capacity it was made in, and tell the author when it wasn't theirs."""
+        named = {} if challenge.reason is None else {"reason": challenge.reason}
         self._audit.memory(
             caller, CHALLENGE_DECIDED, challenge.target_path, project_id=project_of(challenge),
-            challenge_id=challenge.id, decision=decision, challenge=challenge.kind, decided_as=decides_as,
+            challenge_id=challenge.id, decision=decision, challenge=challenge.kind, **named, decided_as=decides_as,
         )  # fmt: skip
         self._challenges.tell_author(caller, challenge, decides_as, decision)
 

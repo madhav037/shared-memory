@@ -507,6 +507,7 @@ class MemoryService:
             change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)
             change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
+        self._challenges.resolve_doubts(caller.team, str(location.path), caller.member_id, "its author edited it.")
         described = describe(location.path, edited)
         if reasons := reasons_for(edited):
             described.update(answer_for(reasons))

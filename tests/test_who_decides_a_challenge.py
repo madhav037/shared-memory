@@ -3,7 +3,17 @@
 
 from __future__ import annotations
 
-from tests.support import NPM, PNPM, Session, Team, added_context, challenge, member, promote_now
+from tests.support import (
+    NPM,
+    PNPM,
+    Session,
+    Team,
+    added_context,
+    challenge,
+    member,
+    promote_keeping_both,
+    promote_now,
+)
 
 
 def payments(team: Team, dana: Session) -> tuple[Session, Session, Session, Session]:
@@ -232,3 +242,115 @@ def test_nobody_else_decides_a_foundation_challenge_once_the_fallback_has_passed
     assert "lead of the project" in refusal
     assert FOUNDATION_HEADING not in news(cole)
     assert FOUNDATION_HEADING in news(lead)
+
+
+# A doubt (spec #502) is decided by the same people as any other challenge.
+
+TAX = {
+    "title": "Sales tax is fifteen percent",
+    "summary": "Invoices add fifteen percent sales tax.",
+    "type": "convention",
+    "body": "Every invoice adds a flat fifteen percent sales tax on the subtotal.",
+}
+RETRIES = {
+    "title": "Billing retries three times",
+    "summary": "Failed charges are retried three times.",
+    "type": "convention",
+    "body": "The billing service retries a failed card charge three times before giving up.",
+}
+WEBHOOKS = {
+    "title": "Webhooks retry for a day",
+    "summary": "A failed webhook is retried for twenty-four hours.",
+    "type": "gotcha",
+    "body": "The relay retries a failed webhook delivery with backoff for twenty-four hours before giving up.",
+}
+
+
+def doubted(session: Session, path: str) -> int:
+    raised = session.call("challenge", path=path, reason="misled", reasoning="It led my session astray.")
+    return int(raised["challenge_id"])
+
+
+def test_the_author_a_lead_of_the_memorys_project_and_an_admin_can_each_decide_a_doubt(
+    team: Team, dana: Session
+) -> None:
+    lead, cole, eve, admin = payments(team, dana)
+    paths = [promote_keeping_both(cole, memory) for memory in (TAX, RETRIES, WEBHOOKS)]
+    doubts = [doubted(eve, path) for path in paths]
+    deciders = (cole, lead, admin)
+    capacities = [
+        [(one["may_decide"], one["decides_as"]) for one in decider.call("read", path=path)["open_challenges"]]
+        for decider, path in zip(deciders, paths, strict=True)
+    ]
+
+    decided = [
+        decider.call("decide_challenge", challenge_id=challenge_id, decision="reject")
+        for decider, challenge_id in zip(deciders, doubts, strict=True)
+    ]
+
+    assert capacities == [[(True, "author")], [(True, "lead")], [(True, "admin")]]
+    assert [one["status"] for one in decided] == ["rejected", "rejected", "rejected"]
+    told = news(cole)
+    assert f"Challenge {doubts[1]} by emp-4 against your memory {paths[1]} was rejected by emp-2, deciding as a project lead" in told
+    assert f"Challenge {doubts[2]} by emp-4 against your memory {paths[2]} was rejected by owner-1, deciding as an admin" in told
+
+
+def test_any_other_member_is_refused_deciding_a_doubt(team: Team, dana: Session) -> None:
+    _, cole, eve, _ = payments(team, dana)
+    frank = member(team, eve.project or "", "emp-5", "Frank Fixer")
+    path = promote_keeping_both(cole, TAX)
+    challenge_id = doubted(eve, path)
+
+    refusals = [
+        one.refusal("decide_challenge", challenge_id=challenge_id, decision=decision)
+        for one in (frank, eve)
+        for decision in ("accept", "reject")
+    ]
+
+    assert all("Only emp-3, the author of the challenged memory" in refusal for refusal in refusals), refusals
+    assert cole.call("read", path=path)["status"] == "active"
+    assert [one["challenge_id"] for one in cole.call("read", path=path)["open_challenges"]] == [challenge_id]
+
+
+def test_a_lead_who_raised_a_doubt_or_joined_it_cant_decide_it_as_lead_but_an_admin_can(
+    team: Team, dana: Session
+) -> None:
+    lead, cole, eve, admin = payments(team, dana)
+    raised_path = promote_keeping_both(cole, TAX)
+    joined_path = promote_keeping_both(cole, RETRIES)
+    raised = doubted(lead, raised_path)
+    joined = doubted(eve, joined_path)
+    doubted(lead, joined_path)
+
+    refusals = [lead.refusal("decide_challenge", challenge_id=one, decision="reject") for one in (raised, joined)]
+    briefing = news(lead)
+    decided = [admin.call("decide_challenge", challenge_id=one, decision="reject") for one in (raised, joined)]
+
+    assert f"You raised challenge {raised}" in refusals[0]
+    assert f"You raised challenge {joined}" in refusals[1]
+    assert "[challenges waiting for your decision]" not in briefing
+    assert [one["status"] for one in decided] == ["rejected", "rejected"]
+
+
+def test_an_admin_who_raised_a_doubt_cant_decide_it_as_admin_but_a_lead_can(team: Team, dana: Session) -> None:
+    lead, cole, _, admin = payments(team, dana)
+    path = promote_keeping_both(cole, TAX)
+    challenge_id = doubted(admin, path)
+
+    refusal = admin.refusal("decide_challenge", challenge_id=challenge_id, decision="accept")
+    accepted = lead.call("decide_challenge", challenge_id=challenge_id, decision="accept")
+
+    assert f"You raised challenge {challenge_id}" in refusal
+    assert accepted["status"] == "accepted"
+
+
+def test_an_author_who_doubted_their_own_memory_decides_it_as_its_author(team: Team, dana: Session) -> None:
+    _, cole, _, _ = payments(team, dana)
+    path = promote_keeping_both(cole, TAX)
+    challenge_id = doubted(cole, path)
+
+    capacity = [(one["may_decide"], one["decides_as"]) for one in cole.call("read", path=path)["open_challenges"]]
+    accepted = cole.call("decide_challenge", challenge_id=challenge_id, decision="accept")
+
+    assert capacity == [(True, "author")]
+    assert accepted["status"] == "accepted"
