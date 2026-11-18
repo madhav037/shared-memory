@@ -72,7 +72,7 @@ from shared_memory.console_contract import (
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, SessionToldRecord, ToldEntry, ToldMemoryEntry, Projects,
+    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, RecentSession, RecentSessions, SessionToldRecord, ToldEntry, ToldMemoryEntry, Projects,
     NearlyPopularMemory, RaisedChallenge, RateLimitChange, RateLimits, RecalledMemory,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
@@ -441,6 +441,7 @@ class ConsoleApi:
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
             "session_told": self._session_told,
+            "recent_sessions": self._recent_sessions,
             "project_health": self._project_health,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
@@ -839,6 +840,37 @@ class ConsoleApi:
                         file=one.file,
                     )
                     for one in entries
+                ],
+            )
+
+        return self._browse(request, read)
+
+    # --- a member's recent sessions, read: for the same readers as each one's told record (#566) ---
+
+    def _recent_sessions(self, request: Request) -> Response:
+        def read(caller: Caller) -> RecentSessions:
+            project = caller.require_project()
+            listed = self._told_record.recent(caller)
+            stated = self._activities.last_stated([one.session for one in listed])
+            return RecentSessions(
+                project_id=project.project_id,
+                project_name=project.name,
+                told_days=self._settings.told_days,
+                sessions=[
+                    RecentSession(
+                        session_number=one.session.id,
+                        member_id=one.session.member_id,
+                        member_name=one.session.member_name,
+                        agent=one.session.agent,
+                        repository=one.session.repository,
+                        branch=one.session.branch,
+                        activity=stated.get(one.session.id),
+                        active=one.active,
+                        started_at=one.session.started_at,
+                        last_seen_at=one.session.last_seen_at,
+                        memories_told=one.memories_told,
+                    )
+                    for one in listed
                 ],
             )
 

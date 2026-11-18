@@ -25,7 +25,7 @@ import {
   type SessionMessage,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
-import { moment, plural, toldUrl, waitingFor } from "../lib/format";
+import { moment, plural, recentSessionsUrl, toldUrl, waitingFor } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** How often the page asks again, so a new collision, gate or message shows without reloading. */
@@ -137,6 +137,9 @@ export function SessionsPage() {
           <b>{plural(found.sessions.length, "active session")}</b>
           {files > 0 ? `, holding ${plural(files, "file")}` : ""}
         </span>
+        <Link to={recentSessionsUrl(found.project_id)} data-testid="to-recent-sessions">
+          Recent sessions
+        </Link>
         <ProjectLinks projectId={found.project_id} here="sessions" />
       </div>
       <AlertsChoice />

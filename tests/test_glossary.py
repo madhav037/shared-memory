@@ -120,8 +120,13 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("task", "Cline's own name for what is a session here, on Connect your agent", (PAGES + "ConnectAgent.tsx",)),
     Allow(
         "activity",
-        "a session's Activity, shown on the console's Sessions page; avoided only for the audit log",
-        (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx"),
+        "a session's Activity, shown on the console's Sessions and Recent sessions pages; avoided only for the audit log",
+        (
+            SERVER + "console_api.py",
+            SERVER + "console_contract.py",
+            PAGES + "SessionsPage.tsx",
+            PAGES + "RecentSessionsPage.tsx",
+        ),
     ),
     Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "locks.py",)),
     Allow("take", "taking a lock on a file, not claiming a card", (SERVER + "app.py",), "take lock"),

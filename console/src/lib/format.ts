@@ -120,6 +120,11 @@ export function toldUrl(projectId: string, sessionNumber: number): string {
   return `/projects/${encodeURIComponent(projectId)}/sessions/${sessionNumber}/told`;
 }
 
+/** Where a member's recent sessions in a project are listed, each opening its told record. */
+export function recentSessionsUrl(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/sessions/recent`;
+}
+
 /** Where a project's active sessions are listed. */
 export function sessionsUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/sessions`;
