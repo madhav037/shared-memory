@@ -99,8 +99,8 @@ class Reach:
         return cls(projects=(project_id,))
 
     @classmethod
-    def shared_in(cls, project_id: str) -> Reach:
-        """What a project shares: its project memory and team memory, and no member's personal memory."""
+    def project_and_team_memory_of(cls, project_id: str) -> Reach:
+        """One project's project memory and team memory, and no member's personal memory."""
         return cls(team_memory=True, projects=(project_id,))
 
     @classmethod

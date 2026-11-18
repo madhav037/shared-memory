@@ -148,7 +148,7 @@ class ProjectHealth:
         by_repository: dict[str, list[EditedFile]] = {}
         for each in edited:
             by_repository.setdefault(each.repository, []).append(each)
-        reach = Reach.shared_in(project_id)
+        reach = Reach.project_and_team_memory_of(project_id)
         untied = {
             (repository, path)
             for repository, files in by_repository.items()
