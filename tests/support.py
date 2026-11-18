@@ -61,11 +61,28 @@ WORKING_FOLDER = "/work/app"
 CHECKOUT = hashlib.sha1(str(REPO_ROOT).encode()).hexdigest()[:8]
 
 
+# The oldest pgvector the server runs on: recall sets `hnsw.iterative_scan`, which 0.8 brought.
+PGVECTOR_NEEDED = (0, 8)
+
+
+def pgvector_too_old(found: str | None) -> str | None:
+    """Why the run stops, given the test Postgres's pgvector version (None when it has none); None when it will do."""
+    parts = re.match(r"(\d+)\.(\d+)", found or "")
+    if parts and (int(parts[1]), int(parts[2])) >= PGVECTOR_NEEDED:
+        return None
+    needed = ".".join(str(part) for part in PGVECTOR_NEEDED)
+    return f"pgvector {needed} or later is needed (found {found or 'none'})"
+
+
 def fresh_database(name: str) -> str:
     """Drop and recreate this checkout's database of that name on the test Postgres; return its URL."""
     name = f"{name}_{CHECKOUT}"
     try:
         with psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=5) as conn:
+            row = conn.execute("SELECT default_version FROM pg_available_extensions WHERE name = 'vector'").fetchone()
+            too_old = pgvector_too_old(row[0] if row else None)
+            if too_old:
+                pytest.exit(f"{too_old}. The compose image has it: docker compose up -d db", returncode=2)
             conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
             conn.execute(f"CREATE DATABASE {name}")
     except psycopg.OperationalError as error:

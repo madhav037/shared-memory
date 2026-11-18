@@ -4,10 +4,16 @@ What a coding agent needs when it implements a ticket in its own worktree, next 
 
 ## Setting up
 
+- Branch from `origin/dev`, after `git fetch origin dev`, and check `git log -1` before starting: a worktree once
+  started on an old release commit.
 - Run `npm ci` in `console/` first: a new worktree has no `console/node_modules`.
 - The tests need the Postgres from `docker compose up -d db`, run once from the main checkout. Each checkout names
   its own test databases, so worktrees share that one Postgres. `SHARED_MEMORY_TEST_ADMIN_URL` (`tests/support.py`)
   points the tests at another Postgres.
+- The compose image gives pgvector 0.8 on Postgres 17; any other Postgres needs pgvector 0.8 or later. With an older
+  one (Ubuntu's 0.6) the tests stop at once with "pgvector 0.8 or later is needed (found 0.6.0)".
+- The tests need the search model in `.cache/fastembed`, which CI caches. Where it can't be downloaded, only CI's
+  server job is authoritative for the recall, search and contradiction tests.
 - The pre-commit hook in `.githooks/` runs `uv run ruff check`. `git config core.hooksPath .githooks`, run once in
   the main checkout, turns it on for that clone and every worktree made from it.
 
