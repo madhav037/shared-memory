@@ -9,7 +9,6 @@ import httpx
 
 from shared_memory.console_contract import DECLARATIONS
 from tests.support import (
-    SERVICES,
     Console,
     ConsoleClient,
     Session,
@@ -22,6 +21,13 @@ from tests.support import (
 )
 from tests.test_restricted_projects import restricted
 
+# A convention: an architecture memory would wait on the Architecture foundation's keepers instead of being promoted.
+RETRIES = {
+    "title": "Webhooks retry three times",
+    "summary": "A failed webhook is retried three times with backoff.",
+    "type": "convention",
+    "body": "A failed webhook is retried three times, a minute apart and then doubling, before it is given up.",
+}
 QUESTION = "Does this still hold for the refunds service?"
 ANSWER = "Yes, refunds were split out with the rest in March."
 
@@ -50,7 +56,7 @@ def test_a_member_asks_from_the_console_and_the_authors_next_briefing_carries_it
     console: Console, signed_out: ConsoleClient
 ) -> None:
     project, _, dana = a_project(console, signed_out, "olive-asks", 1601)
-    path = promote_now(dana, SERVICES)
+    path = promote_now(dana, RETRIES)
     briefing(dana)
 
     asked = ask_about(signed_out, path)
@@ -78,7 +84,7 @@ def test_the_questions_waiting_for_a_member_are_listed_and_answered_from_the_con
     console: Console, signed_out: ConsoleClient
 ) -> None:
     _, olive, dana = a_project(console, signed_out, "olive-answers", 1602)
-    path = promote_now(olive, SERVICES)
+    path = promote_now(olive, RETRIES)
     question_id = dana.call("ask_question", path=path, text=QUESTION)["question_id"]
     briefing(dana)
 
@@ -88,7 +94,7 @@ def test_the_questions_waiting_for_a_member_are_listed_and_answered_from_the_con
     assert (waiting["question_id"], waiting["path"], waiting["title"], waiting["text"]) == (
         question_id,
         path,
-        SERVICES["title"],
+        RETRIES["title"],
         QUESTION,
     )
     assert (waiting["asked_by"], waiting["asked_by_name"]) == ("emp-2", "Dana Dev")
@@ -107,7 +113,7 @@ def test_a_memorys_threads_are_read_with_it_and_its_author_is_not_offered_to_ask
     console: Console, signed_out: ConsoleClient
 ) -> None:
     _, olive, dana = a_project(console, signed_out, "olive-reads-threads", 1603)
-    path = promote_now(olive, SERVICES)
+    path = promote_now(olive, RETRIES)
     question_id = dana.call("ask_question", path=path, text=QUESTION)["question_id"]
     olive.call("answer_question", question_id=question_id, text=ANSWER)
 
@@ -125,7 +131,7 @@ def test_a_member_kept_out_of_a_restricted_project_neither_reads_nor_asks_about_
     console: Console, signed_out: ConsoleClient
 ) -> None:
     kept_out = restricted(console, signed_out, "olive-restricts-questions", 1604)
-    path = promote_now(kept_out.owner.in_project(kept_out.billing, "billing-api"), SERVICES)
+    path = promote_now(kept_out.owner.in_project(kept_out.billing, "billing-api"), RETRIES)
     dana = signed_in(console, "dana-olive-restricts-questions", 1605)
 
     read = dana.get(f"/api/memory/questions?path={path}")

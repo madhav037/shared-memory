@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import { openInContents, signInAs } from "./helpers";
 
-// Quinn wrote "Report exports are CSV" and "Reports keep 13 months of history" in Reporting, and Raj has asked about
-// the first (tests/console_e2e_server.py). Only these journeys sign in as Quinn.
+// Kai wrote "Report exports are CSV" and "Reports keep 13 months of history" in Reporting, and Raj has asked about
+// the first (tests/console_e2e_server.py).
 const RAJS_QUESTION = "Do the finance exports follow this too?";
 
 test("a member reading another member's memory asks its author a question and sees it in the thread", async ({
@@ -34,7 +34,7 @@ test("a member reading another member's memory asks its author a question and se
 test("a member answers a question waiting for them from the front page, and the thread shows it answered", async ({
   page,
 }) => {
-  await signInAs(page, 82, "quinn");
+  await signInAs(page, 80, "kai");
 
   const waiting = page.getByTestId("questions-waiting").getByTestId("question-waiting").filter({ hasText: RAJS_QUESTION });
   await expect(waiting).toContainText("Raj Raiser asked");
@@ -43,7 +43,7 @@ test("a member answers a question waiting for them from the front page, and the 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Report exports are CSV");
   const thread = page.getByTestId("questions").getByTestId("question").filter({ hasText: RAJS_QUESTION });
   await expect(thread.getByTestId("question-state")).toHaveText("Open");
-  // Quinn wrote it: there is no one for her to ask.
+  // Kai wrote it: there is no one for him to ask.
   await expect(page.getByTestId("questions").getByTestId("ask")).toHaveCount(0);
 
   const answer = "Yes: finance reads them into its own sheets.";
@@ -52,7 +52,7 @@ test("a member answers a question waiting for them from the front page, and the 
   await thread.getByTestId("answer-send").click();
 
   await expect(thread.getByTestId("question-answer")).toContainText(answer);
-  await expect(thread.getByTestId("question-answer")).toContainText("Quinn Quill answered");
+  await expect(thread.getByTestId("question-answer")).toContainText("Kai Keeper answered");
   await expect(thread.getByTestId("question-state")).toHaveText("Answered");
   // The memory itself is as it was: answering changes none of it.
   await expect(page.getByTestId("memory-body")).toContainText("Every report exports as CSV with a header row");
