@@ -115,7 +115,7 @@ def test_the_briefing_tool_and_a_prompt_that_recalls_nothing_new(console: Consol
     project, in_project = a_project(console, signed_out, "olive-told-tool", 5653)
     promote_keeping_both(in_project, PNPM)
     session = in_project.as_session("olive-tool")
-    fetched = session.call("briefing", session=session.identifier)
+    fetched = session.call_as_sent("briefing", session=session.identifier)
     session.prompt(PROMPT)
     # Told once: the same prompt again adds nothing to the session, and so nothing to its record.
     session.prompt(PROMPT)
