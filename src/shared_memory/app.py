@@ -50,6 +50,7 @@ from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder,
 from shared_memory.errors import Refused
 from shared_memory.gates import Gates
 from shared_memory.handoff import HandoffNotes
+from shared_memory.file_edits import FileEdits
 from shared_memory.health import ProjectHealth
 from shared_memory.export import TeamExport
 from shared_memory.history import MemoryHistory
@@ -376,6 +377,7 @@ def build_app(
     recall = Recall(settings, db, sessions, index, store, uses, challenges, tied, told_record)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
+    file_edits = FileEdits(db, clock)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
@@ -688,7 +690,7 @@ def build_app(
     async def before_edit(request: Request) -> Response:
         """The hook before every tool call (ADR-0025), named for the edits it can stop. It keeps the session active
         and records its branch and the files the tool names; an edit takes or keeps each file's lock, or is blocked
-        because another active session holds one; and anything else is let through with the session's waiting news,
+        because another active session holds one; an edit that goes ahead is counted for project health; and anything else is let through with the session's waiting news,
         where the agent's hook before a tool takes added context. One whose hook doesn't hears it after the tool.
 
         Its optional part, within the recall budget, adds the memories tied to the files an edit that goes ahead
@@ -718,6 +720,7 @@ def build_app(
                 return reason
             if files:
                 gates.edit_went_ahead(session)
+                file_edits.count(session, files)
                 went_ahead = (session, files)
             return news_for(current, session) if hears else None
 
@@ -1744,7 +1747,7 @@ def build_app(
             licenses,
             TeamExport(settings, identity, board, audit),
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
-            ProjectHealth(identity, store, uses, challenges),
+            ProjectHealth(identity, store, uses, challenges, file_edits, tied),
             told_record,
         ).routes()
     )

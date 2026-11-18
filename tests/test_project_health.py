@@ -1,5 +1,5 @@
-"""Project health (#553, spec #504): a read-only page for a project's leads and the team's admins, listing the
-project's possibly outdated memory and its memory in doubt. Driven through the console's JSON API.
+"""Project health (#553, #572, spec #504): a read-only page for a project's leads and the team's admins, listing the
+project's possibly outdated memory, its memory in doubt and its coverage gaps. Driven through the console's JSON API.
 
 Nothing on it changes anything (ADR-0009): pinning, unpinning, deciding and retiring stay on their own screens."""
 
@@ -21,6 +21,7 @@ from tests.support import (
     signed_in_owner,
 )
 from tests.test_console_never_writes_memory import watch_for_writes
+from tests.test_tied_files import promoted, remember
 
 TAX = {
     "title": "Sales tax is fifteen percent",
@@ -228,3 +229,53 @@ def test_project_health_changes_nothing(
     assert sorted(paths(first["possibly_outdated"])) == sorted([outdated, doubted])
     assert paths(first["in_doubt"]) == [doubted]
     assert governed(signed_out, project, outdated) == before
+
+
+# Coverage gaps (#572): files the project's sessions edited often lately that no memory is tied to
+
+
+def gap(path: str, edits: int) -> dict[str, Any]:
+    return {"repository": "billing-api", "path": path, "file": f"billing-api:{path}", "edits": edits}
+
+
+def edit(session: Session, path: str, times: int = 1) -> None:
+    for _ in range(times):
+        session.edit(path)
+
+
+def test_project_health_lists_often_edited_files_no_memory_is_tied_to_most_edited_first(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-gaps", 5545)
+    promoted(in_project, tied_files=["billing-api:src/tax.py"])
+    promoted(in_project, level="team", title="Ledgers close monthly", tied_files=["billing-api:src/ledger/**"])
+    # A member's own personal memory is theirs, not the project's: the file it is tied to is still a gap.
+    remember(in_project, title="Exports", tied_files=["billing-api:src/exports.py"])
+    edit(in_project, "src/tax.py", 4)
+    edit(in_project, "src/ledger/close.py", 2)
+    edit(in_project, "src/webhooks.py", 3)
+    edit(in_project, "src/exports.py")
+
+    found = health(signed_out, project)
+
+    assert found["coverage_days"] == 30
+    assert found["coverage_gaps"] == [gap("src/webhooks.py", 3), gap("src/exports.py", 1)]
+
+
+def test_coverage_gaps_count_only_the_project_s_edits_that_went_ahead_within_coverage_days(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-window", 5546)
+    elsewhere = in_project.call("create_project", name="Payroll")["project_id"]
+    edit(in_project, "src/old.py", 5)
+    console.clock.advance(days=31)
+    sign_in_again(console, signed_out, "olive-health-window", 5546)
+    edit(in_project, "src/webhooks.py", 2)
+    edit(in_project.in_project(elsewhere, "billing-api").as_session("payroll"), "src/payroll.py", 3)
+    # Another session's edit of a file Olive's session holds is blocked, so it changes nothing and isn't counted.
+    dana = member_in(console, signed_out, project, "emp-2", "Dana Dev")
+    assert dana.edit("src/webhooks.py")["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    found = health(signed_out, project)
+
+    assert found["coverage_gaps"] == [gap("src/webhooks.py", 2)]

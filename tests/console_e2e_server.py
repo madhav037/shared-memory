@@ -449,6 +449,12 @@ def seeded(
         )
         for doubter in (owner, tess):
             doubter.in_project(payments, "payments-api").call("challenge", path=payouts, reason="misled")
+        # Payments' coverage gaps, for the project health journey: a session of Tess's that edited the payout schedule
+        # three times and its retry once, files no memory is tied to, and then ended, so it holds no lock.
+        payouts_session = tess.in_project(payments, "payments-api").as_session("tess-payouts")
+        for edited in ("src/payouts/schedule.py",) * 3 + ("src/payouts/retry.py",):
+            payouts_session.edit(edited)
+        payouts_session.end()
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
         outdated = promote_now(

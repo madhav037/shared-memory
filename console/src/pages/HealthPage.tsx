@@ -8,10 +8,11 @@ import { useAsked } from "../lib/useAsked";
 
 type Outdated = ProjectHealth["possibly_outdated"][number];
 type Doubted = ProjectHealth["in_doubt"][number];
+type Gap = ProjectHealth["coverage_gaps"][number];
 
 /**
  * A project's health (CONTEXT.md: Project health), for its leads and the team's admins: the project memory that may
- * no longer be true, and the memory sessions doubt. It only reads: pinning, retiring and deciding stay on the memory's
+ * no longer be true, the memory sessions doubt, and the files sessions edit often that no memory is tied to. It only reads: pinning, retiring and deciding stay on the memory's
  * own page and the challenges page, which each entry links to (ADR-0009).
  */
 export function HealthPage() {
@@ -33,7 +34,7 @@ export function HealthPage() {
       <h1 className="page-title">Project health</h1>
       <p className="standfirst">
         What <b data-testid="project-name">{health.project_name}</b>’s project memory is doing now: what no coding agent
-        has used for a long time, and what sessions doubt. Nothing here changes it.
+        has used for a long time, what sessions doubt, and where it is missing. Nothing here changes it.
       </p>
       <div className="page-meta">
         <ProjectLinks projectId={health.project_id} />
@@ -67,6 +68,22 @@ export function HealthPage() {
           {health.in_doubt.length === 0 && <Nothing>No session doubts this project’s memory.</Nothing>}
           {health.in_doubt.map((memory) => (
             <DoubtedEntry key={memory.path} memory={memory} />
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="coverage-heading">
+        <h2 className="section-heading" id="coverage-heading">
+          Coverage gaps
+        </h2>
+        <p className="section-lede">
+          Files this project’s sessions edited in the last {plural(health.coverage_days, "day")} that no project or team
+          memory is tied to, the most edited first. What a session learns about them is saved from a session.
+        </p>
+        <ul className="entries" data-testid="coverage-gaps">
+          {health.coverage_gaps.length === 0 && <Nothing>No file edited lately lacks a tied memory.</Nothing>}
+          {health.coverage_gaps.map((gap) => (
+            <GapEntry key={gap.file} gap={gap} />
           ))}
         </ul>
       </section>
@@ -121,6 +138,19 @@ function DoubtedEntry({ memory }: { memory: Doubted }) {
         <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
           See its challenges
         </Link>
+      </div>
+    </li>
+  );
+}
+
+function GapEntry({ gap }: { gap: Gap }) {
+  return (
+    <li className="entry" data-testid="coverage-gap">
+      <code className="entry-title" data-testid="gap-file">
+        {gap.file}
+      </code>
+      <div className="entry-meta">
+        <span data-testid="gap-edits">Edited {plural(gap.edits, "time")}</span>
       </div>
     </li>
   );

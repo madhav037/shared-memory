@@ -907,16 +907,29 @@ class DoubtedMemory(BaseModel):
     in_doubt: InDoubtMark
 
 
+class CoverageGap(BaseModel):
+    """A file on project health's coverage gaps: the project's sessions edited it in the last coverage_days days and
+    no project or team memory is tied to it. file is written repository:path; edits is how many edits changed it."""
+
+    repository: str
+    path: str
+    file: str
+    edits: int
+
+
 class ProjectHealth(BaseModel):
     """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-    that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
-    reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
+    that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; and its coverage
+    gaps, the most edited first, at most ten. Read-only: reading it is no use of any memory and changes nothing.
+    outdated_after_days is the server's setting; coverage_days the days of edits coverage gaps count."""
 
     project_id: str
     project_name: str
     outdated_after_days: float
     possibly_outdated: list[PossiblyOutdatedMemory]
     in_doubt: list[DoubtedMemory]
+    coverage_days: int
+    coverage_gaps: list[CoverageGap]
 
 
 class ToldMemoryEntry(BaseModel):
@@ -1188,8 +1201,9 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="project_health",
         summary=(
-            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
-            "doubt, with each one's count and reasons. Changes nothing."
+            "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in "
+            "doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is "
+            "tied to. Changes nothing."
         ),
         answers=ProjectHealth,
     ),

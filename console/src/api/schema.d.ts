@@ -352,7 +352,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+        /** A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing. */
         get: operations["project_health"];
         put?: never;
         post?: never;
@@ -1266,6 +1266,21 @@ export interface components {
             cards: components["schemas"]["Card"][];
         };
         /**
+         * CoverageGap
+         * @description A file on project health's coverage gaps: the project's sessions edited it in the last coverage_days days and
+         *     no project or team memory is tied to it. file is written repository:path; edits is how many edits changed it.
+         */
+        CoverageGap: {
+            /** Repository */
+            repository: string;
+            /** Path */
+            path: string;
+            /** File */
+            file: string;
+            /** Edits */
+            edits: number;
+        };
+        /**
          * DoubtedMemory
          * @description A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the
          *     challenges screen, never here (ADR-0009).
@@ -1337,8 +1352,9 @@ export interface components {
         /**
          * ProjectHealth
          * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-         *     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
-         *     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.
+         *     that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; and its coverage
+         *     gaps, the most edited first, at most ten. Read-only: reading it is no use of any memory and changes nothing.
+         *     outdated_after_days is the server's setting; coverage_days the days of edits coverage gaps count.
          */
         ProjectHealth: {
             /** Project Id */
@@ -1351,6 +1367,10 @@ export interface components {
             possibly_outdated: components["schemas"]["PossiblyOutdatedMemory"][];
             /** In Doubt */
             in_doubt: components["schemas"]["DoubtedMemory"][];
+            /** Coverage Days */
+            coverage_days: number;
+            /** Coverage Gaps */
+            coverage_gaps: components["schemas"]["CoverageGap"][];
         };
         /**
          * ActiveSession
@@ -3215,7 +3235,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
