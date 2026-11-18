@@ -139,11 +139,14 @@ def run(
         from shared_memory.embeddings import CachedQueries, FastEmbedEmbedder
         from shared_memory.index import SearchIndex
         from shared_memory.store import MemoryStore
+        from shared_memory.tied import TiedFiles
 
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             embedder = CachedQueries(FastEmbedEmbedder(settings.model_cache))
-            count = SearchIndex(db, embedder).rebuild(MemoryStore(settings.memory_root))
+            store = MemoryStore(settings.memory_root)
+            count = SearchIndex(db, embedder).rebuild(store)
+            TiedFiles(db).rebuild(store)
         finally:
             db.close()
         print(f"Reindexed {count} memories.", file=out)

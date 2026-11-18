@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from tests.support import Console, ConsoleClient, RunningServer, Session, Team, ask
+from tests.support import Console, ConsoleClient, RunningServer, Session, Team, add, ask, create, signed_in_owner
 
 KNOWN_ISSUE = {
     "title": "Uploads flake on staging",
@@ -112,3 +112,182 @@ def test_a_tied_file_not_written_as_repository_path_is_refused(member: Session) 
     refusal = member.refusal("remember", title="Tax", summary="s", type="gotcha", body="b", tied_files=["src/tax.ts"])
 
     assert "Tied file 'src/tax.ts' must be written as repository:path" in refusal
+
+
+# Tied files as folder globs, the tied-file index, and `tied_memories` (#548).
+
+
+def tied(session: Session, file: str) -> list[str]:
+    """The paths of the memories `tied_memories` gives a session for a file."""
+    return [each["path"] for each in session.call("tied_memories", file=file)["memories"]]
+
+
+def promoted(session: Session, level: str = "project", **overrides: object) -> str:
+    """A memory remembered with these details and promoted, keeping both of anything similar it is shown."""
+    personal = remember(session, **overrides)
+    result = session.call("promote", path=personal, level=level)
+    if result["status"] == "similar_memories":
+        result = session.call(
+            "promote",
+            path=personal,
+            level=level,
+            reference=result["reference"],
+            resolutions={similar["path"]: "keep_both" for similar in result["similar"]},
+        )
+    assert result["status"] == "promoted", result
+    path: str = result["path"]
+    return path
+
+
+def test_remember_takes_a_folder_glob_as_a_tied_file(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax/**"])
+    refusal = member.refusal(
+        "remember", title="Tax", summary="s", type="gotcha", body="b", tied_files=["billing-api:src/{tax,fees}/**"]
+    )
+
+    assert member.call("read", path=path)["tied_files"] == ["billing-api:src/tax/**"]
+    assert "Tied file 'billing-api:src/{tax,fees}/**' isn't a usable glob" in refusal
+    assert "`!`, `[...]` and `{...}` are not read" in refusal, "the never-lock pattern rules' reason"
+
+
+def test_tied_memories_finds_a_memory_tied_to_the_file_exactly(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+
+    found = member.call("tied_memories", file="billing-api:src/tax.ts")
+
+    assert [each["path"] for each in found["memories"]] == [path]
+    shown = found["memories"][0]
+    assert (shown["level"], shown["tied_file"]) == ("personal", "billing-api:src/tax.ts")
+    assert "Round the tax on each line" in shown["body"]
+    assert tied(member, "billing-api:src/fees.ts") == []
+
+
+def test_tied_memories_finds_a_memory_tied_by_a_folder_glob(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax/**"])
+
+    assert tied(member, "billing-api:src/tax/rates/vat.ts") == [path]
+    assert tied(member, "billing-api:src/tax.ts") == []
+    assert tied(member, "billing-api:lib/src/tax/vat.ts") == [], "a glob with a slash is matched from the root"
+
+
+def test_tied_memories_ignores_a_tie_to_the_same_path_in_another_repository(member: Session) -> None:
+    remember(member, tied_files=["billing-web:src/tax.ts"])
+
+    assert tied(member, "billing-api:src/tax.ts") == []
+
+
+def test_tied_memories_never_gives_another_members_personal_memory(owner: Session, dana: Session) -> None:
+    owners = remember(owner, tied_files=["billing-api:src/tax.ts"])
+
+    assert tied(owner, "billing-api:src/tax.ts") == [owners]
+    assert tied(dana, "billing-api:src/tax.ts") == []
+
+
+def test_tied_memories_never_gives_memory_of_a_restricted_project_the_caller_cannot_reach(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-tied-vault", 1801)
+    billing = create(signed_out, "Billing")["project_id"]
+    vault = create(signed_out, "Vault")["project_id"]
+    payments = create(signed_out, "Payments")["project_id"]
+    restricting = signed_out.post_json(f"/api/projects/{vault}/restrict", {"restricted": True})
+    assert restricting.status_code == 200, restricting.text
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev", "dana-tied-vault")["personal_token"])
+    promoted(owner.in_project(vault, "vault-api"), title="Vault keys rotate", tied_files=["shared-lib:src/keys.ts"])
+    readable = promoted(
+        owner.in_project(payments, "payments-api"), title="Payment keys rotate", tied_files=["shared-lib:src/keys.ts"]
+    )
+
+    found = tied(dana.in_project(billing, "billing-api"), "shared-lib:src/keys.ts")
+
+    assert found == [readable], "an open project's memory is in reach; the restricted project's isn't"
+
+
+def test_tied_memories_gives_own_personal_project_and_team_memory(owner: Session, dana: Session) -> None:
+    file = ["billing-api:src/tax.ts"]
+    in_team = promoted(owner, "team", title="Tax is per line everywhere", tied_files=file)
+    in_project = promoted(owner, "project", title="Billing rounds tax per line", tied_files=file)
+    mine = remember(dana, title="My note on tax rounding", tied_files=file)
+
+    found = dana.call("tied_memories", file="billing-api:src/tax.ts")["memories"]
+
+    assert sorted((each["path"], each["level"]) for each in found) == sorted(
+        [(in_team, "team"), (in_project, "project"), (mine, "personal")]
+    )
+
+
+def test_a_tied_memory_in_doubt_is_marked_in_doubt(owner: Session, dana: Session) -> None:
+    doubted = promoted(owner, title="Tax rounds down", tied_files=["billing-api:src/tax.ts"])
+    sound = promoted(owner, title="Tax is per line", tied_files=["billing-api:src/tax/**", "billing-api:src/tax.ts"])
+    dana.call("challenge", path=doubted, reason="misled")
+
+    found = {each["path"]: each for each in dana.call("tied_memories", file="billing-api:src/tax.ts")["memories"]}
+
+    assert found[doubted]["in_doubt"] == "In doubt: 1 says it misled them"
+    assert "in_doubt" not in found[sound]
+
+
+def test_a_retired_or_superseded_memory_is_no_longer_tied(owner: Session) -> None:
+    body = "Round the tax on each line before adding them up, then round the total."
+    retired = promoted(owner, title="Tax rounding is per line", body=body, tied_files=["billing-api:src/tax.ts"])
+    old = promoted(owner, title="Fees round per line", body=body, tied_files=["billing-api:src/fees.ts"])
+    personal = remember(owner, title="Fees round per line, always", body=body, tied_files=["billing-api:src/fees.ts"])
+    first = owner.call("promote", path=personal, level="project")
+    assert first["status"] == "similar_memories", first
+    newer = owner.call(
+        "promote",
+        path=personal,
+        level="project",
+        reference=first["reference"],
+        resolutions={each["path"]: "supersede" if each["path"] == old else "keep_both" for each in first["similar"]},
+    )
+    assert newer["status"] == "promoted", newer
+
+    owner.call("retire", path=retired)
+
+    assert tied(owner, "billing-api:src/tax.ts") == []
+    assert tied(owner, "billing-api:src/fees.ts") == [newer["path"]]
+
+
+def test_a_deleted_memory_is_no_longer_tied(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+
+    member.call("delete_memory", path=path)
+
+    assert tied(member, "billing-api:src/tax.ts") == []
+
+
+def test_a_promoted_memory_stays_tied_at_its_new_path(member: Session) -> None:
+    personal = remember(member, tied_files=["billing-api:src/tax/**"])
+    result = member.call("promote", path=personal, level="project")
+    if result["status"] == "similar_memories":
+        keep_both = {similar["path"]: "keep_both" for similar in result["similar"]}
+        result = member.call(
+            "promote", path=personal, level="project", reference=result["reference"], resolutions=keep_both
+        )
+    assert result["status"] == "promoted", result
+
+    assert tied(member, "billing-api:src/tax/vat.ts") == [result["path"]]
+
+
+def test_an_edit_that_changes_tied_files_moves_the_tie(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+
+    member.call("edit_memory", path=path, tied_files=["billing-api:src/tax/rounding.ts"])
+
+    assert tied(member, "billing-api:src/tax.ts") == []
+    assert tied(member, "billing-api:src/tax/rounding.ts") == [path]
+
+
+def test_reindex_rebuilds_the_tied_file_index_from_memory_on_disk(team: Team, member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+    file = file_of(team.server, team.code, path)
+    # Written on disk the way memory was before related files became tied files, and tied somewhere new.
+    header_says_related_files(file)
+    file.write_text(file.read_text(encoding="utf-8").replace("src/tax.ts", "src/tax/**"), encoding="utf-8")
+
+    team.server.run_cli("reindex")
+
+    assert "related_files:\n- billing-api:src/tax/**" in file.read_text(encoding="utf-8")
+    assert tied(member, "billing-api:src/tax.ts") == []
+    assert tied(member, "billing-api:src/tax/vat.ts") == [path]
