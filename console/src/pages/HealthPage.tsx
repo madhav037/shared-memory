@@ -15,7 +15,8 @@ type NearlyPopular = ProjectHealth["nearly_popular"][number];
 /**
  * A project's health (CONTEXT.md: Project health), for its leads and the team's admins: the project memory that may
  * no longer be true, the memory sessions doubt, the files sessions edit often that no memory is tied to, and the
- * memory the project relies on most. It only reads: pinning, retiring and deciding stay on the memory's own page and the challenges page, which each entry links to (ADR-0009).
+ * memory the project relies on most. It only reads: pinning, retiring and deciding stay on the memory's own page and
+ * the challenges page, which each entry links to (ADR-0009).
  */
 export function HealthPage() {
   const { projectId = "" } = useParams();
