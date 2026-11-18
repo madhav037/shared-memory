@@ -1016,6 +1016,31 @@ def build_app(
     @saving
     @_refusals_as_tool_errors
     @unless_read_only
+    def challenge(
+        path: str,
+        reason: str,
+        ctx: Context,
+        reasoning: str | None = None,
+        code_reference: str | None = None,
+        quoted_line: str | None = None,
+        session: str | None = None,
+    ) -> dict[str, Any]:
+        """Doubt a memory you can read, at any level, your own included. When memory and code disagree, trust the
+        code, raise contradicts_code, and never edit the memory to match.
+
+        reason is misled or contradicts_code; contradicts_code needs code_reference (repository:path:line) and
+        quoted_line. reasoning says what happened. The same memory and reason as an open doubt joins it as a +1.
+        """
+        raised = challenges.doubt(
+            caller(ctx), path, reason, reasoning=reasoning, code_reference=code_reference, quoted_line=quoted_line,
+            session=session,
+        )  # fmt: skip
+        return dataclasses.asdict(raised)
+
+    @server.tool()
+    @saving
+    @_refusals_as_tool_errors
+    @unless_read_only
     def add_to_foundation(path: str, foundation: str, ctx: Context, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into one of the project's foundations (architecture, product, glossary,
         decisions, or an extra one a project lead added). Only an active project memory outside any foundation, of a

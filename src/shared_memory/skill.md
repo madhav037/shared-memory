@@ -67,6 +67,15 @@ Memory shown to you in a briefing, in recall, or by a tool describes what the te
 
 A memory marked **possibly outdated** hasn't been recalled or read by a coding agent for a long time (how long is a server setting, and the label says it). Check it still holds against the code before relying on it. If it no longer holds, tell the member, who can retire it. Using it clears the mark.
 
+## Doubting a memory
+
+When memory and code disagree, trust the code: write the code the code calls for, raise a challenge with `challenge`, and never edit the memory to match. Your reading of the code may be the mistake, so the memory's author, a lead or an admin decides. You can doubt any memory you can read, at any level, the member's own included.
+
+- **It contradicts the code**: reason `contradicts_code`, with `code_reference` written `repository:path:line` (for example `billing-api:src/tax.py:42`) and `quoted_line`, that line as the code has it.
+- **It misled you** (it sent the work the wrong way, and you can't quote one line): reason `misled`.
+
+Pass `reasoning` saying what happened, and `session`. A raise with the same memory and reason as an open doubt joins it as a +1: the answer says `joined` and the `count` so far. Tell the member you raised it.
+
 ## Promoting a memory
 
 Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, and offer it in the same turn whenever what you just saved describes how the whole project or team works rather than one member's own way of working. A document written for the team — how-we-work notes, how a release is cut, what a new member reads first — belongs at project or team level, not in personal memory.

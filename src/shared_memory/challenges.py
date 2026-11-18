@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -13,9 +14,11 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, project_in
+from shared_memory.identity import NAME_PATTERN, Caller, Identity, project_in
 from shared_memory.memory import locate
+from shared_memory.sessions import usable
 from shared_memory.store import MemoryStore
+from shared_memory.validation import refuse_secret
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS challenges (
@@ -40,6 +43,24 @@ CREATE TABLE IF NOT EXISTS challenges (
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS promoted_by TEXT;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reasoning TEXT;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS foundation TEXT;
+-- The reason a doubt names (spec #502): misled or contradicts_code. Other kinds name none.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reason TEXT;
+-- One open doubt per memory and reason, so a second raise joins it, even when two sessions raise it at once.
+CREATE UNIQUE INDEX IF NOT EXISTS challenges_one_open_doubt ON challenges (team, target_path, reason)
+    WHERE kind = 'doubt' AND state = 'open';
+
+-- What each member who raised a doubt brought: the first raiser's is the first row, each +1 adds one.
+CREATE TABLE IF NOT EXISTS challenge_evidence (
+    id BIGSERIAL PRIMARY KEY,
+    challenge_id BIGINT NOT NULL REFERENCES challenges (id),
+    member_id TEXT NOT NULL,
+    session_identifier TEXT,
+    reasoning TEXT,
+    code_reference TEXT,
+    quoted_line TEXT,
+    raised_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS challenge_evidence_by_challenge ON challenge_evidence (challenge_id);
 
 CREATE TABLE IF NOT EXISTS notices (
     id BIGSERIAL PRIMARY KEY,
@@ -50,6 +71,82 @@ CREATE TABLE IF NOT EXISTS notices (
     delivered_at TIMESTAMPTZ
 );
 """
+
+# The challenge kind a session raises to doubt a memory, and the reasons a doubt names (CONTEXT.md: Reason).
+DOUBT = "doubt"
+Reason = Literal["misled", "contradicts_code"]
+REASONS: tuple[Reason, ...] = ("misled", "contradicts_code")
+# What a reason says, after "N say(s)".
+_REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
+# The longest line of code a contradicts_code doubt may quote.
+QUOTED_LINE_LIMIT = 300
+_CODE_REFERENCE = re.compile(r"^(?P<repository>[^:\s]+):(?P<path>[^:\n]*[^:\s][^:\n]*):(?P<line>[1-9][0-9]*)$")
+
+
+@dataclass(frozen=True)
+class CodeReference:
+    """Where the code a doubt quotes is, written repository:path:line, and the line as the code has it."""
+
+    repository: str
+    path: str
+    line: int
+    quoted_line: str
+
+    def __str__(self) -> str:
+        return f"{self.repository}:{self.path}:{self.line}"
+
+    @classmethod
+    def parse(cls, written: str | None, quoted_line: str | None) -> CodeReference:
+        """The code reference a contradicts_code doubt gives, refused unless it names a repository, a file and a line
+        and quotes that line."""
+        match = _CODE_REFERENCE.match((written or "").strip())
+        if match is None or not NAME_PATTERN.match(match["repository"]):
+            raise Refused(
+                "A doubt that contradicts the code says where: pass code_reference written repository:path:line, for "
+                "example billing-api:src/tax.py:42, using the repository names from each repository's settings."
+            )
+        quoted = (quoted_line or "").strip()
+        if not quoted or "\n" in quoted or len(quoted) > QUOTED_LINE_LIMIT:
+            raise Refused(
+                "A doubt that contradicts the code quotes the line: pass quoted_line, that one line as the code has "
+                f"it, at most {QUOTED_LINE_LIMIT} characters."
+            )
+        refuse_secret(quoted, "The quoted line", "into a challenge")
+        return cls(match["repository"], match["path"], int(match["line"]), quoted)
+
+    @classmethod
+    def stored(cls, written: str, quoted_line: str) -> CodeReference:
+        """A code reference as it was kept, already checked when it was raised."""
+        repository, _, rest = written.partition(":")
+        path, _, line = rest.rpartition(":")
+        return cls(repository, path, int(line), quoted_line)
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """What one member who raised a doubt brought: their reasoning and, for contradicts_code, the code they quote."""
+
+    member_id: str
+    session_identifier: str | None
+    reasoning: str | None
+    code_reference: CodeReference | None
+    raised_at: datetime
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> Evidence:
+        written = row["code_reference"]
+        reference = None if written is None else CodeReference.stored(written, row["quoted_line"] or "")
+        return cls(row["member_id"], row["session_identifier"], row["reasoning"], reference, row["raised_at"])
+
+
+@dataclass(frozen=True)
+class Raised:
+    """What raising a doubt answers: the challenge, whether the raise joined one already open, and how many have now
+    raised it."""
+
+    challenge_id: int
+    joined: bool
+    count: int
 
 
 @dataclass(frozen=True)
@@ -67,6 +164,8 @@ class Challenge:
     # The foundation (ADR-0019) a challenge is about: a keeper of it or a lead of its project decides it. A kind "add"
     # challenge has no challenged memory, so its target_path is the foundation's folder.
     foundation: str | None = None
+    # The reason a doubt names; None for every other kind.
+    reason: Reason | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Challenge:
@@ -82,7 +181,22 @@ class Challenge:
             row["raised_at"],
             row["reasoning"],
             row.get("foundation"),
+            row.get("reason"),
         )
+
+
+@dataclass(frozen=True)
+class Doubt:
+    """An open challenge that names a reason, with every piece of evidence raised for it, the first raiser's first."""
+
+    challenge: Challenge
+    reason: Reason
+    evidence: tuple[Evidence, ...]
+
+    @property
+    def count(self) -> int:
+        """How many raises it has had: the first and each +1."""
+        return len(self.evidence)
 
 
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
@@ -157,6 +271,118 @@ class Challenges:
             **about,
         )
         return challenge_id
+
+    def doubt(
+        self,
+        caller: Caller,
+        path: str,
+        reason: str,
+        *,
+        reasoning: str | None = None,
+        code_reference: str | None = None,
+        quoted_line: str | None = None,
+        session: str | None = None,
+    ) -> Raised:
+        """Doubt a memory the caller can read, at any level and their own included, naming a reason. A raise naming
+        the same memory and reason as an open doubt joins it as a +1."""
+        caller.require_project()
+        caller.require_reach(path)  # before the memory is looked up, so a restricted project never says what it holds
+        named = _reason(reason, code_reference, quoted_line)
+        reference = CodeReference.parse(code_reference, quoted_line) if named == "contradicts_code" else None
+        written = (reasoning or "").strip() or None
+        if written is not None:
+            refuse_secret(written, "This reasoning", "into a challenge")
+        location = locate(path)
+        memory = self._store.read(caller.team, location.path)
+        if memory.status != "active":
+            raise Refused(f"{location.path} is already {memory.status}, so there is nothing left to doubt.")
+        evidence = Evidence(caller.member_id, usable(session), written, reference, self._clock())
+        return self.raise_doubt(
+            caller, target_path=str(location.path), target_author=memory.author, level=location.level, reason=named,
+            evidence=evidence,
+        )  # fmt: skip
+
+    def raise_doubt(
+        self, caller: Caller, *, target_path: str, target_author: str, level: str, reason: Reason, evidence: Evidence
+    ) -> Raised:
+        """Open a doubt, or join the open one naming the same memory and reason, and add the evidence, in one
+        transaction: two sessions raising it at once give one challenge with both pieces of evidence."""
+        reference = evidence.code_reference
+        with self._db.transaction() as conn:
+            challenge_id, joined = self._open_or_join(conn, caller, target_path, target_author, level, reason)
+            conn.execute(
+                "INSERT INTO challenge_evidence (challenge_id, member_id, session_identifier, reasoning, code_reference,"
+                " quoted_line, raised_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    challenge_id, evidence.member_id, evidence.session_identifier, evidence.reasoning,
+                    None if reference is None else str(reference), None if reference is None else reference.quoted_line,
+                    evidence.raised_at,
+                ),  # fmt: skip
+            )
+            counted = conn.execute(
+                "SELECT count(*) AS count FROM challenge_evidence WHERE challenge_id = %s", (challenge_id,)
+            ).fetchone()
+        assert counted is not None
+        self._audit.memory(
+            caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=DOUBT, author=target_author,
+            reason=reason, joined=joined,
+        )  # fmt: skip
+        return Raised(challenge_id, joined, int(counted["count"]))
+
+    def _open_or_join(
+        self, conn: Conn, caller: Caller, target_path: str, target_author: str, level: str, reason: Reason
+    ) -> tuple[int, bool]:
+        """The open doubt naming this memory and reason, opened now unless one already is, and whether it already
+        was. A raise that joins one asks the author's next prompt to show it again, with its new evidence."""
+        while True:
+            opened = conn.execute(
+                "INSERT INTO challenges (team, kind, target_path, target_author, level, raised_by, raised_at, state,"
+                " reason) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open', %s) ON CONFLICT (team, target_path, reason)"
+                " WHERE kind = 'doubt' AND state = 'open' DO NOTHING RETURNING id",
+                (caller.team, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
+            ).fetchone()
+            if opened is not None:
+                return int(opened["id"]), False
+            # Another raise holds it open. The insert waited for that raise to commit, so it is found here, unless it
+            # was decided in between: then the loop opens a new one.
+            found = conn.execute(
+                "UPDATE challenges SET author_notified_at = NULL WHERE team = %s AND kind = 'doubt' AND state = 'open'"
+                " AND target_path = %s AND reason = %s RETURNING id",
+                (caller.team, target_path, reason),
+            ).fetchone()
+            if found is not None:
+                return int(found["id"]), True
+
+    def doubts_against(self, team: str, paths: Iterable[str]) -> dict[str, list[Doubt]]:
+        """For each memory path, its open challenges that name a reason, each with all its evidence: what makes a
+        memory in doubt (CONTEXT.md). A path with none maps to an empty list."""
+        wanted = list(dict.fromkeys(paths))
+        doubts: dict[str, list[Doubt]] = {path: [] for path in wanted}
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT * FROM challenges WHERE team = %s AND state = 'open' AND reason IS NOT NULL"
+                " AND target_path = ANY(%s) ORDER BY id",
+                (team, wanted),
+            ).fetchall()
+        evidence = self._evidence([row["id"] for row in rows])
+        for row in rows:
+            challenge = Challenge.from_row(row)
+            assert challenge.reason is not None
+            doubts[challenge.target_path].append(Doubt(challenge, challenge.reason, evidence.get(challenge.id, ())))
+        return doubts
+
+    def _evidence(self, challenge_ids: list[int]) -> dict[int, tuple[Evidence, ...]]:
+        """Each challenge's evidence, first raised first."""
+        if not challenge_ids:
+            return {}
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT * FROM challenge_evidence WHERE challenge_id = ANY(%s) ORDER BY id", (challenge_ids,)
+            ).fetchall()
+        found: dict[int, list[Evidence]] = {}
+        for row in rows:
+            found.setdefault(row["challenge_id"], []).append(Evidence.from_row(row))
+        return {challenge_id: tuple(each) for challenge_id, each in found.items()}
 
     def open_challenge(self, team: str, challenge_id: int) -> Challenge | None:
         with self._db.transaction() as conn:
@@ -428,6 +654,7 @@ class Challenges:
         if not waiting:
             return None
         lines = [heading]
+        evidence = self._evidence([one.challenge.id for one in waiting if one.challenge.kind == DOUBT])
         for target_path in dict.fromkeys(one.challenge.target_path for one in waiting):
             first = next(one.challenge for one in waiting if one.challenge.target_path == target_path)
             if first.foundation is not None and first.kind == "add":
@@ -440,6 +667,9 @@ class Challenges:
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
                 whose = "" if one.decides_as == "author" else f", yours to decide {self._capacity(one.decides_as)}"
+                if c.kind == DOUBT:
+                    lines.extend(_doubt_lines(c, whose, evidence.get(c.id, ())))
+                    continue
                 if c.kind == "add":
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c)} to the {c.foundation} foundation"
                     line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
@@ -456,6 +686,11 @@ class Challenges:
             "At most one challenge per memory can be accepted. Where the memory is another member's, its author is "
             "told who decided and in what capacity."
         )
+        if evidence:
+            lines.append(
+                "A doubt says the memory may be wrong: check it against the code with the member. Where they disagree, "
+                "the code holds."
+            )
         return "\n".join(lines)
 
     def _replacement(self, caller: Caller, challenge: Challenge) -> str:
@@ -494,3 +729,27 @@ class Challenges:
                 (caller.team, caller.member_id, self._clock() - timedelta(days=days), limit),
             ).fetchall()
         return [{"notice_id": row["id"], "text": row["text"], "created_at": row["created_at"]} for row in rows]
+
+
+def _reason(reason: str, code_reference: str | None, quoted_line: str | None) -> Reason:
+    """The reason a doubt names, refused unless it is one of the two; only contradicts_code quotes code."""
+    for named in REASONS:
+        if reason == named:
+            if named == "misled" and (code_reference or quoted_line):
+                raise Refused("Only a doubt with the reason contradicts_code quotes code; misled takes none.")
+            return named
+    raise Refused(f"A doubt names its reason: {' or '.join(REASONS)}.")
+
+
+def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...]) -> list[str]:
+    """A doubt as a briefing or prompt shows it: its reason and how many raised it, then each piece of evidence."""
+    count = len(evidence)
+    says = "says" if count == 1 else "say"
+    lines = [f"- Challenge {challenge.id}, a doubt{whose}: {count} {says} {_REASON_IN_WORDS[challenge.reason or '']}."]
+    for each in evidence:
+        line = f"  - {each.member_id}"
+        if each.code_reference is not None:
+            line += f" quotes {each.code_reference}: {each.code_reference.quoted_line}"
+        line += f" — reasoning: {each.reasoning}" if each.reasoning else ("" if each.code_reference else ".")
+        lines.append(line)
+    return lines
