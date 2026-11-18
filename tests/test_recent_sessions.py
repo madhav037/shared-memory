@@ -90,7 +90,7 @@ def test_each_recent_session_comes_with_when_it_ran_and_how_many_memories_it_was
 
     assert (found["project_id"], found["project_name"], found["told_days"]) == (project, "Billing", 30)
     newest, oldest = found["sessions"]
-    assert (newest["agent"], newest["active"], newest["memories_told"]) == ("codex", True, 0)
+    assert (newest["agent"], newest["active"], newest["memories_told"]) == ("Codex", True, 0)
     assert (oldest["agent"], oldest["active"], oldest["memories_told"]) == ("claude-code", False, 1)
     assert oldest["activity"] == "Choosing the package manager", "an ended session keeps its agent and activity"
     assert oldest["member_id"] == "E1001"
