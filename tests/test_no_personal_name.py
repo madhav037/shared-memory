@@ -2,19 +2,31 @@
 
 The only places the GitHub owner may still appear are the install paths, owners and URLs that
 move to the raven-memory organisation once it exists (#496, Part 2). Each is listed below by
-file and by the exact text allowed there; Part 2 shrinks ALLOWED to nothing.
+file and by the exact text allowed there; Part 2 shrinks ALLOWED to nothing. The personal email addresses and the
+numeric GitHub account ID are allowed nowhere; they are kept here only as SHA-256 digests.
 """
 
 from __future__ import annotations
 
 import codecs
+import hashlib
 import pathlib
+import re
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OWNER = "madhav"
 # The surname, kept out of this file's own text.
 SURNAME = codecs.decode("yrueh", "rot13")
+
+# The personal email address and the numeric GitHub account ID (also inside the GitHub noreply address), by digest.
+FORBIDDEN_DIGESTS = frozenset(
+    {
+        "d29e6a2d4598662372c9c1c41efaf6fc5832966710e3d2065f86aa9a06d1654e",
+        "aecb74f899dedd69c4c81803ad7de2fec63887c959a613ef5e72a8a30f29bce7",
+    }
+)
+EMAIL_OR_NUMBER = re.compile(r"[\w.%+-]+@[\w.-]+|\d+")
 
 REPOSITORY = f"{OWNER}037/shared-memory"
 ALLOWED: dict[str, tuple[str, ...]] = {
@@ -29,7 +41,6 @@ ALLOWED: dict[str, tuple[str, ...]] = {
     "plugin/.claude-plugin/plugin.json": (REPOSITORY, f'"{OWNER}037"', f"github.com/{OWNER}037"),
     "server.json": (REPOSITORY,),
     "src/shared_memory/config.py": (REPOSITORY,),
-    "tests/test_before_edit.py": (REPOSITORY,),
     "tests/test_listing.py": (REPOSITORY,),
     "tests/test_settings.py": (REPOSITORY,),
 }
@@ -74,3 +85,15 @@ def test_every_allowed_location_still_needs_its_allowance() -> None:
         text = _text(name) or ""
         for entry in allowed:
             assert entry.lower() in text.lower(), f"{name} no longer holds {entry}; drop it"
+
+
+def test_no_personal_email_or_account_id_appears_anywhere() -> None:
+    offenders = []
+    for name in _tracked_files():
+        text = _text(name)
+        if text is None:
+            continue
+        tokens = {token for match in EMAIL_OR_NUMBER.findall(text) for token in (match, *re.findall(r"\d+", match))}
+        if any(hashlib.sha256(token.lower().encode()).hexdigest() in FORBIDDEN_DIGESTS for token in tokens):
+            offenders.append(name)
+    assert offenders == []

@@ -574,7 +574,7 @@ def kit(session: Session, server_url: str | None = None) -> dict[str, str]:
     assert session.project is not None and session.repository is not None
     files = connection_kit(
         server_url=server_url or session.server.url,
-        marketplace="madhav037/shared-memory",
+        marketplace="raven-memory/shared-memory",
         project_id=session.project,
         project_name="Billing",
         repository=session.repository,
