@@ -84,6 +84,13 @@ When memory and code disagree, trust the code: write the code the code calls for
 
 Pass `reasoning` saying what happened, and `session`. A raise with the same memory and reason as an open doubt joins it as a +1: the answer says `joined` and the `count` so far. Tell the member you raised it.
 
+## Asking a memory's author
+
+When the member reads a memory they don't understand, or wonder whether it still holds, ask its author rather than guess: call `ask_question` with the memory's `path` and the question in the member's words. You can ask about any memory you can read that someone else wrote. The author's next briefing carries it, and yours carries each answer. A question is not a doubt: when the memory contradicts the code, raise a `challenge` instead. Neither tool has anything to do with a gate, which is `answer_gate`.
+
+- **A question for you**: a briefing, or the news beside a tool's result, names the question, its asker and its ID. Show it to the member and ask what to answer, never answering on your own judgment; send their words with `answer_question`, the `question_id` and the `text`. If the answer shows the memory should change, change it too: `edit_memory` for personal memory; for project or team memory, save the corrected one and `promote` it, superseding this one.
+- **The thread**: `read` gives a memory's `questions`, how many are `open` and each thread with its answers. Anyone who can read the memory reads its threads, and may add an answer the same way. Show the member a thread that bears on the task.
+
 ## Promoting a memory
 
 Personal memory becomes what the team follows only when it is promoted with `promote` (level `project` or `team`). Promote when the member asks to, and offer it in the same turn whenever what you just saved describes how the whole project or team works rather than one member's own way of working. A document written for the team — how-we-work notes, how a release is cut, what a new member reads first — belongs at project or team level, not in personal memory.
