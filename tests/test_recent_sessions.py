@@ -75,20 +75,24 @@ def test_each_recent_session_comes_with_when_it_ran_and_how_many_memories_it_was
 ) -> None:
     project, in_project = a_project(console, signed_out, "olive-recent-told", 5672)
     promote_keeping_both(in_project, PNPM)
-    earlier = in_project.as_session("olive-earlier")
+    # Each names its coding agent in a tool call: a hook of no agent family names none.
+    earlier = in_project.as_agent("claude-code").as_session("olive-earlier")
     earlier.start()
+    earlier.call("set_activity", activity="Choosing the package manager", session=earlier.identifier)
     earlier.prompt(PROMPT)
     earlier.end()
     console.clock.advance(minutes=10)
-    later = in_project.as_session("olive-later")
+    later = in_project.as_agent("codex").as_session("olive-later")
     later.start()
+    later.call("set_activity", activity="Splitting invoices", session=later.identifier)
 
     found = recent(signed_out, project)
 
     assert (found["project_id"], found["project_name"], found["told_days"]) == (project, "Billing", 30)
     newest, oldest = found["sessions"]
-    assert (newest["active"], newest["memories_told"]) == (True, 0)
-    assert (oldest["active"], oldest["memories_told"]) == (False, 1)
+    assert (newest["agent"], newest["active"], newest["memories_told"]) == ("codex", True, 0)
+    assert (oldest["agent"], oldest["active"], oldest["memories_told"]) == ("claude-code", False, 1)
+    assert oldest["activity"] == "Choosing the package manager", "an ended session keeps its agent and activity"
     assert oldest["member_id"] == "E1001"
     assert oldest["member_name"] == "Olive Owner"
     assert oldest["repository"] == "billing-api"
