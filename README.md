@@ -64,7 +64,7 @@ name the project and the repository in two more headers, `X-Shared-Memory-Projec
 |---|---|
 | Start a session | `briefing`, `set_activity`, `guide`, `onboard` |
 | Find memory | `search`, `tree`, `list`, `read` |
-| Write memory | `remember`, `edit_memory`, `delete_memory`, `promote`, `save_known_issue` |
+| Write memory | `remember`, `edit_memory`, `tie`, `delete_memory`, `promote`, `save_known_issue` |
 | Govern memory | `pin`, `unpin`, `retire`, `decide_challenge`, `add_to_foundation` |
 | Avoid collisions | `take_lock`, `release_lock`, `never_lock` |
 | Plan work | `board`, `add_card`, `update_card`, `claim_card`, `comment_card`, `delete_card` |

@@ -91,12 +91,18 @@ def _has_workaround(body: str) -> bool:
     return False
 
 
+def validate_tied_files(tied_files: list[str]) -> None:
+    """Refuse a tied file that can't be one, or that holds a secret."""
+    for entry in tied_files:
+        tie_of(entry)
+        refuse_secret(entry)
+
+
 def validate(memory: Memory, word_limit: int) -> None:
     _single_line("title", memory.title, 200)
     _single_line("summary", memory.summary, 300)
     type_folder(memory.type)
-    for entry in memory.tied_files:
-        tie_of(entry)
+    validate_tied_files(memory.tied_files)
     if memory.type == KNOWN_ISSUE and not _has_workaround(memory.body):
         raise Refused(
             "A known issue must say how to work around it: add a line 'Workaround: ...', or 'Workaround: none known' "
