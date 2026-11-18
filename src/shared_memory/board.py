@@ -151,7 +151,7 @@ def _memories(caller: Caller, paths: list[str]) -> list[str]:
 
 
 def _files(entries: list[str]) -> list[str]:
-    """File links, each written as repository:path, the way a memory's related files are."""
+    """File links, each written as repository:path, the way a memory's tied files are."""
     linked: list[str] = []
     for entry in entries:
         repository, _, path = entry.strip().partition(":")

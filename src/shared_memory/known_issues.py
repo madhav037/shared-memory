@@ -68,7 +68,7 @@ class KnownIssues:
         title: str,
         summary: str,
         body: str,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         card: int | None = None,
     ) -> dict[str, Any] | None:
         """Saving's first call up to the save: the similar project memories to resolve, or None when there are none.
@@ -76,7 +76,7 @@ class KnownIssues:
         It saves no memory, only a pending save, so it need not wait a turn among saves. A caller given None saves
         with no reference, which searches again and lands the known issue in its turn.
         """
-        return self._similar(caller, self._known_issue(caller, title, summary, body, related_files, card))
+        return self._similar(caller, self._known_issue(caller, title, summary, body, tied_files, card))
 
     def titles(self, caller: Caller) -> list[str]:
         """The title of every active known issue in the session's project, as its briefing lists them. Nothing for a
@@ -97,14 +97,14 @@ class KnownIssues:
         title: str,
         summary: str,
         body: str,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
         card: int | None = None,
     ) -> dict[str, Any]:
         """Save a known issue into project memory and link it to the card that will fix it: the card named, or a new
         To do card. Similar project memories come back first, to be resolved before it lands."""
-        memory = self._known_issue(caller, title, summary, body, related_files, card)
+        memory = self._known_issue(caller, title, summary, body, tied_files, card)
         if reference is None:
             proposal = self._similar(caller, memory)
             return proposal if proposal is not None else self._land(caller, memory, card)
@@ -148,7 +148,7 @@ class KnownIssues:
         return self._land(caller, memory, card)
 
     def _known_issue(
-        self, caller: Caller, title: str, summary: str, body: str, related_files: list[str] | None, card: int | None
+        self, caller: Caller, title: str, summary: str, body: str, tied_files: list[str] | None, card: int | None
     ) -> Memory:
         caller.require_project()
         memory = Memory(
@@ -157,7 +157,7 @@ class KnownIssues:
             type=KNOWN_ISSUE,
             author=caller.member_id,
             body=body,
-            related_files=list(related_files or []),
+            tied_files=list(tied_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
         if card is not None:

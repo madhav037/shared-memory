@@ -108,7 +108,7 @@ _Avoid_: Flagged, quarantined, unsafe
 
 **Tied file**:
 A file, or a folder glob, in one of a project's repositories that a memory is about, written as repository:path; editing it brings the memory up.
-_Avoid_: Linked file, attached file
+_Avoid_: Linked file, attached file, related file
 
 **In doubt**:
 Said of a memory with at least one open challenge naming a reason; recall ranks it lower and marks it so.

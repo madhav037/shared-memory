@@ -36,7 +36,7 @@ LEGITIMATE = [
 
 
 def memory(body: str, title: str = "Setup notes", summary: str = "How setup works.") -> Memory:
-    return Memory(title=title, summary=summary, type="convention", author="emp-1", body=body, related_files=[])
+    return Memory(title=title, summary=summary, type="convention", author="emp-1", body=body, tied_files=[])
 
 
 @pytest.mark.parametrize("body", ORDERS)

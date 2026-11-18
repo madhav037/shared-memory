@@ -929,7 +929,7 @@ def build_app(
         type: str,
         body: str,
         ctx: Context,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         topic: str | None = None,
     ) -> dict[str, Any]:
         """Save what a teammate would need to know as your personal memory in this project: a convention, a decision
@@ -937,13 +937,13 @@ def build_app(
         local memory instead. Promote it when the team should follow it.
 
         type is one of: convention, decision, architecture, gotcha. summary is one line.
-        related_files are written as repository:path, for example billing-api:package.json.
+        tied_files are written as repository:path, for example billing-api:package.json.
         topic groups several memories about one long subject into a folder; each stays its own memory.
 
         It always saves. `similar` names up to three similar memories in your reach: judge each with the member, then
         supersede it, promote yours, or leave both.
         """
-        saved = service.remember(caller(ctx), title, summary, type, body, related_files, topic)
+        saved = service.remember(caller(ctx), title, summary, type, body, tied_files, topic)
         token = new_token()
         for each in saved.get("similar", []):
             each["title"] = escape(each["title"])
@@ -1152,9 +1152,9 @@ def build_app(
     @_refusals_as_tool_errors
     @unless_read_only
     def similar_before_saving(
-        title: str, summary: str, body: str, related_files: list[str] | None, card: int | None, ctx: Context
+        title: str, summary: str, body: str, tied_files: list[str] | None, card: int | None, ctx: Context
     ) -> dict[str, Any] | None:
-        return known_issues.similar_before_saving(caller(ctx), title, summary, body, related_files, card)
+        return known_issues.similar_before_saving(caller(ctx), title, summary, body, tied_files, card)
 
     @_refusals_as_tool_errors
     @unless_read_only
@@ -1162,13 +1162,13 @@ def build_app(
         title: str,
         summary: str,
         body: str,
-        related_files: list[str] | None,
+        tied_files: list[str] | None,
         card: int | None,
         ctx: Context,
         reference: str | None,
         resolutions: dict[str, str] | None,
     ) -> dict[str, Any]:
-        return known_issues.save(caller(ctx), title, summary, body, related_files, reference, resolutions, card)
+        return known_issues.save(caller(ctx), title, summary, body, tied_files, reference, resolutions, card)
 
     @server.tool()
     async def save_known_issue(
@@ -1176,7 +1176,7 @@ def build_app(
         summary: str,
         body: str,
         ctx: Context,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         card: int | None = None,
         reference: str | None = None,
         resolutions: dict[str, str] | None = None,
@@ -1185,7 +1185,7 @@ def build_app(
         straight into project memory, so every member's agent is warned at once; retire it once it is fixed.
 
         title and summary name the symptom. body must say how to work around it, in a line 'Workaround: ...', or
-        'Workaround: none known'. related_files are written as repository:path. card is the number of the card on
+        'Workaround: none known'. tied_files are written as repository:path. card is the number of the card on
         this project's board that will fix it, when the member names one; otherwise a To do card is added for it.
 
         Call it first without a reference. If similar project memories exist, nothing is saved yet: you get them back
@@ -1196,12 +1196,12 @@ def build_app(
         if reference is None:
             # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
             proposal = await anyio.to_thread.run_sync(
-                similar_before_saving, title, summary, body, related_files, card, ctx
+                similar_before_saving, title, summary, body, tied_files, card, ctx
             )
             if proposal is not None:
                 return proposal
         return await saves.run(
-            saving_known_issue, title, summary, body, related_files, card, ctx, reference, resolutions
+            saving_known_issue, title, summary, body, tied_files, card, ctx, reference, resolutions
         )
 
     @server.tool()
@@ -1215,10 +1215,10 @@ def build_app(
         summary: str | None = None,
         type: str | None = None,
         body: str | None = None,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Edit your own personal memory. Only the fields you pass change."""
-        return service.edit_memory(caller(ctx), path, title, summary, type, body, related_files)
+        return service.edit_memory(caller(ctx), path, title, summary, type, body, tied_files)
 
     @server.tool()
     @saving
