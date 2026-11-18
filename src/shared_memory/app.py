@@ -339,7 +339,7 @@ def build_app(
     saves = Saves()
     sessions = Sessions(settings, db, identity, clock)
     identity.on_access_lost(sessions.end_unreachable)
-    recall = Recall(settings, db, sessions, index, store, uses, challenges)
+    recall = Recall(settings, db, sessions, index, store, uses, challenges, tied)
     activities = Activities(db, clock, sessions, board.doing_titles)
     locks = Locks(db, sessions, clock, activities.of)
     project_patterns = ProjectPatterns(db, identity, audit, clock)
@@ -644,18 +644,24 @@ def build_app(
         """The hook before every tool call (ADR-0025), named for the edits it can stop. It keeps the session active
         and records its branch and the files the tool names; an edit takes or keeps each file's lock, or is blocked
         because another active session holds one; and anything else is let through with the session's waiting news,
-        where the agent's hook before a tool takes added context. One whose hook doesn't hears it after the tool."""
+        where the agent's hook before a tool takes added context. One whose hook doesn't hears it after the tool.
+
+        Its optional part, within the recall budget, adds the memories tied to the files an edit that goes ahead
+        changes, for the same agents (#549). It never decides anything: a blocked edit is told only why, and the
+        memories stay untold for the next edit that goes ahead."""
         # Where the hook says its repository's root is. Without it the payload's working folder stands in.
         root = request.headers.get("x-shared-memory-root")
         branch = hooks.branch_named(request.headers.get(hooks.BRANCH_HEADER.lower()))
         hears = hooks.hears_before_tool(request.query_params.get("format"))
         stopped = False
+        # The session and the files of an edit that went ahead, for the optional part.
+        went_ahead: tuple[Session, list[str]] | None = None
 
         def held(current: Caller, payload: dict[str, Any]) -> str | None:
             """Why the edit is blocked: the session is gated (ADR-0024), or another active session holds the file.
             Otherwise the session's news, or None, with the file's lock taken or kept for this session where the file
             locks. A blocked edit takes no lock and leaves the news waiting for the session's next call."""
-            nonlocal stopped
+            nonlocal stopped, went_ahead
             session = session_of(current, payload)
             if session is None:
                 return None
@@ -667,12 +673,21 @@ def build_app(
                 return reason
             if files:
                 gates.edit_went_ahead(session)
+                went_ahead = (session, files)
             return news_for(current, session) if hears else None
+
+        def tied_to_the_edit(current: Caller, payload: dict[str, Any]) -> str | None:
+            """The memories tied to the files of an edit that went ahead, those the session hasn't been told, where
+            the agent's hook before a tool takes added context."""
+            if stopped or went_ahead is None or not hears:
+                return None
+            session, files = went_ahead
+            return recall.for_edit(current, files, session)
 
         def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
             return hooks.blocked(format, event, text) if stopped else hooks.answered(format, event, text)
 
-        return await hook(request, "PreToolUse", held, answer=answer)
+        return await hook(request, "PreToolUse", held, tied_to_the_edit, answer=answer)
 
     @server.custom_route("/hooks/after-tool", methods=["POST"])  # type: ignore[untyped-decorator]
     async def after_tool(request: Request) -> Response:

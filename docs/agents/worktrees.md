@@ -202,6 +202,13 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
   prompt.
 - **The decision** is `locks.before_edit(session, files)`, beside `Locks`: it takes or keeps each file's lock and
   gives the reason the edit is blocked, or None to let it through. `app.py` only wires the hook to it.
+- **Tied memories** (#549) are the hook's optional part, as recall is the prompt hook's: `recall.for_edit(caller,
+  files, session)` gives the memories within the caller's reach tied to the edited files (`tied.tied_to`), in recall's
+  framing and fence, through `hooks.answered`, and only where `hooks.hears_before_tool` (Claude Code, Codex, Cline).
+  It runs within the recall budget or is dropped, only for an edit that went ahead: a gated or locked edit is told
+  only why, and its memories stay untold. What it tells goes in `recall_told` with recall's, every section of each
+  memory, so neither hook repeats the other, and a compaction's `recall.forget` starts both over. A tied memory
+  counts as told while some section of it was told and none told has changed since.
 - **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is who holds the file,
   followed by `TAKEOVER_IS_POSSIBLE` (`locks.py`) in place of take_lock's own advice (`Held.told`):
   - `claude`: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",

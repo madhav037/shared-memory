@@ -145,6 +145,25 @@ def test_once_the_wait_has_passed_the_edit_goes_ahead(team: Team, owner: Session
     assert dana.edit(FILE) == ALLOWED
 
 
+def test_a_gated_edit_carries_no_tied_memory_and_leaves_it_untold(team: Team, owner: Session, dana: Session) -> None:
+    path = dana.call(
+        "remember",
+        title="Invoice numbers are never reused",
+        summary="An invoice number is never given out twice.",
+        type="gotcha",
+        body="A voided invoice keeps its number for good.",
+        tied_files=[f"billing-api:{FILE}"],
+    )["path"]
+    collide(owner, dana)
+
+    reason = reason_in(dana.edit(FILE))
+    team.server.clock.advance(minutes=5)
+    allowed = dana.edit(FILE)
+
+    assert GATED in reason and path not in reason and "<memory-" not in reason
+    assert path in allowed["hookSpecificOutput"]["additionalContext"], "given on the first edit that goes ahead"
+
+
 def test_different_work_lifts_the_gate_at_once(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 
