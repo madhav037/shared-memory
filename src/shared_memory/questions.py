@@ -71,18 +71,6 @@ ALTER TABLE questions ADD COLUMN IF NOT EXISTS author TEXT;
 # How long a question waits for its author before it is passed on to the memory's project leads or the team's admins.
 PASS_ON_DAYS = 7
 
-# Passes on the team's open questions now due, each once: still with their author, and asked `PASS_ON_DAYS` ago or by
-# now about a removed author's memory.
-PASSED_ON = """
-UPDATE questions q SET routed_to = CASE WHEN q.memory_path LIKE 'projects/%%' THEN 'leads' ELSE 'admins' END,
-    routed_at = %(now)s
-WHERE q.team = %(team)s AND q.state = 'open' AND q.routed_to = 'author' AND (q.asked_at <= %(due)s OR EXISTS (
-    SELECT 1 FROM members m WHERE m.team_id = %(team_pk)s AND m.member_id = q.author AND m.removed_at IS NOT NULL
-))
-RETURNING q.id, q.memory_path, q.asker_id, q.author, q.text, EXISTS (
-    SELECT 1 FROM members m WHERE m.team_id = %(team_pk)s AND m.member_id = q.author AND m.removed_at IS NOT NULL
-) AS removed
-"""
 
 State = Literal["open", "answered"]
 
@@ -180,44 +168,45 @@ class Questions:
         whose author has been removed: the memory's project leads are told, or for team memory the team's admins. Each
         question is passed on once, by whichever read finds it due first."""
         now = self._clock()
+        team_pk = caller.member.team_pk
         with self._db.transaction() as conn:
-            due = conn.execute(
-                PASSED_ON,
-                {
-                    "now": now,
-                    "team": caller.team,
-                    "team_pk": caller.member.team_pk,
-                    "due": now - timedelta(days=PASS_ON_DAYS),
-                },
+            waiting = conn.execute(
+                "SELECT id, author, asked_at FROM questions WHERE team = %s AND state = 'open' AND routed_to = 'author'",
+                (caller.team,),
             ).fetchall()
-            if not due:
+            removed = self._identity.removed_in(conn, team_pk, [row["author"] for row in waiting if row["author"]])
+            overdue = now - timedelta(days=PASS_ON_DAYS)
+            due_ids = [row["id"] for row in waiting if row["asked_at"] <= overdue or row["author"] in removed]
+            if not due_ids:
                 return
+            # Claimed here, so that each question is passed on once however many reads find it due together.
+            due = conn.execute(
+                "UPDATE questions SET routed_to = CASE WHEN memory_path LIKE 'projects/%%' THEN 'leads' ELSE 'admins'"
+                " END, routed_at = %s WHERE id = ANY(%s) AND routed_to = 'author'"
+                " RETURNING id, memory_path, asker_id, author, text",
+                (now, due_ids),
+            ).fetchall()
             askers = self._identity.named_in(conn, [row["asker_id"] for row in due])
-            authors = {
-                row["member_id"]: row["name"]
-                for row in conn.execute(
-                    "SELECT member_id, name FROM members WHERE team_id = %s AND member_id = ANY(%s)",
-                    (caller.member.team_pk, [row["author"] for row in due if row["author"] is not None]),
-                )
-            }
+            authors = self._identity.in_team(conn, team_pk, [row["author"] for row in due if row["author"]])
             told: list[tuple[str, str]] = []
             for row in sorted(due, key=lambda each: int(each["id"])):
                 location = locate(row["memory_path"])
                 if location.project_id is None:
                     standing, hearing = (
                         "one of the team's admins",
-                        self._identity.admins_in(conn, caller.member.team_pk),
+                        self._identity.admins_in(conn, team_pk),
                     )
                 else:
                     standing = "a lead of its project"
-                    hearing = self._identity.told_about(conn, caller.member.team_pk, location.project_id)
+                    hearing = self._identity.told_about(conn, team_pk, location.project_id)
                 asker_id, asker_name = askers[row["asker_id"]]
                 author = row["author"] or "its author"
                 if row["author"] is not None:
-                    author = f"its author {_named(row['author'], authors.get(row['author'], row['author']))}"
+                    named = authors.get(row["author"], (0, row["author"]))[1]
+                    author = f"its author {_named(row['author'], named)}"
                 why = (
                     f"{author} has been removed"
-                    if row["removed"]
+                    if row["author"] in removed
                     else f"unanswered by {author} for {PASS_ON_DAYS} days"
                 )
                 text = (
@@ -228,7 +217,7 @@ class Questions:
                 others = [member_id for member_id in hearing if member_id not in (asker_id, row["author"])]
                 if not others:
                     # The project's only leads are the asker or the silent author: its team's admins hear instead.
-                    admins = self._identity.admins_in(conn, caller.member.team_pk)
+                    admins = self._identity.admins_in(conn, team_pk)
                     others = [member_id for member_id in admins if member_id not in (asker_id, row["author"])]
                 told.extend((member_id, text) for member_id in others)
         for member_id, text in told:

@@ -616,6 +616,19 @@ class Identity:
         return {row["member_id"]: (row["id"], row["name"]) for row in rows}
 
     @staticmethod
+    def removed_in(conn: Conn, team_pk: int, member_ids: Iterable[str]) -> set[str]:
+        """Which of these members of a team, by member ID, have been removed from it. Asked inside a transaction
+        already open."""
+        asked = list(set(member_ids))
+        if not asked:
+            return set()
+        rows = conn.execute(
+            "SELECT member_id FROM members WHERE team_id = %s AND member_id = ANY(%s) AND removed_at IS NOT NULL",
+            (team_pk, asked),
+        ).fetchall()
+        return {row["member_id"] for row in rows}
+
+    @staticmethod
     def present(conn: Conn, member_pk: int) -> Member | None:
         """The member with this row id, or None once they have been removed from the team. Asked inside a
         transaction already open."""

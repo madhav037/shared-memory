@@ -191,12 +191,19 @@ def test_a_restricted_projects_questions_are_hidden_from_members_outside_it(
 
 # Passed on (#569): a question its author leaves unanswered for 7 days, or whose author has been removed, also goes to
 # the memory's project leads, or the team's admins for team memory. Worked out from the clock when questions are read.
+# Dana leads no project, so her memory is a convention: an architecture memory would wait on a foundation's keeper.
+RETRIES = {
+    "title": "Webhooks retry three times",
+    "summary": "A failed webhook is retried three times, a minute apart.",
+    "type": "convention",
+    "body": "Retry a failed webhook three times, one minute apart, then mark it failed and alert the on-call.",
+}
 
 
 def test_a_question_unanswered_for_seven_days_reaches_the_projects_leads(
     team: Team, owner: Session, dana: Session, cole: Session
 ) -> None:
-    path = promote_now(dana, SERVICES)
+    path = promote_now(dana, RETRIES)
     asked = ask(cole, path)
     briefing(owner)
 
@@ -226,7 +233,7 @@ def test_a_team_memorys_unanswered_question_reaches_the_teams_admins(
 
 
 def test_a_removed_authors_question_reaches_the_leads_at_once(owner: Session, dana: Session, cole: Session) -> None:
-    path = promote_now(dana, SERVICES)
+    path = promote_now(dana, RETRIES)
     asked = ask(cole, path)
     briefing(owner)
 
@@ -240,7 +247,7 @@ def test_a_removed_authors_question_reaches_the_leads_at_once(owner: Session, da
 def test_the_author_can_still_answer_once_it_has_been_passed_on(
     team: Team, owner: Session, dana: Session, cole: Session
 ) -> None:
-    path = promote_now(dana, SERVICES)
+    path = promote_now(dana, RETRIES)
     asked = ask(cole, path)
     briefing(cole)
     team.server.clock.advance(days=8)
@@ -254,7 +261,7 @@ def test_the_author_can_still_answer_once_it_has_been_passed_on(
 
 
 def test_an_answered_question_is_not_passed_on(team: Team, owner: Session, dana: Session, cole: Session) -> None:
-    path = promote_now(dana, SERVICES)
+    path = promote_now(dana, RETRIES)
     asked = ask(cole, path)
     answer(dana, asked["question_id"])
     briefing(owner)
