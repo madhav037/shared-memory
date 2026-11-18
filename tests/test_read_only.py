@@ -156,6 +156,7 @@ def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
     changes: dict[str, dict[str, Any]] = {
         "remember": SERVICES,
         "edit_memory": {"path": team.personal, "title": "Postgres and Redis"},
+        "tie": {"path": team.personal, "tied_files": ["billing-api:src/db/**"]},
         "delete_memory": {"path": team.personal},
         "promote": {"path": team.personal, "level": "project"},
         "retire": {"path": team.project_memory},
@@ -175,6 +176,17 @@ def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
     assert unfenced_in(owner.call("tree")) == before
     assert owner.call("read", path=team.personal)["title"] == POSTGRES["title"]
     assert owner.call("read", path=team.project_memory)["status"] == "active"
+
+
+def test_tie_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
+    under(hosted, hosted_key())
+    owner = team.owner
+
+    refusal = owner.refusal("tie", path=team.personal, tied_files=["billing-api:src/db/**"])
+
+    assert read_only_refusal(refusal), refusal
+    assert owner.call("read", path=team.personal)["tied_files"] == []
+    assert owner.call("tied_memories", file="billing-api:src/db/pool.py")["memories"] == []
 
 
 def test_a_read_only_server_still_serves_reading_search_and_the_briefing(hosted: RunningServer, team: Team) -> None:
@@ -215,6 +227,22 @@ def test_a_read_only_server_still_runs_the_team(hosted: RunningServer, team: Tea
     assert not_retired["status"] == "not_retired"
     assert read_only_refusal(not_retired["reason"])
     assert owner.call("read", path=team.known_issue)["status"] == "active"
+
+
+def test_confirm_draft_learning_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
+    owner = team.owner
+    drafted = {"moment": "session_end", **SERVICES}
+    kept = owner.call("draft_learnings", session=owner.identifier, draft_learnings=[drafted])
+    (draft_learning,) = [each["id"] for each in kept["draft_learnings"]]
+    before = unfenced_in(owner.call("tree"))
+    under(hosted, hosted_key())
+
+    refused = owner.refusal("confirm_draft_learning", id=draft_learning)
+
+    assert read_only_refusal(refused)
+    assert unfenced_in(owner.call("tree")) == before
+    under(hosted, hosted_key(expires=RENEWED_UNTIL))
+    assert owner.call("confirm_draft_learning", id=draft_learning)["level"] == "personal", "it is still waiting"
 
 
 def test_a_call_without_a_valid_personal_token_is_refused_for_that_not_for_read_only(

@@ -7,8 +7,8 @@ import re
 from collections import Counter
 
 from shared_memory.errors import Refused
-from shared_memory.identity import NAME_PATTERN
 from shared_memory.memory import KNOWN_ISSUE, Memory, type_folder
+from shared_memory.tied import tie_of
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("an AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -91,14 +91,18 @@ def _has_workaround(body: str) -> bool:
     return False
 
 
+def validate_tied_files(tied_files: list[str]) -> None:
+    """Refuse a tied file that can't be one, or that holds a secret."""
+    for entry in tied_files:
+        tie_of(entry)
+        refuse_secret(entry)
+
+
 def validate(memory: Memory, word_limit: int) -> None:
     _single_line("title", memory.title, 200)
     _single_line("summary", memory.summary, 300)
     type_folder(memory.type)
-    for entry in memory.related_files:
-        repository, _, path = entry.partition(":")
-        if not NAME_PATTERN.match(repository) or not path.strip() or "\n" in entry:
-            raise Refused(f"Related file {entry!r} must be written as repository:path, for example billing-api:package.json.")
+    validate_tied_files(memory.tied_files)
     if memory.type == KNOWN_ISSUE and not _has_workaround(memory.body):
         raise Refused(
             "A known issue must say how to work around it: add a line 'Workaround: ...', or 'Workaround: none known' "
@@ -111,5 +115,6 @@ def validate(memory: Memory, word_limit: int) -> None:
         raise Refused(
             f"This memory is {len(memory.body)} characters; the limit is {CHARACTER_LIMIT} characters. {_SPLIT_IT}"
         )
-    for text in (memory.title, memory.summary, memory.body, *memory.related_files):
+    # Each tied file was checked for a secret with the rest of it, above.
+    for text in (memory.title, memory.summary, memory.body):
         refuse_secret(text)

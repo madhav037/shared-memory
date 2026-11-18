@@ -451,7 +451,7 @@ class ParsedMemories:
 
 
 def _copy(memory: Memory) -> Memory:
-    return replace(memory, related_files=list(memory.related_files))
+    return replace(memory, tied_files=list(memory.tied_files))
 
 
 class SaveTransaction(Protocol):

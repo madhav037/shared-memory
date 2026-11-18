@@ -148,6 +148,8 @@ PATTERN_LIMIT = 200
 
 # What a glob in another dialect uses and these patterns don't read.
 _UNREAD = "[]{}"
+# What these patterns read as a glob; a pattern without any of them is a plain path.
+GLOB_CHARACTERS = "*?"
 
 # How often taking a lock looks again when the file changed hands between two looks.
 _ATTEMPTS = 3
@@ -331,6 +333,8 @@ class UnusablePattern(Refused):
     """What was written is not a glob these patterns can be matched with."""
 
     def __init__(self, pattern: str, reason: str) -> None:
+        # Why it isn't usable, for a refusal of the same glob written elsewhere, such as a tied file.
+        self.reason = reason
         super().__init__(
             f"{pattern!r} isn't a usable never-lock pattern: {reason}. A pattern is a glob of at most {PATTERN_LIMIT} "
             "characters, in which `*`, `?` and `**` are read: `*` and `?` stay within one folder and `**` crosses "

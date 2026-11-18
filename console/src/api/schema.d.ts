@@ -2169,8 +2169,8 @@ export interface components {
             superseded_by: string | null;
             /** Exception To */
             exception_to: string | null;
-            /** Related Files */
-            related_files: string[];
+            /** Tied Files */
+            tied_files: string[];
             /** Promoted By */
             promoted_by: string | null;
             /** Imported By */

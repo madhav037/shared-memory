@@ -4901,11 +4901,11 @@
             ],
             "title": "Exception To"
           },
-          "related_files": {
+          "tied_files": {
             "items": {
               "type": "string"
             },
-            "title": "Related Files",
+            "title": "Tied Files",
             "type": "array"
           },
           "promoted_by": {
@@ -5017,7 +5017,7 @@
           "replaces",
           "superseded_by",
           "exception_to",
-          "related_files",
+          "tied_files",
           "promoted_by",
           "imported_by",
           "imported_from",

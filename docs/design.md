@@ -74,7 +74,7 @@ author: emp-1042
 status: active                     # active | superseded | retired
 replaces: projects/billing/shared/decisions/package-manager-npm.md
 exception_to:                      # only on an exception: the team memory it overrides
-related_files: [billing-api:package.json, billing-api:pnpm-lock.yaml]
+tied_files: [billing-api:package.json, billing-api:pnpm-lock.yaml]
 ---
 We use pnpm for every package. npm creates a second lockfile and CI rejects it.
 ```

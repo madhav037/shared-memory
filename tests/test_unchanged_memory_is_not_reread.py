@@ -162,10 +162,10 @@ def test_a_memory_read_back_can_be_changed_without_changing_what_the_next_read_r
 
     first = store.read("t", path)
     first.title = "Changed by a caller"
-    first.related_files.append("src/changed.py")
+    first.tied_files.append("src/changed.py")
 
     again = store.read("t", path)
-    assert (again.title, again.related_files) == ("Kept", [])
+    assert (again.title, again.tied_files) == ("Kept", [])
 
 
 def test_a_save_ending_mid_read_only_stops_its_own_files_being_kept(

@@ -423,7 +423,7 @@ class MemoryDetail(BaseModel):
     replaces: str | None
     superseded_by: str | None
     exception_to: str | None
-    related_files: list[str]
+    tied_files: list[str]
     promoted_by: str | None
     imported_by: str | None
     imported_from: str | None

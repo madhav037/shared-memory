@@ -404,11 +404,11 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
             </dd>
           </>
         )}
-        {memory.related_files.length > 0 && (
+        {memory.tied_files.length > 0 && (
           <>
-            <dt>Related files</dt>
+            <dt>Tied files</dt>
             <dd>
-              {memory.related_files.map((file) => (
+              {memory.tied_files.map((file) => (
                 <div key={file} className="path">
                   {file}
                 </div>

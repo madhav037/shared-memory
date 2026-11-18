@@ -104,6 +104,12 @@ class Reach:
         team memory and the project memory of every project they can reach."""
         return cls(team_memory=True, projects=None, unreachable=unreachable, member_id=member_id, personal_in=project_id)
 
+    @classmethod
+    def of_recall(cls, member_id: str, project_id: str) -> Reach:
+        """What recall searches for a member's session: team memory, the project memory of the project the session
+        works in, and the member's own personal memory there."""
+        return cls(team_memory=True, projects=(project_id,), member_id=member_id, personal_in=project_id)
+
     def where(self) -> tuple[str, dict[str, object]]:
         """This reach as a condition on `sections`, with the parameters it binds."""
         if self.projects is None:
