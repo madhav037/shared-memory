@@ -254,7 +254,9 @@ and `console/e2e/told.spec.ts`. A before-edit addition (#567) goes in through a 
 `ProjectHealth` in `src/shared_memory/health.py`, built in `build_app` beside `ConsoleApi`, is a read model with no
 table: `of(caller)` asks `Identity.looks_after`, `Uses` and `Challenges` about the project memory under
 `projects/<id>/shared` and gives a typed `Health`. `GET /api/projects/{project_id}/health` serves it; the console's
-page is `HealthPage.tsx`, linked from project settings when `you_may_change`. A later section of spec #504 adds a list
+page is `HealthPage.tsx`, linked from project settings when `you_may_change`. Its coverage gaps (#572) come from
+`FileEdits` in `src/shared_memory/file_edits.py` (built in `build_app` as `file_edits`; it owns `file_edits`, which the
+before-edit hook counts each edit that went ahead in) and `TiedFiles.untied`. A later section of spec #504 adds a list
 to `Health` and to the `ProjectHealth` model. `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
 
 ## Editing

@@ -5,10 +5,12 @@ import { signInAs } from "./helpers";
 // Tess leads Payments. Olive's session and Tess's doubt Wes's "Payouts settle in two days" (tests/console_e2e_server.py);
 // both raised it, so it waits on nobody's challenges page but its author's, and stays in doubt whatever order the
 // journeys run in. No coding agent has used Wes's "Reports render through wkhtmltopdf", in Reporting, for 61 days.
+// Tess's session in Payments edited src/payouts/schedule.py three times and src/payouts/retry.py once; no memory is tied
+// to either.
 
 const PAYOUTS = "Payouts settle in two days";
 
-test("a lead opens project health from project settings and clicks through from a doubted memory to its challenge", async ({
+test("a lead opens project health from project settings, sees its coverage gaps and clicks through from a doubted memory to its challenge", async ({
   page,
 }) => {
   await signInAs(page, 81, "tess");
@@ -24,6 +26,13 @@ test("a lead opens project health from project settings and clicks through from 
   await expect(doubted.getByTestId("doubt-line")).toHaveText("In doubt: 2 say it misled them.");
   await expect(doubted.getByTestId("doubt-count")).toHaveText("Doubted by 2 members");
   await expect(doubted.getByTestId("doubt-reason")).toHaveText("Misled a session: 2");
+  const gaps = page.getByTestId("coverage-gap");
+  await expect(gaps.getByTestId("gap-file")).toHaveText([
+    "payments-api:src/payouts/schedule.py",
+    "payments-api:src/payouts/retry.py",
+  ]);
+  await expect(gaps.getByTestId("gap-edits")).toHaveText(["Edited 3 times", "Edited 1 time"]);
+  await expect(page.locator("main")).toContainText("in the last 30 days");
   // Read-only: nothing on the page pins, retires or decides.
   await expect(page.locator("main button")).toHaveCount(0);
 

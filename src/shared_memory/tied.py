@@ -9,7 +9,8 @@ content, and like the search index it is kept in step with every save and rebuil
 What other modules stand on, all of it on `TiedFiles`:
 
 - `tied_to(team, repository, paths, reach)`: the active memories within a `Reach` tied to any of a repository's files,
-  as `Tie`s, one per memory. The one place a file is matched against tied files.
+  as `Tie`s, one per memory. With `untied(team, repository, paths, reach)`, which gives those of the files no such
+  memory is tied to, the one place a file is matched against tied files.
 - `on_change(team, writes, deletes)`: the store's listener, so a save, edit, promote, supersede, retire or delete
   moves the ties with it.
 - `rebuild(store)` for `reindex`, and `catch_up(store)` to fill the index the first time a server has it.
@@ -212,6 +213,24 @@ class TiedFiles:
         files = list(dict.fromkeys(paths))
         if not files:
             return []
+        found = []
+        for memory, patterns in self._globs(team, repository, reach).items():
+            glob = next((each for each in patterns if any(ties(each, path) for path in files)), None)
+            if glob is not None:
+                found.append(Tie(memory, repository, glob))
+        return found
+
+    def untied(self, team: str, repository: str, paths: Iterable[str], reach: Reach) -> list[str]:
+        """Those of a repository's files, each by its path from the repository's root, that no active memory within
+        reach is tied to, in the order given, in one lookup."""
+        files = list(dict.fromkeys(paths))
+        if not files:
+            return []
+        globs = [glob for patterns in self._globs(team, repository, reach).values() for glob in patterns]
+        return [path for path in files if not any(ties(glob, path) for glob in globs)]
+
+    def _globs(self, team: str, repository: str, reach: Reach) -> dict[str, list[str]]:
+        """The tied files within reach in one repository: each memory's path to its paths and globs, in path order."""
         within, params = reach.where()
         with self._db.transaction() as conn:
             rows = conn.execute(
@@ -222,9 +241,4 @@ class TiedFiles:
         globs: dict[str, list[str]] = {}
         for row in rows:
             globs.setdefault(str(row["path"]), []).append(str(row["glob"]))
-        found = []
-        for memory, patterns in globs.items():
-            glob = next((each for each in patterns if any(ties(each, path) for path in files)), None)
-            if glob is not None:
-                found.append(Tie(memory, repository, glob))
-        return found
+        return globs

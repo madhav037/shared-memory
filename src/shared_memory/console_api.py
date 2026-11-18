@@ -66,7 +66,7 @@ from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
+    ChangedMember, ConnectionFile, CoverageGap, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
     DoubtedMemory, HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
     Members,
@@ -850,6 +850,11 @@ class ConsoleApi:
                 in_doubt=[
                     DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
                     for one in found.in_doubt
+                ],
+                coverage_days=health.COVERAGE_DAYS,
+                coverage_gaps=[
+                    CoverageGap(repository=one.repository, path=one.path, file=one.file, edits=one.edits)
+                    for one in found.coverage_gaps
                 ],
             )
 
