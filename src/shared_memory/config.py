@@ -17,6 +17,9 @@ SIGN_INS = ("github", "platform")
 # still bound it.
 STAND_BY_TOOL_CAP_SECONDS = 300
 
+# What recall and search multiply the score of a memory in doubt by, unless the server's settings say otherwise.
+IN_DOUBT_PENALTY = 0.5
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -41,6 +44,8 @@ class Settings:
     # How similar a memory in the saving member's reach must be for the save to name it. The same bar as promote's
     # check, so what a save names is what promoting it would ask about.
     save_similar_threshold: float = 0.62
+    # What recall and search multiply the score of a memory in doubt by: it ranks lower but is still found.
+    in_doubt_penalty: float = IN_DOUBT_PENALTY
     # The longest one database statement may run, waiting included, before its request fails.
     statement_timeout_seconds: float = 10.0
     allowed_hosts: tuple[str, ...] = ()
@@ -162,6 +167,7 @@ class Settings:
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
             save_similar_threshold=float(env.get("SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD", "0.62")),
+            in_doubt_penalty=float(env.get("SHARED_MEMORY_IN_DOUBT_PENALTY", str(IN_DOUBT_PENALTY))),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
             gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
             standby_cap_minutes=float(env.get("SHARED_MEMORY_STANDBY_CAP_MINUTES", "5")),

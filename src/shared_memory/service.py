@@ -7,7 +7,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Audit
-from shared_memory.challenges import Challenges
+from shared_memory.challenges import Challenges, InDoubt, ranked
 from shared_memory.config import Settings
 from shared_memory.connection import claude_settings, connection_kit
 from shared_memory.embeddings import QuerySource
@@ -49,16 +49,20 @@ class SimilarMemory:
     title: str
     summary: str
     similarity: float
+    in_doubt: InDoubt | None = None
 
     def answer(self) -> dict[str, Any]:
-        """As the save's answer names it."""
-        return {
+        """As the save's answer names it, with the in-doubt line if it is in doubt."""
+        answered: dict[str, Any] = {
             "path": self.path,
             "level": self.level,
             "title": self.title,
             "summary": self.summary,
             "similarity": round(self.similarity, 3),
         }
+        if self.in_doubt is not None:
+            answered["in_doubt"] = self.in_doubt.line()
+        return answered
 
 
 def _resolving(similar: list[SimilarMemory]) -> str:
@@ -233,9 +237,11 @@ class MemoryService:
             similar.append(SimilarMemory(found, locate(found).level, other.title, other.summary, similarity))
             if len(similar) == SAVE_SIMILAR_LIMIT:
                 break
-        return similar
+        in_doubt = self._challenges.in_doubt(caller.team, [each.path for each in similar])
+        return [replace(each, in_doubt=in_doubt.get(each.path)) for each in similar]
 
-    def read(self, caller: Caller, path: str) -> dict[str, Any]:
+    def read(self, caller: Caller, path: str, for_agent: bool = False) -> dict[str, Any]:
+        """One memory in full, with its challenges. For a coding agent, a memory in doubt carries its in-doubt line."""
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
@@ -245,6 +251,8 @@ class MemoryService:
         memory["possibly_outdated"] = bool(self._uses.possibly_outdated(caller.team, {memory["path"]: memory["status"]}))
         if memory["possibly_outdated"]:
             memory["check"] = self._uses.check(caller.team, memory["path"])
+        if for_agent and (in_doubt := self._challenges.in_doubt(caller.team, [memory["path"]]).get(memory["path"])):
+            memory["in_doubt"] = in_doubt.line()
         return memory
 
     def history(self, caller: Caller, path: str) -> dict[str, Any]:
@@ -349,16 +357,20 @@ class MemoryService:
             raise Refused(f"Unknown level {level!r}: use team, project or personal.")
         if not query.strip():
             raise Refused("Search needs some words to look for.")
-        hits = self._index.search(
+        candidates = self._index.search(
             caller.team,
             query,
             project_id=project.project_id,
             levels=None if level is None else [level],
             type=type,
-            limit=max(1, min(limit, 50)),
+            limit=None,
             source=QuerySource.SEARCH,
         )
-        results = self._found(caller, hits, for_agent=True)
+        # Every candidate is ranked again before the cut, so a memory in doubt makes way for one that isn't.
+        in_doubt = self._challenges.in_doubt(caller.team, [hit.path for hit in candidates])
+        penalty = self._settings.in_doubt_penalty
+        hits = sorted(candidates, key=lambda hit: -ranked(hit.score, in_doubt.get(hit.path), penalty))
+        results = self._found(caller, hits[: max(1, min(limit, 50))], in_doubt=in_doubt)
         if any(result["possibly_outdated"] for result in results):
             return {"results": results, "check": self._uses.check_any()}
         return {"results": results}
@@ -382,10 +394,14 @@ class MemoryService:
         )
         return {"results": self._found(caller, hits)}
 
-    def _found(self, caller: Caller, hits: list[Hit], for_agent: bool = False) -> list[dict[str, Any]]:
+    def _found(
+        self, caller: Caller, hits: list[Hit], in_doubt: dict[str, InDoubt] | None = None
+    ) -> list[dict[str, Any]]:
         """Search hits as the memories they came from, with the heading of the section that matched. For a coding
-        agent, each also says whether it is possibly outdated; the console's search page doesn't show that. For the
-        console, each says whether it matched the words searched for, so a match by meaning alone can be set apart."""
+        agent, which passes which of them are in doubt, each also says whether it is possibly outdated and, if it is
+        in doubt, carries its in-doubt line; the console's search page shows neither. For the console, each says
+        whether it matched the words searched for, so a match by meaning alone can be set apart."""
+        for_agent = in_doubt is not None
         pending = self._challenges.pending(caller.team, [hit.path for hit in hits])
         found: list[tuple[Hit, Memory]] = []
         for hit in hits:
@@ -415,6 +431,7 @@ class MemoryService:
                     "pending": pending[hit.path],
                     "possibly_outdated": hit.path in outdated,
                     **({} if for_agent else {"words_match": hit.words_match}),
+                    **({"in_doubt": doubt.line()} if in_doubt and (doubt := in_doubt.get(hit.path)) else {}),
                 }
             )
         return results
