@@ -5,6 +5,8 @@ Nothing on it changes anything (ADR-0009): pinning, unpinning, deciding and reti
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 import pytest
@@ -279,3 +281,89 @@ def test_coverage_gaps_count_only_the_project_s_edits_that_went_ahead_within_cov
     found = health(signed_out, project)
 
     assert found["coverage_gaps"] == [gap("src/webhooks.py", 2)]
+
+
+# Most relied on (#571): the project memory sessions were told most, and personal memory near the popular-memory bar
+
+PNPM = {
+    "title": "Use pnpm, not npm",
+    "summary": "Every package in billing is managed with pnpm, never npm.",
+    "type": "convention",
+    "body": "We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
+}
+PNPM_PROMPT = "which package manager do we use for the billing packages?"
+
+
+def recalled_in(session: Session, identifier: str, prompt: str = PNPM_PROMPT) -> list[str]:
+    """A new session of the member's prompts once; the paths its recall told it."""
+    told = session.as_session(identifier).prompt(prompt)
+    return re.findall(r"projects/[^\s)\"]+\.md", json.dumps(told))
+
+
+def test_project_health_lists_the_project_memory_recalled_in_the_most_sessions_within_relied_on_days(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-recalled", 5547)
+    pnpm = promote_keeping_both(in_project, PNPM)
+    dana = member_in(console, signed_out, project, "emp-2", "Dana Dev")
+    # Long ago: past the window, so not counted.
+    assert pnpm in recalled_in(in_project, "olive-long-ago")
+    console.clock.advance(days=31)
+    sign_in_again(console, signed_out, "olive-health-recalled", 5547)
+    for each in ("olive-1", "olive-2"):
+        assert pnpm in recalled_in(in_project, each)
+    assert pnpm in recalled_in(dana, "dana-1")
+    # Told once a session: the same prompt again in the same session adds nothing.
+    in_project.as_session("olive-1").prompt(PNPM_PROMPT)
+    # A member's own personal memory is theirs, not the project's, however often it is recalled.
+    own = in_project.call("remember", **{**PNPM, "title": "pnpm workspaces", "summary": "pnpm workspaces."})["path"]
+
+    found = health(signed_out, project)
+
+    assert found["relied_on_days"] == 30
+    [first, *_] = found["most_recalled"]
+    assert first["path"] == pnpm
+    assert first["title"] == PNPM["title"]
+    assert first["author_name"] == "Olive Owner"
+    assert first["sessions"] == 3
+    assert own not in paths(found["most_recalled"])
+    assert all(one["path"].startswith(f"projects/{project}/shared/") for one in found["most_recalled"])
+
+
+def test_project_health_leaves_out_memory_retired_since_it_was_recalled(console: Console, signed_out: ConsoleClient) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-retired", 5548)
+    pnpm = promote_keeping_both(in_project, PNPM)
+    assert pnpm in recalled_in(in_project, "olive-before")
+    assert paths(health(signed_out, project)["most_recalled"]) == [pnpm]
+
+    assert signed_out.post_json("/api/memory/retire", {"path": pnpm}).status_code == 200
+
+    assert pnpm not in paths(health(signed_out, project)["most_recalled"])
+
+
+def test_project_health_lists_personal_memory_near_the_popular_memory_bar_by_distinct_other_readers(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-near", 5549)
+    dana = member_in(console, signed_out, project, "emp-2", "Dana Dev")
+    ash = member_in(console, signed_out, project, "emp-3", "Ash Dev")
+    near = dana.call("remember", **TAX)["path"]
+    popular = dana.call("remember", **RETRIES)["path"]
+    only_its_author = dana.call("remember", **EXPORTS)["path"]
+    elsewhere = dana.in_project(in_project.call("create_project", name="Payroll")["project_id"], "payroll-api")
+    other_project = elsewhere.call("remember", **{**TAX, "title": "Payroll tax"})["path"]
+    for _ in range(3):
+        ash.call("read", path=near)
+    for reader in (in_project, ash):
+        reader.call("read", path=popular)
+    dana.call("read", path=only_its_author)
+    ash.call("read", path=other_project)
+
+    found = health(signed_out, project)
+
+    assert found["popular_members"] == 2
+    assert paths(found["nearly_popular"]) == [near]
+    [listed] = found["nearly_popular"]
+    assert listed["title"] == TAX["title"]
+    assert listed["author_name"] == "Dana Dev"
+    assert listed["readers"] == 1, "each member counts once however often they read it"

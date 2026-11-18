@@ -257,7 +257,9 @@ table: `of(caller)` asks `Identity.looks_after`, `Uses` and `Challenges` about t
 page is `HealthPage.tsx`, linked from project settings when `you_may_change`. Its coverage gaps (#572) come from
 `FileEdits` in `src/shared_memory/file_edits.py` (built in `build_app` as `file_edits`; it owns `file_edits`, which the
 before-edit hook counts each edit that went ahead in) and `TiedFiles.untied`. A later section of spec #504 adds a list
-to `Health` and to the `ProjectHealth` model. `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
+to `Health` and to the `ProjectHealth` model. *Most relied on* (#571) asks `ToldRecord.most_recalled` (distinct sessions
+told each project memory) and `Popularity.nearly_popular` (personal memory with at least half the bar of distinct other
+readers, not yet all of it). `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
 
 ## Editing
 

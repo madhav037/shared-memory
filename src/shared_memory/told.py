@@ -12,6 +12,8 @@ The interface:
 - `recalled(session, memories)`: the memories one recall added to the session's prompt, in the order told.
 - `of(caller, number)`: one of the caller's project's sessions and its told record, oldest first, for the session's own
   member, the project's leads and the team's admins (`may_read`); refused to anyone else.
+- `most_recalled(under, within)`: the memories under a folder that recall told in the most sessions lately, with how
+  many sessions each, for project health's most relied on. Reach is the asker's to check.
 
 Only this module reads the `session_told` table. A row refers to its session by `Session.id`; sessions are never
 deleted, so an ended session keeps its record.
@@ -119,6 +121,20 @@ class ToldRecord:
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 [(session.id, kind, now, head, briefing, path, title, section) for kind, briefing, path, title, section in rows],
             )
+
+    def most_recalled(self, under: str, within: timedelta) -> list[tuple[str, int]]:
+        """Each memory under the folder that a recall told within the last `within` (and the record still keeps), with
+        how many sessions it was told in, the most first. A session counts once however many of its sections it was
+        told."""
+        since = self._clock() - min(within, self._kept)
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT path, COUNT(DISTINCT session_id) AS sessions FROM session_told"
+                " WHERE kind = %s AND starts_with(path, %s) AND at >= %s"
+                " GROUP BY path ORDER BY sessions DESC, path",
+                (RECALL, under.rstrip("/") + "/", since),
+            ).fetchall()
+        return [(row["path"], row["sessions"]) for row in rows]
 
     def may_read(self, caller: Caller, session: Session) -> bool:
         """Whether the caller may read this session's told record: it is their own, or they look after its project."""

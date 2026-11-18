@@ -697,7 +697,7 @@
     "/api/projects/{project_id}/health": {
       "get": {
         "operationId": "project_health",
-        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing.",
+        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,7 +710,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing.",
+            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2805,6 +2805,50 @@
         "title": "InDoubtReason",
         "type": "object"
       },
+      "NearlyPopularMemory": {
+        "description": "A personal memory in the project near the popular-memory bar: this many other members read it within the\npopular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a\nsession, never from here (ADR-0009).",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "readers": {
+            "title": "Readers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "readers"
+        ],
+        "title": "NearlyPopularMemory",
+        "type": "object"
+      },
       "PossiblyOutdatedMemory": {
         "description": "A memory on project health's possibly outdated list: no coding agent has recalled or read it for\n`outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.",
         "properties": {
@@ -2857,8 +2901,52 @@
         "title": "PossiblyOutdatedMemory",
         "type": "object"
       },
+      "RecalledMemory": {
+        "description": "A project memory on project health's most relied on list: recall told it in this many sessions within\nrelied_on_days, each session counting once.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "sessions"
+        ],
+        "title": "RecalledMemory",
+        "type": "object"
+      },
       "ProjectHealth": {
-        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; and its coverage\ngaps, the most edited first, at most ten. Read-only: reading it is no use of any memory and changes nothing.\noutdated_after_days is the server's setting; coverage_days the days of edits coverage gaps count.",
+        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage\ngaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions\nwithin relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other\nreaders, each the most first. Read-only: reading it is no use of any memory and changes nothing.\noutdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps\ncount.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2896,6 +2984,28 @@
             },
             "title": "Coverage Gaps",
             "type": "array"
+          },
+          "relied_on_days": {
+            "title": "Relied On Days",
+            "type": "integer"
+          },
+          "most_recalled": {
+            "items": {
+              "$ref": "#/components/schemas/RecalledMemory"
+            },
+            "title": "Most Recalled",
+            "type": "array"
+          },
+          "popular_members": {
+            "title": "Popular Members",
+            "type": "integer"
+          },
+          "nearly_popular": {
+            "items": {
+              "$ref": "#/components/schemas/NearlyPopularMemory"
+            },
+            "title": "Nearly Popular",
+            "type": "array"
           }
         },
         "required": [
@@ -2905,7 +3015,11 @@
           "possibly_outdated",
           "in_doubt",
           "coverage_days",
-          "coverage_gaps"
+          "coverage_gaps",
+          "relied_on_days",
+          "most_recalled",
+          "popular_members",
+          "nearly_popular"
         ],
         "title": "ProjectHealth",
         "type": "object"

@@ -352,7 +352,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing. */
+        /** A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing. */
         get: operations["project_health"];
         put?: never;
         post?: never;
@@ -1329,6 +1329,28 @@ export interface components {
             code_references: string[];
         };
         /**
+         * NearlyPopularMemory
+         * @description A personal memory in the project near the popular-memory bar: this many other members read it within the
+         *     popular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a
+         *     session, never from here (ADR-0009).
+         */
+        NearlyPopularMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Readers */
+            readers: number;
+        };
+        /**
          * PossiblyOutdatedMemory
          * @description A memory on project health's possibly outdated list: no coding agent has recalled or read it for
          *     `outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.
@@ -1350,11 +1372,35 @@ export interface components {
             last_used: string | null;
         };
         /**
+         * RecalledMemory
+         * @description A project memory on project health's most relied on list: recall told it in this many sessions within
+         *     relied_on_days, each session counting once.
+         */
+        RecalledMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Sessions */
+            sessions: number;
+        };
+        /**
          * ProjectHealth
          * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-         *     that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; and its coverage
-         *     gaps, the most edited first, at most ten. Read-only: reading it is no use of any memory and changes nothing.
-         *     outdated_after_days is the server's setting; coverage_days the days of edits coverage gaps count.
+         *     that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage
+         *     gaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions
+         *     within relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other
+         *     readers, each the most first. Read-only: reading it is no use of any memory and changes nothing.
+         *     outdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps
+         *     count.
          */
         ProjectHealth: {
             /** Project Id */
@@ -1371,6 +1417,14 @@ export interface components {
             coverage_days: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["CoverageGap"][];
+            /** Relied On Days */
+            relied_on_days: number;
+            /** Most Recalled */
+            most_recalled: components["schemas"]["RecalledMemory"][];
+            /** Popular Members */
+            popular_members: number;
+            /** Nearly Popular */
+            nearly_popular: components["schemas"]["NearlyPopularMemory"][];
         };
         /**
          * ActiveSession
@@ -3235,7 +3289,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is tied to. Changes nothing. */
+            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is tied to, and the memory it relies on most. Changes nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
