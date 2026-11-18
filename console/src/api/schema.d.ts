@@ -1241,7 +1241,7 @@ export interface components {
          *     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
          *     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
          *     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
-         *     and no hook of the session has called.
+         *     and no hook of the session has called. standby is the session's standby while it stands by, None otherwise.
          */
         ActiveSession: {
             /** Member Id */
@@ -1274,6 +1274,17 @@ export interface components {
             locks: components["schemas"]["HeldLock"][];
             /** Can Be Gated */
             can_be_gated: boolean;
+            standby: components["schemas"]["SessionStandby"] | null;
+        };
+        /**
+         * AwaitedMember
+         * @description A member whose answer a standing-by session awaits.
+         */
+        AwaitedMember: {
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
         };
         /**
          * GateWait
@@ -1433,6 +1444,27 @@ export interface components {
             sent_by_me: boolean;
             /** Urgent */
             urgent: boolean;
+        };
+        /**
+         * SessionStandby
+         * @description A session standing by (ADR-0027): its coding agent waits for news without its member typing. awaits names the
+         *     members whose answer it awaits, as it was when the standby started (the earlier members its edit is gated on); it
+         *     is empty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the
+         *     server's clock, unless news, a newer standby or the member's next prompt ends it first.
+         */
+        SessionStandby: {
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Awaits */
+            awaits: components["schemas"]["AwaitedMember"][];
         };
         /**
          * ProjectSessions

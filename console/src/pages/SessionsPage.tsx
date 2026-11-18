@@ -25,7 +25,7 @@ import {
   type SessionMessage,
 } from "../api/client";
 import { Placeholder, ProjectLinks, Refusal, Trail } from "../components/Bits";
-import { moment, plural } from "../lib/format";
+import { moment, plural, waitingFor } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** How often the page asks again, so a new collision, gate or message shows without reloading. */
@@ -200,6 +200,16 @@ function Session({ session }: { session: ActiveSession }) {
         </p>
       )}
       <div className="entry-meta">
+        {session.standby && (
+          <span
+            className="mark"
+            data-testid="standby"
+            title="Its coding agent stands by: it hears the answer the moment it comes, without its member typing"
+          >
+            <IconHourglass size={14} stroke={1.6} aria-hidden />
+            {waitingFor(session.standby.awaits.map((one) => one.member_name))}
+          </span>
+        )}
         {session.from_card && (
           <span className="mark" data-testid="from-card" title="This session stated no activity">
             <IconLayoutColumns size={14} stroke={1.6} aria-hidden />
