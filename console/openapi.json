@@ -4421,6 +4421,59 @@
         "title": "Folder",
         "type": "object"
       },
+      "InDoubtMark": {
+        "description": "What marks a memory in doubt (CONTEXT.md): how many raises its open doubts have had, and for which reasons.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/InDoubtReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "reasons"
+        ],
+        "title": "InDoubtMark",
+        "type": "object"
+      },
+      "InDoubtReason": {
+        "description": "One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is.",
+        "properties": {
+          "reason": {
+            "enum": [
+              "misled",
+              "contradicts_code"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "code_references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Code References",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reason",
+          "count",
+          "code_references"
+        ],
+        "title": "InDoubtReason",
+        "type": "object"
+      },
       "OpenChallenge": {
         "description": "A challenge raised against this memory.",
         "properties": {
@@ -4446,6 +4499,21 @@
               }
             ],
             "title": "Challenger Path"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "misled",
+                  "contradicts_code"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "may_decide": {
             "title": "May Decide",
@@ -4476,6 +4544,7 @@
           "kind",
           "raised_by",
           "challenger_path",
+          "reason",
           "may_decide",
           "decides_as"
         ],
@@ -4680,6 +4749,16 @@
             },
             "title": "Open Challenges",
             "type": "array"
+          },
+          "in_doubt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InDoubtMark"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4706,7 +4785,8 @@
           "last_used",
           "suspected_instructions",
           "pending",
-          "open_challenges"
+          "open_challenges",
+          "in_doubt"
         ],
         "title": "MemoryDetail",
         "type": "object"
@@ -5017,6 +5097,39 @@
               }
             ],
             "title": "Reasoning"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "misled",
+                  "contradicts_code"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/DoubtEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
           }
         },
         "required": [
@@ -5031,7 +5144,10 @@
           "foundation_name",
           "target",
           "challenger",
-          "reasoning"
+          "reasoning",
+          "reason",
+          "evidence",
+          "count"
         ],
         "title": "ChallengeDetail",
         "type": "object"
@@ -5085,6 +5201,62 @@
         "title": "ChallengedMemory",
         "type": "object"
       },
+      "DoubtEvidence": {
+        "description": "What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they\nquote, written repository:path:line, as the code has it.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "code_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Reference"
+          },
+          "quoted_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Line"
+          },
+          "raised_at": {
+            "format": "date-time",
+            "title": "Raised At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "reasoning",
+          "code_reference",
+          "quoted_line",
+          "raised_at"
+        ],
+        "title": "DoubtEvidence",
+        "type": "object"
+      },
       "RaisedChallenge": {
         "description": "A challenge this member raised, and how it ended.",
         "properties": {
@@ -5095,6 +5267,21 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "misled",
+                  "contradicts_code"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "target_path": {
             "title": "Target Path",
@@ -5184,6 +5371,7 @@
         "required": [
           "challenge_id",
           "kind",
+          "reason",
           "target_path",
           "target_title",
           "challenger_path",

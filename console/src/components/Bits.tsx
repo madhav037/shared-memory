@@ -152,6 +152,16 @@ export function ChallengedMark({ count = 1, compact = false }: { count?: number;
   );
 }
 
+/** A session has doubted it and nobody has decided yet (CONTEXT.md: In doubt). Only a label: the console never clears it. */
+export function InDoubtMark() {
+  return (
+    <span className="mark alert" title="A session doubts it; recall ranks it lower until it is decided" data-testid="in-doubt-mark">
+      <IconScale size={14} stroke={STROKE} aria-hidden />
+      In doubt
+    </span>
+  );
+}
+
 /** No coding agent has recalled or read it for a long time: it may no longer be true. Only a label. */
 export function OutdatedMark({ compact = false }: { compact?: boolean }) {
   const words = "Possibly outdated";

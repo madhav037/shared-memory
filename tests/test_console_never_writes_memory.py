@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from shared_memory.console_contract import DECLARATIONS
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.service import MemoryService
 from tests.support import NPM, PNPM, Console, ConsoleClient, Session, add, ask, challenge, promote_now, signed_in_owner
@@ -168,6 +169,9 @@ MAY_ASK: dict[str, set[str]] = {
     # add_foundation and remove_foundation change which foundations a project has; removing only reads the folder it
     # empties.
     "_lifecycle": {"add_foundation", "decide_challenge", "remove_foundation", "retire"},
+    # Challenges are read and decided here, never raised: only a session raises one, a doubt included (#539). Retiring
+    # another author's memory asks its author through `_lifecycle.retire`, as a session's retire does.
+    "_challenging": {"doubts_against", "in_doubt", "open_challenge", "raised_by", "told", "waiting_for"},
 }
 
 
@@ -198,3 +202,12 @@ def test_the_console_api_asks_nothing_of_memory_that_adr_0009_forbids(collaborat
         f"MAY_ASK still allows self.{collaborator}.{sorted(MAY_ASK[collaborator] - asked)}, which the console no "
         "longer calls. A permission nothing uses reads as one the console still has; take it out."
     )
+
+
+def test_the_console_has_no_route_to_raise_a_challenge() -> None:
+    """The console lists challenges and decides them; there is no call that raises one, a doubt included (#539)."""
+    about_challenges = sorted(
+        (one.method, one.path) for one in DECLARATIONS if "challenge" in one.path or "doubt" in one.path
+    )
+
+    assert about_challenges == [("GET", "/challenges"), ("POST", "/challenges/{challenge_id}/decide")]

@@ -15,9 +15,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
-import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
+import { Dotted, InDoubtMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { doubtsUrl, inDoubtWords } from "../lib/doubt";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
@@ -201,6 +202,9 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
     );
 
   const challenged = memory.open_challenges.length > 0;
+  // Doubts are said in the in-doubt line; the other challenges ask for the memory to be superseded or retired.
+  const asking = memory.open_challenges.filter((challenge) => challenge.reason === null);
+  const doubts = memory.open_challenges.filter((challenge) => challenge.reason !== null);
   const personal = memory.level === "personal";
   const project = projects.get(projectIn(memory.path) ?? "")?.name;
   return (
@@ -213,10 +217,26 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         <IconShieldCheck size={18} stroke={1.6} aria-hidden />
       )}
       <div>
-        {challenged && (
+        {memory.in_doubt && (
+          <p data-testid="in-doubt">
+            <b>In doubt.</b> {inDoubtWords(memory.in_doubt)}. Recall ranks it lower and marks it for every coding
+            agent until it is decided.{" "}
+            {doubts.some((challenge) => challenge.may_decide) ? (
+              <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
+                See its open doubts and decide
+              </Link>
+            ) : (
+              <>
+                {memory.author_name}
+                {memory.level === "team" ? "" : ", a project lead"} or an admin decides.
+              </>
+            )}
+          </p>
+        )}
+        {asking.length > 0 && (
           <p data-testid="open-challenges">
-            <b>{memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}</b>{" "}
-            {memory.open_challenges
+            <b>{asking.length === 1 ? "Challenged." : `${asking.length} challenges.`}</b>{" "}
+            {asking
               .map((challenge) =>
                 challenge.kind === "retire"
                   ? `${nameOf(challenge.raised_by)} wants to retire it`
@@ -224,7 +244,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
               )
               .join("; ")}
             .{" "}
-            {memory.open_challenges.some((challenge) => challenge.may_decide) ? (
+            {asking.some((challenge) => challenge.may_decide) ? (
               <>
                 Until you decide, it stands as it is. <Link to="/challenges">Compare and decide</Link>
               </>
@@ -327,6 +347,7 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
               <StatusMark status={memory.status} />
               {memory.status === "active" && <span className="mark">Current</span>}
               {memory.pinned && <PinnedMark />}
+              {memory.in_doubt && <InDoubtMark />}
               {memory.possibly_outdated && <OutdatedMark />}
               {memory.suspected_instructions.length > 0 && <SuspectedMark reasons={memory.suspected_instructions} />}
             </>

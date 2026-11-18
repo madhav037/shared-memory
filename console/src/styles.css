@@ -2085,6 +2085,55 @@ div.dotted {
   word-break: break-word;
   color: var(--ink);
 }
+/* A doubt's evidence: each raise on its own soft rule, first raised first, the code it quotes in mono. */
+.evidence {
+  margin: 0 0 14px;
+}
+.evidence ol {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.evidence li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.evidence li:first-child {
+  border-top: 1px solid var(--rule-soft);
+}
+.evidence-by {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-3);
+  font-feature-settings: "tnum";
+}
+.evidence-by b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.evidence-code {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  word-break: break-word;
+}
+.evidence-code .path {
+  font-weight: 600;
+  color: var(--ink);
+}
+.evidence-code .quoted {
+  padding: 0 6px;
+  background: var(--paper-3);
+  color: var(--ink-2);
+}
+.showing-one {
+  margin: 0 0 14px;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
 .raised-reasoning {
   margin-top: 2px;
   font-size: 0.8125rem;

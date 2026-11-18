@@ -548,6 +548,7 @@ class Challenges:
                     "kind": c.kind,
                     "raised_by": c.raised_by,
                     "challenger_path": c.challenger_path,
+                    "reason": c.reason,
                     "may_decide": decides_as is not None,
                     "decides_as": decides_as,
                 }
@@ -571,14 +572,15 @@ class Challenges:
         """Every challenge this member raised, newest first, and how each one ended."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT id, kind, target_path, challenger_path, raised_at, state, decided_by, decided_at, explanation,"
-                " reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
+                "SELECT id, kind, reason, target_path, challenger_path, raised_at, state, decided_by, decided_at,"
+                " explanation, reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
                 (caller.team, caller.member_id),
             ).fetchall()
         return [
             {
                 "challenge_id": row["id"],
                 "kind": row["kind"],
+                "reason": row["reason"],
                 "target_path": row["target_path"],
                 "challenger_path": row["challenger_path"],
                 "raised_at": row["raised_at"],
