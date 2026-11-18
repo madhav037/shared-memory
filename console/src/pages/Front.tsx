@@ -13,6 +13,7 @@ import {
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
 import { boardUrl } from "../lib/board";
 import { useContents } from "../lib/contents";
+import { REASON_NAMES } from "../lib/doubt";
 import { day, folderName, folderUrl, longDay, memoryUrl, moment, noticeMemory, plural, readableNotice } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
@@ -154,7 +155,9 @@ function Waiting() {
           <li key={challenge.challenge_id}>
             <Link to={memoryUrl(challenge.target.path)}>{challenge.target.title}</Link>
             <span>
-              {nameOf(challenge.raised_by)} wants to {challenge.kind === "retire" ? "retire it" : "supersede it"}
+              {challenge.reason
+                ? `${nameOf(challenge.raised_by)} doubts it: ${REASON_NAMES[challenge.reason].toLowerCase()}`
+                : `${nameOf(challenge.raised_by)} wants to ${challenge.kind === "retire" ? "retire it" : "supersede it"}`}
               {challenge.challenger ? ` with “${challenge.challenger.title}”` : ""}
             </span>
           </li>

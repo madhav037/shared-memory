@@ -1,7 +1,7 @@
 import { Button, Checkbox } from "@mantine/core";
 import { IconHistory, IconScale } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import {
   decideChallenge,
@@ -9,6 +9,7 @@ import {
   fetchMembers,
   type ChallengeDetail,
   type ChallengeList,
+  type DoubtEvidence,
   type Decided,
   type RaisedChallenge,
 } from "../api/client";
@@ -18,6 +19,7 @@ import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
+import { REASON_NAMES } from "../lib/doubt";
 import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
@@ -31,6 +33,9 @@ export function Challenges({
   onDecided?: (left: ChallengeList) => void;
 }) {
   const { answer, refused, setAnswer } = useAsked((signal) => fetchChallenges(signal), []);
+  // A memory's page links here for the challenges against that one memory, its doubts among them.
+  const [asked] = useSearchParams();
+  const only = asked.get("path");
   const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
   const [slip, setSlip] = useState<Slip | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -52,8 +57,8 @@ export function Challenges({
     <div className="medium">
       <h1 className="page-title wide">Challenges</h1>
       <p className="standfirst">
-        A challenge asks for a memory to be superseded or retired, or for one to join a foundation. You decide the ones
-        waiting here as their author, or for the reason each one gives.
+        A challenge asks for a memory to be superseded or retired, says a session doubts it, or asks for one to join a
+        foundation. You decide the ones waiting here as their author, or for the reason each one gives.
       </p>
 
       {refused && <Refusal>{refused}</Refusal>}
@@ -67,12 +72,21 @@ export function Challenges({
           <div role="status" data-testid="decided-region">
             {slip && <DecidedSlip slip={slip} readsAudit={readsAudit} onDismiss={dismiss} />}
           </div>
+          {only && (
+            <p className="showing-one" data-testid="showing-one">
+              Only the challenges against one memory. <Link to="/challenges">Show every challenge</Link>
+            </p>
+          )}
           {answer.waiting.length === 0 ? (
             <p className="empty" data-testid="nothing-waiting">
               {slip ? "Nothing else is waiting for your decision." : "Nothing is waiting for your decision."}
             </p>
           ) : (
-            <Waiting waiting={answer.waiting} who={who} onDecided={decided} />
+            <Waiting
+              waiting={only ? answer.waiting.filter((one) => one.target.path === only) : answer.waiting}
+              who={who}
+              onDecided={decided}
+            />
           )}
           <Raised raised={answer.raised} who={who} />
         </>
@@ -326,12 +340,31 @@ function Proposal({
     <div className="proposal">
       <p className="proposal-by">
         <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
-        <b>{who(challenge.raised_by)}</b> wants to{" "}
-        {adding
-          ? `add it to the ${challenge.foundation_name} foundation`
-          : challenge.kind === "retire"
-            ? "retire it"
-            : "supersede it"}{" "}
+        {challenge.reason ? (
+          <>
+            <b>{who(challenge.raised_by)}</b> doubts it{" "}
+            <span className="mark alert" data-testid="doubt-reason">
+              {REASON_NAMES[challenge.reason]}
+            </span>
+            {challenge.count !== null && challenge.count > 1 && (
+              <>
+                {" "}
+                <span className="mark" data-testid="doubt-count" title={`${challenge.count} have raised it`}>
+                  +{challenge.count - 1}
+                </span>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <b>{who(challenge.raised_by)}</b> wants to{" "}
+            {adding
+              ? `add it to the ${challenge.foundation_name} foundation`
+              : challenge.kind === "retire"
+                ? "retire it"
+                : "supersede it"}
+          </>
+        )}{" "}
         ·{" "}
         {moment(challenge.raised_at)}
         {challenge.decides_as !== "author" && (
@@ -344,6 +377,7 @@ function Proposal({
           <p className="reasoning-text" data-testid="reasoning-text">{challenge.reasoning}</p>
         </div>
       )}
+      {challenge.evidence.length > 0 && <EvidenceList evidence={challenge.evidence} who={who} />}
       {changes && (
         <div className="what-changes" data-testid="what-changes">
           <p className="what-changes-head">If you accept this, here is what would be different</p>
@@ -419,8 +453,21 @@ function Proposal({
               <span className="title" style={{ color: "var(--ink-2)" }}>
                 Nothing in its place
               </span>
-              <p className="by">Asked for by {who(challenge.raised_by)}</p>
-              <p className="body retire-it">Retire it: {who(challenge.raised_by)} says it is no longer true.</p>
+              {challenge.reason ? (
+                <>
+                  <p className="by">
+                    Doubted by {challenge.count === 1 ? who(challenge.raised_by) : `${challenge.count} members`}
+                  </p>
+                  <p className="body retire-it">
+                    Retire it if the evidence holds. Reject it and the memory stands, no longer in doubt.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="by">Asked for by {who(challenge.raised_by)}</p>
+                  <p className="body retire-it">Retire it: {who(challenge.raised_by)} says it is no longer true.</p>
+                </>
+              )}
             </>
           )}
         </div>
@@ -446,6 +493,33 @@ function Proposal({
         </Button>
       </div>
       {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
+    </div>
+  );
+}
+
+/** Every raise of a doubt, the first raiser's first: who, when, why, and the line of code it quotes. */
+function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memberId: string) => string }) {
+  return (
+    <div className="evidence" data-testid="evidence">
+      <p className="reasoning-head">Evidence</p>
+      <ol>
+        {evidence.map((each, place) => (
+          <li key={place} data-testid="evidence-entry">
+            <p className="evidence-by">
+              <b>{who(each.member_id)}</b> · {moment(each.raised_at)}
+            </p>
+            {each.reasoning && <p className="reasoning-text">{each.reasoning}</p>}
+            {each.code_reference && (
+              <p className="evidence-code">
+                <code className="path" data-testid="evidence-reference">
+                  {each.code_reference}
+                </code>
+                {each.quoted_line && <code className="quoted">{each.quoted_line}</code>}
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -492,7 +566,13 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                     )}
                   </td>
                   <td>
-                    {one.kind === "add" ? "to add a memory" : one.kind === "retire" ? "to retire it" : "to supersede it"}
+                    {one.reason
+                      ? `doubting it: ${REASON_NAMES[one.reason].toLowerCase()}`
+                      : one.kind === "add"
+                        ? "to add a memory"
+                        : one.kind === "retire"
+                          ? "to retire it"
+                          : "to supersede it"}
                     {one.reasoning && (
                       <div className="raised-reasoning" data-testid="raised-reasoning">
                         {one.reasoning}

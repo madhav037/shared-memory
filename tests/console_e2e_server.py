@@ -382,7 +382,7 @@ def seeded(
         # foundation, and Nell asks for a memory of hers to join it. Neither Olive (an admin, but foundations are
         # decided by their keepers and leads) nor any member another journey signs in as has it waiting.
         tess = Session(
-            server, owner.call("add_member", member_id="emp-tess", name="Tess Treasurer")["personal_token"]
+            server, owner.call("add_member", member_id="emp-tess", name="Tess Treasurer", github="tess")["personal_token"]
         )
         treasury = tess.call("create_project", name="Treasury", repository="treasury-api")["project_id"]
         owner.call("add_member", member_id="emp-kai", name="Kai Keeper", github="kai")
@@ -403,6 +403,36 @@ def seeded(
             path=settlement,
             foundation="product",
             reasoning="Settlement timing is a product rule that finance and support both rely on.",
+        )
+        # A doubt for the in-doubt journeys, in a project of its own that only Tess leads: a memory of Wes's that
+        # Olive's session says contradicts the code, and Raj's joins as a +1 quoting a line of its own. Olive raised it,
+        # so it isn't hers to decide as an admin, and the journeys that check she or Raj has nothing waiting still find
+        # nothing; Wes signs in to no journey. No member is added for it: the team is at the unlicensed member cap.
+        payments = tess.call("create_project", name="Payments", repository="payments-api")["project_id"]
+        refunds = promote_now(
+            wes.in_project(payments, "payments-api"),
+            {
+                "title": "Refunds are allowed for 14 days",
+                "summary": "A customer may ask for a refund up to 14 days after paying.",
+                "type": "gotcha",
+                "body": "A customer may ask for a refund up to 14 days after paying; after that support refuses it.",
+            },
+        )
+        owner.in_project(payments, "payments-api").call(
+            "challenge",
+            path=refunds,
+            reason="contradicts_code",
+            reasoning="The refund window in the code is 30 days.",
+            code_reference="payments-api:src/refunds.py:18",
+            quoted_line="REFUND_WINDOW_DAYS = 30",
+        )
+        dana.in_project(payments, "payments-api").call(
+            "challenge",
+            path=refunds,
+            reason="contradicts_code",
+            reasoning="Support approved a refund on day 20 yesterday.",
+            code_reference="payments-api:src/support/policy.py:7",
+            quoted_line="if days_since_payment <= REFUND_WINDOW_DAYS:",
         )
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
