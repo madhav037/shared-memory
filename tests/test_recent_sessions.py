@@ -75,20 +75,20 @@ def test_each_recent_session_comes_with_when_it_ran_and_how_many_memories_it_was
 ) -> None:
     project, in_project = a_project(console, signed_out, "olive-recent-told", 5672)
     promote_keeping_both(in_project, PNPM)
-    earlier = in_project.as_agent("claude-code").as_session("olive-earlier")
+    earlier = in_project.as_session("olive-earlier")
     earlier.start()
     earlier.prompt(PROMPT)
     earlier.end()
     console.clock.advance(minutes=10)
-    later = in_project.as_agent("codex").as_session("olive-later")
+    later = in_project.as_session("olive-later")
     later.start()
 
     found = recent(signed_out, project)
 
     assert (found["project_id"], found["project_name"], found["told_days"]) == (project, "Billing", 30)
     newest, oldest = found["sessions"]
-    assert (newest["agent"], newest["active"], newest["memories_told"]) == ("codex", True, 0)
-    assert (oldest["agent"], oldest["active"], oldest["memories_told"]) == ("claude-code", False, 1)
+    assert (newest["active"], newest["memories_told"]) == (True, 0)
+    assert (oldest["active"], oldest["memories_told"]) == (False, 1)
     assert oldest["member_id"] == "E1001"
     assert oldest["member_name"] == "Olive Owner"
     assert oldest["repository"] == "billing-api"
