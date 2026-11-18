@@ -321,6 +321,13 @@ own model, at or above `SHARED_MEMORY_COLLISION_THRESHOLD` (default 0.75, option
 with a small embedding model. Raise it if members are warned about work that isn't the same; lower it if two sessions
 doing the same work were not warned.
 
+## How alike a memory must be for a save to name it
+
+A save always lands. Its answer then names up to three memories in the saving member's reach (their own personal
+memory in the project, and the project and team memory they can read) whose embeddings score at or above
+`SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD` (default 0.62, the same bar as promote's check; optional in `.env`; from 0 to
+1). Raise it if saves name memories that aren't near-copies; lower it if near-copies go unnamed.
+
 ## How long a gated session waits
 
 When a session's prompt or activity collides with another member's active session, the later session's file edits are

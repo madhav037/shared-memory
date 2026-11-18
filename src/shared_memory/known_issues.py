@@ -19,7 +19,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
-from shared_memory.index import SearchIndex
+from shared_memory.index import Reach, SearchIndex
 from shared_memory.memory import KNOWN_ISSUE, Area, Memory, level_folder
 from shared_memory.service import committer, describe
 from shared_memory.store import MemoryStore
@@ -169,7 +169,10 @@ class KnownIssues:
     def _similar(self, caller: Caller, memory: Memory) -> dict[str, Any] | None:
         project = caller.require_project()
         similar = self._index.similar_to(
-            caller.team, memory, project_id=project.project_id, threshold=self._settings.similar_threshold
+            caller.team,
+            memory,
+            reach=Reach.project_memory_of(project.project_id),
+            threshold=self._settings.similar_threshold,
         )
         if not similar:
             return None

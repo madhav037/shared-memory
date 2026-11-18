@@ -79,6 +79,48 @@ class Hit:
     words_match: bool = False
 
 
+@dataclass(frozen=True)
+class Reach:
+    """The memory a search for similar memories may name: team memory if `team_memory`; the project memory of
+    `projects`, or of every project but `unreachable` when `projects` is None; and the personal memory of `member_id`
+    in `personal_in`, never any other member's."""
+
+    team_memory: bool = False
+    projects: tuple[str, ...] | None = ()
+    unreachable: frozenset[str] = frozenset()
+    member_id: str | None = None
+    personal_in: str | None = None
+
+    @classmethod
+    def project_memory_of(cls, project_id: str) -> Reach:
+        """One project's project memory alone."""
+        return cls(projects=(project_id,))
+
+    @classmethod
+    def of_member(cls, member_id: str, project_id: str, unreachable: frozenset[str]) -> Reach:
+        """What a member's save is compared with: their own personal memory in the project they work in, plus the
+        team memory and the project memory of every project they can reach."""
+        return cls(team_memory=True, projects=None, unreachable=unreachable, member_id=member_id, personal_in=project_id)
+
+    def where(self) -> tuple[str, dict[str, object]]:
+        """This reach as a condition on `sections`, with the parameters it binds."""
+        if self.projects is None:
+            projects = "NOT (project_id = ANY(%(reach_unreachable)s))"
+        else:
+            projects = "project_id = ANY(%(reach_projects)s)"
+        condition = (
+            f"((level = 'team' AND %(reach_team)s) OR (level = 'project' AND {projects})"
+            " OR (level = 'personal' AND member_id = %(reach_member)s AND project_id = %(reach_personal_in)s))"
+        )
+        return condition, {
+            "reach_team": self.team_memory,
+            "reach_projects": list(self.projects or ()),
+            "reach_unreachable": sorted(self.unreachable),
+            "reach_member": self.member_id,
+            "reach_personal_in": self.personal_in,
+        }
+
+
 def split_sections(memory: Memory) -> list[tuple[str, str]]:
     """A memory's sections: the part before the first heading, then one section per Markdown heading."""
     sections: list[tuple[str, str]] = []
@@ -390,9 +432,12 @@ class SearchIndex:
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 
-    def similar_to(self, team: str, memory: Memory, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
-        """Active memories in one project's project memory whose sections come close in meaning to any section of a
-        memory not yet saved, such as a known issue about to land."""
+    def similar_to(
+        self, team: str, memory: Memory, *, reach: Reach, threshold: float, excluding: PurePosixPath | None = None
+    ) -> list[tuple[str, float]]:
+        """Active memories within a reach whose sections come close in meaning to any section of a memory, most
+        similar first: one not yet saved, such as a known issue about to land, or one just saved, left out by
+        `excluding`. Vectors come from what was prepared or stored, so the model runs only for text never seen."""
         texts, hashes = self._plan(memory)
         found: dict[str, list[float]] = {}
         with self._prepared_lock:
@@ -404,15 +449,18 @@ class SearchIndex:
         missing = {digest: texts[key] for key, digest in hashes.items() if digest not in found}
         if missing:
             found.update(zip(missing, self._embedder.passages(list(missing.values())), strict=True))
+        within, params = reach.where()
+        params = {**params, "team": team, "excluding": None if excluding is None else str(excluding)}
         best: dict[str, float] = {}
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             for vector in {digest: found[digest] for digest in hashes.values()}.values():
                 rows = conn.execute(
                     "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
-                    " WHERE team = %(team)s AND status = 'active' AND level = 'project' AND project_id = %(project)s"
+                    f" WHERE team = %(team)s AND status = 'active' AND {within}"
+                    " AND path IS DISTINCT FROM %(excluding)s"
                     f" ORDER BY embedding <=> %(vector)s LIMIT {_SIMILAR_CANDIDATES}",
-                    {"team": team, "project": project_id, "vector": Vector(vector)},
+                    {**params, "vector": Vector(vector)},
                 ).fetchall()
                 for row in rows:
                     best[str(row["path"])] = max(best.get(str(row["path"]), -1.0), float(row["similarity"]))
