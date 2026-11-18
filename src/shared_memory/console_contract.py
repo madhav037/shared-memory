@@ -976,15 +976,17 @@ class ToldMemoryEntry(BaseModel):
 
 
 class ToldEntry(BaseModel):
-    """One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall
-    added (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before
-    memory's first save."""
+    """One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall
+    added (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind
+    before_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head
+    commit then, None before memory's first save."""
 
-    kind: Literal["briefing", "recall"]
+    kind: Literal["briefing", "recall", "before_edit"]
     at: datetime
     commit: str | None
     briefing: str | None
     memory: ToldMemoryEntry | None
+    file: str | None
 
 
 class SessionToldRecord(BaseModel):

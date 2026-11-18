@@ -815,6 +815,7 @@ class ConsoleApi:
                             if one.memory is not None
                             else None
                         ),
+                        file=one.file,
                     )
                     for one in entries
                 ],

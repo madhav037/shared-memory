@@ -1,4 +1,4 @@
-import { IconBook2, IconSparkles } from "@tabler/icons-react";
+import { IconBook2, IconPencil, IconSparkles } from "@tabler/icons-react";
 import { Link, useParams } from "react-router";
 
 import { fetchTold, type ToldEntry } from "../api/client";
@@ -8,8 +8,8 @@ import { useAsked } from "../lib/useAsked";
 
 /**
  * A session's told record (CONTEXT.md: Told record), for its own member, its project's leads and the team's admins:
- * its briefing as delivered and each memory recall added, oldest first, each with when and the memory repository's
- * commit then. It never holds what the member typed, and reading it changes nothing.
+ * its briefing as delivered, each memory recall added and each memory the before-edit hook added for a file it edited,
+ * oldest first, each with when and the memory repository's commit then. It never holds what the member typed, and reading it changes nothing.
  */
 export function ToldPage() {
   const { projectId = "", sessionNumber = "" } = useParams();
@@ -33,8 +33,8 @@ export function ToldPage() {
       <h1 className="page-title">What it was told</h1>
       <p className="standfirst">
         Everything Shared Memory told <b data-testid="told-member">{found.member_name}</b>’s session
-        {found.repository ? ` in ${found.repository}` : ""}, in order: its briefing and every memory recall added to a
-        prompt. What they typed is never kept. Each is kept for {plural(found.told_days, "day")}.
+        {found.repository ? ` in ${found.repository}` : ""}, in order: its briefing, every memory recall added to a
+        prompt and every memory added before it edited a file the memory is tied to. What they typed is never kept. Each is kept for {plural(found.told_days, "day")}.
       </p>
       <div className="page-meta">
         <span>{found.agent ?? "Coding agent not yet known"}</span>
@@ -86,13 +86,23 @@ function Told({ told }: { told: ToldEntry }) {
       </li>
     );
   const memory = told.memory!;
+  const beforeEdit = told.kind === "before_edit";
   return (
-    <li className="entry" data-testid="told-recall">
+    <li className="entry" data-testid={beforeEdit ? "told-before-edit" : "told-recall"}>
       <div className="entry-meta">
         <span className="mark">
-          <IconSparkles size={14} stroke={1.6} aria-hidden />
-          Recall
+          {beforeEdit ? (
+            <IconPencil size={14} stroke={1.6} aria-hidden />
+          ) : (
+            <IconSparkles size={14} stroke={1.6} aria-hidden />
+          )}
+          {beforeEdit ? "Before an edit" : "Recall"}
         </span>
+        {beforeEdit && told.file && (
+          <span className="path" data-testid="told-file">
+            {told.file}
+          </span>
+        )}
         {when}
         {commit}
       </div>
