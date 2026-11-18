@@ -136,7 +136,7 @@ The server knows each running session. The briefing ends by naming this session'
 
 A session that awaits an answer stands by: it waits for its news without the member typing, and hears it the moment it comes. Stand by on your own when an edit is refused as gated and when you have sent an urgent message; after any other message, stand by only when the member wants its answer.
 
-In Claude Code, stand by with this command, run with `run_in_background` so that you can end your turn: you are woken when it ends. Put this session's identifier in place of `<session>`, and change nothing else. It reads the server's address and the personal token from the plugin's settings, as the plugin's hooks do, and hands the token to curl on its input, so the token never appears on the command line.
+In Claude Code, stand by with this command, run with `run_in_background` so that you can end your turn: you are woken when it ends. Put this session's identifier in place of `<session>`, and change nothing else. It reads the server's address and the personal token from the plugin's settings, which the plugin's session-start hook puts in this session's environment, and hands the token to curl on its input, so the token never appears on the command line.
 
 ```sh
 printf 'header = "Authorization: Bearer %s"\n' "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN" | curl -s --fail --max-time 360 --config - -H 'Content-Type: application/json' -H "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT" -H "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY" -H 'X-Shared-Memory-Agent: claude-code' --data '{"session_id":"<session>"}' "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" || echo 'Shared Memory did not answer this standby.'
