@@ -103,7 +103,7 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
         "replaces": memory.replaces,
         "superseded_by": memory.superseded_by,
         "exception_to": memory.exception_to,
-        "related_files": memory.related_files,
+        "tied_files": memory.tied_files,
         "promoted_by": memory.promoted_by,
         "imported_by": memory.imported_by,
         "imported_from": memory.imported_from,
@@ -180,7 +180,7 @@ class MemoryService:
         summary: str,
         type: str,
         body: str,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         topic: str | None = None,
     ) -> dict[str, Any]:
         project = caller.require_project()
@@ -194,7 +194,7 @@ class MemoryService:
             type=type,
             author=caller.member_id,
             body=body,
-            related_files=list(related_files or []),
+            tied_files=list(tied_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
         folder = level_folder("personal", type, project.project_id, caller.member_id)
@@ -461,7 +461,7 @@ class MemoryService:
         title: str | None,
         summary: str | None,
         body: str | None,
-        related_files: list[str] | None,
+        tied_files: list[str] | None,
     ) -> None:
         """Embed an edit's new text before its save takes its turn. A refusal is left for the save itself to raise."""
         try:
@@ -486,9 +486,9 @@ class MemoryService:
         summary: str | None = None,
         type: str | None = None,
         body: str | None = None,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
     ) -> dict[str, Any]:
-        self._prepare_edit(caller, path, title, summary, body, related_files)
+        self._prepare_edit(caller, path, title, summary, body, tied_files)
         with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "edit")
             if type is not None and type != location.type:
@@ -501,7 +501,7 @@ class MemoryService:
                 title=memory.title if title is None else title.strip(),
                 summary=memory.summary if summary is None else summary.strip(),
                 body=memory.body if body is None else body,
-                related_files=memory.related_files if related_files is None else list(related_files),
+                tied_files=memory.tied_files if tied_files is None else list(tied_files),
             )
             validate(edited, self._settings.memory_word_limit)
             change.message = f"Edit: {edited.title}"

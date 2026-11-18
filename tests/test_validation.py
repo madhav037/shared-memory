@@ -88,20 +88,11 @@ def test_a_memory_of_600_long_words_is_saved(member: Session) -> None:
         ({"summary": ""}, "summary"),
         ({"summary": "first line\nsecond line"}, "one line"),
         ({"type": "rule"}, "Unknown memory type"),
-        ({"related_files": ["package.json"]}, "repository:path"),
+        ({"tied_files": ["package.json"]}, "repository:path"),
     ],
 )
 def test_a_memory_with_a_bad_header_is_refused(member: Session, overrides: dict[str, object], complaint: str) -> None:
     assert complaint in refusal_to_remember(member, **overrides)
-
-
-def test_related_files_are_kept_as_repository_and_path(member: Session) -> None:
-    saved = remember(member, related_files=["billing-api:package.json", "billing-web:src/auth.ts"])
-
-    assert member.call("read", path=saved["path"])["related_files"] == [
-        "billing-api:package.json",
-        "billing-web:src/auth.ts",
-    ]
 
 
 @pytest.mark.parametrize("tool", ["read", "edit_memory", "delete_memory"])

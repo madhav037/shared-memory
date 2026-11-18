@@ -95,10 +95,10 @@ def validate(memory: Memory, word_limit: int) -> None:
     _single_line("title", memory.title, 200)
     _single_line("summary", memory.summary, 300)
     type_folder(memory.type)
-    for entry in memory.related_files:
+    for entry in memory.tied_files:
         repository, _, path = entry.partition(":")
         if not NAME_PATTERN.match(repository) or not path.strip() or "\n" in entry:
-            raise Refused(f"Related file {entry!r} must be written as repository:path, for example billing-api:package.json.")
+            raise Refused(f"Tied file {entry!r} must be written as repository:path, for example billing-api:package.json.")
     if memory.type == KNOWN_ISSUE and not _has_workaround(memory.body):
         raise Refused(
             "A known issue must say how to work around it: add a line 'Workaround: ...', or 'Workaround: none known' "
@@ -111,5 +111,5 @@ def validate(memory: Memory, word_limit: int) -> None:
         raise Refused(
             f"This memory is {len(memory.body)} characters; the limit is {CHARACTER_LIMIT} characters. {_SPLIT_IT}"
         )
-    for text in (memory.title, memory.summary, memory.body, *memory.related_files):
+    for text in (memory.title, memory.summary, memory.body, *memory.tied_files):
         refuse_secret(text)

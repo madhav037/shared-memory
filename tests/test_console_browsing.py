@@ -54,6 +54,24 @@ def test_a_memory_reads_in_full_with_its_details(console: Console, signed_out: C
     assert memory["pending"] == []
 
 
+def test_memory_detail_carries_tied_files(console: Console, signed_out: ConsoleClient) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-browse-tied", 331)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    saved = owner.in_project(project, "billing-api").call(
+        "remember",
+        title="Tax rounding",
+        summary="Tax is rounded per line.",
+        type="gotcha",
+        body="Round the tax on each line before adding them up.",
+        tied_files=["billing-api:src/tax.ts"],
+    )
+
+    memory = ask(signed_out, "/api/memory", path=saved["path"])
+
+    assert memory["tied_files"] == ["billing-api:src/tax.ts"]
+    assert "related_files" not in memory
+
+
 def test_a_memory_that_reads_like_orders_to_an_agent_shows_its_mark_and_why(
     console: Console, signed_out: ConsoleClient
 ) -> None:

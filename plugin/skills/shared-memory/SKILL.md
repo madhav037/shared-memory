@@ -51,7 +51,7 @@ Save when the member says "remember this", and also on your own when you learn s
   - `decision`: a choice made once, with its reasons and the alternatives rejected. *"We chose pnpm over npm because CI rejects two lockfiles."*
   - `architecture`: how the system is built and how its parts relate. *"Billing reaches payments only through the queue."*
   - `gotcha`: a surprising fact that wastes time if you don't know it. *"The staging database resets every night at 02:00 UTC."*
-- **List related files** as `repository:path` (for example `billing-api:src/auth.ts`), using the repository names from each repository's settings.
+- **List tied files** as `repository:path` (for example `billing-api:src/auth.ts`), using the repository names from each repository's settings.
 - **Split a long subject into a topic.** If a subject needs more than 600 words, save several memories with the same `topic`, each covering one part. Each file in a topic is its own memory.
 
 ## When a save names similar memories
