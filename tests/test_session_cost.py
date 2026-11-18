@@ -16,8 +16,11 @@ BUDGETS = {
     # Sessions that talk (#507) add six tools (different_work, answer_gate, send_message, mute, leave_handoff_note,
     # project_wait), each a member's way to answer another session, which no shorter listing can leave out. Their
     # descriptions were cut to the rule an agent must not miss; the rest is in the skill and AGENTS.md.
-    "member start": 7800,  # estimated: 8445 measured, less about 650 cut from the new tools; was 6754 after #427
-    "admin start": 8200,  # estimated: 8851 measured, less about 650; was 7160 after #427
+    # Draft learnings (#551) add three tools (draft_learnings, confirm_draft_learning, decline_draft_learning), about
+    # 560 tokens, nearly all the input schema of a draft learning and its edits, which every coding agent needs since
+    # an agent without hooks drafts through them (ADR-0011). Their descriptions are one line each.
+    "member start": 8360,  # 8802 measured; was 7800 (8238 measured) before #551
+    "admin start": 8760,  # 9208 measured; was 8200 (8645 measured) before #551
     "one recall": 350,  # estimated after #427 (a fence value and the sentence naming it); was 218
 }
 MARGIN = 1.10

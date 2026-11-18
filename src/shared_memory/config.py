@@ -24,6 +24,11 @@ IN_DOUBT_PENALTY = 0.5
 # and a save's similar memories hold to the same bar, unless the server's settings say otherwise.
 SIMILAR_THRESHOLD = 0.62
 
+# The most draft learnings a member has waiting in one project, and the days one waits before it is dropped, unless
+# the server's settings say otherwise.
+DRAFT_LEARNING_MOST = 3
+DRAFT_LEARNING_DAYS = 7
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -94,6 +99,9 @@ class Settings:
     recent_work_hours: float = 24
     # How long a session's handoff note is kept, written by its coding agent or put together by the server.
     handoff_note_kept_days: float = 7
+    # The most draft learnings a member has waiting in one project, and how long one waits for them before it is dropped.
+    draft_learning_most: int = DRAFT_LEARNING_MOST
+    draft_learning_days: float = DRAFT_LEARNING_DAYS
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
@@ -180,6 +188,8 @@ class Settings:
             message_kept_days=float(env.get("SHARED_MEMORY_MESSAGE_KEPT_DAYS", "7")),
             recent_work_hours=float(env.get("SHARED_MEMORY_RECENT_WORK_HOURS", "24")),
             handoff_note_kept_days=float(env.get("SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS", "7")),
+            draft_learning_most=int(env.get("SHARED_MEMORY_DRAFT_LEARNING_MOST", str(DRAFT_LEARNING_MOST))),
+            draft_learning_days=float(env.get("SHARED_MEMORY_DRAFT_LEARNING_DAYS", str(DRAFT_LEARNING_DAYS))),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),

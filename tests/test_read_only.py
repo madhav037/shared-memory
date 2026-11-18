@@ -217,6 +217,22 @@ def test_a_read_only_server_still_runs_the_team(hosted: RunningServer, team: Tea
     assert owner.call("read", path=team.known_issue)["status"] == "active"
 
 
+def test_confirm_draft_learning_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
+    owner = team.owner
+    drafted = {"moment": "session_end", **SERVICES}
+    kept = owner.call("draft_learnings", session=owner.identifier, draft_learnings=[drafted])
+    (draft_learning,) = [each["id"] for each in kept["draft_learnings"]]
+    before = unfenced_in(owner.call("tree"))
+    under(hosted, hosted_key())
+
+    refused = owner.refusal("confirm_draft_learning", id=draft_learning)
+
+    assert read_only_refusal(refused)
+    assert unfenced_in(owner.call("tree")) == before
+    under(hosted, hosted_key(expires=RENEWED_UNTIL))
+    assert owner.call("confirm_draft_learning", id=draft_learning)["level"] == "personal", "it is still waiting"
+
+
 def test_a_call_without_a_valid_personal_token_is_refused_for_that_not_for_read_only(
     hosted: RunningServer, team: Team
 ) -> None:
