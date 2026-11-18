@@ -3486,12 +3486,13 @@
         "type": "object"
       },
       "ToldEntry": {
-        "description": "One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall\nadded (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before\nmemory's first save.",
+        "description": "One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall\nadded (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind\nbefore_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head\ncommit then, None before memory's first save.",
         "properties": {
           "kind": {
             "enum": [
               "briefing",
-              "recall"
+              "recall",
+              "before_edit"
             ],
             "title": "Kind",
             "type": "string"
@@ -3532,6 +3533,17 @@
                 "type": "null"
               }
             ]
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
           }
         },
         "required": [
@@ -3539,7 +3551,8 @@
           "at",
           "commit",
           "briefing",
-          "memory"
+          "memory",
+          "file"
         ],
         "title": "ToldEntry",
         "type": "object"

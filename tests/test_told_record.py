@@ -127,6 +127,44 @@ def test_the_briefing_tool_and_a_prompt_that_recalls_nothing_new(console: Consol
     assert found["told"][0]["briefing"] == fetched
 
 
+def test_memories_the_before_edit_hook_adds_are_recorded_in_order_with_the_file_they_came_for(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-told-edit", 5663)
+    promote_keeping_both(in_project, PNPM)
+    session = in_project.as_session("olive-editing")
+    tied = session.call(
+        "remember",
+        title="Webhook retries back off",
+        summary="Webhook retries back off.",
+        type="gotcha",
+        body="Webhook retries back off exponentially and stop after five attempts.",
+        tied_files=["billing-api:src/webhooks/*.py"],
+    )["path"]
+    session.start()
+    console.clock.advance(minutes=1)
+    added = session.edit("src/webhooks/retry.py")
+    assert tied in added["hookSpecificOutput"]["additionalContext"]
+    console.clock.advance(minutes=1)
+    session.prompt(PROMPT)
+    # Told once: the next edit of the file adds nothing, and so nothing to the record.
+    session.edit("src/webhooks/retry.py")
+    number = number_of(signed_out, project, "E1001")
+
+    found = told(signed_out, project, number)
+
+    assert [one["kind"] for one in found["told"]] == ["briefing", "before_edit", "recall"]
+    briefing, edit, recall = found["told"]
+    assert edit["memory"]["path"] == tied
+    assert edit["memory"]["title"] == "Webhook retries back off"
+    assert edit["file"] == "billing-api:src/webhooks/retry.py", "the file edited, not the glob that tied it"
+    assert edit["briefing"] is None
+    assert re.fullmatch(r"[0-9a-f]{40}", edit["commit"])
+    assert (briefing["file"], recall["file"]) == (None, None)
+    elapsed = datetime.fromisoformat(edit["at"]) - datetime.fromisoformat(briefing["at"])
+    assert elapsed.total_seconds() == 60
+
+
 def test_its_member_the_projects_leads_and_the_teams_admins_read_it_and_no_one_else(
     console: Console, signed_out: ConsoleClient
 ) -> None:

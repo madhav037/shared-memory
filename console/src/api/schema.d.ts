@@ -1648,16 +1648,17 @@ export interface components {
         };
         /**
          * ToldEntry
-         * @description One thing a session was told: its briefing as delivered (kind briefing, with briefing), or a memory a recall
-         *     added (kind recall, with memory). at is when; commit is the memory repository's head commit then, None before
-         *     memory's first save.
+         * @description One thing a session was told: its briefing as delivered (kind briefing, with briefing), a memory a recall
+         *     added (kind recall, with memory), or a memory the before-edit hook added for a file an edit changed (kind
+         *     before_edit, with memory and file, written repository:path). at is when; commit is the memory repository's head
+         *     commit then, None before memory's first save.
          */
         ToldEntry: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "briefing" | "recall";
+            kind: "briefing" | "recall" | "before_edit";
             /**
              * At
              * Format: date-time
@@ -1668,6 +1669,8 @@ export interface components {
             /** Briefing */
             briefing: string | null;
             memory: components["schemas"]["ToldMemoryEntry"] | null;
+            /** File */
+            file: string | null;
         };
         /**
          * ToldMemoryEntry

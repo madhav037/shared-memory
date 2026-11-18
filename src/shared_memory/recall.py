@@ -16,8 +16,8 @@ The prompt hook and the before-edit hook share it, so neither tells a session wh
 - `forget(session)`: start the session over, as after a compaction.
 
 Both answer with a `Telling`: the text, and `told()`, which records it as told. A hook calls `told()` only once the
-text is in its answer, so what is dropped past the recall budget stays untold. For a prompt, `told()` also adds what
-recall told to the session's told record (told.py).
+text is in its answer, so what is dropped past the recall budget stays untold. `told()` also adds what was told to the
+session's told record (told.py): as a recall for a prompt, and for an edit with the file each memory came for.
 """
 
 from __future__ import annotations
@@ -40,7 +40,8 @@ from shared_memory.sessions import Session, Sessions
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import label_for, reasons_for
-from shared_memory.tied import TiedFiles
+from shared_memory.locks import named
+from shared_memory.tied import TiedFiles, ties
 from shared_memory.told import ToldMemory, ToldRecord
 from shared_memory.uses import Uses
 
@@ -84,6 +85,8 @@ class _Found:
     sections: tuple[tuple[int, str], ...]
     # The tied file it was found by, for the before-edit hook.
     tied_file: str | None = None
+    # The edited file it came for, written repository:path, for the before-edit hook.
+    edited_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -185,18 +188,21 @@ class Recall:
 
     def _telling(
         self, caller: Caller, session: Session | None, found: list[_Found], sections: list[tuple[str, int, str]],
-        in_doubt: dict[str, InDoubt], recorded: bool = False,
+        in_doubt: dict[str, InDoubt], for_edit: bool = False,
     ) -> Telling:  # fmt: skip
-        """The memories as recall tells them, recorded as told, these sections of them, only by `told()`. With
-        `recorded`, `told()` also puts them in the session's told record, as a recall."""
+        """The memories as recall tells them, recorded as told, these sections of them, only by `told()`, which also
+        puts them in the session's told record: as a recall, or, `for_edit`, each with the edited file it came for."""
 
         def record() -> None:
             if session is not None:
                 self._tell(session, sections)
-                if recorded:
-                    self._told_record.recalled(
-                        session, [ToldMemory(each.path, each.memory.title, each.heading) for each in found]
+                memories = [ToldMemory(each.path, each.memory.title, each.heading) for each in found]
+                if for_edit:
+                    self._told_record.before_edit(
+                        session, [(one, each.edited_file or "") for one, each in zip(memories, found, strict=True)]
                     )
+                else:
+                    self._told_record.recalled(session, memories)
             # Told is used: each memory added to the session starts its clock again.
             self._uses.used(caller.team, [each.path for each in found])
 
@@ -238,7 +244,7 @@ class Recall:
         if not found:
             return None
         told = [(each.path, number, text) for each in found for number, text in each.sections]
-        return self._telling(caller, session, found, told, in_doubt, recorded=True)
+        return self._telling(caller, session, found, told, in_doubt)
 
     def for_edit(self, caller: Caller, files: Sequence[str], session: Session) -> Telling | None:
         """The memories tied to the files an edit is about to change, each a path from the caller's repository's root,
@@ -261,7 +267,7 @@ class Recall:
             found.append(
                 _Found(
                     tie.memory_path, location.level, location.member_id, memory, memory.title, whole, sections,
-                    tie.tied_file,
+                    tie.tied_file, named(repository, next(path for path in files if ties(tie.glob, path))),
                 )
             )  # fmt: skip
         found = self._untold_whole(session, found)[: self._settings.recall_limit]
@@ -272,7 +278,7 @@ class Recall:
         told = [(each.path, number, text) for each in found[:1] for number, text in each.sections]
         told += [(each.path, each.sections[0][0], each.sections[0][1]) for each in found[1:]]
         in_doubt = self._challenges.in_doubt(caller.team, [each.path for each in found])
-        return self._telling(caller, session, found, told, in_doubt)
+        return self._telling(caller, session, found, told, in_doubt, for_edit=True)
 
     def _told_as_recall(self, caller: Caller, found: list[_Found], in_doubt: dict[str, InDoubt]) -> str:
         """The memories as one block in recall's framing and fence: the first in full, the rest as entries of one
