@@ -94,7 +94,8 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
   `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
   the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws
-  on the tool hooks' rate limit. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
+  on the tool hooks' rate limit, and doesn't count as a hook that reaches the session (#518), since an agent with no
+  hooks runs it too. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
   (`STAND_BY_SECONDS`, 45, unless asked; at most `Settings.standby_tool_cap_seconds`), answering as the endpoint does
   (`_standby_answer`). The cap and the check interval are `Settings.standby_cap_minutes` and
   `standby_check_seconds`. `tests/test_standby.py`.

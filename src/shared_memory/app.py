@@ -370,16 +370,18 @@ def build_app(
         reported = _reported_name(ctx.session, ctx.request_context.request)
         return dataclasses.replace(authenticate(ctx.headers or {}), agent=agent_named(reported))
 
-    def session_of(current: Caller, payload: dict[str, Any]) -> Session | None:
+    def session_of(current: Caller, payload: dict[str, Any], *, a_hook: bool = True) -> Session | None:
         """The session whose hook sent this payload, seen now, or None when the payload names none. Every hook that
-        runs for a session calls this, which is what keeps the session active."""
+        runs for a session calls this, which is what keeps the session active. A standby passes `a_hook` false: an
+        agent with no hooks runs one too (Copilot in VS Code), and it refuses no edit."""
         identifier = hooks.session_in(payload)
         if identifier is None:
             return None
         # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
         # tool call has reported one.
         session = sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
-        unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
+        if a_hook:
+            unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
         return session
 
     def waiting_for(
@@ -652,7 +654,7 @@ def build_app(
                 )
 
             def standing_by() -> tuple[Session, tuple[str, ...]]:
-                session = session_of(current, payload)
+                session = session_of(current, payload, a_hook=False)
                 assert session is not None
                 return session, awaited_by(current, session)
 

@@ -605,6 +605,23 @@ def test_the_background_standby_command_run_in_a_posix_shell_hears_the_sessions_
     assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
 
 
+def test_a_session_with_no_hooks_that_stands_by_in_the_background_is_still_one_no_hook_reaches(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    """Copilot in VS Code stands by with the background command, but has no hook before an edit to refuse a gated
+    one: a standby is not such a hook, so the session is still told its gate waits, in its tools' notices (#518)."""
+    copilot = dana.as_agent("Visual Studio Code").as_session("copilot-session")
+    copilot.call("set_activity", activity="Looking around", session=copilot.identifier)
+    held = standing_by(copilot)
+    team.server.clock.advance(minutes=5)
+    assert answer_of(held)["ended"] == "nothing_yet"
+    state(owner, WEBHOOKS)
+
+    stated = "\n".join(copilot.call("set_activity", activity=RETRIES, session=copilot.identifier)["notices"])
+
+    assert "[gated]" in stated and "no hook" in stated
+
+
 @pytest.mark.skipif(not POWERSHELLS, reason="the background command for Windows runs in PowerShell, which isn't here")
 @pytest.mark.parametrize("shell", POWERSHELLS)
 def test_the_background_standby_command_run_in_powershell_hears_the_sessions_news(
