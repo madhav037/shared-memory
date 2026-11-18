@@ -121,22 +121,28 @@ def test_accepting_one_doubt_closes_the_other_reasons_doubt_and_tells_each_of_it
 
 
 def test_the_author_editing_the_memory_in_a_session_closes_its_open_doubts_as_resolved_and_tells_each_raiser(
-    dana: Session,
+    team: Team, dana: Session
 ) -> None:
+    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
     path = dana.call("remember", **WEBHOOKS)["path"]
-    misled = doubt(dana, path)
+    misled = doubt(cole, path, reasoning="My webhook gave up after an hour.")
     contradicts = doubt(dana.as_session("another-session"), path, "contradicts_code", **TAX_LINE)
     doubt(dana.as_session("a-third-session"), path)
     news(dana)
+    news(cole)
 
     dana.call("edit_memory", path=path, body="The relay retries a failed webhook delivery for twelve hours.")
 
     read = dana.call("read", path=path)
     assert read["status"] == "active"
     assert read["open_challenges"] == []
-    told = news(dana)
-    for challenge_id in (misled, contradicts):
-        assert told.count(f"Your challenge {challenge_id} against {path} was closed: resolved, its author edited it.") == 1
+
+    def closed(challenge_id: int) -> str:
+        return f"Your challenge {challenge_id} against {path} was closed: resolved, its author edited it."
+
+    told_cole, told_dana = news(cole), news(dana)
+    assert (told_cole.count(closed(misled)), told_cole.count(closed(contradicts))) == (1, 0)
+    assert (told_dana.count(closed(misled)), told_dana.count(closed(contradicts))) == (1, 1)
 
 
 def test_the_author_superseding_the_memory_in_a_session_closes_its_open_doubts_as_resolved_and_tells_each_raiser(

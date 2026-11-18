@@ -14,8 +14,9 @@ import pytest
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
-from shared_memory.config import Settings
+from shared_memory.config import SIMILAR_THRESHOLD, Settings
 from shared_memory.embeddings import DIMENSIONS, FastEmbedEmbedder
+from shared_memory.service import SAVE_SIMILAR_LIMIT
 from tests.support import (
     REPO_ROOT,
     Console,
@@ -202,6 +203,43 @@ def test_the_save_succeeds_whatever_is_similar(console: Console, signed_out: Con
 def test_the_save_similar_threshold_reads_its_environment_variable_and_has_a_default() -> None:
     assert Settings.from_env({}).save_similar_threshold == 0.62
     assert Settings.from_env({"SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD": "0.9"}).save_similar_threshold == 0.9
+
+
+def test_a_save_is_held_to_the_same_similarity_bar_as_promotes_check_named_once() -> None:
+    """What a save names is what promoting it would ask about, so both bars are the one constant."""
+    settings = Settings.from_env({})
+
+    assert settings.save_similar_threshold == settings.similar_threshold == SIMILAR_THRESHOLD
+    assert Settings.save_similar_threshold == Settings.similar_threshold == SIMILAR_THRESHOLD
+
+
+def test_the_deployment_docs_and_the_compose_file_give_the_save_similar_threshold_its_default() -> None:
+    """A limit is named once: the docs and the compose file are static text, so this holds them to the setting's."""
+    name, default = "SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD", Settings.from_env({}).save_similar_threshold
+    compose = (REPO_ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+    docs = " ".join((REPO_ROOT / "docs" / "deployment.md").read_text(encoding="utf-8").split())
+
+    assert f"{name}: ${{{name}:-{default:g}}}" in compose
+    assert f"`{name}` (default {default:g}" in docs
+    assert f"names up to {IN_WORDS[SAVE_SIMILAR_LIMIT]} memories" in docs
+
+
+# How the static text writes a small count.
+IN_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
+
+
+def test_the_tool_description_and_both_skills_name_as_many_similar_memories_as_a_save_does(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    """A limit is named once: the description and the skills are static text, so this holds them to
+    SAVE_SIMILAR_LIMIT."""
+    team = ATeam(console, signed_out, "olive-similar-limit", 1511)
+    _, descriptions = team.dana.on_connecting()
+    up_to = f"up to {IN_WORDS[SAVE_SIMILAR_LIMIT]}"
+
+    assert f"names {up_to} similar memories" in " ".join(descriptions["remember"].split())
+    for skill in SKILLS:
+        assert f"names {up_to} in `similar`" in skill.read_text(encoding="utf-8"), skill
 
 
 def test_the_tool_description_says_what_to_do_about_a_similar_memory(console: Console, signed_out: ConsoleClient) -> None:

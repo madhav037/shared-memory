@@ -194,14 +194,20 @@ class Doubt:
     evidence: tuple[Evidence, ...]
 
     @property
+    def members(self) -> tuple[str, ...]:
+        """Every member who raised it, first raiser first, each once however many sessions they raised it from."""
+        return _members(self.evidence)
+
+    @property
     def count(self) -> int:
-        """How many raises it has had: the first and each +1."""
-        return len(self.evidence)
+        """How many members have raised it: the first and each +1. A member raising it again adds evidence, not to
+        the count."""
+        return len(self.members)
 
 
 @dataclass(frozen=True)
 class ReasonRaised:
-    """One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is."""
+    """One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is."""
 
     reason: Reason
     count: int
@@ -218,29 +224,29 @@ class ReasonRaised:
 
 @dataclass(frozen=True)
 class InDoubt:
-    """What marks a memory in doubt (CONTEXT.md) wherever it is shown: how many raises its open doubts have had, and
-    for which reasons, in the order of `REASONS`."""
+    """What marks a memory in doubt (CONTEXT.md) wherever it is shown: how many members doubt it, and for which
+    reasons, in the order of `REASONS`."""
 
     reasons: tuple[ReasonRaised, ...]
+    # How many members doubt it, for any reason: one who names both reasons is counted once.
+    count: int
 
     @classmethod
     def of(cls, doubts: Iterable[Doubt]) -> InDoubt:
+        listed = list(doubts)
         counts: dict[Reason, int] = {}
         references: dict[Reason, dict[str, None]] = {}
-        for doubt in doubts:
-            counts[doubt.reason] = counts.get(doubt.reason, 0) + doubt.count
+        for doubt in listed:
+            # One open doubt per memory and reason, so a reason's count is its doubt's.
+            counts[doubt.reason] = doubt.count
             quoted = references.setdefault(doubt.reason, {})
             for each in doubt.evidence:
                 if each.code_reference is not None:
                     quoted[str(each.code_reference)] = None
         return cls(
             tuple(ReasonRaised(r, counts[r], tuple(references[r])) for r in REASONS if counts.get(r)),
+            len(_members(each for doubt in listed for each in doubt.evidence)),
         )
-
-    @property
-    def count(self) -> int:
-        """How many raises, across every reason."""
-        return sum(each.count for each in self.reasons)
 
     def line(self) -> str:
         """The in-doubt line, e.g. "In doubt: 3 say it misled them; 1 says it contradicts billing-api:src/tax.py:42"."""
@@ -359,10 +365,13 @@ class Challenges:
         self, caller: Caller, *, target_path: str, target_author: str, level: str, reason: Reason, evidence: Evidence
     ) -> Raised:
         """Open a doubt, or join the open one naming the same memory and reason, and add the evidence, in one
-        transaction: two sessions raising it at once give one challenge with both pieces of evidence."""
+        transaction: two sessions raising it at once give one challenge with both pieces of evidence. The count
+        answered is how many members have raised it."""
         reference = evidence.code_reference
         with self._db.transaction() as conn:
             challenge_id, joined = self._open_or_join(conn, caller, target_path, target_author, level, reason)
+            if joined:
+                _show_the_author_again(conn, challenge_id)
             conn.execute(
                 "INSERT INTO challenge_evidence (challenge_id, member_id, session_identifier, reasoning, code_reference,"
                 " quoted_line, raised_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -373,7 +382,8 @@ class Challenges:
                 ),  # fmt: skip
             )
             counted = conn.execute(
-                "SELECT count(*) AS count FROM challenge_evidence WHERE challenge_id = %s", (challenge_id,)
+                "SELECT count(DISTINCT member_id) AS count FROM challenge_evidence WHERE challenge_id = %s",
+                (challenge_id,),
             ).fetchone()
         assert counted is not None
         self._audit.memory(
@@ -386,7 +396,7 @@ class Challenges:
         self, conn: Conn, caller: Caller, target_path: str, target_author: str, level: str, reason: Reason
     ) -> tuple[int, bool]:
         """The open doubt naming this memory and reason, opened now unless one already is, and whether it already
-        was. A raise that joins one asks the author's next prompt to show it again, with its new evidence."""
+        was."""
         while True:
             opened = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, level, raised_by, raised_at, state,"
@@ -398,9 +408,10 @@ class Challenges:
                 return int(opened["id"]), False
             # Another raise holds it open. The insert waited for that raise to commit, so it is found here, unless it
             # was decided in between: then the loop opens a new one.
+            # FOR UPDATE holds it open until this raise commits, so it isn't decided before its evidence lands.
             found = conn.execute(
-                "UPDATE challenges SET author_notified_at = NULL WHERE team = %s AND kind = 'doubt' AND state = 'open'"
-                " AND target_path = %s AND reason = %s RETURNING id",
+                "SELECT id FROM challenges WHERE team = %s AND kind = 'doubt' AND state = 'open' AND target_path = %s"
+                " AND reason = %s FOR UPDATE",
                 (caller.team, target_path, reason),
             ).fetchone()
             if found is not None:
@@ -486,10 +497,13 @@ class Challenges:
         self._close(team, doubts, decider, f"resolved, {explanation}")
 
     def _close(self, team: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
+        raisers = self.raisers(challenges)
         for challenge in challenges:
             self.decide(challenge, "closed", decider, explanation)
             self.tell_raisers(
-                team, challenge, f"Your challenge {challenge.id} against {challenge.target_path} was closed: {explanation}"
+                team,
+                raisers[challenge.id],
+                f"Your challenge {challenge.id} against {challenge.target_path} was closed: {explanation}",
             )
 
     def raisers(self, challenges: Iterable[Challenge]) -> dict[int, tuple[str, ...]]:
@@ -512,9 +526,10 @@ class Challenges:
         raised.update({challenge_id: tuple(members) for challenge_id, members in found.items()})
         return raised
 
-    def tell_raisers(self, team: str, challenge: Challenge, text: str) -> None:
-        """Tell every member who raised a challenge, each once: for a doubt, everyone who added evidence to it."""
-        for member_id in self.raisers([challenge])[challenge.id]:
+    def tell_raisers(self, team: str, raisers: tuple[str, ...], text: str) -> None:
+        """Tell every member who raised a challenge, each once: its `raisers`, for a doubt everyone who added evidence
+        to it."""
+        for member_id in raisers:
             self.tell(team, member_id, text)
 
     def tell(self, team: str, member_id: str, text: str) -> None:
@@ -614,15 +629,13 @@ class Challenges:
 
     # Who decides
 
-    def decides_as(
-        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...] | None = None
-    ) -> DecidesAs | None:
+    def decides_as(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...]) -> DecidesAs | None:
         """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
         the team's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); team
         memory has no project, so only admins stand there. Once the author has left, or after the fallback period,
-        any member may. `raisers` is the challenge's, from `raisers`, when the caller already has them.
+        any member may. `raisers` is the challenge's, from `raisers`, fetched once however many are decided.
 
         A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
         decides it, and never whoever raised it. No author, admin or fallback standing applies.
@@ -638,7 +651,7 @@ class Challenges:
             return None
         if challenge.target_author == caller.member_id:
             return "author"
-        if not self._raised(caller, challenge, raisers):
+        if caller.member_id not in raisers:
             if self._leads_the_challenged(caller, challenge):
                 return "lead"
             if caller.member.is_owner or caller.member.is_admin:
@@ -649,20 +662,16 @@ class Challenges:
             return "fallback"
         return None
 
-    def _raised(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...] | None = None) -> bool:
-        """Whether this member raised the challenge, or added evidence to it when it is a doubt."""
-        found = self.raisers([challenge])[challenge.id] if raisers is None else raisers
-        return caller.member_id in found
-
     def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
         """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
         nobody standing."""
         project_id = project_in(challenge.target_path)
         return project_id is not None and project_id in self._identity.leads_of(caller.member)
 
-    def require_decider(self, caller: Caller, challenge: Challenge) -> DecidesAs:
-        """The capacity this member decides the challenge in; refused when it isn't theirs to decide."""
-        decides_as = self.decides_as(caller, challenge)
+    def require_decider(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...]) -> DecidesAs:
+        """The capacity this member decides the challenge in, given who raised it; refused when it isn't theirs to
+        decide."""
+        decides_as = self.decides_as(caller, challenge, raisers)
         if decides_as is not None:
             return decides_as
         if challenge.foundation is not None:
@@ -677,7 +686,7 @@ class Challenges:
             )
         days = self._settings.challenge_fallback_days
         in_project = project_in(challenge.target_path) is not None
-        if self._raised(caller, challenge) and (
+        if caller.member_id in raisers and (
             caller.member.is_owner or caller.member.is_admin or self._leads_the_challenged(caller, challenge)
         ):
             raise Refused(
@@ -692,11 +701,13 @@ class Challenges:
             f"until it has been open for {days} days."
         )
 
-    def tell_author(self, caller: Caller, challenge: Challenge, decides_as: DecidesAs, decision: str) -> None:
+    def tell_author(
+        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...], decides_as: DecidesAs, decision: str
+    ) -> None:
         """Tell the challenged memory's author that someone else decided a challenge against it, and in what
-        capacity. An author who decided it themselves, or who has left, is told nothing, and nor is one who raised it,
-        who is told as a raiser."""
-        if decides_as in ("author", "author_left") or challenge.target_author in self.raisers([challenge])[challenge.id]:
+        capacity. An author who decided it themselves, or who has left, is told nothing, and nor is one among its
+        `raisers`, who is told as a raiser."""
+        if decides_as in ("author", "author_left") or challenge.target_author in raisers:
             return
         if decision == "rejected":
             outcome = "your memory stands as it is"
@@ -851,8 +862,9 @@ def _reason(reason: str, code_reference: str | None, quoted_line: str | None) ->
 
 
 def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...]) -> list[str]:
-    """A doubt as a briefing or prompt shows it: its reason and how many raised it, then each piece of evidence."""
-    count = len(evidence)
+    """A doubt as a briefing or prompt shows it: its reason and how many members raised it, then each piece of
+    evidence."""
+    count = len(_members(evidence))
     says = "says" if count == 1 else "say"
     lines = [f"- Challenge {challenge.id}, a doubt{whose}: {count} {says} {_REASON_IN_WORDS[challenge.reason or '']}."]
     for each in evidence:
@@ -862,3 +874,13 @@ def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...
         line += f" — reasoning: {each.reasoning}" if each.reasoning else ("" if each.code_reference else ".")
         lines.append(line)
     return lines
+
+
+def _members(evidence: Iterable[Evidence]) -> tuple[str, ...]:
+    """The members this evidence came from, first raiser first, each once."""
+    return tuple(dict.fromkeys(each.member_id for each in evidence))
+
+
+def _show_the_author_again(conn: Conn, challenge_id: int) -> None:
+    """Ask the author's next prompt to show a doubt again, a raise having joined it with new evidence."""
+    conn.execute("UPDATE challenges SET author_notified_at = NULL WHERE id = %s", (challenge_id,))

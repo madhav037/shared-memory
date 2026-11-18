@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session, add, ask, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, add, ask, signed_in, signed_in_owner
 
 TAX = {
     "title": "Sales tax is fifteen percent",
@@ -107,14 +107,38 @@ def test_a_memory_read_in_the_console_carries_its_in_doubt_count_and_reasons(
 
     memory = ask(signed_out, "/api/memory", path=path)
 
+    # Two members doubt it: Ash for both reasons, counted once.
     assert memory["in_doubt"] == {
-        "count": 3,
+        "count": 2,
         "reasons": [
             {"reason": "misled", "count": 2, "code_references": []},
             {"reason": "contradicts_code", "count": 1, "code_references": ["billing-api:src/tax.py:42"]},
         ],
+        "line": "In doubt: 2 say it misled them; 1 says it contradicts billing-api:src/tax.py:42",
     }
     assert sorted(one["reason"] for one in memory["open_challenges"]) == ["contradicts_code", "misled"]
+
+
+def test_a_member_who_cannot_decide_a_doubt_reads_its_count_and_evidence_on_the_memory_but_is_not_asked_to_decide(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-onlooker", 5410)
+    add(signed_out, "emp-5", "Frank Fixer", github="frank-doubts-onlooker")
+    challenge_id = doubt(dana, path, "misled", reasoning="Invoices came out wrong.")
+    doubt(ash, path, "misled")
+    frank = signed_in(console, "frank-doubts-onlooker", 5411)
+
+    memory = ask(frank, "/api/memory", path=path)
+
+    [listed] = memory["open_challenges"]
+    assert (listed["challenge_id"], listed["reason"], listed["count"], listed["may_decide"]) == (
+        challenge_id, "misled", 2, False,
+    )  # fmt: skip
+    assert [(one["member_id"], one["reasoning"]) for one in listed["evidence"]] == [
+        ("emp-2", "Invoices came out wrong."),
+        ("emp-3", None),
+    ]
+    assert ask(frank, "/api/challenges")["waiting"] == []
 
 
 def test_a_memory_no_one_doubts_is_not_in_doubt(console: Console, signed_out: ConsoleClient) -> None:

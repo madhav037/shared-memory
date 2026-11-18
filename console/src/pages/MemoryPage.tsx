@@ -18,7 +18,7 @@ import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../a
 import { Dotted, InDoubtMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
-import { doubtsUrl, inDoubtWords } from "../lib/doubt";
+import { doubtsUrl, says } from "../lib/challenge";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
@@ -202,9 +202,8 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
     );
 
   const challenged = memory.open_challenges.length > 0;
-  // Doubts are said in the in-doubt line; the other challenges ask for the memory to be superseded or retired.
-  const asking = memory.open_challenges.filter((challenge) => challenge.reason === null);
   const doubts = memory.open_challenges.filter((challenge) => challenge.reason !== null);
+  const deciders = `${memory.author_name}${memory.level === "team" ? "" : ", a project lead"} or an admin`;
   const personal = memory.level === "personal";
   const project = projects.get(projectIn(memory.path) ?? "")?.name;
   return (
@@ -219,40 +218,38 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
       <div>
         {memory.in_doubt && (
           <p data-testid="in-doubt">
-            <b>In doubt.</b> {inDoubtWords(memory.in_doubt)}. Recall ranks it lower and marks it for every coding
-            agent until it is decided.{" "}
+            {memory.in_doubt.line}. Recall ranks it lower and marks it for every coding agent until it is decided.{" "}
             {doubts.some((challenge) => challenge.may_decide) ? (
               <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
                 See its open doubts and decide
               </Link>
             ) : (
               <>
-                {memory.author_name}
-                {memory.level === "team" ? "" : ", a project lead"} or an admin decides.
+                {deciders} decides.{" "}
+                <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
+                  See its open doubts
+                </Link>
               </>
             )}
           </p>
         )}
-        {asking.length > 0 && (
+        {challenged && (
           <p data-testid="open-challenges">
-            <b>{asking.length === 1 ? "Challenged." : `${asking.length} challenges.`}</b>{" "}
-            {asking
-              .map((challenge) =>
-                challenge.kind === "retire"
-                  ? `${nameOf(challenge.raised_by)} wants to retire it`
-                  : `${nameOf(challenge.raised_by)} wants to supersede it`,
+            <b>{memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}</b>{" "}
+            {memory.open_challenges
+              .map(
+                (challenge) =>
+                  `${nameOf(challenge.raised_by)} ${says(challenge)}` +
+                  (challenge.count !== null && challenge.count > 1 ? ` (+${challenge.count - 1})` : ""),
               )
               .join("; ")}
             .{" "}
-            {asking.some((challenge) => challenge.may_decide) ? (
+            {memory.open_challenges.some((challenge) => challenge.may_decide) ? (
               <>
                 Until you decide, it stands as it is. <Link to="/challenges">Compare and decide</Link>
               </>
             ) : (
-              <>
-                Until {memory.author_name}
-                {memory.level === "team" ? "" : ", a project lead"} or an admin decides, it stands as it is.
-              </>
+              <>Until {deciders} decides, it stands as it is.</>
             )}
           </p>
         )}
