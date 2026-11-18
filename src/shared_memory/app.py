@@ -31,7 +31,7 @@ from shared_memory import hooks, onboarding
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
-from shared_memory.board import Board
+from shared_memory.board import Board, column_named
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi, SessionTalk
 from shared_memory.console_memory import ConsoleMemory
@@ -44,7 +44,7 @@ from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.draft_learnings import ASKING as DRAFT_LEARNINGS_ASKING
-from shared_memory.draft_learnings import DraftLearning, DraftLearnings, Edits, Moment
+from shared_memory.draft_learnings import DraftLearning, DraftLearnings, Edits, Moment, asked_for_card
 from shared_memory.collisions import Collisions, reminder
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
@@ -982,21 +982,27 @@ def build_app(
         description=(
             "Send what this session learned as draft learnings, at most "
             f"{settings.draft_learning_most} waiting at a time, for the member to confirm or decline; none if "
-            "nothing is worth keeping. moment is compaction, session_end or card_done."
+            "nothing is worth keeping. moment is compaction, session_end or card_done; card is the card moved to Done."
         )
     )
     @_refusals_as_tool_errors
     def draft_learnings(
-        session: str, draft_learnings: list[SentDraftLearning], ctx: Context
+        session: str, draft_learnings: list[SentDraftLearning], ctx: Context, card: int | None = None
     ) -> dict[str, Any]:
         current = caller(ctx)
         calling = sessions.touch(current, session)
+        if card is not None:
+            # A card on this project's board the member can see, refused as reading it would be.
+            board.card(current, card)
         kept = draft_learnings_kept.keep(
-            current, calling, [DraftLearning(**each) for each in draft_learnings]
+            current, calling, [DraftLearning(**each) for each in draft_learnings], card
         )
         answer: dict[str, Any] = {
             "session": calling.identifier,
-            "draft_learnings": [{"id": each.id, "title": escape(each.title)} for each in kept],
+            "draft_learnings": [
+                {"id": each.id, "title": escape(each.title)} | ({} if each.card is None else {"card": each.card})
+                for each in kept
+            ],
         }
         if kept:
             answer["next"] = DRAFT_LEARNINGS_ASKING
@@ -1558,8 +1564,13 @@ def build_app(
         leads and the team's admins, and only they set an assignee: to work on a card yourself, use claim_card. To say
         something about a card you can't change, use comment_card.
         """
-        return board.update(
-            caller(ctx),
+        current = caller(ctx)
+        # Read before the move, so only the move into Done asks, not one that tries a known issue's retiring again.
+        into_done = (
+            column is not None and column_named(column) == "done" and board.card(current, number)["column"] != "done"
+        )
+        moved = board.update(
+            current,
             number,
             title=title,
             description=description,
@@ -1574,6 +1585,11 @@ def build_app(
             blocked_reason=blocked_reason,
             waits_on=waits_on,
         )
+        # The session finishing its own card is asked what the work taught (#552). Asked here, not in Board.update,
+        # which the console's move shares: the console has no coding agent to draft them.
+        if into_done and moved["column"] == "done" and moved["assignee"] == current.member_id:
+            moved["next"] = asked_for_card(number)
+        return moved
 
     @server.tool()
     @_refusals_as_tool_errors

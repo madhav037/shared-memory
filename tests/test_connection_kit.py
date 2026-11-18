@@ -448,8 +448,9 @@ def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_ser
 
 
 #: The board habits every agent is given, one marker each: add a card for follow-up work and say so, claim only when
-#: asked (the top card of the highest priority on "take the next card"), Done only on the member's word, Blocked with a
-#: reason, known issues with a symptom and a workaround, and the board items the briefing shows.
+#: asked (the top card of the highest priority on "take the next card"), Done only on the member's word, the draft
+#: learnings a card moved to Done asks for (#552), Blocked with a reason, known issues with a symptom and a workaround,
+#: and the board items the briefing shows.
 BOARD_HABITS = (
     "add_card",
     "tell the member",
@@ -457,6 +458,7 @@ BOARD_HABITS = (
     "take the next card",
     "highest priority",
     "confirms",
+    "draft_learnings",
     "blocked_reason",
     "save_known_issue",
     "Workaround: none known",

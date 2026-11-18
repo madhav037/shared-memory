@@ -117,7 +117,7 @@ The project's work is tracked as cards on its board, in To do, Doing, Blocked an
 
 - **Follow-up work you won't do now**: `add_card` for it, and tell the member you did.
 - **Claiming**: `claim_card` only when the member asks you to work on a card. On "take the next card", call `claim_card` with no number: it claims the top card of the highest priority in To do that has no assignee.
-- **Done**: move a card to Done only once the member confirms the work is finished. That retires the known issues the card was to fix, or raises a challenge to the author of one someone else wrote; tell the member which. One that comes back `not_retired` is still active: `retire` it, or move the card to Done again to try once more.
+- **Done**: move a card to Done only once the member confirms the work is finished. That retires the known issues the card was to fix, or raises a challenge to the author of one someone else wrote; tell the member which. One that comes back `not_retired` is still active: `retire` it, or move the card to Done again to try once more. Moving your own card to Done asks for draft learnings: draft one to three from the card's work, none if nothing is worth keeping, send them with `draft_learnings` and the card's number, then ask the member which to keep.
 - **Blocked**: moving a card to Blocked needs a `blocked_reason`, what it waits for; if that is another card, pass its number as `waits_on`.
 - **The briefing** lists the member's overdue and due-today cards, their Doing and Blocked cards, and the project's known issues. Mention the ones that bear on the task.
 
