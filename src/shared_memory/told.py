@@ -14,6 +14,8 @@ The interface:
   member, the project's leads and the team's admins (`may_read`); refused to anyone else.
 - `most_recalled(under, within)`: the memories under a folder that recall told in the most sessions lately, with how
   many sessions each, for project health's most relied on. Reach is the asker's to check.
+- `recent(caller)`: the sessions of the caller's project from the last `told_days` whose told record the caller may
+  read, the most recently seen first, each with how many memories it was told (#566).
 
 Only this module reads the `session_told` table. A row refers to its session by `Session.id`; sessions are never
 deleted, so an ended session keeps its record.
@@ -88,6 +90,19 @@ class Told:
     memory: ToldMemory | None = None
 
 
+# The most recent sessions listed, so a lead of a busy project is not sent a month of them at once.
+RECENT_LIMIT = 100
+
+
+@dataclass(frozen=True)
+class RecentSession:
+    """One of a project's recent sessions: whether it is active now, and how many memories recall told it."""
+
+    session: Session
+    active: bool
+    memories_told: int
+
+
 class ToldRecord:
     def __init__(
         self, settings: Settings, db: Database, store: MemoryStore, sessions: Sessions, identity: Identity, clock: Clock
@@ -139,6 +154,28 @@ class ToldRecord:
     def may_read(self, caller: Caller, session: Session) -> bool:
         """Whether the caller may read this session's told record: it is their own, or they look after its project."""
         return session.member_id == caller.member_id or self._identity.looks_after(caller.member, session.project_id)
+
+    def recent(self, caller: Caller) -> list[RecentSession]:
+        """The sessions of the caller's project that were active in the last `told_days` and whose told record the
+        caller may read, the most recently seen first, at most `RECENT_LIMIT`: their own, or every one when they look
+        after the project. Each with how many memories recall told it in that time."""
+        project = caller.require_project()
+        looks_after = self._identity.looks_after(caller.member, project.project_id)
+        listed = [
+            (session, active)
+            for session, active in self._sessions.lately(project.project_id, self._kept)
+            if looks_after or session.member_id == caller.member_id
+        ][:RECENT_LIMIT]
+        if not listed:
+            return []
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT session_id, count(*) AS told FROM session_told"
+                " WHERE session_id = ANY(%s) AND kind = %s AND at >= %s GROUP BY session_id",
+                ([session.id for session, _ in listed], RECALL, self._clock() - self._kept),
+            ).fetchall()
+        told = {row["session_id"]: row["told"] for row in rows}
+        return [RecentSession(session, active, told.get(session.id, 0)) for session, active in listed]
 
     def of(self, caller: Caller, number: int) -> tuple[Session, list[Told]]:
         """One of the session's of the caller's project, by its number, and what it was told, oldest first. Refused,

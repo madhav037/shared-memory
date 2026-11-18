@@ -379,6 +379,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/sessions/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing. */
+        get: operations["recent_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/sessions/{session_number}/told": {
         parameters: {
             query?: never;
@@ -1699,6 +1716,58 @@ export interface components {
             handoff_notes: components["schemas"]["SessionHandoffNote"][];
             /** Messages */
             messages: components["schemas"]["SessionMessage"][];
+        };
+        /**
+         * RecentSession
+         * @description One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None
+         *     when it stated none since it last started), its git branch as its hooks last said, when it started and was last
+         *     seen, and how many memories recall told it. session_number opens its told record.
+         */
+        RecentSession: {
+            /** Session Number */
+            session_number: number;
+            /** Member Id */
+            member_id: string;
+            /** Member Name */
+            member_name: string;
+            /** Agent */
+            agent: string | null;
+            /** Repository */
+            repository: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Activity */
+            activity: string | null;
+            /** Active */
+            active: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Memories Told */
+            memories_told: number;
+        };
+        /**
+         * RecentSessions
+         * @description The project's sessions from the last told_days whose told record the signed-in member may read, the most
+         *     recently seen first: their own, or every one when they lead the project or are the team's owner or an admin.
+         *     Reading it changes nothing.
+         */
+        RecentSessions: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Told Days */
+            told_days: number;
+            /** Sessions */
+            sessions: components["schemas"]["RecentSession"][];
         };
         /**
          * ToldEntry
@@ -3318,6 +3387,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectSessions"];
+                };
+            };
+        };
+    };
+    recent_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentSessions"];
                 };
             };
         };

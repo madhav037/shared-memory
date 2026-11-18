@@ -750,6 +750,34 @@
         }
       }
     },
+    "/api/projects/{project_id}/sessions/recent": {
+      "get": {
+        "operationId": "recent_sessions",
+        "summary": "A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's sessions from the last told_days whose told record the signed-in member may read, the most recently seen first, each with its last stated activity, branch, when it ran and how many memories it was told. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/sessions/{session_number}/told": {
       "get": {
         "operationId": "session_told",
@@ -3597,6 +3625,132 @@
           "messages"
         ],
         "title": "ProjectSessions",
+        "type": "object"
+      },
+      "RecentSession": {
+        "description": "One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None\nwhen it stated none since it last started), its git branch as its hooks last said, when it started and was last\nseen, and how many memories recall told it. session_number opens its told record.",
+        "properties": {
+          "session_number": {
+            "title": "Session Number",
+            "type": "integer"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "activity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "memories_told": {
+            "title": "Memories Told",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_number",
+          "member_id",
+          "member_name",
+          "agent",
+          "repository",
+          "branch",
+          "activity",
+          "active",
+          "started_at",
+          "last_seen_at",
+          "memories_told"
+        ],
+        "title": "RecentSession",
+        "type": "object"
+      },
+      "RecentSessions": {
+        "description": "The project's sessions from the last told_days whose told record the signed-in member may read, the most\nrecently seen first: their own, or every one when they lead the project or are the team's owner or an admin.\nReading it changes nothing.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "told_days": {
+            "title": "Told Days",
+            "type": "number"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/RecentSession"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "told_days",
+          "sessions"
+        ],
+        "title": "RecentSessions",
         "type": "object"
       },
       "ToldEntry": {

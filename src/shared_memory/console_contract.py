@@ -1006,6 +1006,35 @@ class SessionToldRecord(BaseModel):
     told: list[ToldEntry]
 
 
+class RecentSession(BaseModel):
+    """One of a project's recent sessions, active or not: whose it is, where it ran, its last stated activity (None
+    when it stated none since it last started), its git branch as its hooks last said, when it started and was last
+    seen, and how many memories recall told it. session_number opens its told record."""
+
+    session_number: int
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    branch: str | None
+    activity: str | None
+    active: bool
+    started_at: datetime
+    last_seen_at: datetime
+    memories_told: int
+
+
+class RecentSessions(BaseModel):
+    """The project's sessions from the last told_days whose told record the signed-in member may read, the most
+    recently seen first: their own, or every one when they lead the project or are the team's owner or an admin.
+    Reading it changes nothing."""
+
+    project_id: str
+    project_name: str
+    told_days: float
+    sessions: list[RecentSession]
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
@@ -1250,6 +1279,17 @@ DECLARATIONS: tuple[Declaration, ...] = (
             "project's collisions and gates; and the signed-in member's own sessions' messages."
         ),
         answers=ProjectSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/recent",
+        method="GET",
+        operation_id="recent_sessions",
+        summary=(
+            "A project's sessions from the last told_days whose told record the signed-in member may read, the most "
+            "recently seen first, each with its last stated activity, branch, when it ran and how many memories it was "
+            "told. Changes nothing."
+        ),
+        answers=RecentSessions,
     ),
     Declaration(
         path="/projects/{project_id}/sessions/{session_number}/told",
