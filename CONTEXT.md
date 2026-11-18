@@ -380,3 +380,7 @@ _Avoid_: Snooze, focus mode
 **Handoff note**:
 What a session leaves for whoever takes up its work: what is done, what is left, its branch and the files it touched. Written by its coding agent, or put together by the server when the session ends without one, and kept for seven days.
 _Avoid_: Handover, baton, recap
+
+**Standby**:
+A session's coding agent waiting for news, in the background or in a held tool call, without its member typing: started when the session awaits an answer, and ended by any news for it, the project's wait, a newer standby, or the member's next prompt.
+_Avoid_: Watch, park, wake-up
