@@ -1747,7 +1747,7 @@ def build_app(
             licenses,
             TeamExport(settings, identity, board, audit),
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
-            ProjectHealth(identity, store, uses, challenges, file_edits, tied),
+            ProjectHealth(identity, store, uses, challenges, file_edits, tied, told_record, popularity),
             told_record,
         ).routes()
     )

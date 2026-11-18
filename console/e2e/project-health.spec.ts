@@ -6,11 +6,12 @@ import { signInAs } from "./helpers";
 // both raised it, so it waits on nobody's challenges page but its author's, and stays in doubt whatever order the
 // journeys run in. No coding agent has used Wes's "Reports render through wkhtmltopdf", in Reporting, for 61 days.
 // Tess's session in Payments edited src/payouts/schedule.py three times and src/payouts/retry.py once; no memory is tied
-// to either.
+// to either. Recall told a session of Tess's and one of Olive's Wes's "Payout files go out at six", and Olive's session
+// read Wes's personal "Chargebacks freeze the payout".
 
 const PAYOUTS = "Payouts settle in two days";
 
-test("a lead opens project health from project settings, sees its coverage gaps and clicks through from a doubted memory to its challenge", async ({
+test("a lead opens project health from project settings, sees its coverage gaps and what it relies on most, and clicks through from a doubted memory to its challenge", async ({
   page,
 }) => {
   await signInAs(page, 81, "tess");
@@ -33,6 +34,11 @@ test("a lead opens project health from project settings, sees its coverage gaps 
   ]);
   await expect(gaps.getByTestId("gap-edits")).toHaveText(["Edited 3 times", "Edited 1 time"]);
   await expect(page.locator("main")).toContainText("in the last 30 days");
+  const recalled = page.getByTestId("recalled-memory").filter({ hasText: "Payout files go out at six" });
+  await expect(recalled.getByTestId("recalled-sessions")).toHaveText("Recalled in 2 sessions");
+  const nearly = page.getByTestId("nearly-popular-memory").filter({ hasText: "Chargebacks freeze the payout" });
+  await expect(nearly.getByTestId("readers")).toHaveText("Read by 1 other member");
+  await expect(nearly).toContainText("Wes Writer");
   // Read-only: nothing on the page pins, retires or decides.
   await expect(page.locator("main button")).toHaveCount(0);
 

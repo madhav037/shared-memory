@@ -22,6 +22,8 @@ The interface:
 - `read_by(caller, path)`: the caller's session read this memory now.
 - `briefing_notices(caller)`: the lines naming the caller's popular memories in their project not yet named at this
   count, recorded as named.
+- `nearly_popular(team, project_id)`: the personal memories in a project that at least half the popular-memory bar of
+  other members read within the window but not yet the whole bar, with how many each, for project health.
 """
 
 from __future__ import annotations
@@ -129,6 +131,20 @@ class Popularity:
                 [(caller.team, path, readers, now) for path, readers, _ in named],
             )
         return [self._line(path, readers, memory) for path, readers, memory in named]
+
+    def nearly_popular(self, team: str, project_id: str) -> list[tuple[str, int]]:
+        """Each personal memory in the project read by at least half `Settings.popular_members` other members within
+        the window, and by fewer than all of them, with how many: the most read first. Whether it is still active is
+        the asker's to check."""
+        bar = self._settings.popular_members
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT path, COUNT(*) AS readers FROM memory_readers"
+                " WHERE team = %s AND starts_with(path, %s) AND read_at >= %s"
+                " GROUP BY path HAVING 2 * COUNT(*) >= %s AND COUNT(*) < %s ORDER BY readers DESC, path",
+                (team, f"projects/{project_id}/people/", self._clock() - self._window, bar, bar),
+            ).fetchall()
+        return [(row["path"], row["readers"]) for row in rows]
 
     def _line(self, path: str, readers: int, memory: Memory) -> str:
         days = max(1, round(self._settings.popular_window_days))

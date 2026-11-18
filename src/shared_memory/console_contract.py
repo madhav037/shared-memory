@@ -917,11 +917,41 @@ class CoverageGap(BaseModel):
     edits: int
 
 
+class RecalledMemory(BaseModel):
+    """A project memory on project health's most relied on list: recall told it in this many sessions within
+    relied_on_days, each session counting once."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    sessions: int
+
+
+class NearlyPopularMemory(BaseModel):
+    """A personal memory in the project near the popular-memory bar: this many other members read it within the
+    popular-memory window, at least half of popular_members and not yet all of them. Its author promotes it from a
+    session, never from here (ADR-0009)."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    readers: int
+
+
 class ProjectHealth(BaseModel):
     """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
-    that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; and its coverage
-    gaps, the most edited first, at most ten. Read-only: reading it is no use of any memory and changes nothing.
-    outdated_after_days is the server's setting; coverage_days the days of edits coverage gaps count."""
+    that is possibly outdated, the longest unused first; its memory in doubt, the most doubted first; its coverage
+    gaps, the most edited first, at most ten; and most relied on: its project memory recalled in the most sessions
+    within relied_on_days, and its personal memory near the popular-memory bar of popular_members distinct other
+    readers, each the most first. Read-only: reading it is no use of any memory and changes nothing.
+    outdated_after_days and popular_members are the server's settings; coverage_days the days of edits coverage gaps
+    count."""
 
     project_id: str
     project_name: str
@@ -930,6 +960,10 @@ class ProjectHealth(BaseModel):
     in_doubt: list[DoubtedMemory]
     coverage_days: int
     coverage_gaps: list[CoverageGap]
+    relied_on_days: int
+    most_recalled: list[RecalledMemory]
+    popular_members: int
+    nearly_popular: list[NearlyPopularMemory]
 
 
 class ToldMemoryEntry(BaseModel):
@@ -1202,8 +1236,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="project_health",
         summary=(
             "A project's health, for its leads and the team's admins: its possibly outdated memory, its memory in "
-            "doubt with each one's count and reasons, and its coverage gaps: files edited often that no memory is "
-            "tied to. Changes nothing."
+            "doubt with each one's count and reasons, its coverage gaps: files edited often that no memory is "
+            "tied to, and the memory it relies on most. Changes nothing."
         ),
         answers=ProjectHealth,
     ),

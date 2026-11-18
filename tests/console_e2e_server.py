@@ -455,6 +455,30 @@ def seeded(
         for edited in ("src/payouts/schedule.py",) * 3 + ("src/payouts/retry.py",):
             payouts_session.edit(edited)
         payouts_session.end()
+        # Payments' most relied on, for the project health journey: a memory of Wes's that recall told a session of
+        # Tess's and one of Olive's, and a personal memory of Wes's that Olive's session read, one reader short of the
+        # popular-memory bar.
+        promote_keeping_both(
+            wes.in_project(payments, "payments-api"),
+            {
+                "title": "Payout files go out at six",
+                "summary": "The bank payout file is sent at 18:00 UTC every working day.",
+                "type": "convention",
+                "body": "The payout file is uploaded to the bank's SFTP at 18:00 UTC each working day; later is next day.",
+            },
+        )
+        for relier, identifier in ((tess, "tess-payout-file"), (owner, "olive-payout-file")):
+            relying = relier.in_project(payments, "payments-api").as_session(identifier)
+            relying.prompt("what time is the bank payout file uploaded to the SFTP each day?")
+            relying.end()
+        nearly = wes.in_project(payments, "payments-api").call(
+            "remember",
+            title="Chargebacks freeze the payout",
+            summary="A merchant with an open chargeback gets no payout until it is settled.",
+            type="gotcha",
+            body="An open chargeback holds the merchant's whole payout, not just the disputed amount, until it settles.",
+        )["path"]
+        owner.in_project(payments, "payments-api").call("read", path=nearly)
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
         outdated = promote_now(

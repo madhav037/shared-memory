@@ -73,7 +73,7 @@ from shared_memory.console_contract import (
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
     Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, SessionToldRecord, ToldEntry, ToldMemoryEntry, Projects,
-    RaisedChallenge, RateLimitChange, RateLimits,
+    NearlyPopularMemory, RaisedChallenge, RateLimitChange, RateLimits, RecalledMemory,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
     AwaitedMember, SessionStandby,
@@ -855,6 +855,15 @@ class ConsoleApi:
                 coverage_gaps=[
                     CoverageGap(repository=one.repository, path=one.path, file=one.file, edits=one.edits)
                     for one in found.coverage_gaps
+                ],
+                relied_on_days=health.RELIED_ON_DAYS,
+                most_recalled=[
+                    RecalledMemory(**about(one.path, one.memory), sessions=one.sessions) for one in found.most_recalled
+                ],
+                popular_members=self._settings.popular_members,
+                nearly_popular=[
+                    NearlyPopularMemory(**about(one.path, one.memory), readers=one.readers)
+                    for one in found.nearly_popular
                 ],
             )
 
