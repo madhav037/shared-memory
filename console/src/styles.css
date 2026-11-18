@@ -3376,6 +3376,19 @@ div.dotted {
   font-size: 0.9375rem;
 }
 /* Answering from the Sessions page: a reply or a gate's answer sits under its line; the alerts line under the meta. */
+/* A question's answers, set in under it the way a reply is set under what it answers. */
+.question-answers {
+  margin: 8px 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+  border-left: 2px solid var(--rule);
+}
+.question-answers > li + li {
+  margin-top: 8px;
+}
+.questions .talk-head .mark {
+  margin-left: 4px;
+}
 .talk-answer {
   margin-top: 8px;
   max-width: 68ch;

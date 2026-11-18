@@ -77,6 +77,20 @@ MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 # The work a third session of Olive's states, and a third of Mira's too, when a journey asks Mira's to stand by: Mira's
 # is then gated on Olive's work, and stands by for Olive's answer.
 WAITED_ON_ACTIVITY = "Moving the currency formatting into one shared helper"
+# Quinn's memories for the question journeys (#570), and the question Raj asked about the first.
+QUINNS_EXPORTS = {
+    "title": "Report exports are CSV",
+    "summary": "Every report exports as CSV, never as a spreadsheet file.",
+    "type": "convention",
+    "body": "Every report exports as CSV with a header row, never as a spreadsheet file.",
+}
+QUINNS_RETENTION = {
+    "title": "Reports keep 13 months of history",
+    "summary": "A report's past runs are kept for 13 months.",
+    "type": "convention",
+    "body": "A report's past runs are kept for 13 months, then dropped on the first of the month.",
+}
+RAJS_QUESTION = "Do the finance exports follow this too?"
 # How long the stand-in gives a standby to be held, or to end once Mira moves on.
 STANDBY_SECONDS = 15
 
@@ -549,6 +563,14 @@ def seeded(
             conn.execute(
                 "UPDATE memory_uses SET last_used_at = last_used_at - interval '61 days' WHERE path = %s", (outdated,)
             )
+        # Questions (#570): two memories of Quinn's in Reporting, whom only the question journeys sign in as. Raj has
+        # asked about the first, so a question waits for Quinn's answer; Olive asks about the second in her journey.
+        quinn = Session(
+            server, owner.call("add_member", member_id="emp-quinn", name="Quinn Quill", github="quinn")["personal_token"]
+        ).in_project(reporting, "reporting-api")
+        exports = promote_keeping_both(quinn, QUINNS_EXPORTS)
+        promote_keeping_both(quinn, QUINNS_RETENTION)
+        dana.call("ask_question", path=exports, text=RAJS_QUESTION)
         # Billing's active sessions, for the Sessions journey: Raj's, in Claude Code, with an activity it stated and a
         # file it holds, and Olive's, which stated none and so shows her card in Doing. Neither goes idle: the
         # journeys' clock never moves. Reporting has no session, for the page that says so.

@@ -445,6 +445,75 @@ class MemoryDetail(BaseModel):
     in_doubt: InDoubtMark | None
 
 
+class QuestionAnswer(BaseModel):
+    """One answer in a question's thread: who gave it, by member ID and name, when, and its text."""
+
+    by: str
+    by_name: str
+    at: datetime
+    text: str
+
+
+class QuestionThread(BaseModel):
+    """A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,
+    its text, and whether it is open or answered. It is open until someone other than its asker answers it."""
+
+    question_id: int
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
+    state: Literal["open", "answered"]
+    answers: list[QuestionAnswer]
+
+
+class MemoryQuestions(BaseModel):
+    """The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its
+    author one: anyone who can read it but its author. text_limit is the most characters a question or an answer may
+    have. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009)."""
+
+    path: str
+    open: int
+    may_ask: bool
+    text_limit: int
+    threads: list[QuestionThread]
+
+
+class QuestionToAsk(BaseModel):
+    """A question for the author of the memory at path, at most text_limit characters."""
+
+    path: str
+    text: str = Field(max_length=TEXT_LIMIT)
+
+
+class AnswerToGive(BaseModel):
+    """An answer to a question about the memory at path, at most text_limit characters."""
+
+    path: str
+    text: str = Field(max_length=TEXT_LIMIT)
+
+
+class WaitingQuestion(BaseModel):
+    """An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to
+    them as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,
+    when, and its text."""
+
+    question_id: int
+    path: str
+    title: str
+    project_id: str | None
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
+
+
+class QuestionsWaiting(BaseModel):
+    """The questions waiting for the signed-in member's answer, the oldest first."""
+
+    questions: list[WaitingQuestion]
+
+
 class SearchHit(BaseModel):
     path: str
     project_id: str | None
@@ -1428,6 +1497,45 @@ DECLARATIONS: tuple[Declaration, ...] = (
         answers=Retired,
         changes=True,
         accepts=MemoryPath,
+    ),
+    Declaration(
+        path="/memory/questions",
+        method="GET",
+        operation_id="memory_questions",
+        summary="The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+        answers=MemoryQuestions,
+        query=("path",),
+    ),
+    Declaration(
+        path="/memory/questions",
+        method="POST",
+        operation_id="ask_question",
+        summary=(
+            "Ask the author of a memory a question about it; their next session is told. The memory itself is not "
+            "changed (ADR-0009)."
+        ),
+        answers=MemoryQuestions,
+        changes=True,
+        accepts=QuestionToAsk,
+    ),
+    Declaration(
+        path="/memory/questions/{question_id}/answer",
+        method="POST",
+        operation_id="answer_question",
+        summary=(
+            "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a "
+            "change it calls for is made in a session (ADR-0009)."
+        ),
+        answers=MemoryQuestions,
+        changes=True,
+        accepts=AnswerToGive,
+    ),
+    Declaration(
+        path="/questions",
+        method="GET",
+        operation_id="questions_waiting",
+        summary="The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+        answers=QuestionsWaiting,
     ),
     Declaration(
         path="/search",

@@ -1,5 +1,5 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconBell, IconScale } from "@tabler/icons-react";
+import { IconBell, IconHelpCircle, IconScale } from "@tabler/icons-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -8,6 +8,7 @@ import {
   fetchChallenges,
   fetchFolder,
   fetchNotices,
+  fetchQuestionsWaiting,
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
@@ -46,6 +47,7 @@ export function Front({ member }: { member: SignedInMember }) {
 
       <div style={{ marginTop: 32 }}>
         <Waiting />
+        <QuestionsWaiting />
         <Told />
       </div>
 
@@ -135,6 +137,33 @@ function PartContents({ path, kind }: { path: string; kind: string }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Questions about memory waiting for this member's answer: one about a memory they wrote, or passed on to them. */
+function QuestionsWaiting() {
+  const { answer } = useAsked((signal) => fetchQuestionsWaiting(signal), []);
+  if (!answer || answer.questions.length === 0) return null;
+  const count = answer.questions.length;
+  return (
+    <section className="notice appear" aria-labelledby="questions-waiting-heading" data-testid="questions-waiting">
+      <h2 className="notice-title" id="questions-waiting-heading">
+        <IconHelpCircle size={17} stroke={1.6} aria-hidden />
+        {count === 1 ? "A question is waiting for your answer" : `${count} questions are waiting for your answer`}
+      </h2>
+      <ol>
+        {answer.questions.map((question) => (
+          <li key={question.question_id} data-testid="question-waiting">
+            <Link to={memoryUrl(question.path)} title={question.path} data-testid="question-waiting-link">
+              {question.title}
+            </Link>
+            <span>
+              {question.asked_by_name} asked “{question.text}”, {moment(question.asked_at)}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
