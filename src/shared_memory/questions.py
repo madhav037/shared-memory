@@ -117,15 +117,14 @@ class Questions:
         someone else answered."""
         with self._db.transaction() as conn:
             found = conn.execute(
-                "SELECT q.memory_path, q.state, m.member_id AS asker FROM questions q"
-                " JOIN members m ON m.id = q.asker_id WHERE q.id = %s AND q.team = %s",
+                "SELECT memory_path, state, asker_id FROM questions WHERE id = %s AND team = %s",
                 (question_id, caller.team),
             ).fetchone()
         if found is None:
             raise Refused(f"There is no question {question_id} in your team.")
         location, author = self._readable(caller, found["memory_path"])
         said = _text(text, "An answer")
-        asker = found["asker"]
+        asker = self._identity.named([found["asker_id"]])[found["asker_id"]][0]
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO answers (question_id, author_id, text, answered_at) VALUES (%s, %s, %s, %s)",
@@ -156,24 +155,24 @@ class Questions:
         """The threads on one memory the caller has already been let read, oldest first, and how many are open."""
         with self._db.transaction() as conn:
             asked = conn.execute(
-                "SELECT q.id, q.text, q.asked_at, q.state, m.member_id, m.name FROM questions q"
-                " JOIN members m ON m.id = q.asker_id WHERE q.team = %s AND q.memory_path = %s ORDER BY q.id",
+                "SELECT id, text, asked_at, state, asker_id FROM questions WHERE team = %s AND memory_path = %s"
+                " ORDER BY id",
                 (caller.team, path),
             ).fetchall()
             answered = conn.execute(
-                "SELECT a.question_id, a.text, a.answered_at, m.member_id, m.name FROM answers a"
-                " JOIN members m ON m.id = a.author_id WHERE a.question_id = ANY(%s) ORDER BY a.id",
+                "SELECT question_id, text, answered_at, author_id FROM answers WHERE question_id = ANY(%s) ORDER BY id",
                 ([row["id"] for row in asked],),
             ).fetchall()
+        names = self._identity.named([*(row["asker_id"] for row in asked), *(row["author_id"] for row in answered)])
         answers: dict[int, list[dict[str, Any]]] = {}
         for row in answered:
             answers.setdefault(row["question_id"], []).append(
-                {"by": _named(row["member_id"], row["name"]), "at": _when(row["answered_at"]), "text": row["text"]}
+                {"by": _named(*names[row["author_id"]]), "at": _when(row["answered_at"]), "text": row["text"]}
             )
         threads = [
             {
                 "question_id": row["id"],
-                "asked_by": _named(row["member_id"], row["name"]),
+                "asked_by": _named(*names[row["asker_id"]]),
                 "asked_at": _when(row["asked_at"]),
                 "text": row["text"],
                 "state": row["state"],
