@@ -8,7 +8,7 @@ import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import timedelta
-from typing import Any, TypeVar
+from typing import Any, NotRequired, TypedDict, TypeVar
 
 import anyio
 import anyio.from_thread
@@ -43,6 +43,8 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
+from shared_memory.draft_learnings import ASKING as DRAFT_LEARNINGS_ASKING
+from shared_memory.draft_learnings import DraftLearning, DraftLearnings, Edits, Moment
 from shared_memory.collisions import Collisions, reminder
 from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder, LazyEmbedder, QueryCacheCounts
 from shared_memory.errors import Refused
@@ -173,6 +175,36 @@ def _refusals_as_tool_errors(fn: F) -> F:
             raise ToolError(str(refused)) from refused
 
     return wrapper  # type: ignore[return-value]
+
+
+# A draft learning as a coding agent sends it with `draft_learnings`. These two go without docstrings and None
+# defaults, which every session would otherwise pay for in its tool listing (test_session_cost.py).
+class SentDraftLearning(TypedDict):
+    moment: Moment
+    title: str
+    summary: str
+    type: str
+    body: str
+    tied_files: NotRequired[list[str]]
+
+
+# What the member changed in a draft learning before confirming it; a field left out stays as drafted.
+class DraftLearningEdits(TypedDict, total=False):
+    title: str
+    summary: str
+    type: str
+    body: str
+    tied_files: list[str]
+
+
+def _fenced_save(saved: dict[str, Any]) -> dict[str, Any]:
+    """A save's answer as a coding agent is given it: the similar memories it names fenced, since others wrote them."""
+    token = new_token()
+    for each in saved.get("similar", []):
+        each["title"] = escape(each["title"])
+        each["summary"] = fenced(each["summary"], token, inline=True)
+        _escape_in_doubt(each)
+    return saved
 
 
 def _escape_in_doubt(shown: dict[str, Any]) -> None:
@@ -319,6 +351,7 @@ def build_app(
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
     standbys = Standbys(settings, db, sessions, gates.wait, clock)
+    draft_learnings_kept = DraftLearnings(settings, db, service, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -946,13 +979,47 @@ def build_app(
         It always saves. `similar` names up to three similar memories in your reach: judge each with the member, then
         supersede it, promote yours, or leave both.
         """
-        saved = service.remember(caller(ctx), title, summary, type, body, tied_files, topic)
-        token = new_token()
-        for each in saved.get("similar", []):
-            each["title"] = escape(each["title"])
-            each["summary"] = fenced(each["summary"], token, inline=True)
-            _escape_in_doubt(each)
-        return saved
+        return _fenced_save(service.remember(caller(ctx), title, summary, type, body, tied_files, topic))
+
+    @server.tool(
+        description=(
+            "Send what this session learned as draft learnings, at most "
+            f"{settings.draft_learning_most} waiting at a time, for the member to confirm or decline; none if "
+            "nothing is worth keeping. moment is compaction, session_end or card_done."
+        )
+    )
+    @_refusals_as_tool_errors
+    def draft_learnings(
+        session: str, draft_learnings: list[SentDraftLearning], ctx: Context
+    ) -> dict[str, Any]:
+        current = caller(ctx)
+        calling = sessions.touch(current, session)
+        kept = draft_learnings_kept.keep(
+            current, calling, [DraftLearning(**each) for each in draft_learnings]
+        )
+        answer: dict[str, Any] = {
+            "session": calling.identifier,
+            "draft_learnings": [{"id": each.id, "title": escape(each.title)} for each in kept],
+        }
+        if kept:
+            answer["next"] = DRAFT_LEARNINGS_ASKING
+        answer["notices"] = waiting_for(current, calling)
+        return answer
+
+    @server.tool()
+    @saving
+    @_refusals_as_tool_errors
+    @unless_read_only
+    def confirm_draft_learning(id: int, ctx: Context, edits: DraftLearningEdits | None = None) -> dict[str, Any]:
+        """Save a draft learning the member chose, with their edits, as their personal memory."""
+        changed = Edits(**edits) if edits is not None else None
+        return _fenced_save(draft_learnings_kept.confirm(caller(ctx), id, changed))
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    def decline_draft_learning(id: int, ctx: Context) -> dict[str, Any]:
+        """Drop a draft learning the member declined."""
+        return {"declined": draft_learnings_kept.decline(caller(ctx), id)}
 
     @server.tool(name="list")
     @_refusals_as_tool_errors
@@ -1600,6 +1667,7 @@ def build_app(
     app.state.standbys = standbys
     app.state.locks = locks
     app.state.project_patterns = project_patterns
+    app.state.draft_learnings = draft_learnings_kept
     return app
 
 
