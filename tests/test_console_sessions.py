@@ -26,6 +26,8 @@ from tests.support import (
     signed_in,
     signed_in_owner,
 )
+from tests.test_messages import PROMPT
+from tests.test_standby import answer_of, standing_by
 
 RETRY = "src/webhooks/retry.py"
 QUEUE = "src/webhooks/queue.py"
@@ -668,3 +670,44 @@ def test_the_page_is_told_the_longest_reply_and_a_longer_one_is_refused(
 
     assert limit == 2000
     assert too_long.status_code == 422
+
+
+def test_a_session_standing_by_shows_whose_answer_it_awaits_and_the_mark_goes_when_the_standby_ends(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-standby", 1490)
+    dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
+    state(olive, WEBHOOKS)
+    state(dana, WEBHOOKS)
+    before = sessions(signed_out, project)
+    held = standing_by(dana)
+
+    during = sessions(signed_out, project)
+    read_again = sessions(signed_out, project)
+    dana.prompt(PROMPT)
+    ended = answer_of(held)
+    after = sessions(signed_out, project)
+
+    assert [one["standby"] for one in before] == [None, None]
+    olives, danas = during
+    assert olives["standby"] is None
+    assert danas["member_id"] == "emp-2"
+    assert danas["standby"]["awaits"] == [{"member_id": "E1001", "member_name": "Olive Owner"}]
+    assert at(danas["standby"]["started_at"]) <= at(danas["standby"]["ends_at"])
+    assert read_again[1]["standby"] == danas["standby"], "reading the page leaves the standby held"
+    assert ended["ended"] == "moved_on"
+    assert [one["standby"] for one in after] == [None, None]
+
+
+def test_a_session_standing_by_for_no_one_in_particular_awaits_no_member(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, olive = a_project(console, signed_out, "olive-sessions-standby-anyone", 1491)
+    olive.start()
+    held = standing_by(olive)
+
+    (during,) = sessions(signed_out, project)
+    olive.prompt(PROMPT)
+    answer_of(held)
+
+    assert during["standby"] == {**during["standby"], "awaits": []}

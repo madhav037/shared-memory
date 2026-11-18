@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { curled, folderName, isTopic, noticeMemory, readableNotice } from "./format";
+import { curled, folderName, isTopic, noticeMemory, readableNotice, waitingFor } from "./format";
 
 const names = new Map([
   ["emp-raj", "Raj Raiser"],
@@ -85,5 +85,21 @@ describe("a folder's name as the console shows it", () => {
 describe("curled quotes", () => {
   it("opens and closes double and single quotes, and turns apostrophes", () => {
     expect(curled(`It's "done" ('mostly')`)).toBe("It’s “done” (‘mostly’)");
+  });
+});
+
+describe("what a standing-by session waits for", () => {
+  it("names the member whose answer it awaits", () => {
+    expect(waitingFor(["Olive Owner"])).toBe("waiting for Olive Owner’s answer");
+  });
+
+  it("names each of several members", () => {
+    expect(waitingFor(["Olive Owner", "Raj Raiser", "Mira Maker"])).toBe(
+      "waiting for Olive Owner’s, Raj Raiser’s and Mira Maker’s answers",
+    );
+  });
+
+  it("waits for an answer when it awaits no member in particular", () => {
+    expect(waitingFor([])).toBe("waiting for an answer");
   });
 });
