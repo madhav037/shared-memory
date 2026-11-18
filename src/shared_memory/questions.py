@@ -19,6 +19,9 @@ What other modules stand on, all of it on `Questions`:
 - `answer(caller, question_id, text)`: answer a question about a memory the caller can read.
 - `on(caller, path)`: the memory's threads, oldest first, and how many are open: what a read of it carries.
 - `pass_on(caller)`: pass on the team's questions now due (#569), before a briefing is composed.
+- `threads(caller, path)`: the same threads as `Threads`, with each member's ID and name apart, refused unless the caller
+  can read the memory: what the console shows (#570).
+- `waiting_for(caller)`: the open questions waiting for the caller's answer, oldest first, as `Asked`.
 
 A question its author has left unanswered for `PASS_ON_DAYS`, or whose author has been removed, is passed on to the
 memory's project leads (the team's owner and admins where it has none), or for team memory to the team's admins. There
@@ -29,6 +32,7 @@ and each question is passed on once. The author may still answer it, and so may 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
@@ -73,6 +77,56 @@ PASS_ON_DAYS = 7
 
 
 State = Literal["open", "answered"]
+
+
+@dataclass(frozen=True)
+class Answer:
+    """One answer in a thread: its author's member ID and name, when it was given, and its text."""
+
+    by: str
+    by_name: str
+    at: datetime
+    text: str
+
+
+@dataclass(frozen=True)
+class Thread:
+    """A question and its answers, oldest first."""
+
+    question_id: int
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
+    state: State
+    answers: list[Answer]
+
+
+@dataclass(frozen=True)
+class Threads:
+    """A memory's threads, oldest first, and the memory's author by member ID."""
+
+    path: str
+    author: str
+    threads: list[Thread]
+
+    @property
+    def open(self) -> int:
+        return sum(1 for each in self.threads if each.state == "open")
+
+
+@dataclass(frozen=True)
+class Asked:
+    """An open question waiting for one member's answer, about the memory at path, titled title."""
+
+    question_id: int
+    path: str
+    title: str
+    project_id: str | None
+    asked_by: str
+    asked_by_name: str
+    asked_at: datetime
+    text: str
 
 
 class Questions:
@@ -226,34 +280,109 @@ class Questions:
     def on(self, caller: Caller, path: str) -> dict[str, Any]:
         """The threads on one memory the caller has already been let read, oldest first, and how many are open."""
         self.pass_on(caller)
+        threads = [
+            {
+                "question_id": each.question_id,
+                "asked_by": _named(each.asked_by, each.asked_by_name),
+                "asked_at": _when(each.asked_at),
+                "text": each.text,
+                "state": each.state,
+                "answers": [
+                    {"by": _named(one.by, one.by_name), "at": _when(one.at), "text": one.text} for one in each.answers
+                ],
+            }
+            for each in self._threads(caller.team, path)
+        ]
+        return {"open": sum(1 for each in threads if each["state"] == "open"), "threads": threads}
+
+    def threads(self, caller: Caller, path: str) -> Threads:
+        """The threads on one memory, oldest first, refused unless the caller can read it."""
+        location, author = self._readable(caller, path)
+        self.pass_on(caller)
+        return Threads(str(location.path), author, self._threads(caller.team, str(location.path)))
+
+    def waiting_for(self, caller: Caller) -> list[Asked]:
+        """The open questions in the caller's team that wait for their answer, oldest first: those about a memory they
+        wrote still routed to its author, and those passed on to its project's leads or the team's admins that the
+        caller is among. A question they asked themselves, or about a memory they can't reach, is left out."""
+        self.pass_on(caller)
+        member = caller.member
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT id, memory_path, asker_id, routed_to, text, asked_at FROM questions"
+                " WHERE team = %s AND state = 'open' AND asker_id <> %s ORDER BY id",
+                (caller.team, member.pk),
+            ).fetchall()
+            leads: dict[str, bool] = {}
+            for row in rows:
+                project_id = locate(row["memory_path"]).project_id
+                if project_id is not None and project_id not in leads:
+                    leads[project_id] = self._identity.looks_after_in(conn, member, project_id)
+        askers = self._identity.named([row["asker_id"] for row in rows])
+        waiting: list[Asked] = []
+        for row in rows:
+            path = row["memory_path"]
+            location = locate(path)
+            try:
+                caller.require_reach(path)
+                memory = self._store.read(caller.team, location.path)
+            except (Refused, FileNotFoundError):
+                continue
+            if row["routed_to"] == "author":
+                for_me = memory.author == caller.member_id
+            elif location.project_id is None:
+                for_me = member.is_owner or member.is_admin
+            else:
+                for_me = memory.author != caller.member_id and leads[location.project_id]
+            if not for_me:
+                continue
+            asker_id, asker_name = askers[row["asker_id"]]
+            waiting.append(
+                Asked(
+                    question_id=int(row["id"]),
+                    path=path,
+                    title=memory.title,
+                    project_id=location.project_id,
+                    asked_by=asker_id,
+                    asked_by_name=asker_name,
+                    asked_at=row["asked_at"],
+                    text=row["text"],
+                )
+            )
+        return waiting
+
+    def _threads(self, team: str, path: str) -> list[Thread]:
+        """The threads on one memory, oldest first, with no check of reach: that is the caller's."""
         with self._db.transaction() as conn:
             asked = conn.execute(
                 "SELECT id, text, asked_at, state, asker_id FROM questions WHERE team = %s AND memory_path = %s"
                 " ORDER BY id",
-                (caller.team, path),
+                (team, path),
             ).fetchall()
             answered = conn.execute(
                 "SELECT question_id, text, answered_at, author_id FROM answers WHERE question_id = ANY(%s) ORDER BY id",
                 ([row["id"] for row in asked],),
             ).fetchall()
         names = self._identity.named([*(row["asker_id"] for row in asked), *(row["author_id"] for row in answered)])
-        answers: dict[int, list[dict[str, Any]]] = {}
+        answers: dict[int, list[Answer]] = {}
         for row in answered:
-            answers.setdefault(row["question_id"], []).append(
-                {"by": _named(*names[row["author_id"]]), "at": _when(row["answered_at"]), "text": row["text"]}
+            by, by_name = names[row["author_id"]]
+            answers.setdefault(row["question_id"], []).append(Answer(by, by_name, row["answered_at"], row["text"]))
+        threads: list[Thread] = []
+        for row in asked:
+            asker, asker_name = names[row["asker_id"]]
+            threads.append(
+                Thread(
+                    question_id=int(row["id"]),
+                    asked_by=asker,
+                    asked_by_name=asker_name,
+                    asked_at=row["asked_at"],
+                    text=row["text"],
+                    state=row["state"],
+                    answers=answers.get(row["id"], []),
+                )
             )
-        threads = [
-            {
-                "question_id": row["id"],
-                "asked_by": _named(*names[row["asker_id"]]),
-                "asked_at": _when(row["asked_at"]),
-                "text": row["text"],
-                "state": row["state"],
-                "answers": answers.get(row["id"], []),
-            }
-            for row in asked
-        ]
-        return {"open": sum(1 for each in threads if each["state"] == "open"), "threads": threads}
+        return threads
 
     def _readable(self, caller: Caller, path: str) -> tuple[Location, str]:
         """The memory's location and its author's member ID, refused unless the caller can read it."""

@@ -703,6 +703,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/memory/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing. */
+        get: operations["memory_questions"];
+        put?: never;
+        /** Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009). */
+        post: operations["ask_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/questions/{question_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009). */
+        post: operations["answer_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The open questions waiting for this member's answer, the oldest first. Changes nothing. */
+        get: operations["questions_waiting"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -2428,6 +2480,123 @@ export interface components {
             /** Path */
             path: string;
         };
+        /**
+         * QuestionAnswer
+         * @description One answer in a question's thread: who gave it, by member ID and name, when, and its text.
+         */
+        QuestionAnswer: {
+            /** By */
+            by: string;
+            /** By Name */
+            by_name: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * QuestionThread
+         * @description A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,
+         *     its text, and whether it is open or answered. It is open until someone other than its asker answers it.
+         */
+        QuestionThread: {
+            /** Question Id */
+            question_id: number;
+            /** Asked By */
+            asked_by: string;
+            /** Asked By Name */
+            asked_by_name: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Text */
+            text: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "answered";
+            /** Answers */
+            answers: components["schemas"]["QuestionAnswer"][];
+        };
+        /**
+         * MemoryQuestions
+         * @description The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its
+         *     author one: anyone who can read it but its author. text_limit is the most characters a question or an answer may
+         *     have. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009).
+         */
+        MemoryQuestions: {
+            /** Path */
+            path: string;
+            /** Open */
+            open: number;
+            /** May Ask */
+            may_ask: boolean;
+            /** Text Limit */
+            text_limit: number;
+            /** Threads */
+            threads: components["schemas"]["QuestionThread"][];
+        };
+        /**
+         * QuestionToAsk
+         * @description A question for the author of the memory at path, at most text_limit characters.
+         */
+        QuestionToAsk: {
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * AnswerToGive
+         * @description An answer to a question about the memory at path, at most text_limit characters.
+         */
+        AnswerToGive: {
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * WaitingQuestion
+         * @description An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to
+         *     them as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,
+         *     when, and its text.
+         */
+        WaitingQuestion: {
+            /** Question Id */
+            question_id: number;
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Asked By */
+            asked_by: string;
+            /** Asked By Name */
+            asked_by_name: string;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * QuestionsWaiting
+         * @description The questions waiting for the signed-in member's answer, the oldest first.
+         */
+        QuestionsWaiting: {
+            /** Questions */
+            questions: components["schemas"]["WaitingQuestion"][];
+        };
         /** SearchHit */
         SearchHit: {
             /** Path */
@@ -3805,6 +3974,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Retired"];
+                };
+            };
+        };
+    };
+    memory_questions: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    ask_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionToAsk"];
+            };
+        };
+        responses: {
+            /** @description Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    answer_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerToGive"];
+            };
+        };
+        responses: {
+            /** @description Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryQuestions"];
+                };
+            };
+        };
+    };
+    questions_waiting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The open questions waiting for this member's answer, the oldest first. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionsWaiting"];
                 };
             };
         };

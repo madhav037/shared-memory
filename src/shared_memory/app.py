@@ -1750,6 +1750,7 @@ def build_app(
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
             ProjectHealth(identity, store, uses, challenges, file_edits, tied, told_record, popularity),
             told_record,
+            questions,
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

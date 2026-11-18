@@ -79,6 +79,7 @@ from shared_memory.console_contract import (
     AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage,
+    AnswerToGive, MemoryQuestions, QuestionAnswer, QuestionThread, QuestionToAsk, QuestionsWaiting, WaitingQuestion,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -89,6 +90,7 @@ from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
 from shared_memory.memory import Memory, locate
+from shared_memory.questions import Questions, Thread
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
@@ -226,6 +228,19 @@ def _evidence(each: Evidence) -> DoubtEvidence:
 
 def _sign_in_first() -> Response:
     return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
+
+
+def _thread(one: Thread) -> QuestionThread:
+    """A question and its answers as the memory page shows them."""
+    return QuestionThread(
+        question_id=one.question_id,
+        asked_by=one.asked_by,
+        asked_by_name=one.asked_by_name,
+        asked_at=one.asked_at,
+        text=one.text,
+        state=one.state,
+        answers=[QuestionAnswer(by=each.by, by_name=each.by_name, at=each.at, text=each.text) for each in one.answers],
+    )
 
 
 def _moment(asked: str | None, edge: time) -> datetime | None:
@@ -378,7 +393,9 @@ class ConsoleApi:
         talk: SessionTalk,
         project_health: health.ProjectHealth,
         told_record: told.ToldRecord,
+        questions: Questions,
     ) -> None:
+        self._questions = questions
         self._told_record = told_record
         self._export_of = export
         self._health = project_health
@@ -445,6 +462,10 @@ class ConsoleApi:
             "pin_at": self._pin_at,
             "unpin_at": self._unpin_at,
             "retire_at": self._retire_at,
+            "memory_questions": self._memory_questions,
+            "ask_question": self._ask_question,
+            "answer_question": self._answer_question,
+            "questions_waiting": self._questions_waiting,
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
             "notices": self._notices,
@@ -1146,6 +1167,64 @@ class ConsoleApi:
             return Retired(status=done["status"], path=path, challenge_id=done.get("challenge_id"))
 
         return self._at(request, retire, request.state.asked.path)
+
+    # --- questions (ADR-0028), asked and answered through the operations a session's tools use. Neither changes the
+    # memory: a change an answer calls for is made in a session (ADR-0009). ---
+
+    def _memory_questions(self, request: Request) -> Response:
+        return self._at(request, self._threads_on)
+
+    def _ask_question(self, request: Request) -> Response:
+        asked: QuestionToAsk = request.state.asked
+
+        def ask(caller: Caller, path: str) -> MemoryQuestions:
+            return self._threads_on(caller, self._questions.ask(caller, path, asked.text)["path"])
+
+        return self._at(request, ask, asked.path)
+
+    def _answer_question(self, request: Request) -> Response:
+        asked: AnswerToGive = request.state.asked
+        try:
+            question_id = int(request.path_params["question_id"])
+        except ValueError:
+            return JSONResponse({"message": "That isn't a question."}, status_code=422)
+
+        def answer(caller: Caller, path: str) -> MemoryQuestions:
+            return self._threads_on(caller, self._questions.answer(caller, question_id, asked.text)["path"])
+
+        return self._at(request, answer, asked.path)
+
+    def _threads_on(self, caller: Caller, path: str) -> MemoryQuestions:
+        found = self._questions.threads(caller, path)
+        return MemoryQuestions(
+            path=found.path,
+            open=found.open,
+            may_ask=found.author != caller.member_id,
+            text_limit=TEXT_LIMIT,
+            threads=[_thread(one) for one in found.threads],
+        )
+
+    def _questions_waiting(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        waiting = self._questions.waiting_for(self._identity.caller_in(member, None))
+        answer = QuestionsWaiting(
+            questions=[
+                WaitingQuestion(
+                    question_id=one.question_id,
+                    path=one.path,
+                    title=one.title,
+                    project_id=one.project_id,
+                    asked_by=one.asked_by,
+                    asked_by_name=one.asked_by_name,
+                    asked_at=one.asked_at,
+                    text=one.text,
+                )
+                for one in waiting
+            ]
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _search_everywhere(self, request: Request) -> Response:
         member = self._member(request)

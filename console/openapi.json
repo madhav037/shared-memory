@@ -1487,6 +1487,116 @@
         }
       }
     },
+    "/api/memory/questions": {
+      "get": {
+        "operationId": "memory_questions",
+        "summary": "The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The questions on a memory, by its path, each with its answers, the oldest first. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ask_question",
+        "summary": "Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionToAsk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ask the author of a memory a question about it; their next session is told. The memory itself is not changed (ADR-0009).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/questions/{question_id}/answer": {
+      "post": {
+        "operationId": "answer_question",
+        "summary": "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009).",
+        "parameters": [
+          {
+            "name": "question_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerToGive"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answer a question about a memory; the asker's next session is told. The memory itself is not changed: a change it calls for is made in a session (ADR-0009).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuestions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/questions": {
+      "get": {
+        "operationId": "questions_waiting",
+        "summary": "The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+        "responses": {
+          "200": {
+            "description": "The open questions waiting for this member's answer, the oldest first. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionsWaiting"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search": {
       "get": {
         "operationId": "search_everywhere",
@@ -5541,6 +5651,239 @@
           "path"
         ],
         "title": "MemoryPath",
+        "type": "object"
+      },
+      "QuestionAnswer": {
+        "description": "One answer in a question's thread: who gave it, by member ID and name, when, and its text.",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "by_name": {
+            "title": "By Name",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "by_name",
+          "at",
+          "text"
+        ],
+        "title": "QuestionAnswer",
+        "type": "object"
+      },
+      "QuestionThread": {
+        "description": "A question about a memory (ADR-0028) and its answers, oldest first: who asked it, by member ID and name, when,\nits text, and whether it is open or answered. It is open until someone other than its asker answers it.",
+        "properties": {
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          },
+          "asked_by": {
+            "title": "Asked By",
+            "type": "string"
+          },
+          "asked_by_name": {
+            "title": "Asked By Name",
+            "type": "string"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "answered"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            },
+            "title": "Answers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "question_id",
+          "asked_by",
+          "asked_by_name",
+          "asked_at",
+          "text",
+          "state",
+          "answers"
+        ],
+        "title": "QuestionThread",
+        "type": "object"
+      },
+      "MemoryQuestions": {
+        "description": "The questions on one memory, oldest first, and how many are open. may_ask says the signed-in member may ask its\nauthor one: anyone who can read it but its author. text_limit is the most characters a question or an answer may\nhave. Neither changes the memory: a member who decides it should change does that in a session (ADR-0009).",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "may_ask": {
+            "title": "May Ask",
+            "type": "boolean"
+          },
+          "text_limit": {
+            "title": "Text Limit",
+            "type": "integer"
+          },
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionThread"
+            },
+            "title": "Threads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "open",
+          "may_ask",
+          "text_limit",
+          "threads"
+        ],
+        "title": "MemoryQuestions",
+        "type": "object"
+      },
+      "QuestionToAsk": {
+        "description": "A question for the author of the memory at path, at most text_limit characters.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "text"
+        ],
+        "title": "QuestionToAsk",
+        "type": "object"
+      },
+      "AnswerToGive": {
+        "description": "An answer to a question about the memory at path, at most text_limit characters.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "text"
+        ],
+        "title": "AnswerToGive",
+        "type": "object"
+      },
+      "WaitingQuestion": {
+        "description": "An open question waiting for the signed-in member's answer: one about a memory they wrote, or one passed on to\nthem as a lead of its project or one of the team's admins. Named by the memory's path and title, with who asked it,\nwhen, and its text.",
+        "properties": {
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "asked_by": {
+            "title": "Asked By",
+            "type": "string"
+          },
+          "asked_by_name": {
+            "title": "Asked By Name",
+            "type": "string"
+          },
+          "asked_at": {
+            "format": "date-time",
+            "title": "Asked At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "path",
+          "title",
+          "project_id",
+          "asked_by",
+          "asked_by_name",
+          "asked_at",
+          "text"
+        ],
+        "title": "WaitingQuestion",
+        "type": "object"
+      },
+      "QuestionsWaiting": {
+        "description": "The questions waiting for the signed-in member's answer, the oldest first.",
+        "properties": {
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "title": "QuestionsWaiting",
         "type": "object"
       },
       "SearchHit": {
