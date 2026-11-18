@@ -5,6 +5,7 @@ import dataclasses
 import functools
 import json
 import logging
+import math
 from collections.abc import Callable, Mapping
 from datetime import timedelta
 from typing import Any, TypeVar
@@ -64,6 +65,7 @@ from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
+from shared_memory.standby import Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
@@ -289,6 +291,7 @@ def build_app(
     talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
+    standbys = Standbys(settings, db, sessions, gates.wait, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -529,6 +532,8 @@ def build_app(
             # The session's part comes after the member's: what this session is told once. A module that has
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
+            if session:
+                standbys.end(session)  # its member moved on (ADR-0027)
             told = [challenges.prompt_notices(current), *(waiting_for(current, session, embedded[0], prompted=True) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
@@ -602,6 +607,60 @@ def build_app(
             return news_for(current, session) if session else None
 
         return await hook(request, "PostToolUse", news)
+
+    @server.custom_route("/hooks/standby", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def standby(request: Request) -> Response:
+        """A session awaiting an answer stands by (ADR-0027): the request is held until there is news for the session,
+        which it answers with, told once, or until the standby ends without news. Its coding agent runs it as a
+        background command where it can be woken when that ends. The personal token comes in the Authorization header
+        as every hook's does, never in the address or the command. A refusal is a 401 or a 400 with `message`; every
+        other answer is a 200 with `ended` (news, nothing_yet, replaced or moved_on), `news`, `message` and, for
+        nothing yet, `wait_left_seconds`."""
+        headers = Headers(scope=request.scope)
+
+        def authenticated() -> Caller | Refused:
+            try:
+                return authenticate(headers)
+            except Refused as refused:
+                return refused
+
+        try:
+            current = await anyio.to_thread.run_sync(authenticated)
+            if isinstance(current, Refused):
+                return JSONResponse({"message": f"Shared Memory refused this standby: {current}"}, status_code=401)
+            if current.project is None:
+                return JSONResponse(
+                    {"message": "A standby names its project in the X-Shared-Memory-Project header."}, status_code=400
+                )
+            current = dataclasses.replace(
+                current, agent=hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), request.query_params.get("format"))
+            )
+            payload = await _hook_payload(request, settings.hook_body_limit_bytes)
+            if payload is None or hooks.session_in(payload) is None:
+                return JSONResponse(
+                    {"message": "A standby names its session, as session_id in a JSON body, as every hook does."},
+                    status_code=400,
+                )
+
+            def standing_by() -> tuple[Session, tuple[str, ...]]:
+                session = session_of(current, payload)
+                assert session is not None
+                awaits = tuple(dict.fromkeys(each.earlier.member_id for each in gates.waiting(current, session)))
+                return session, awaits
+
+            session, awaits = await anyio.to_thread.run_sync(standing_by)
+            ended = await standbys.hold(
+                session, functools.partial(waiting_for, current, session), awaits, gone=request.is_disconnected
+            )
+        except Refused as refused:
+            return JSONResponse({"message": f"Shared Memory refused this standby: {refused}"}, status_code=400)
+        except Exception:
+            log.exception("standby failed")
+            return JSONResponse({"message": "Shared Memory could not hold this standby."}, status_code=503)
+        answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message}
+        if ended.wait_left is not None:
+            answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
+        return JSONResponse(answer)
 
     def composed_briefing(
         current: Caller, named: str | None, session: Session | None, with_sessions: bool = True
@@ -1407,6 +1466,7 @@ def build_app(
     app.state.licenses = licenses
     app.state.database = db
     app.state.sessions = sessions
+    app.state.standbys = standbys
     app.state.locks = locks
     app.state.project_patterns = project_patterns
     return app

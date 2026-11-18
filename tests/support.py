@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -40,6 +40,7 @@ from shared_memory.config import Settings
 from shared_memory.fence import unfenced
 from shared_memory.sessions import Session as KnownSession
 from shared_memory.sessions import Sessions
+from shared_memory.standby import Standbys
 
 ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -70,6 +71,10 @@ def fresh_database(name: str) -> str:
     except psycopg.OperationalError as error:
         pytest.exit(f"Postgres is not reachable ({error}). Start it with: docker compose up -d db", returncode=2)
     return ADMIN_URL.rsplit("/", 1)[0] + f"/{name}"
+
+
+# Where the requests a coding agent leaves running in the background are held, such as a standby.
+_BACKGROUND = ThreadPoolExecutor(max_workers=16, thread_name_prefix="background-request")
 
 
 class TestClock:
@@ -285,6 +290,26 @@ class Session:
             **tool,
         }
         return self.hook_payload(event, body, format, branch)
+
+    def stand_by(self) -> Future[httpx.Response]:
+        """Start a standby as a coding agent's background command does, on a thread of its own: the future holds the
+        server's answer once the standby ends."""
+        return _BACKGROUND.submit(
+            httpx.post,
+            f"{self.server.url}/hooks/standby",
+            json={"session_id": self.identifier},
+            headers=self.headers(),
+            timeout=60,
+        )
+
+    def on_standby(self) -> list[str]:
+        """The identifiers of the sessions in this session's project that stand by now, as the worker it talks to
+        reads them, one per held standby. No tool or page shows them yet, so this asks that worker's standby module."""
+        assert self.project is not None
+        standbys: Standbys = self.server.app.state.standbys
+        sessions: Sessions = self.server.app.state.sessions
+        named = {each.id: each.identifier for each in sessions.active(self.project)}
+        return [named[each.session_id] for each in standbys.in_project(self.project) if each.session_id in named]
 
     def active_sessions(self) -> list[KnownSession]:
         """The sessions active in this session's project, as the worker it talks to reads them. No tool lists them

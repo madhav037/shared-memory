@@ -14,7 +14,7 @@ server's, so a test moves it by hand.
 The hooks a coding agent calls on every tool call, before it and after it (ADR-0025), are counted per personal token
 in a bucket of their own, `TOOL_HOOKS_MULTIPLE` times the personal token's limit: a fast agent calls them two at a
 time, many times a minute, and they must neither use up its prompts' and tools' allowance nor be limited themselves
-in ordinary work.
+in ordinary work. A standby (ADR-0027) draws on the same allowance.
 
 The limiter never refuses a call because of its own fault: when a bucket can't be read or written, the call is allowed
 and the failure logged.
@@ -51,7 +51,7 @@ log = logging.getLogger("shared_memory")
 BURST_DIVISOR = 4
 
 # The hooks on every tool call, and how many times a personal token's limit they may make a minute between them.
-TOOL_HOOK_PATHS = ("/hooks/before-edit", "/hooks/after-tool")
+TOOL_HOOK_PATHS = ("/hooks/before-edit", "/hooks/after-tool", "/hooks/standby")
 TOOL_HOOKS_MULTIPLE = 4
 
 # The most of a refused MCP call's body that is read, to answer it in its own JSON-RPC shape.

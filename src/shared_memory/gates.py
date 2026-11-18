@@ -18,7 +18,7 @@ since the urgent message was sent. It is the same gate, read the same way, in th
 Kept in Postgres, so every worker agrees (ADR-0013):
 
 - `gate_ends`: per later and earlier session, how the gate between them ended (`different_work` or `timed_out`), and
-  whether the earlier session has been told. A timeout is kept the first time a read finds the wait passed, which is
+  whether the earlier session has been told, and of a timeout, the later session too. A timeout is kept the first time a read finds the wait passed, which is
   when it is written to the audit log.
 - `gate_answers`: per later and earlier session, the earlier member's answer (`agreed` or `refused`), their words for
   the later session, and whether the later session has been told. A refusal may be changed to agree; an agreement
@@ -43,7 +43,8 @@ What other modules stand on, all of it on `Gates`:
 - `in_project(caller, project_id)`: each session gated now and whom it waits for, answers included: what the console
   shows. A wait it finds passed is kept as timed out, as every read of a gate does.
 - `waiting_notices(caller, session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
-  each one ended; as a later session, each answer to its gate.
+  each one ended; as a later session, each answer to its gate and each gate lifted at the project's wait, so a
+  session standing by hears it (ADR-0027).
 - `waiting(caller, session)`: the earlier sessions this session's gate waits for now, for `Unhooked` to tell a
   session no hook reaches (#518).
 - `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
@@ -92,6 +93,9 @@ CREATE TABLE IF NOT EXISTS gate_ends (
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
 CREATE INDEX IF NOT EXISTS gate_ends_earlier ON gate_ends (earlier_session_id) WHERE NOT told;
+-- The later session has been told its gate lifted at the project's wait: by its next call that is not an edit, which
+-- would itself show the gate gone. Only a timeout is told to the later session; it said different work itself.
+ALTER TABLE gate_ends ADD COLUMN IF NOT EXISTS later_told BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS gate_answers (
     later_session_id BIGINT NOT NULL REFERENCES sessions(id),
@@ -271,6 +275,15 @@ def _ended(by: Ending, row_name: str, minutes: int) -> str:
     return (
         f"[gate] {row_name}'s session, gated on nearly the same work as this one, waited the project's wait "
         f"({minutes} minutes) with no answer and goes ahead. Tell your member."
+    )
+
+
+def _lifted(earlier_name: str, minutes: int) -> str:
+    """What a later session is told when its gate on one earlier session lifts at the project's wait."""
+    return (
+        f"[gate] The project's wait ({minutes} minutes) passed with no answer from {earlier_name}'s session: this "
+        "session's edits on nearly the same work as theirs go ahead, once every other session the gate waits for has "
+        "agreed or the wait has passed. Tell your member."
     )
 
 
@@ -499,9 +512,9 @@ class Gates:
         whoever's call found it, unless another call already did."""
         with self._db.transaction() as conn:
             kept = conn.execute(
-                "INSERT INTO gate_ends (later_session_id, earlier_session_id, ended_by, ended_at)"
-                " VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING later_session_id",
-                (later.id, earlier.id, by, self._clock()),
+                "INSERT INTO gate_ends (later_session_id, earlier_session_id, ended_by, ended_at, later_told)"
+                " VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING later_session_id",
+                (later.id, earlier.id, by, self._clock(), by != Ending.TIMED_OUT),
             ).fetchone()
         if kept is None:
             return False
@@ -518,6 +531,13 @@ class Gates:
         urgents = self._urgents(session)
         now = self._clock()
         reasons = [*([refusal(waiting, now)] if waiting else []), *([urgent_refusal(urgents, now)] if urgents else [])]
+        if not reasons:
+            # The edit going ahead shows the gate gone: a timeout found now, or before, need not be told as well.
+            with self._db.transaction() as conn:
+                conn.execute(
+                    "UPDATE gate_ends SET later_told = TRUE WHERE later_session_id = %s AND NOT later_told",
+                    (session.id,),
+                )
         return "\n\n".join(reasons) or None
 
     def different_work(self, caller: Caller, session: Session) -> list[str]:
@@ -747,8 +767,10 @@ class Gates:
     def waiting_notices(self, caller: Caller, session: Session) -> list[str]:
         """What a session is told once. As an earlier session: that a later session's gate waits on its work, and how
         each gate on its work ended, a wait it finds passed kept as timed out now, so it hears of it though the later
-        session stays quiet. As a later session: each answer to its gate. Asking marks them told."""
+        session stays quiet. As a later session: each answer to its gate, and each gate on an earlier session lifted
+        at the project's wait, a wait it finds passed kept as timed out now. Asking marks them told."""
         self._time_out_on_work(caller, session)
+        self.waiting(caller, session)
         with self._db.transaction() as conn:
             ends = conn.execute(
                 "UPDATE gate_ends SET told = TRUE WHERE earlier_session_id = %s AND NOT told"
@@ -760,8 +782,13 @@ class Gates:
                 " RETURNING earlier_session_id, answer, text",
                 (session.id,),
             ).fetchall()
+            lifted = conn.execute(
+                "UPDATE gate_ends SET later_told = TRUE WHERE later_session_id = %s AND NOT later_told"
+                " RETURNING earlier_session_id",
+                (session.id,),
+            ).fetchall()
         notices = [*self._starts(session)]
-        if ends or answers:
+        if ends or answers or lifted:
             others = {each.session.id: each.session for each in self._activities.in_project(session.project_id)}
             minutes = self.wait(session.project_id)
             notices += [
@@ -772,6 +799,11 @@ class Gates:
             notices += [
                 _answered(others[row["earlier_session_id"]], Answer(row["answer"]), row["text"])
                 for row in answers
+                if row["earlier_session_id"] in others
+            ]
+            notices += [
+                _lifted(others[row["earlier_session_id"]].member_name, minutes)
+                for row in lifted
                 if row["earlier_session_id"] in others
             ]
         return notices

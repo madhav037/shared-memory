@@ -162,6 +162,20 @@ def test_the_hooks_on_each_tool_call_have_their_own_larger_allowance(limited: Ru
     assert prompt(limited, token).status_code == 429, "the rest stay limited"
 
 
+def test_a_standby_counts_against_the_hooks_on_each_tool_call(limited: RunningServer) -> None:
+    token = a_token(limited)
+    burst = burst_of(PER_MINUTE * TOOL_HOOKS_MULTIPLE)
+    answered = [before_tool(limited, token).status_code for _ in range(burst)]
+
+    standby = httpx.post(
+        f"{limited.url}/hooks/standby", json={"session_id": "s"}, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert answered == [200] * burst
+    assert standby.status_code == 429, "the hooks on tool calls used up the allowance a standby draws on"
+    assert prompt(limited, token).status_code == 200, "the prompts' and tools' allowance is untouched"
+
+
 def test_a_before_edit_hook_over_its_limit_is_answered_as_when_the_server_is_unreachable(
     limited: RunningServer,
 ) -> None:
