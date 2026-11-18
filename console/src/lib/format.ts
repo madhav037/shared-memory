@@ -110,6 +110,11 @@ export function memoryUrl(path: string): string {
   return `/memory?path=${encodeURIComponent(path)}`;
 }
 
+/** Where a project's health is shown, to its leads and the team's admins. */
+export function healthUrl(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/health`;
+}
+
 /** Where a project's active sessions are listed. */
 export function sessionsUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/sessions`;

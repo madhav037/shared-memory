@@ -1,7 +1,7 @@
 import { Button, TextInput } from "@mantine/core";
 import { IconLock, IconLockOpen } from "@tabler/icons-react";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import {
   addFoundation,
@@ -27,6 +27,7 @@ import { AgentSelect, useChosenAgent } from "../components/AgentChoice";
 import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
+import { healthUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Who looks after a project, who can reach it, and the repositories that belong to it. */
@@ -92,6 +93,21 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
 
       {project.you_may_change && (
         <Named name={project.name} onRenamed={(name) => attempt(() => renameProject(project.project_id, name))} />
+      )}
+
+      {project.you_may_change && (
+        <section aria-labelledby="health-heading">
+          <h2 className="section-heading" id="health-heading">
+            Project health
+          </h2>
+          <p className="section-lede">
+            Its project memory that no coding agent has used for a long time, and the memory sessions doubt. Only its
+            leads and the team’s admins see it.
+          </p>
+          <Link to={healthUrl(project.project_id)} data-testid="to-health">
+            See its project health
+          </Link>
+        </section>
       )}
 
       <section aria-labelledby="reach-heading">

@@ -1,0 +1,230 @@
+"""Project health (#553, spec #504): a read-only page for a project's leads and the team's admins, listing the
+project's possibly outdated memory and its memory in doubt. Driven through the console's JSON API.
+
+Nothing on it changes anything (ADR-0009): pinning, unpinning, deciding and retiring stay on their own screens."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from shared_memory.console_contract import DECLARATIONS
+from tests.support import (
+    Console,
+    ConsoleClient,
+    Session,
+    add,
+    ask,
+    promote_keeping_both,
+    signed_in,
+    signed_in_owner,
+)
+from tests.test_console_never_writes_memory import watch_for_writes
+
+TAX = {
+    "title": "Sales tax is fifteen percent",
+    "summary": "Invoices add fifteen percent sales tax.",
+    "type": "convention",
+    "body": "Every invoice adds a flat fifteen percent sales tax on the subtotal.",
+}
+RETRIES = {
+    "title": "Webhooks retry three times",
+    "summary": "A failed webhook is retried three times with backoff.",
+    "type": "gotcha",
+    "body": "The provider retries a failed webhook three times, an hour apart, before it gives up.",
+}
+EXPORTS = {
+    "title": "Exports are written as CSV",
+    "summary": "Every ledger export is a CSV file.",
+    "type": "decision",
+    "body": "Ledger exports are CSV with a header row, never spreadsheets, so finance can diff them.",
+}
+TAX_LINE = {"code_reference": "billing-api:src/tax.py:42", "quoted_line": "RATE = Decimal('0.20')"}
+
+
+def health(client: ConsoleClient, project: str) -> dict[str, Any]:
+    return ask(client, f"/api/projects/{project}/health")
+
+
+def paths(listed: list[dict[str, Any]]) -> list[str]:
+    return [one["path"] for one in listed]
+
+
+def a_project(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[str, Session]:
+    """The owner signed in to the console, with a project of theirs and a session in it."""
+    owner = signed_in_owner(console, client, github, account)
+    project: str = owner.call("create_project", name="Billing")["project_id"]
+    return project, owner.in_project(project, "billing-api")
+
+
+def member_in(console: Console, client: ConsoleClient, project: str, member_id: str, name: str) -> Session:
+    """A member added through the console, with a session in the project."""
+    return Session(console.server, add(client, member_id, name)["personal_token"]).in_project(project, "billing-api")
+
+
+def sign_in_again(console: Console, client: ConsoleClient, github: str, account: int) -> None:
+    """The console's sign-in lapses while the clock moves on by months."""
+    console.github.as_(account, github)
+    client.sign_in()
+
+
+def test_project_health_lists_memory_unused_past_outdated_after_days(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-outdated", 5531)
+    unused = promote_keeping_both(in_project, TAX)
+    read_lately = promote_keeping_both(in_project, RETRIES)
+    console.clock.advance(days=30)
+    saved_lately = promote_keeping_both(in_project, EXPORTS)
+    console.clock.advance(days=29)
+    in_project.call("read", path=read_lately)
+    console.clock.advance(days=2)
+    sign_in_again(console, signed_out, "olive-health-outdated", 5531)
+
+    found = health(signed_out, project)
+
+    assert found["project_id"] == project
+    assert found["project_name"] == "Billing"
+    assert found["outdated_after_days"] == 60
+    assert paths(found["possibly_outdated"]) == [unused]
+    [listed] = found["possibly_outdated"]
+    assert listed["title"] == TAX["title"]
+    assert listed["last_used"] is not None
+    assert read_lately not in paths(found["possibly_outdated"])
+    assert saved_lately not in paths(found["possibly_outdated"])
+
+
+def test_project_health_leaves_out_pinned_memory(console: Console, signed_out: ConsoleClient) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-pinned", 5532)
+    pinned = promote_keeping_both(in_project, TAX)
+    unpinned = promote_keeping_both(in_project, RETRIES)
+    in_topic = promote_keeping_both(in_project, {**EXPORTS, "type": "gotcha", "topic": "ledger"})
+    assert signed_out.post_json("/api/memory/pin", {"path": pinned}).status_code == 200
+    assert signed_out.post_json("/api/memory/pin", {"path": in_topic.rsplit("/", 1)[0]}).status_code == 200
+    console.clock.advance(days=90)
+    sign_in_again(console, signed_out, "olive-health-pinned", 5532)
+
+    found = health(signed_out, project)
+
+    assert paths(found["possibly_outdated"]) == [unpinned]
+
+
+def test_project_health_lists_memory_in_doubt_with_count_and_reasons_most_doubted_first(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-doubts", 5533)
+    once = promote_keeping_both(in_project, TAX)
+    twice = promote_keeping_both(in_project, RETRIES)
+    asked_to_retire = promote_keeping_both(in_project, EXPORTS)
+    sound = promote_keeping_both(in_project, {**EXPORTS, "title": "Ledgers close monthly", "summary": "Monthly."})
+    dana = member_in(console, signed_out, project, "emp-2", "Dana Dev")
+    ash = member_in(console, signed_out, project, "emp-3", "Ash Dev")
+    dana.call("challenge", path=once, reason="misled", reasoning="Invoices came out wrong.")
+    dana.call("challenge", path=twice, reason="misled")
+    ash.call("challenge", path=twice, reason="contradicts_code", **TAX_LINE)
+    # A challenge that names no reason doesn't put a memory in doubt.
+    dana.call("retire", path=asked_to_retire)
+
+    found = health(signed_out, project)
+
+    assert paths(found["in_doubt"]) == [twice, once]
+    first, second = found["in_doubt"]
+    assert first["title"] == RETRIES["title"]
+    assert first["in_doubt"] == {
+        "count": 2,
+        "reasons": [
+            {"reason": "misled", "count": 1, "code_references": []},
+            {"reason": "contradicts_code", "count": 1, "code_references": ["billing-api:src/tax.py:42"]},
+        ],
+        "line": "In doubt: 1 says it misled them; 1 says it contradicts billing-api:src/tax.py:42",
+    }
+    assert second["in_doubt"]["count"] == 1
+    assert [one["reason"] for one in second["in_doubt"]["reasons"]] == ["misled"]
+    assert sound not in paths(found["in_doubt"])
+
+
+def test_project_health_is_readable_by_a_lead_and_an_admin(console: Console, signed_out: ConsoleClient) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-readers", 5534)
+    path = promote_keeping_both(in_project, TAX)
+    member_in(console, signed_out, project, "emp-2", "Dana Dev").call("challenge", path=path, reason="misled")
+    add(signed_out, "emp-3", "Lee Lead", github="lee-health-readers")
+    add(signed_out, "emp-4", "Ada Admin", github="ada-health-readers")
+    assert signed_out.post_json(f"/api/projects/{project}/leads", {"member_id": "emp-3"}).status_code == 200
+    assert signed_out.post_json("/api/members/emp-4/admin", {"admin": True}).status_code == 200
+
+    lead = signed_in(console, "lee-health-readers", 5535)
+    admin = signed_in(console, "ada-health-readers", 5536)
+
+    assert paths(health(lead, project)["in_doubt"]) == [path]
+    assert paths(health(admin, project)["in_doubt"]) == [path]
+
+
+def test_project_health_is_refused_to_a_member_who_is_not_a_lead(console: Console, signed_out: ConsoleClient) -> None:
+    project, _ = a_project(console, signed_out, "olive-health-refused", 5537)
+    add(signed_out, "emp-2", "Dana Dev", github="dana-health-refused")
+    dana = signed_in(console, "dana-health-refused", 5538)
+
+    refused = dana.get(f"/api/projects/{project}/health")
+
+    assert refused.status_code == 403
+    assert refused.json()["message"] == "Only this project's leads and the team's admins can see its health."
+
+
+def test_project_health_of_a_restricted_project_is_refused_outside_its_leads_and_admins(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    project, _ = a_project(console, signed_out, "olive-health-restricted", 5539)
+    add(signed_out, "emp-2", "Dana Dev", github="dana-health-restricted")
+    add(signed_out, "emp-3", "Ash Dev", github="ash-health-restricted")
+    add(signed_out, "emp-4", "Lee Lead", github="lee-health-restricted")
+    add(signed_out, "emp-5", "Ada Admin", github="ada-health-restricted")
+    assert signed_out.post_json(f"/api/projects/{project}/restrict", {"restricted": True}).status_code == 200
+    assert signed_out.post_json(f"/api/projects/{project}/access", {"member_id": "emp-2"}).status_code == 200
+    assert signed_out.post_json(f"/api/projects/{project}/leads", {"member_id": "emp-4"}).status_code == 200
+    assert signed_out.post_json("/api/members/emp-5/admin", {"admin": True}).status_code == 200
+
+    allowed_in = signed_in(console, "dana-health-restricted", 5540).get(f"/api/projects/{project}/health")
+    kept_out = signed_in(console, "ash-health-restricted", 5541).get(f"/api/projects/{project}/health")
+
+    assert allowed_in.status_code == 403
+    assert allowed_in.json()["message"] == "Only this project's leads and the team's admins can see its health."
+    assert kept_out.status_code == 403
+    assert "is restricted" in kept_out.json()["message"]
+    assert health(signed_in(console, "lee-health-restricted", 5542), project)["project_id"] == project
+    assert health(signed_in(console, "ada-health-restricted", 5543), project)["project_id"] == project
+    assert health(signed_out, project)["project_id"] == project
+
+
+def governed(client: ConsoleClient, project: str, path: str) -> tuple[dict[str, Any], ...]:
+    """What the screens that govern memory show: a memory with its last use, the challenges, and the pins."""
+    return (
+        ask(client, "/api/memory", path=path),
+        ask(client, "/api/challenges"),
+        ask(client, f"/api/projects/{project}/pins"),
+    )
+
+
+def test_project_health_changes_nothing(
+    console: Console, signed_out: ConsoleClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, in_project = a_project(console, signed_out, "olive-health-unchanged", 5544)
+    outdated = promote_keeping_both(in_project, TAX)
+    doubted = promote_keeping_both(in_project, RETRIES)
+    member_in(console, signed_out, project, "emp-2", "Dana Dev").call("challenge", path=doubted, reason="misled")
+    console.clock.advance(days=61)
+    sign_in_again(console, signed_out, "olive-health-unchanged", 5544)
+    before = governed(signed_out, project, outdated)
+    reached = watch_for_writes(monkeypatch)
+
+    first = health(signed_out, project)
+    again = health(signed_out, project)
+
+    [declared] = [one for one in DECLARATIONS if one.path == "/projects/{project_id}/health"]
+    assert (declared.method, declared.changes) == ("GET", False)
+    assert reached == []
+    # Reading it is no use of a memory, decides no challenge and pins nothing: it reads the same the second time.
+    assert first == again
+    assert sorted(paths(first["possibly_outdated"])) == sorted([outdated, doubted])
+    assert paths(first["in_doubt"]) == [doubted]
+    assert governed(signed_out, project, outdated) == before

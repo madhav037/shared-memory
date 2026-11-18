@@ -694,6 +694,34 @@
         }
       }
     },
+    "/api/projects/{project_id}/health": {
+      "get": {
+        "operationId": "project_health",
+        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectHealth"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/sessions": {
       "get": {
         "operationId": "project_sessions",
@@ -2611,6 +2639,199 @@
         "title": "BoardArchive",
         "type": "object"
       },
+      "DoubtedMemory": {
+        "description": "A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the\nchallenges screen, never here (ADR-0009).",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "in_doubt": {
+            "$ref": "#/components/schemas/InDoubtMark"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "in_doubt"
+        ],
+        "title": "DoubtedMemory",
+        "type": "object"
+      },
+      "InDoubtMark": {
+        "description": "What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line\na session is shown, which the console shows as it is.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/InDoubtReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "reasons",
+          "line"
+        ],
+        "title": "InDoubtMark",
+        "type": "object"
+      },
+      "InDoubtReason": {
+        "description": "One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.",
+        "properties": {
+          "reason": {
+            "enum": [
+              "misled",
+              "contradicts_code"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "code_references": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Code References",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reason",
+          "count",
+          "code_references"
+        ],
+        "title": "InDoubtReason",
+        "type": "object"
+      },
+      "PossiblyOutdatedMemory": {
+        "description": "A memory on project health's possibly outdated list: no coding agent has recalled or read it for\n`outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_name": {
+            "title": "Author Name",
+            "type": "string"
+          },
+          "last_used": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type",
+          "author",
+          "author_name",
+          "last_used"
+        ],
+        "title": "PossiblyOutdatedMemory",
+        "type": "object"
+      },
+      "ProjectHealth": {
+        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "outdated_after_days": {
+            "title": "Outdated After Days",
+            "type": "number"
+          },
+          "possibly_outdated": {
+            "items": {
+              "$ref": "#/components/schemas/PossiblyOutdatedMemory"
+            },
+            "title": "Possibly Outdated",
+            "type": "array"
+          },
+          "in_doubt": {
+            "items": {
+              "$ref": "#/components/schemas/DoubtedMemory"
+            },
+            "title": "In Doubt",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "outdated_after_days",
+          "possibly_outdated",
+          "in_doubt"
+        ],
+        "title": "ProjectHealth",
+        "type": "object"
+      },
       "ActiveSession": {
         "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.",
         "properties": {
@@ -4475,64 +4696,6 @@
           "raised_at"
         ],
         "title": "DoubtEvidence",
-        "type": "object"
-      },
-      "InDoubtMark": {
-        "description": "What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line\na session is shown, which the console shows as it is.",
-        "properties": {
-          "count": {
-            "title": "Count",
-            "type": "integer"
-          },
-          "reasons": {
-            "items": {
-              "$ref": "#/components/schemas/InDoubtReason"
-            },
-            "title": "Reasons",
-            "type": "array"
-          },
-          "line": {
-            "title": "Line",
-            "type": "string"
-          }
-        },
-        "required": [
-          "count",
-          "reasons",
-          "line"
-        ],
-        "title": "InDoubtMark",
-        "type": "object"
-      },
-      "InDoubtReason": {
-        "description": "One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.",
-        "properties": {
-          "reason": {
-            "enum": [
-              "misled",
-              "contradicts_code"
-            ],
-            "title": "Reason",
-            "type": "string"
-          },
-          "count": {
-            "title": "Count",
-            "type": "integer"
-          },
-          "code_references": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Code References",
-            "type": "array"
-          }
-        },
-        "required": [
-          "reason",
-          "count",
-          "code_references"
-        ],
-        "title": "InDoubtReason",
         "type": "object"
       },
       "OpenChallenge": {

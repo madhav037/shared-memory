@@ -231,6 +231,14 @@ Its docstring lists the interface. Only recall and the `read` tool call `uses.us
 memory is pinned comes from `briefing.pinned_among`. In tests, move the server's `TestClock` past
 `outdated_after_days`; `tests/test_outdated_memory.py` is the prior art.
 
+## Project health
+
+`ProjectHealth` in `src/shared_memory/health.py`, built in `build_app` beside `ConsoleApi`, is a read model with no
+table: `of(caller)` asks `Identity.looks_after`, `Uses` and `Challenges` about the project memory under
+`projects/<id>/shared` and gives a typed `Health`. `GET /api/projects/{project_id}/health` serves it; the console's
+page is `HealthPage.tsx`, linked from project settings when `you_may_change`. A later section of spec #504 adds a list
+to `Health` and to the `ProjectHealth` model. `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
+
 ## Editing
 
 Read a file with Read, in ranges for a large one such as `board.py`, and change it with Edit. Edit refuses a file

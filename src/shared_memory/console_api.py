@@ -24,6 +24,7 @@ from shared_memory.activity import Activities, SessionActivity
 from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
+from shared_memory import health
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
@@ -65,12 +66,12 @@ from shared_memory.console_contract import (
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
-    HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
+    DoubtedMemory, HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
+    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
@@ -86,7 +87,7 @@ from shared_memory.ratelimit import Limits
 from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
-from shared_memory.memory import locate
+from shared_memory.memory import Memory, locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
@@ -187,8 +188,11 @@ NONCE_PATH = "/api/sign-in"
 
 def _marked(in_doubt: InDoubt | None) -> InDoubtMark | None:
     """A memory's in-doubt mark as the console is sent it, or None when nobody doubts it."""
-    if in_doubt is None:
-        return None
+    return None if in_doubt is None else _mark(in_doubt)
+
+
+def _mark(in_doubt: InDoubt) -> InDoubtMark:
+    """The in-doubt mark of a memory that is in doubt, as the console is sent it."""
     return InDoubtMark(
         count=in_doubt.count,
         reasons=[
@@ -371,8 +375,10 @@ class ConsoleApi:
         licenses: Licenses,
         export: TeamExport,
         talk: SessionTalk,
+        project_health: health.ProjectHealth,
     ) -> None:
         self._export_of = export
+        self._health = project_health
         self._talk = talk
         self._settings = settings
         self._rate_limits_of = rate_limits
@@ -414,6 +420,7 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
+            "project_health": self._project_health,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
             "card": self._card,
@@ -776,6 +783,39 @@ class ConsoleApi:
 
     def _project_sessions(self, request: Request) -> Response:
         return self._browse(request, self._sessions_now)
+
+    # --- a project's health, read: nothing here pins, decides, retires or uses a memory (ADR-0009) ---
+
+    def _project_health(self, request: Request) -> Response:
+        def read(caller: Caller) -> ProjectHealth:
+            found = self._health.of(caller)
+            names = self._names(caller.member)
+
+            def about(path: str, memory: Memory) -> dict[str, str]:
+                return {
+                    "path": path,
+                    "title": memory.title,
+                    "summary": memory.summary,
+                    "type": memory.type,
+                    "author": memory.author,
+                    "author_name": names.get(memory.author, memory.author),
+                }
+
+            return ProjectHealth(
+                project_id=found.project.project_id,
+                project_name=found.project.name,
+                outdated_after_days=self._settings.outdated_after_days,
+                possibly_outdated=[
+                    PossiblyOutdatedMemory(**about(one.path, one.memory), last_used=one.last_used)
+                    for one in found.possibly_outdated
+                ],
+                in_doubt=[
+                    DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
+                    for one in found.in_doubt
+                ],
+            )
+
+        return self._browse(request, read)
 
     # --- a member's reply and answer, through the same operations their session's tools use (ADR-0026) ---
 

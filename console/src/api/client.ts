@@ -38,6 +38,7 @@ export type BoardColumn = components["schemas"]["BoardColumn"];
 export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
+export type ProjectHealth = components["schemas"]["ProjectHealth"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
@@ -174,6 +175,11 @@ export function reissueToken(memberId: string): Promise<IssuedToken> {
 }
 
 /** Everything pinned that this project's sessions are briefed with. */
+/** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt. */
+export function fetchHealth(projectId: string, signal?: AbortSignal): Promise<ProjectHealth> {
+  return ask<ProjectHealth>(`/api/projects/${encodeURIComponent(projectId)}/health`, { signal });
+}
+
 export function fetchPins(projectId: string, signal?: AbortSignal): Promise<Pins> {
   return ask<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { signal });
 }

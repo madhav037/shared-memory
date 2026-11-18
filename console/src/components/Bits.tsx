@@ -73,8 +73,9 @@ function projectPageUrl(projectId: string, page: ProjectPage): string {
   return `/projects/${encodeURIComponent(projectId)}/settings`;
 }
 
-/** One project's pages, the same four links on each of them. */
-export function ProjectLinks({ projectId, here }: { projectId: string; here: ProjectPage }) {
+/** One project's pages, the same four links on each of them. A page that isn't one of the four, such as project
+ * health, names none as here. */
+export function ProjectLinks({ projectId, here }: { projectId: string; here?: ProjectPage }) {
   return (
     <nav className="project-links" aria-label="This project’s pages">
       {PROJECT_PAGES.map(({ page, name, Icon }) =>
