@@ -434,6 +434,20 @@ def seeded(
             code_reference="payments-api:src/support/policy.py:7",
             quoted_line="if days_since_payment <= REFUND_WINDOW_DAYS:",
         )
+        # A second doubt in Payments, for the project health journey, which the in-doubt journeys leave open: Olive's
+        # session says Wes's memory misled it and Tess's joins as a +1. Both raised it, so only Wes, who signs in to no
+        # journey, may decide it, and nobody else's challenges page has it waiting.
+        payouts = promote_keeping_both(
+            wes.in_project(payments, "payments-api"),
+            {
+                "title": "Payouts settle in two days",
+                "summary": "A merchant's payout reaches their bank two working days after capture.",
+                "type": "convention",
+                "body": "Payouts settle two working days after capture; support quotes that to every merchant.",
+            },
+        )
+        for doubter in (owner, tess):
+            doubter.in_project(payments, "payments-api").call("challenge", path=payouts, reason="misled")
         # A memory of Wes's that no coding agent has used for 61 days, for the journey that shows it possibly outdated.
         # Its last use is moved back below, as the archived card's move is.
         outdated = promote_now(

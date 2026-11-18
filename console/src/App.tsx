@@ -31,6 +31,7 @@ import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
+import { HealthPage } from "./pages/HealthPage";
 import { Front } from "./pages/Front";
 import { MemoryPage } from "./pages/MemoryPage";
 import { NotFound } from "./pages/NotFound";
@@ -255,6 +256,7 @@ function SignedIn({
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
+            <Route path="/projects/:projectId/health" element={<HealthPage />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/team" element={<Team me={member} />} />

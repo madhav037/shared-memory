@@ -345,6 +345,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+        get: operations["project_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/sessions": {
         parameters: {
             query?: never;
@@ -1232,6 +1249,93 @@ export interface components {
             cards: components["schemas"]["Card"][];
         };
         /**
+         * DoubtedMemory
+         * @description A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the
+         *     challenges screen, never here (ADR-0009).
+         */
+        DoubtedMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            in_doubt: components["schemas"]["InDoubtMark"];
+        };
+        /**
+         * InDoubtMark
+         * @description What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
+         *     a session is shown, which the console shows as it is.
+         */
+        InDoubtMark: {
+            /** Count */
+            count: number;
+            /** Reasons */
+            reasons: components["schemas"]["InDoubtReason"][];
+            /** Line */
+            line: string;
+        };
+        /**
+         * InDoubtReason
+         * @description One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.
+         */
+        InDoubtReason: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "misled" | "contradicts_code";
+            /** Count */
+            count: number;
+            /** Code References */
+            code_references: string[];
+        };
+        /**
+         * PossiblyOutdatedMemory
+         * @description A memory on project health's possibly outdated list: no coding agent has recalled or read it for
+         *     `outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved.
+         */
+        PossiblyOutdatedMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+            /** Author */
+            author: string;
+            /** Author Name */
+            author_name: string;
+            /** Last Used */
+            last_used: string | null;
+        };
+        /**
+         * ProjectHealth
+         * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+         *     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
+         *     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.
+         */
+        ProjectHealth: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Outdated After Days */
+            outdated_after_days: number;
+            /** Possibly Outdated */
+            possibly_outdated: components["schemas"]["PossiblyOutdatedMemory"][];
+            /** In Doubt */
+            in_doubt: components["schemas"]["DoubtedMemory"][];
+        };
+        /**
          * ActiveSession
          * @description One active session of a member's coding agent. agent is None until the session has said which coding agent it
          *     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
@@ -2001,34 +2105,6 @@ export interface components {
              * Format: date-time
              */
             raised_at: string;
-        };
-        /**
-         * InDoubtMark
-         * @description What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
-         *     a session is shown, which the console shows as it is.
-         */
-        InDoubtMark: {
-            /** Count */
-            count: number;
-            /** Reasons */
-            reasons: components["schemas"]["InDoubtReason"][];
-            /** Line */
-            line: string;
-        };
-        /**
-         * InDoubtReason
-         * @description One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.
-         */
-        InDoubtReason: {
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "misled" | "contradicts_code";
-            /** Count */
-            count: number;
-            /** Code References */
-            code_references: string[];
         };
         /**
          * OpenChallenge
@@ -3028,6 +3104,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BoardArchive"];
+                };
+            };
+        };
+    };
+    project_health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectHealth"];
                 };
             };
         };

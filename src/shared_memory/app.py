@@ -48,6 +48,7 @@ from shared_memory.embeddings import CachedQueries, Embedder, FastEmbedEmbedder,
 from shared_memory.errors import Refused
 from shared_memory.gates import Gates
 from shared_memory.handoff import HandoffNotes
+from shared_memory.health import ProjectHealth
 from shared_memory.export import TeamExport
 from shared_memory.history import MemoryHistory
 from shared_memory.connection import GUIDANCE_ONLY, skill_sections
@@ -1565,6 +1566,7 @@ def build_app(
             licenses,
             TeamExport(settings, identity, board, audit),
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
+            ProjectHealth(identity, store, uses, challenges),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

@@ -877,6 +877,44 @@ class SessionHandoffNote(BaseModel):
     last_seen_at: datetime
 
 
+class PossiblyOutdatedMemory(BaseModel):
+    """A memory on project health's possibly outdated list: no coding agent has recalled or read it for
+    `outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    last_used: datetime | None
+
+
+class DoubtedMemory(BaseModel):
+    """A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the
+    challenges screen, never here (ADR-0009)."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    in_doubt: InDoubtMark
+
+
+class ProjectHealth(BaseModel):
+    """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+    that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
+    reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
+
+    project_id: str
+    project_name: str
+    outdated_after_days: float
+    possibly_outdated: list[PossiblyOutdatedMemory]
+    in_doubt: list[DoubtedMemory]
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
@@ -1100,6 +1138,16 @@ DECLARATIONS: tuple[Declaration, ...] = (
         summary="The cards that have left a project's board, done more than 14 days ago, under the board's filters.",
         answers=BoardArchive,
         query=("assignee", "label", "priority"),
+    ),
+    Declaration(
+        path="/projects/{project_id}/health",
+        method="GET",
+        operation_id="project_health",
+        summary=(
+            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
+            "doubt, with each one's count and reasons. Changes nothing."
+        ),
+        answers=ProjectHealth,
     ),
     Declaration(
         path="/projects/{project_id}/sessions",
