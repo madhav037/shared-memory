@@ -16,6 +16,8 @@ The before-edit hook runs before every tool call, not only an edit (ADR-0025): i
 its branch and the files the tool names, and hands the session its waiting news where the agent's hook before a tool
 can take added context (`hears_before_tool`). Claude Code, Codex and Cline can; Gemini CLI, Devin Desktop, Copilot CLI
 and Cursor cannot, so their kits post the same news from their hook after a tool instead (the after-tool endpoint).
+Where it can, an edit that goes ahead is answered with the memories tied to its files too, in the same `answered`
+shape (#549).
 
 It is the one hook that can stop its agent, and for one reason only: the tool is an edit and another active session
 holds the file's lock. `blocked` shapes that answer for each family:
