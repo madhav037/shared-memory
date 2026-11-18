@@ -32,10 +32,11 @@ MIGRATIONS = {
     "application startup.",
 }
 
-#: Writing, editing and promoting: the three things ADR-0009 keeps out of the console, as they are spelled in code.
+#: Writing, editing (retying included) and promoting: the three things ADR-0009 keeps out of the console, as they are spelled in code.
 FORBIDDEN: tuple[tuple[type, str], ...] = (
     (MemoryService, "remember"),
     (MemoryService, "edit_memory"),
+    (MemoryService, "tie"),
     (MemoryService, "delete_memory"),
     (Lifecycle, "promote"),
 )

@@ -21,7 +21,7 @@ from shared_memory.locks import named
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.tied import Tie, TiedFiles, file_named
 from shared_memory.uses import Uses
-from shared_memory.validation import validate
+from shared_memory.validation import validate, validate_tied_files
 
 
 def _promoting(path: str) -> str:
@@ -560,6 +560,18 @@ class MemoryService:
         if reasons := reasons_for(edited):
             described.update(answer_for(reasons))
         return described
+
+    def tie(self, caller: Caller, path: str, tied_files: list[str]) -> dict[str, Any]:
+        """Replace the tied files of the caller's own personal memory. Whether project and team memory may be retied
+        too is undecided (#503), so until then they are retied by superseding them."""
+        validate_tied_files(tied_files)
+        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
+            location, memory = self._own_personal_memory(caller, change, path, "tie")
+            tied = replace(memory, tied_files=list(tied_files))
+            change.message = f"Tie: {tied.title}"
+            change.write(location.path, tied)
+            change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
+        return describe(location.path, tied)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
         with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:

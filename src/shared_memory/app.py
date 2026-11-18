@@ -1311,6 +1311,14 @@ def build_app(
     @saving
     @_refusals_as_tool_errors
     @unless_read_only
+    def tie(path: str, tied_files: list[str], ctx: Context) -> dict[str, Any]:
+        """Replace the tied files of your own personal memory, each written repository:path or a folder glob."""
+        return service.tie(caller(ctx), path, tied_files)
+
+    @server.tool()
+    @saving
+    @_refusals_as_tool_errors
+    @unless_read_only
     def delete_memory(path: str, ctx: Context) -> dict[str, Any]:
         """Delete your own personal memory."""
         return service.delete_memory(caller(ctx), path)

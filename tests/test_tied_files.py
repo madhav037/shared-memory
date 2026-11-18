@@ -291,3 +291,62 @@ def test_reindex_rebuilds_the_tied_file_index_from_memory_on_disk(team: Team, me
     assert "related_files:\n- billing-api:src/tax/**" in file.read_text(encoding="utf-8")
     assert tied(member, "billing-api:src/tax.ts") == []
     assert tied(member, "billing-api:src/tax/vat.ts") == [path]
+
+
+# `tie`: a session replaces a memory's tied files (#550).
+
+
+def test_tie_replaces_a_memorys_tied_files(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+
+    tied_now = member.call("tie", path=path, tied_files=["billing-api:src/tax/**"])
+
+    assert tied_now["tied_files"] == ["billing-api:src/tax/**"]
+    assert member.call("read", path=path)["tied_files"] == ["billing-api:src/tax/**"]
+    assert tied(member, "billing-api:src/tax.ts") == [], "the old file no longer brings it up"
+    assert tied(member, "billing-api:src/tax/rates/vat.ts") == [path], "the new glob does"
+
+
+def test_tie_is_in_the_memorys_history(console: Console, signed_out: ConsoleClient) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-tie-history", 1850)
+    in_project = owner.in_project(owner.call("create_project", name="Billing")["project_id"], "billing-api")
+    path = remember(in_project, tied_files=["billing-api:src/tax.ts"])
+
+    in_project.call("tie", path=path, tied_files=["billing-api:src/tax/**"])
+
+    versions = ask(signed_out, "/api/memory/history", path=path)["versions"]
+    assert [version["message"].split(":")[0] for version in versions] == ["Tie", "Remember"]
+    assert versions[0]["author"] == versions[1]["author"], "credited to the member who tied it"
+    retied = ask(signed_out, "/api/memory/version", path=path, commit=versions[0]["commit"])["text"]
+    assert "billing-api:src/tax/**" in retied
+
+
+def test_tie_on_another_members_memory_is_refused(owner: Session, dana: Session) -> None:
+    owners = remember(owner, tied_files=["billing-api:src/tax.ts"])
+
+    refusal = dana.refusal("tie", path=owners, tied_files=["billing-api:src/tax/**"])
+
+    assert "You can only tie your own personal memory" in refusal
+    assert owner.call("read", path=owners)["tied_files"] == ["billing-api:src/tax.ts"]
+    assert tied(owner, "billing-api:src/tax/vat.ts") == []
+
+
+def test_tie_on_project_or_team_memory_is_refused_until_it_is_superseded(owner: Session) -> None:
+    in_project = promoted(owner, "project", title="Billing rounds tax per line", tied_files=["billing-api:src/tax.ts"])
+    in_team = promoted(owner, "team", title="Tax is per line everywhere", tied_files=["billing-api:src/tax.ts"])
+
+    refusals = [owner.refusal("tie", path=path, tied_files=["billing-api:src/tax/**"]) for path in (in_project, in_team)]
+
+    assert all("You can only tie your own personal memory" in refusal for refusal in refusals), refusals
+    assert all("promoting a memory that supersedes it" in refusal for refusal in refusals), refusals
+    assert tied(owner, "billing-api:src/tax/vat.ts") == []
+
+
+def test_tie_with_an_unusable_glob_is_refused(member: Session) -> None:
+    path = remember(member, tied_files=["billing-api:src/tax.ts"])
+
+    refusal = member.refusal("tie", path=path, tied_files=["billing-api:src/tax/**", "billing-api:src/{tax,fees}/**"])
+
+    assert "Tied file 'billing-api:src/{tax,fees}/**' isn't a usable glob" in refusal
+    assert member.call("read", path=path)["tied_files"] == ["billing-api:src/tax.ts"]
+    assert tied(member, "billing-api:src/tax.ts") == [path]

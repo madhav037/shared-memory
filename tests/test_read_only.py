@@ -156,6 +156,7 @@ def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
     changes: dict[str, dict[str, Any]] = {
         "remember": SERVICES,
         "edit_memory": {"path": team.personal, "title": "Postgres and Redis"},
+        "tie": {"path": team.personal, "tied_files": ["billing-api:src/db/**"]},
         "delete_memory": {"path": team.personal},
         "promote": {"path": team.personal, "level": "project"},
         "retire": {"path": team.project_memory},
@@ -175,6 +176,17 @@ def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
     assert unfenced_in(owner.call("tree")) == before
     assert owner.call("read", path=team.personal)["title"] == POSTGRES["title"]
     assert owner.call("read", path=team.project_memory)["status"] == "active"
+
+
+def test_tie_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
+    under(hosted, hosted_key())
+    owner = team.owner
+
+    refusal = owner.refusal("tie", path=team.personal, tied_files=["billing-api:src/db/**"])
+
+    assert read_only_refusal(refusal), refusal
+    assert owner.call("read", path=team.personal)["tied_files"] == []
+    assert owner.call("tied_memories", file="billing-api:src/db/pool.py")["memories"] == []
 
 
 def test_a_read_only_server_still_serves_reading_search_and_the_briefing(hosted: RunningServer, team: Team) -> None:
