@@ -94,10 +94,17 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
   `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
   the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws
-  on the tool hooks' rate limit. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
+  on the tool hooks' rate limit, and doesn't count as a hook that reaches the session (#518), since an agent with no
+  hooks runs it too. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
   (`STAND_BY_SECONDS`, 45, unless asked; at most `Settings.standby_tool_cap_seconds`), answering as the endpoint does
   (`_standby_answer`). The cap and the check interval are `Settings.standby_cap_minutes` and
   `standby_check_seconds`. `tests/test_standby.py`.
+- **Each agent's route to stand by** (#527) is in `connection.py`: `STAND_BY_IN_THE_BACKGROUND` (the background
+  command first, the tool as fallback) and `STAND_BY_WITH_THE_TOOL` (each agent's seconds a call, and the tool timeout
+  that allows them). `standby_habits` is the guidance AGENTS.md and Cursor's rule carry, with the background command
+  for a POSIX shell and for PowerShell (`background_standby`, `background_standby_powershell`); `stands_by(agent)` is
+  what each agent's connect output says. Claude Code's command is in the plugin's skill, whose "Standing by" names
+  every route too.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()`, `active_sessions()`,
   `stand_by()` (a standby held on a thread of its own) and `on_standby()`.
 
