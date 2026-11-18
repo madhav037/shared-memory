@@ -28,6 +28,15 @@ export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** What a standing-by session waits for: "waiting for Olive Owner’s answer", one name or several, or "waiting for an
+ * answer" when it awaits no member in particular. */
+export function waitingFor(names: string[]): string {
+  if (names.length === 0) return "waiting for an answer";
+  const owned = names.map((name) => `${name}’s`);
+  const listed = owned.length === 1 ? owned[0] : `${owned.slice(0, -1).join(", ")} and ${owned[owned.length - 1]}`;
+  return `waiting for ${listed} ${names.length === 1 ? "answer" : "answers"}`;
+}
+
 /** Where a memory sits. The server's vocabulary, so anything naming levels is exhaustive against this. */
 export const LEVEL_KEYS = ["team", "project", "personal"] as const;
 export type Level = (typeof LEVEL_KEYS)[number];
@@ -99,6 +108,11 @@ export function folderUrl(path: string): string {
 
 export function memoryUrl(path: string): string {
   return `/memory?path=${encodeURIComponent(path)}`;
+}
+
+/** Where a project's health is shown, to its leads and the team's admins. */
+export function healthUrl(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/health`;
 }
 
 /** Where a project's active sessions are listed. */

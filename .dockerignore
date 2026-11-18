@@ -12,6 +12,7 @@ smoke
 deploy
 !deploy/Caddyfile
 !deploy/server_base.py
+!deploy/server-entrypoint.sh
 console/node_modules
 console/dist
 console/test-results

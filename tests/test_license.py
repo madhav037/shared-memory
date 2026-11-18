@@ -30,7 +30,7 @@ def _tracked_text_files() -> list[pathlib.Path]:
 def test_license_names_the_licensor_and_the_license() -> None:
     text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     assert "Functional Source License, Version 1.1, ALv2 Future License" in text
-    assert "Copyright 2026 Madhav Lehru" in text
+    assert "Copyright 2026 Raven" in text
     assert "${" not in text
 
 

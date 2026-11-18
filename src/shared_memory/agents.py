@@ -8,16 +8,19 @@ from __future__ import annotations
 
 ANOTHER_AGENT = "another agent"
 CLAUDE_CODE = "Claude Code"
+CURSOR = "Cursor"
+# One name for Copilot CLI and Copilot in VS Code: both report themselves alike.
+GITHUB_COPILOT = "GitHub Copilot"
 
 # Checked in order: Cursor reports "cursor-vscode", which must not be taken for VS Code.
 _KNOWN: list[tuple[tuple[str, ...], str]] = [
-    (("cursor",), "Cursor"),
+    (("cursor",), CURSOR),
     (("windsurf", "devin"), "Devin Desktop"),
     (("cline",), "Cline"),
     (("gemini",), "Gemini CLI"),
     (("codex",), "Codex"),
     (("claude-code", "claude code"), CLAUDE_CODE),
-    (("visual studio code", "visual-studio-code", "vscode", "copilot"), "GitHub Copilot"),
+    (("visual studio code", "visual-studio-code", "vscode", "copilot"), GITHUB_COPILOT),
 ]
 
 

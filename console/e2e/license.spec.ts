@@ -46,3 +46,41 @@ test("an admin sees the unlicensed banner, installs a key and sees the team, cap
   });
   expect(refused.status()).toBe(403);
 });
+
+test("a self-hosted server whose key has lapsed shows admins the lapsed banner, never read-only, and members no notice", async ({
+  page,
+}) => {
+  const lapsed = signLicense({
+    team: "Acme Billing",
+    member_cap: 12,
+    issued: "2025-09-01",
+    expires: "2026-08-31",
+    key_id: "acme-journey-lapsed",
+  });
+  await signInAs(page, 1, "olive");
+  const installed = await page.request.post("/api/license", {
+    headers: { "X-Shared-Memory-Console": "1" },
+    data: { key: lapsed },
+  });
+  expect(installed.ok()).toBe(true);
+
+  await page.reload();
+  const banner = page.getByTestId("license-banner");
+  await expect(banner).toHaveAttribute("data-status", "lapsed");
+  await expect(banner).toContainText("lapsed on 2026-08-31. Memory keeps working");
+  await expect(banner).not.toContainText("read-only");
+
+  await signOut(page);
+  await signInAs(page, 2, "dana");
+  await expect(page.getByTestId("read-only-notice")).toHaveCount(0);
+  await expect(page.getByTestId("license-banner")).toHaveCount(0);
+
+  // The key the journey above installed goes back, so the journeys after this one find the server as they expect.
+  await signOut(page);
+  await signInAs(page, 1, "olive");
+  const restored = await page.request.post("/api/license", {
+    headers: { "X-Shared-Memory-Console": "1" },
+    data: { key: KEY },
+  });
+  expect(restored.ok()).toBe(true);
+});

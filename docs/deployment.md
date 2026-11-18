@@ -67,6 +67,8 @@ Members use `https://memory.example.com` as the **Shared Memory server URL** in 
 
 To update the server later, pull this repository and run `docker compose up -d --build` again, or let GitHub do it: [Deploying from GitHub](#deploying-from-github).
 
+**The server runs as its own user, not root.** The server image's process runs as `shared-memory` (uid 10001). The container starts as root only to hand the `memory-data` volume to that user, then drops to it, so a volume made by an older, root-run image, or a memory folder restored into it, needs nothing done by hand: the first start hands it over. `docker compose exec server …` still runs as root; the commands run that way change the database, not the memory folder. Caddy and the backup still run as root: Caddy binds ports 80 and 443, and the backup reads the SSH key mounted from the host.
+
 ## Behind a web server the host already runs
 
 On a host whose own web server (nginx, say) already holds ports 80 and 443 for other sites, the stack's Caddy can't take them. Put the stack behind that web server instead. The web server keeps 80 and 443 and holds HTTPS for this domain too. It passes the domain on to Caddy, which listens only on the host's loopback (`127.0.0.1:8180`), so the stack is reachable from outside only through the web server. The other sites aren't touched: nginx tells sites apart by name.
@@ -131,11 +133,21 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 
 When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
 
+Install it again before the first release whose server runs as its own user (#388) reaches the host. Putting back a release from before that, whose server ran as root, then hands the memory folder back to root first; the copy from before it doesn't, and a root server can't open a memory folder another user owns.
+
 **What a deploy sends.** Only the layers the host lacks. The workflow first asks the script's `layers`, which prints the layers of the release images the host holds and changes nothing, and leaves those layers out of what it sends ([`deploy/upload.py`](../deploy/upload.py)); `docker load` on the host finds them already there. The server image is built in two parts for this ([`Dockerfile`](../Dockerfile)): a base with the system packages, the locked dependencies and the search model, named by a hash of exactly what goes into it, and the server's code on top. The images the three Dockerfiles start from are pinned by digest. So a release that changes only the server's code or the console sends a few megabytes, and the log says how many bytes went and how long they took.
 
 A release that changes a base (`uv.lock`, the dependencies in `pyproject.toml`, the Dockerfile above its release stage, or a pinned image) sends that image whole, some hundreds of megabytes. Over a slow link that takes longer than the deploy's hour: run that deploy from **Actions → Deploy → Run workflow** with a longer `minutes`. A host whose script predates `layers` is sent every layer, as before.
 
 The check can be run by hand on the host as well: `~/.local/bin/shared-memory-deploy check`, and so can `layers`.
+
+## Listening address
+
+`shared-memory serve` listens on `127.0.0.1` unless given `--host`, so a server run on a laptop is reachable only
+from that laptop. The image's command passes `--host 0.0.0.0`, because inside a container Caddy reaches the server
+over the compose network; the server still publishes no port, so only Caddy reaches it. Running the server outside
+the image and wanting it reachable from other machines, pass `--host 0.0.0.0` (or the one address to listen on) and
+put it behind HTTPS with `SHARED_MEMORY_ALLOWED_HOSTS` set.
 
 ## Sizing
 
@@ -242,8 +254,39 @@ console's Team page (owner and admins; the install is in the audit log, and a ke
 
 The server checks the key against a public key built into it and makes no network call to do so. With no key, an
 invalid one or a lapsed one, admins see a banner on the console, from 30 days before expiry it says the key is
-expiring, and a lapsed key still keeps its cap. Memory, MCP tools and hooks are never affected, and an unlicensed
-server works fully for evaluation.
+expiring, and a lapsed key still keeps its cap. On a self-hosted server memory, MCP tools and hooks are never
+affected, and an unlicensed server works fully for evaluation.
+
+A hosted server's key says so (`"hosted": true`; a key without it is a self-hosted server's). A server knows it is
+hosted from `SHARED_MEMORY_SIGN_IN=platform` ([Signing in on a hosted server](#signing-in-on-a-hosted-server)), and
+takes only a key of its own kind: a hosted server refuses a self-hosted server's key, and a self-hosted server a
+hosted server's, from the Team page and `install-license` alike. Once a hosted server's key lapses, the server is
+read-only ([ADR-0022](./adr/0022-a-lapsed-hosted-server-turns-read-only.md)): every change
+to memory from a coding agent (saving, editing, deleting, promoting, retiring, deciding a challenge, pinning, creating a
+project or a foundation), adding a member and adding a card is refused with an answer naming the date the key lapsed
+and that paying restores it. Reading, search, the briefing and the hooks keep working, and a hook never blocks a coding
+agent over it. Removing members, reissuing personal tokens, locks and the board's existing cards keep working too.
+Installing a renewed key ends it at once.
+
+The platform renews a hosted server's key from the host, with no restart; a running server picks it up within five
+seconds. A key that can't be trusted, or is for the other kind of server, is refused with the Team page's answer on
+standard error, exiting 1, and changes nothing; the audit log records an install as the vendor's:
+
+```
+docker compose exec -T server shared-memory install-license - < license-key.txt
+```
+
+The command reads the key from standard input when given `-`, or no key with standard input not a terminal, so the key
+never appears in the host's or the container's process list. Passing the key as the argument
+(`shared-memory install-license <license key>`) still works, but puts it in the process list while it installs.
+
+Before moving a hosted team to a smaller plan, the platform asks the server how many **members** the team has. It
+prints the count alone on one line, counted as the **member cap** counts them (a removed member holds no place), and
+exits 0; a team the server doesn't have is a plain error on stderr with a non-zero exit:
+
+```
+docker compose exec server shared-memory count-members --team acme
+```
 
 ### Generating the production key pair (the developer, once)
 
@@ -265,7 +308,7 @@ uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory
     --team "Acme" --member-cap 10 --expires 2027-11-06
 ```
 
-It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
+Add `--hosted` for a hosted server's key. It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
 the old one.
 
 ## How alike two activities must be for a collision warning
@@ -277,6 +320,51 @@ own model, at or above `SHARED_MEMORY_COLLISION_THRESHOLD` (default 0.75, option
 **The default is a guess and needs tuning.** Activity lines are short, and short lines score high against each other
 with a small embedding model. Raise it if members are warned about work that isn't the same; lower it if two sessions
 doing the same work were not warned.
+
+## How alike a memory must be for a save to name it
+
+A save always lands. Its answer then names up to three memories in the saving member's reach (their own personal
+memory in the project, and the project and team memory they can read) whose embeddings score at or above
+`SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD` (default 0.62, the same bar as promote's check; optional in `.env`; from 0 to
+1). Raise it if saves name memories that aren't near-copies; lower it if near-copies go unnamed.
+
+## How far a memory in doubt ranks down
+
+Recall and search multiply the score of a memory in doubt (one with an open challenge naming a reason) by
+`SHARED_MEMORY_IN_DOUBT_PENALTY` (default 0.5, optional in `.env`; above 0 and below 1). It still ranks, only lower.
+Lower it if doubted memories still crowd out sound ones; raise it toward 1 if they disappear from recall.
+
+## How long a gated session waits
+
+When a session's prompt or activity collides with another member's active session, the later session's file edits are
+refused until each earlier session's member agrees, or the project's wait has passed with no answer, or its member
+says it is different work; an earlier member's refusal holds past the wait, until their session ends or goes idle
+([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
+wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
+in `.env`). The same wait bounds an urgent message: the later session may send one per collision, and the earlier
+session's edits wait until its member answers or the wait has passed since it was sent. Each agree, refuse, timeout,
+urgent message and "different work" is in the audit log with the collision's score, never an answer's or a message's
+text, for tuning the threshold above.
+
+A session awaiting an answer stands by ([ADR-0027](./adr/0027-a-session-awaiting-an-answer-stands-by.md)): the server
+holds its request, checks every `SHARED_MEMORY_STANDBY_CHECK_SECONDS` (default 2) for news for it, and answers as soon
+as there is any, or with "nothing yet" after `SHARED_MEMORY_STANDBY_CAP_MINUTES` (default 5, and never longer than the
+project's wait). A coding agent that can't be woken by a background command calls the `stand_by` tool instead, held
+45 seconds unless it asks for more, and never longer than `SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS` (default 300, the
+longest tool timeout a coding agent allows). All three are optional in `.env`. A waiting session costs one held request
+and one small check per interval.
+
+## How long messages between sessions are kept
+
+A session can send a message to another session in its project with the `send_message` tool. A message is kept for
+`SHARED_MEMORY_MESSAGE_KEPT_DAYS` (default 7, optional in `.env`), delivered or not. One sent to a session that ended or
+went idle within `SHARED_MEMORY_RECENT_WORK_HOURS` (default 24, optional) waits for its member's next session in the
+project; one to a session gone longer is refused.
+
+The same window is how long a session that ended or went idle counts as recent work: a later session whose prompt
+matches its activity is reminded who worked on it, and given its handoff note. A handoff note, written with
+`leave_handoff_note` or put together by the server when a session ends or goes idle without one, is kept for
+`SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS` (default 7, optional). Notes are never saved as memory.
 
 ## The console
 
@@ -299,9 +387,56 @@ The console is served at the domain by the same Caddy that fronts the server, so
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
 
+### Signing in on a hosted server
+
+A hosted server has no GitHub OAuth app of its own: the platform signs members in with its one GitHub app and hands the
+sign-in over, signed with Ed25519. A self-hosted server ignores all of this and keeps its own GitHub app. The platform
+provisions a hosted server with:
+
+| Setting | Value |
+|---|---|
+| `SHARED_MEMORY_SIGN_IN` | `platform` (the default, `github`, is the server's own GitHub app) |
+| `SHARED_MEMORY_PLATFORM_URL` | The platform's address, for example `https://platform.example.com`. The console links there for the landing page, plans, Terms and Privacy Policy; a self-hosted server may set it for those links alone |
+| `SHARED_MEMORY_PLATFORM_PUBLIC_KEY` | The public half of the platform's sign-in key: 32 bytes of Ed25519, in hex |
+| `SHARED_MEMORY_SUBDOMAIN` | The server's own subdomain, for example `acme` for `acme.example.com` |
+
+Signing in then goes:
+
+1. The member chooses to sign in. The server makes a random one-time nonce, keeps it in the browser in a short-lived
+   httponly cookie (ten minutes), and sends them to
+   `<platform>/sign-in?subdomain=<subdomain>&return_to=<console>/api/sign-in/platform/callback&nonce=<nonce>`.
+2. The platform signs them in with GitHub, then sends them to `return_to` with `?sign_in=<handed-over sign-in>`,
+   whose payload carries the `nonce` it was given. It only ever sends them to the address of the hosted server that
+   `subdomain` names.
+3. The server checks the handed-over sign-in and signs in the member that GitHub account is linked to, as its own
+   GitHub sign-in would. It refuses one whose signature doesn't check out, that names another subdomain, that has
+   expired or expires more than ten minutes ahead, whose nonce isn't the one in this browser's cookie, or that was
+   already used once; it remembers each one-time ID until its sign-in expires. It clears the nonce cookie either way.
+   The nonce is what keeps an unused sign-in from signing in whoever it is passed to: in any other browser it is
+   refused, and left unspent.
+
+A handed-over sign-in reads `<payload>.<signature>`, both base64url without padding. The payload is JSON:
+
+```json
+{"expires": 1763112300, "github_id": 583231, "github_login": "olive", "id": "kq3Jf0mXb2", "nonce": "Zp8vR2kQ", "subdomain": "acme"}
+```
+
+| Field | What it is |
+|---|---|
+| `github_id` | The GitHub account's number, which never changes when the account is renamed |
+| `github_login` | The GitHub account's login |
+| `subdomain` | The hosted server the sign-in is for |
+| `expires` | When it stops being accepted, in Unix seconds: a few minutes after signing, and no more than ten |
+| `id` | A one-time ID, unique to this sign-in, at most 200 characters |
+| `nonce` | Required: the `nonce` the server sent the member to the platform with, exactly as given, at most 200 characters |
+
+The signature is Ed25519 over the payload's base64url text exactly as sent, so the order of the keys and the spacing
+are the platform's to choose. `src/shared_memory/platform_sign_in.py` signs and verifies this format; the tests' fake
+platform signs with it.
+
 ### Search engines
 
-Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server, its console and its landing page stay out of search results. On the one server whose landing page should be found, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
+Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server and its console stay out of search results. The landing page lives on the platform, not on any server; to let search engines index a server anyway, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
 
 ## Behind a CDN
 

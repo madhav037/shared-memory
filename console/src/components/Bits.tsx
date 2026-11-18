@@ -73,8 +73,9 @@ function projectPageUrl(projectId: string, page: ProjectPage): string {
   return `/projects/${encodeURIComponent(projectId)}/settings`;
 }
 
-/** One project's pages, the same four links on each of them. */
-export function ProjectLinks({ projectId, here }: { projectId: string; here: ProjectPage }) {
+/** One project's pages, the same four links on each of them. A page that isn't one of the four, such as project
+ * health, names none as here. */
+export function ProjectLinks({ projectId, here }: { projectId: string; here?: ProjectPage }) {
   return (
     <nav className="project-links" aria-label="This project’s pages">
       {PROJECT_PAGES.map(({ page, name, Icon }) =>
@@ -148,6 +149,16 @@ export function ChallengedMark({ count = 1, compact = false }: { count?: number;
     <span className="mark alert" title={words}>
       <IconScale size={14} stroke={STROKE} aria-hidden />
       {compact ? <span className="visually-hidden">{words}</span> : words}
+    </span>
+  );
+}
+
+/** A session has doubted it and nobody has decided yet (CONTEXT.md: In doubt). Only a label: the console never clears it. */
+export function InDoubtMark() {
+  return (
+    <span className="mark alert" title="A session doubts it; recall ranks it lower until it is decided" data-testid="in-doubt-mark">
+      <IconScale size={14} stroke={STROKE} aria-hidden />
+      In doubt
     </span>
   );
 }

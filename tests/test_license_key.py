@@ -1,13 +1,20 @@
-"""A license key is checked offline: valid, tampered, lapsed and wrongly signed keys, and key versions (spec #416)."""
+"""A license key is checked offline: valid, tampered, lapsed and wrongly signed keys, key versions (spec #416), and
+whether a key is a hosted server's (#469), and the `install-license` command's help (#470)."""
 
 from __future__ import annotations
 
+import base64
+import io
+import json
 import socket
 from datetime import date
+from pathlib import Path
 
 import pytest
 
+from shared_memory import cli
 from shared_memory import license as licensing
+from shared_memory.config import Settings
 from shared_memory.license import License, InvalidLicense, verify
 from tests.license_keys import OTHER_PRIVATE, TEST_PUBLIC_KEYS, a_key
 
@@ -73,6 +80,35 @@ def test_a_key_is_licensed_expiring_or_lapsed_by_its_date() -> None:
     assert found.days_left(date(2026, 12, 1)) == 5
 
 
+def test_a_key_without_the_hosted_field_is_a_self_hosted_servers_and_signs_as_before() -> None:
+    key = a_key()
+    encoded = key.split(".")[1]
+    payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+
+    assert key.startswith("sm1.")
+    assert set(payload) == {"team", "member_cap", "issued", "expires", "key_id"}
+    assert verify(key, TEST_PUBLIC_KEYS).hosted is False
+
+
+def test_a_hosted_key_says_so_and_is_signed_by_the_same_key_and_version() -> None:
+    key = a_key(hosted=True)
+
+    assert key.startswith("sm1.")
+    assert verify(key, TEST_PUBLIC_KEYS) == License(
+        "Acme", 5, date(2026, 9, 1), date(2027, 9, 1), "k-1", hosted=True
+    )
+
+
+def test_a_key_lapses_alike_whichever_kind_of_server_it_is_for() -> None:
+    hosted = verify(a_key(expires=date(2026, 12, 6), hosted=True), TEST_PUBLIC_KEYS)
+    self_hosted = verify(a_key(expires=date(2026, 12, 6)), TEST_PUBLIC_KEYS)
+
+    assert hosted.status(date(2026, 12, 6)) == "expiring"
+    # Whether a lapsed key makes the server read-only is the server's to say, from its settings (ADR-0022).
+    assert hosted.status(date(2026, 12, 7)) == "lapsed"
+    assert self_hosted.status(date(2026, 12, 7)) == "lapsed"
+
+
 def test_checking_a_key_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -> None:
     def blocked(*_: object, **__: object) -> None:
         raise AssertionError("the license check opened a network connection")
@@ -82,3 +118,40 @@ def test_checking_a_key_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -
 
     assert verify(a_key(), TEST_PUBLIC_KEYS).status(TODAY) == "licensed"
     assert licensing.PUBLIC_KEYS  # the built-in key is present
+
+
+def test_install_license_says_what_it_does_in_the_glossarys_words(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        cli.run(["install-license", "--help"])
+
+    said = " ".join(capsys.readouterr().out.split())
+    assert "Install a license key server-wide, as an admin does on the Team page" in said
+    assert "recorded in the audit log as installed by the vendor" in said
+    assert "The platform runs it to renew a hosted server's license key" in said
+
+
+#: No database: these refusals come before the command opens one.
+NO_SERVER = Settings("", Path("."), Path("."))
+
+
+class Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def test_install_license_without_a_key_on_a_terminal_says_how_to_pass_it(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exited:
+        cli.run(["install-license"], settings=NO_SERVER, stdin=Terminal())
+
+    assert exited.value.code == 2
+    assert "standard input" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("piped", ["", "  \n"], ids=["empty", "blank"])
+def test_install_license_refuses_an_empty_key_on_standard_input(piped: str) -> None:
+    err = io.StringIO()
+
+    code = cli.run(["install-license", "-"], settings=NO_SERVER, err=err, stdin=io.StringIO(piped))
+
+    assert code == 1
+    assert "No license key" in err.getvalue()

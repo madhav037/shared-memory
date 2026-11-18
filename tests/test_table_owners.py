@@ -34,6 +34,7 @@ OWNERS = {
     **{table: "board.py" for table in BOARD},
     "console_sessions": "console_sessions.py",
     "console_sign_ins": "console_sessions.py",
+    "handed_over_sign_ins": "console_sessions.py",
     "audit_events": "audit.py",
     "rate_buckets": "ratelimit.py",
     "rate_limit_settings": "ratelimit.py",

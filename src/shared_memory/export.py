@@ -28,7 +28,7 @@ from shared_memory.store import memory_folder, ordinary
 AUDIT_PAGE = 200
 
 
-def _json(value: Any) -> str:
+def _json(value: object) -> str:
     return json.dumps(value, indent=2, default=str)
 
 

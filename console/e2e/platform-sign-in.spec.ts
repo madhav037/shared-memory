@@ -1,0 +1,121 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { fakePlatform, hostedConsole, signOut } from "./helpers";
+
+// A hosted server: no GitHub app of its own, so the platform signs the member in and hands the sign-in over (#471).
+test.use({ baseURL: hostedConsole });
+
+/** Whoever the fake platform signs in next, and how that one sign-in goes wrong, if it does. */
+async function platformSignsIn(
+  page: Page,
+  account: { id: number; login: string; subdomain?: string; expired?: boolean; forged?: boolean; held?: boolean },
+) {
+  await page.request.post(`${fakePlatform}/as-account`, { data: account });
+}
+
+async function chooseToSignIn(page: Page) {
+  await page.goto("/");
+  await page.getByTestId("sign-in").click();
+}
+
+test("a member of a hosted server signs in through the platform", async ({ page }) => {
+  await platformSignsIn(page, { id: 1, login: "olive" });
+
+  await chooseToSignIn(page);
+
+  await expect(page.getByTestId("member-menu")).toBeVisible();
+  await page.getByTestId("member-menu").click();
+  await expect(page.getByText("Olive Owner (E1001), owner of acme")).toBeVisible();
+});
+
+test("a hosted console's links to the landing page, plans, Terms and Privacy Policy reach the platform", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const notice = page.getByTestId("sign-in-notice");
+  await expect(notice.getByRole("link", { name: "Terms" })).toHaveAttribute("href", `${fakePlatform}/terms`);
+  await expect(notice.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", `${fakePlatform}/privacy`);
+  const links = page.getByTestId("platform-links");
+  await expect(links.getByRole("link", { name: "Plans" })).toHaveAttribute("href", `${fakePlatform}/#pricing`);
+
+  await platformSignsIn(page, { id: 1, login: "olive" });
+  await page.getByTestId("sign-in").click();
+  await expect(page.getByTestId("member-menu")).toBeVisible();
+
+  const footer = page.getByTestId("platform-links");
+  await expect(footer.getByRole("link", { name: "About Shared Memory" })).toHaveAttribute("href", `${fakePlatform}/`);
+  await expect(footer.getByRole("link", { name: "Plans" })).toHaveAttribute("href", `${fakePlatform}/#pricing`);
+  await expect(footer.getByRole("link", { name: "Terms" })).toHaveAttribute("href", `${fakePlatform}/terms`);
+  await expect(footer.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", `${fakePlatform}/privacy`);
+});
+
+test("a sign-in whose signature doesn't check out is turned away", async ({ page }) => {
+  await platformSignsIn(page, { id: 1, login: "olive", forged: true });
+
+  await chooseToSignIn(page);
+
+  await expect(page.getByTestId("sign-in-error")).toContainText("couldn't be checked");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+});
+
+test("a sign-in for another team's server is turned away", async ({ page }) => {
+  await platformSignsIn(page, { id: 1, login: "olive", subdomain: "globex" });
+
+  await chooseToSignIn(page);
+
+  await expect(page.getByTestId("sign-in-error")).toContainText("for another team's server");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+});
+
+test("a sign-in that has expired is turned away", async ({ page }) => {
+  await platformSignsIn(page, { id: 1, login: "olive", expired: true });
+
+  await chooseToSignIn(page);
+
+  await expect(page.getByTestId("sign-in-error")).toContainText("took too long");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+});
+
+test("a sign-in handed back a second time is turned away", async ({ page }) => {
+  await platformSignsIn(page, { id: 1, login: "olive" });
+  await chooseToSignIn(page);
+  await expect(page.getByTestId("member-menu")).toBeVisible();
+  const handedBack: { url: string } = await (await page.request.get(`${fakePlatform}/last`)).json();
+  await signOut(page);
+
+  await page.goto(handedBack.url);
+
+  await expect(page.getByTestId("sign-in-error")).toContainText("didn't start in this browser");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+});
+
+test("a sign-in passed to a colleague's browser signs nobody in there", async ({ page, browser }) => {
+  // Olive starts signing in, but the platform holds the sign-in back rather than handing it to her browser.
+  await platformSignsIn(page, { id: 1, login: "olive", held: true });
+  await chooseToSignIn(page);
+  const handedBack: { url: string } = await (await page.request.get(`${fakePlatform}/last`)).json();
+
+  const colleagues = await browser.newContext({ baseURL: hostedConsole });
+  try {
+    const colleague = await colleagues.newPage();
+    await colleague.goto(handedBack.url);
+
+    await expect(colleague.getByTestId("sign-in-error")).toContainText("didn't start in this browser");
+    await expect(colleague.getByTestId("sign-in")).toBeVisible();
+  } finally {
+    await colleagues.close();
+  }
+
+  // Turning the colleague away didn't spend it: Olive's own browser still finishes the sign-in.
+  await page.goto(handedBack.url);
+  await expect(page.getByTestId("member-menu")).toBeVisible();
+});
+
+test("a GitHub account nobody has linked is turned away, as GitHub sign-in turns it away", async ({ page }) => {
+  await platformSignsIn(page, { id: 999, login: "a-stranger" });
+
+  await chooseToSignIn(page);
+
+  await expect(page.getByTestId("sign-in-error")).toContainText("isn't linked to a member");
+  await expect(page.getByTestId("sign-in")).toBeVisible();
+});

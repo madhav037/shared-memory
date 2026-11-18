@@ -13,6 +13,7 @@ from tests.support import (
     Crew,
     Session,
     add,
+    added_context,
     ask,
     promote,
     signed_in_owner,
@@ -143,6 +144,43 @@ def test_accepting_a_retire_challenge_leaves_no_memory_in_force_in_its_place(
     assert accepted.json()["decided"] == {"challenge_id": challenge_id, "decision": "accepted", "in_force": None}
     assert ask(signed_out, "/api/memory", path=theirs)["status"] == "retired"
     dana_console.close()
+
+
+def test_accepting_a_doubt_from_the_console_retires_the_memory_and_tells_its_raiser(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-disputes-doubt", 1180)
+    mine = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    challenge_id = dana.call("challenge", path=mine, reason="misled", reasoning="Charges are never retried.")[
+        "challenge_id"
+    ]
+
+    accepted = decide(signed_out, challenge_id, "accept")
+
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["decided"] == {"challenge_id": challenge_id, "decision": "accepted", "in_force": None}
+    assert accepted.json()["waiting"] == []
+    assert ask(signed_out, "/api/memory", path=mine)["status"] == "retired"
+    assert f"Your challenge {challenge_id} was accepted by E1001: {mine} is retired." in added_context(dana.start())
+
+
+def test_rejecting_a_doubt_from_the_console_lets_the_memory_stand(console: Console, signed_out: ConsoleClient) -> None:
+    owner, project, in_project = a_team(console, signed_out, "olive-disputes-doubt-two", 1181)
+    mine = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    challenge_id = dana.call("challenge", path=mine, reason="misled")["challenge_id"]
+
+    rejected = decide(signed_out, challenge_id, "reject")
+
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["decided"] == {"challenge_id": challenge_id, "decision": "rejected", "in_force": mine}
+    assert ask(signed_out, "/api/memory", path=mine)["status"] == "active"
+    assert "The memory stands as it is." in added_context(dana.start())
 
 
 def test_several_challenges_against_one_memory_are_shown_together_and_accepting_one_closes_the_others(

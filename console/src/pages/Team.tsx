@@ -185,6 +185,8 @@ export function licenseSentence(license: LicenseState): string {
       return `The license for ${license.team} expires on ${license.expires}, in ${license.days_left} days. Install a renewed key to keep the member cap.`;
     case "lapsed":
       return `The license for ${license.team} lapsed on ${license.expires}. Memory keeps working; install a renewed key to add members beyond the cap.`;
+    case "read-only":
+      return `This hosted server is read-only: the license for ${license.team} lapsed on ${license.expires}, so memory can be read and exported but not changed. The server stops on ${license.stops}; paying for your team’s plan restores it, with all its memory.`;
     case "invalid":
       return `The license key can’t be used: ${license.reason}`;
     default:

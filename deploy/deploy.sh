@@ -76,7 +76,17 @@ switch_to() {
     git -C "$REPO" checkout -q --detach "$2" || return 1
     local image
     for image in "${IMAGES[@]}"; do docker tag "$image:$1" "$image:latest" || return 1; done
+    root_owns_memory || return 1
     compose up -d --no-build --remove-orphans || return 1
+}
+
+# A server image from before #388 runs as root, and git refuses a memory folder another user owns, so putting such a
+# release back hands /data back to root first. The images since start as root only to hand /data to their own user.
+root_owns_memory() {
+    [ "$(docker image inspect -f '{{json .Config.Entrypoint}}' shared-memory-server:latest)" = null ] || return 0
+    log "The server image runs as root, so /data goes back to root"
+    compose stop server || return 1
+    compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data || return 1
 }
 
 check() {

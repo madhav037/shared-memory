@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import sys
+from collections.abc import Mapping
 from typing import TextIO
 
 from shared_memory.clock import system_clock
@@ -12,6 +13,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity
+from shared_memory.license import PUBLIC_KEYS
 
 # How long a worker keeps an idle connection open. Longer than a proxy in front keeps its own open to the server
 # (Caddy: 2 minutes) or a coding agent waits between calls: uvicorn's 5 seconds made a client, sending on a
@@ -19,7 +21,14 @@ from shared_memory.identity import Identity
 KEEP_ALIVE_SECONDS = 130
 
 
-def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.stdout) -> int:
+def run(
+    argv: list[str],
+    settings: Settings | None = None,
+    out: TextIO = sys.stdout,
+    err: TextIO = sys.stderr,
+    license_keys: Mapping[int, bytes] = PUBLIC_KEYS,
+    stdin: TextIO = sys.stdin,
+) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -33,6 +42,28 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
     link.add_argument("--team", required=True, help="Team ID")
     link.add_argument("--member-id", required=True)
     link.add_argument("--github", required=True, help="Their GitHub username")
+
+    counts = (
+        "Print how many members a team has, as a number alone on one line: those the member cap counts, so not removed "
+        "members. The platform runs it before moving a hosted team to a smaller plan."
+    )
+    counting = commands.add_parser("count-members", help=counts, description=counts)
+    counting.add_argument("--team", required=True, help="Team ID")
+
+    installs = (
+        "Install a license key server-wide, as an admin does on the Team page, recorded in the audit log as installed "
+        "by the vendor. The platform runs it to renew a hosted server's license key. A running server uses the new key "
+        "within five seconds, with no restart."
+    )
+    install = commands.add_parser("install-license", help=installs, description=installs)
+    install.add_argument(
+        "key",
+        nargs="?",
+        help=(
+            "The license key, as signed by the vendor. Pass - or leave it out to read the key from standard input, so "
+            "it never appears in the process list."
+        ),
+    )
 
     commands.add_parser("reindex", help="Rebuild the search index from the memory files.")
 
@@ -60,6 +91,48 @@ def run(argv: list[str], settings: Settings | None = None, out: TextIO = sys.std
         print(f"Team: {args.team}", file=out)
         print(f"Owner personal token: {token}", file=out)
         print("Keep this token secret: it is shown only once.", file=out)
+        return 0
+
+    if args.command == "count-members":
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
+        try:
+            members = Identity(db, system_clock).members_in_team(args.team)
+        except Refused as refused:
+            print(refused, file=err)
+            return 1
+        finally:
+            db.close()
+        print(members, file=out)
+        return 0
+
+    if args.command == "install-license":
+        from shared_memory.audit import Audit
+        from shared_memory.licensing import Licenses
+
+        key = args.key
+        if key is None and stdin.isatty():
+            install.error("give the license key, or pipe it on standard input")
+        if key is None or key == "-":
+            key = stdin.read().strip()
+            if not key:
+                print("No license key on standard input.", file=err)
+                return 1
+
+        db = Database(settings.database_url, settings.statement_timeout_seconds)
+        try:
+            audit = Audit(db, system_clock, Identity(db, system_clock))
+            held = Licenses(settings, db, audit, system_clock, license_keys).install_as_vendor(key).license
+        except Refused as refused:
+            print(refused, file=err)
+            return 1
+        finally:
+            db.close()
+        assert held is not None  # a key that verified when it was installed verifies when read back
+        print(
+            f"Installed the license key for {held.team}: up to {held.member_cap} members, until "
+            f"{held.expires.isoformat()} (key {held.key_id}).",
+            file=out,
+        )
         return 0
 
     if args.command == "reindex":

@@ -16,7 +16,6 @@ import {
   fetchLicense,
   fetchStatus,
   onRateLimited,
-  signInUrl,
   signOut,
   type LicenseState,
   type SignedInMember,
@@ -24,6 +23,7 @@ import {
 } from "./api/client";
 import { Refusal } from "./components/Bits";
 import { ContentsTree } from "./components/Contents";
+import { PlatformLinks } from "./components/PlatformLinks";
 import { ContentsProvider } from "./lib/contents";
 import { folderUrl, memoryUrl } from "./lib/format";
 import { AuditLog } from "./pages/AuditLog";
@@ -31,14 +31,14 @@ import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
 import { Challenges } from "./pages/Challenges";
 import { FolderPage } from "./pages/FolderPage";
-import { ComingSoon, NotFound } from "./pages/Elsewhere";
+import { HealthPage } from "./pages/HealthPage";
 import { Front } from "./pages/Front";
-import { Landing } from "./pages/Landing";
-import { LegalLinks, Privacy, Terms } from "./pages/Legal";
 import { MemoryPage } from "./pages/MemoryPage";
+import { NotFound } from "./pages/NotFound";
 import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { SignIn } from "./pages/SignIn";
 import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
@@ -48,23 +48,6 @@ function refusal(): string | null {
   const reason = new URLSearchParams(window.location.search).get("sign-in-error");
   return reason && reason.trim() ? reason : null;
 }
-
-/**
- * The console's own addresses, as the signed-in routes below have them. A visitor who isn't signed in sees the
- * landing page, and its sign-in, at any of these; anywhere else is not found.
- */
-const CONSOLE_ADDRESSES = [
-  "/",
-  "/files",
-  "/memory",
-  "/search",
-  "/challenges",
-  "/projects/*",
-  "/team",
-  "/audit",
-  "/connect",
-  "/my-token",
-];
 
 export function App() {
   const [connection, setConnection] = useState<Connection>({ state: "asking" });
@@ -117,41 +100,27 @@ export function App() {
 
   const { status } = connection;
   const member = status.member;
+  // Signed out, every address opens on the sign-in: what Shared Memory is and what it costs live on the platform.
   if (!member) {
     return (
       <>
         <header className="masthead">
           <Wordmark team={null} />
-          <nav className="nav" aria-label="This page">
-            <Link to="/#how">How it works</Link>
-            <Link to="/#pricing">Pricing</Link>
-          </nav>
-          {status.github_sign_in && (
-            <div className="masthead-end">
-              <a className="quiet-link" href={signInUrl}>
-                Sign in
-              </a>
-            </div>
-          )}
         </header>
-        <main id="page">
-          <Routes>
-            <Route path="/coming-soon" element={<ComingSoon />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} />
-            {CONSOLE_ADDRESSES.map((path) => (
-              <Route key={path} path={path} element={<Landing status={status} refused={signInRefused} />} />
-            ))}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </main>
+        <SignIn status={status} refused={signInRefused} />
       </>
     );
   }
 
   return (
     <ContentsProvider>
-      <SignedIn member={member} serverUrl={status.server_url} onLeave={leave} refused={signInRefused} />
+      <SignedIn
+        member={member}
+        serverUrl={status.server_url}
+        platformUrl={status.platform_url}
+        onLeave={leave}
+        refused={signInRefused}
+      />
     </ContentsProvider>
   );
 }
@@ -169,11 +138,13 @@ function Wordmark({ team }: { team: string | null }) {
 function SignedIn({
   member,
   serverUrl,
+  platformUrl,
   onLeave,
   refused,
 }: {
   member: SignedInMember;
   serverUrl: string;
+  platformUrl: string | null;
   onLeave: () => void;
   refused: string | null;
 }) {
@@ -183,15 +154,6 @@ function SignedIn({
   const location = useLocation();
   const readsAudit = member.role === "owner" || member.role === "admin" || member.leads_a_project;
   const manages = member.role === "owner" || member.role === "admin";
-
-  // The page's own title describes Shared Memory to search engines; a signed-in member's tab just names it.
-  useEffect(() => {
-    const described = document.title;
-    document.title = "Shared Memory";
-    return () => {
-      document.title = described;
-    };
-  }, []);
 
   // The server limits how fast calls may come; say so, so a refused page isn't taken for a broken console.
   useEffect(() => onRateLimited(setLimited), []);
@@ -281,7 +243,7 @@ function SignedIn({
         </aside>
         <main className="page" id="page" tabIndex={-1}>
           {refused && <Refusal testid="sign-in-error">{refused}</Refusal>}
-          {manages && <LicenseBanner />}
+          <LicenseBanner manages={manages} />
           <Routes>
             <Route path="/" element={<Front member={member} />} />
             <Route path="/files" element={<FolderPage member={member} />} />
@@ -294,28 +256,32 @@ function SignedIn({
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings me={member} />} />
+            <Route path="/projects/:projectId/health" element={<HealthPage />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/team" element={<Team me={member} />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
-            <Route path="/coming-soon" element={<ComingSoon inConsole />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="*" element={<NotFound inConsole />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>
-      <footer className="legal-foot">
-        <LegalLinks />
-      </footer>
+      {platformUrl && (
+        <footer className="platform-foot">
+          <PlatformLinks platformUrl={platformUrl} />
+        </footer>
+      )}
     </>
   );
 }
 
-/** Tells admins when the server has no usable license key, or its key is about to expire or has. Never blocks. */
-function LicenseBanner() {
+/**
+ * Tells admins when the server has no usable license key, or its key is about to expire or has, and when a hosted
+ * server has turned read-only, until when and how to restore it. Members see only a plain notice that memory can't be
+ * changed, while the server is read-only. Never blocks.
+ */
+function LicenseBanner({ manages }: { manages: boolean }) {
   const [license, setLicense] = useState<LicenseState | null>(null);
   const [installed, setInstalled] = useState(0);
   // The Team page says when it installs a key, so the banner follows without a reload.
@@ -332,6 +298,14 @@ function LicenseBanner() {
     return () => attempt.abort();
   }, [installed]);
   if (!license || license.status === "licensed") return null;
+  if (!manages) {
+    if (license.status !== "read-only") return null;
+    return (
+      <p className="license-banner" role="status" data-testid="read-only-notice">
+        Memory can’t be changed right now: this server is read-only. You can still read and search everything.
+      </p>
+    );
+  }
   return (
     <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
       {licenseSentence(license)} <Link to="/team">Team</Link>

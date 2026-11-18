@@ -7,11 +7,12 @@ import io
 import json
 import os
 import re
+import secrets
 import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,8 @@ import psycopg
 import pytest
 import uvicorn
 from anyio.from_thread import BlockingPortal
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from mcp import Client, types
 from mcp.client.streamable_http import streamable_http_client
 from starlette.applications import Starlette
@@ -32,11 +35,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory import cli
+from shared_memory import cli, platform_sign_in
 from shared_memory.config import Settings
 from shared_memory.fence import unfenced
 from shared_memory.sessions import Session as KnownSession
 from shared_memory.sessions import Sessions
+from shared_memory.standby import Standbys
 
 ADMIN_URL = os.environ.get("SHARED_MEMORY_TEST_ADMIN_URL", "postgresql://postgres:postgres@localhost:5433/postgres")
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,16 +61,37 @@ WORKING_FOLDER = "/work/app"
 CHECKOUT = hashlib.sha1(str(REPO_ROOT).encode()).hexdigest()[:8]
 
 
+# The oldest pgvector the server runs on: recall sets `hnsw.iterative_scan`, which 0.8 brought.
+PGVECTOR_NEEDED = (0, 8)
+
+
+def pgvector_too_old(found: str | None) -> str | None:
+    """Why the run stops, given the test Postgres's pgvector version (None when it has none); None when it will do."""
+    parts = re.match(r"(\d+)\.(\d+)", found or "")
+    if parts and (int(parts[1]), int(parts[2])) >= PGVECTOR_NEEDED:
+        return None
+    needed = ".".join(str(part) for part in PGVECTOR_NEEDED)
+    return f"pgvector {needed} or later is needed (found {found or 'none'})"
+
+
 def fresh_database(name: str) -> str:
     """Drop and recreate this checkout's database of that name on the test Postgres; return its URL."""
     name = f"{name}_{CHECKOUT}"
     try:
         with psycopg.connect(ADMIN_URL, autocommit=True, connect_timeout=5) as conn:
+            row = conn.execute("SELECT default_version FROM pg_available_extensions WHERE name = 'vector'").fetchone()
+            too_old = pgvector_too_old(row[0] if row else None)
+            if too_old:
+                pytest.exit(f"{too_old}. The compose image has it: docker compose up -d db", returncode=2)
             conn.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
             conn.execute(f"CREATE DATABASE {name}")
     except psycopg.OperationalError as error:
         pytest.exit(f"Postgres is not reachable ({error}). Start it with: docker compose up -d db", returncode=2)
     return ADMIN_URL.rsplit("/", 1)[0] + f"/{name}"
+
+
+# Where the requests a coding agent leaves running in the background are held, such as a standby.
+_BACKGROUND = ThreadPoolExecutor(max_workers=16, thread_name_prefix="background-request")
 
 
 class TestClock:
@@ -236,13 +261,16 @@ class Session:
         body = {"session_id": self.identifier, "cwd": WORKING_FOLDER, "hook_event_name": CLAUDE_EVENTS[event], **payload}
         return self.hook_payload(event, body, format)
 
-    def hook_payload(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
-        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format."""
+    def hook_payload(
+        self, event: str, payload: dict[str, Any], format: str | None = None, branch: str | None = None
+    ) -> dict[str, Any]:
+        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format, and
+        naming the session's git branch as the hook before a tool does."""
         response = httpx.post(
             f"{self.server.url}/hooks/{event}",
             json=payload,
             params={"format": format} if format else None,
-            headers=self.headers(),
+            headers={**self.headers(), **({"X-Shared-Memory-Branch": branch} if branch is not None else {})},
             timeout=60,
         )
         assert response.status_code == 200, response.text
@@ -265,6 +293,40 @@ class Session:
         """Fire the before-edit hook as Claude Code does before its Edit tool changes this file, named from the
         repository's root, and return its hook output. Claude Code names the file by its absolute path."""
         return self._hook("before-edit", edit_tool(f"{WORKING_FOLDER}/{path}"), format)
+
+    def use(
+        self, tool: dict[str, Any], format: str | None = None, branch: str | None = None, after: bool = False
+    ) -> dict[str, Any]:
+        """Fire the hook before a tool call (or, with `after`, the hook after it) as Claude Code does for this tool,
+        on this branch, and return its hook output."""
+        event = "after-tool" if after else "before-edit"
+        body = {
+            "session_id": self.identifier,
+            "cwd": WORKING_FOLDER,
+            "hook_event_name": "PostToolUse" if after else "PreToolUse",
+            **tool,
+        }
+        return self.hook_payload(event, body, format, branch)
+
+    def stand_by(self) -> Future[httpx.Response]:
+        """Start a standby as a coding agent's background command does, on a thread of its own: the future holds the
+        server's answer once the standby ends."""
+        return _BACKGROUND.submit(
+            httpx.post,
+            f"{self.server.url}/hooks/standby",
+            json={"session_id": self.identifier},
+            headers=self.headers(),
+            timeout=60,
+        )
+
+    def on_standby(self) -> list[str]:
+        """The identifiers of the sessions in this session's project that stand by now, as the worker it talks to
+        reads them, one per held standby. No tool or page shows them yet, so this asks that worker's standby module."""
+        assert self.project is not None
+        standbys: Standbys = self.server.app.state.standbys
+        sessions: Sessions = self.server.app.state.sessions
+        named = {each.id: each.identifier for each in sessions.active(self.project)}
+        return [named[each.session_id] for each in standbys.in_project(self.project) if each.session_id in named]
 
     def active_sessions(self) -> list[KnownSession]:
         """The sessions active in this session's project, as the worker it talks to reads them. No tool lists them
@@ -298,6 +360,21 @@ def edit_tool(file_path: str) -> dict[str, Any]:
         "tool_input": {"file_path": file_path, "old_string": "retries = 3", "new_string": "retries = 5"},
         "tool_use_id": "toolu_01ABC123",
     }
+
+
+def read_tool(file_path: str) -> dict[str, Any]:
+    """What Claude Code's PreToolUse payload says of a Read tool call about to read this file."""
+    return {
+        "permission_mode": "default",
+        "tool_name": "Read",
+        "tool_input": {"file_path": file_path},
+        "tool_use_id": "toolu_02DEF456",
+    }
+
+
+def search_tool(pattern: str) -> dict[str, Any]:
+    """What Claude Code's PreToolUse payload says of a Grep tool call, which names no file."""
+    return {"permission_mode": "default", "tool_name": "Grep", "tool_input": {"pattern": pattern}, "tool_use_id": "t3"}
 
 
 def added_context_as_sent(hook_output: dict[str, Any]) -> str:
@@ -469,6 +546,101 @@ class FakeGitHub:
         self._server.stop()
 
 
+class FakePlatform:
+    """Stands in for the platform's half of a hosted server's sign-in: it signs a member in "with GitHub" as whichever
+    account it has been told to, and hands the sign-in back to the server signed with its own Ed25519 key, exactly as
+    the platform does (platform_sign_in.py).
+
+    `go_wrong` makes the next sign-in alone go wrong: for another subdomain, already expired, expiring too far ahead,
+    for another browser's nonce, or signed by a key that isn't the platform's; or held back, answered with the address
+    it would have handed back to rather than sent there. The browser journeys reach both through `POST /as-account`,
+    and read the address the last sign-in was handed back to from `GET /last`, to use it again or elsewhere.
+    """
+
+    def __init__(self, portal: BlockingPortal, settings: Settings, clock: TestClock, port: int = 0) -> None:
+        self._key = Ed25519PrivateKey.generate()
+        self.public_key = self._key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
+        self.account_id = 1
+        self.login = "olive"
+        self.last = ""
+        self.last_nonce = ""
+        self._wrong: dict[str, Any] = {}
+
+        async def sign_in(request: Request) -> Response:
+            wrong, self._wrong = self._wrong, {}
+            self.last_nonce = request.query_params.get("nonce", "")
+            lasts = timedelta(minutes=5)
+            if wrong.get("expired"):
+                lasts = timedelta(seconds=-1)
+            elif wrong.get("far_ahead"):
+                lasts = timedelta(hours=1)
+            handed = platform_sign_in.HandedOverSignIn(
+                github_id=self.account_id,
+                github_login=self.login,
+                subdomain=wrong.get("subdomain") or request.query_params["subdomain"],
+                expires=clock() + lasts,
+                id=secrets.token_urlsafe(16),
+                nonce=wrong.get("nonce") or self.last_nonce,
+            )
+            key = Ed25519PrivateKey.generate() if wrong.get("forged") else self._key
+            handed_over = urlencode({"sign_in": platform_sign_in.sign(key, handed)})
+            self.last = f"{request.query_params['return_to']}?{handed_over}"
+            if wrong.get("held"):
+                return JSONResponse({"url": self.last})
+            return RedirectResponse(self.last, status_code=302)
+
+        async def as_account(request: Request) -> Response:
+            body = await request.json()
+            self.as_(int(body["id"]), str(body["login"]))
+            self.go_wrong(
+                subdomain=body.get("subdomain"),
+                expired=bool(body.get("expired")),
+                forged=bool(body.get("forged")),
+                held=bool(body.get("held")),
+            )
+            return JSONResponse({"id": self.account_id, "login": self.login})
+
+        async def last(request: Request) -> Response:
+            return JSONResponse({"url": self.last})
+
+        app = Starlette(
+            routes=[
+                Route("/sign-in", sign_in, methods=["GET"]),
+                Route("/as-account", as_account, methods=["POST"]),
+                Route("/last", last, methods=["GET"]),
+            ]
+        )
+        self._server = RunningServer(app, settings, TestClock(), portal, port=port)
+        self.url = self._server.url
+
+    def as_(self, account_id: int, login: str) -> None:
+        """Whoever signs in next is this GitHub account."""
+        self.account_id, self.login = account_id, login
+
+    def go_wrong(
+        self,
+        subdomain: str | None = None,
+        expired: bool = False,
+        forged: bool = False,
+        far_ahead: bool = False,
+        nonce: str | None = None,
+        held: bool = False,
+    ) -> None:
+        """Make the next sign-in, and only that one, for another subdomain, expired, expiring too far ahead, for
+        another nonce, or not signed by the platform; or held back rather than handed over."""
+        self._wrong = {
+            "subdomain": subdomain,
+            "expired": expired,
+            "forged": forged,
+            "far_ahead": far_ahead,
+            "nonce": nonce,
+            "held": held,
+        }
+
+    def stop(self) -> None:
+        self._server.stop()
+
+
 class ConsoleClient:
     """A browser, as the server sees it: it follows redirects and keeps the session cookie."""
 
@@ -488,6 +660,18 @@ class ConsoleClient:
     def sign_in(self) -> httpx.Response:
         """Follow the whole sign-in: to GitHub, back to the callback, and on to the console."""
         return self._http.get("/api/sign-in/github")
+
+    def start_sign_in(self) -> str:
+        """Choose to sign in, keeping whatever cookie that sets, and return where the browser is sent, not going."""
+        sent = self._http.get("/api/sign-in/github", follow_redirects=False)
+        assert sent.status_code == 302, sent.text
+        return str(sent.headers["location"])
+
+    def cookie(self, name: str) -> str | None:
+        return self._http.cookies.get(name)
+
+    def set_cookie(self, name: str, value: str) -> None:
+        self._http.cookies.set(name, value)
 
     def post(self, path: str, with_header: bool = True) -> httpx.Response:
         headers = {"X-Shared-Memory-Console": "1"} if with_header else {}
@@ -521,13 +705,44 @@ class Console:
 
     def a_team(self, github_login: str) -> tuple[str, str]:
         """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
-        code = f"team-{uuid.uuid4().hex[:8]}"
-        printed = self.server.run_cli(
-            "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
-            "--owner-github", github_login,
-        )  # fmt: skip
-        token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
-        return code, token
+        return a_team_on(self.server, github_login)
+
+
+class StubEmbedder:
+    """Stands in for the embedding model, for a server whose tests never save or search, so it loads no model."""
+
+    def passages(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] for _ in texts]
+
+    def query(self, text: str) -> list[float]:
+        return [0.0]
+
+    def tokens(self, words: list[str]) -> list[int]:
+        return [1 for _ in words]
+
+
+@dataclass
+class HostedConsole:
+    """A hosted server, which signs members in by a sign-in the platform hands over, and the fake platform."""
+
+    server: RunningServer
+    platform: FakePlatform
+    clock: TestClock
+
+    def a_team(self, github_login: str) -> tuple[str, str]:
+        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
+        return a_team_on(self.server, github_login)
+
+
+def a_team_on(server: RunningServer, github_login: str) -> tuple[str, str]:
+    """A team on this server whose owner signs in as this GitHub account; returns its code and the owner's token."""
+    code = f"team-{uuid.uuid4().hex[:8]}"
+    printed = server.run_cli(
+        "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+        "--owner-github", github_login,
+    )  # fmt: skip
+    token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
+    return code, token
 
 
 def signed_in(console: Console, github: str, account: int) -> ConsoleClient:

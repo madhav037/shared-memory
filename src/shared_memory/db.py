@@ -113,6 +113,13 @@ CREATE TABLE IF NOT EXISTS console_sign_ins (
     created_at TIMESTAMPTZ NOT NULL
 );
 
+-- The one-time IDs of the sign-ins the platform handed over that were used (console_sessions.py), each kept until its
+-- sign-in expires, so none is accepted twice.
+CREATE TABLE IF NOT EXISTS handed_over_sign_ins (
+    id TEXT PRIMARY KEY,
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
     id BIGSERIAL PRIMARY KEY,
     at TIMESTAMPTZ NOT NULL,

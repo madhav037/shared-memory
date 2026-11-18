@@ -70,6 +70,12 @@ Kind = Literal[
     "license_installed",
     "token_limited",
     "team_exported",
+    "gate_timed_out",
+    "different_work",
+    "project_wait_changed",
+    "gate_agreed",
+    "gate_refused",
+    "urgent_message",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -126,6 +132,22 @@ LICENSE_INSTALLED: Kind = "license_installed"
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
 # An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.
 TEAM_EXPORTED: Kind = "team_exported"
+# A later session's gate ended (ADR-0024): its wait passed with no answer, or its member said it is different work. The
+# entry's actor is the later session's member, its target the earlier one's, and its detail holds the collision's score
+# and cause, never a prompt.
+GATE_TIMED_OUT: Kind = "gate_timed_out"
+DIFFERENT_WORK: Kind = "different_work"
+# An earlier session's member agreed to or refused a later session's gate on its work (#512). The entry's actor is the
+# earlier session's member, its target the later one's, and its detail holds the collision's score and cause, never
+# the answer's text.
+GATE_AGREED: Kind = "gate_agreed"
+GATE_REFUSED: Kind = "gate_refused"
+# A later session sent an earlier session's member an urgent message on their collision (#513), which gates the earlier
+# session until its member answers. The entry's actor is the later session's member, its target the earlier one's, and
+# its detail holds the collision's score and cause, never the message's text.
+URGENT_MESSAGE: Kind = "urgent_message"
+# A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
+PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
 
 
 @dataclass(frozen=True)
@@ -179,7 +201,7 @@ class Audit:
                 ),
             )
 
-    def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: Any) -> None:
+    def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: object) -> None:
         """Note a change to one memory: who changed it, in which project, and at which path.
 
         The project is the session's, or the memory's own when the change was made from somewhere that isn't in
@@ -206,7 +228,7 @@ class Audit:
             ).fetchone()
         return row is not None
 
-    def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: Any) -> None:
+    def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: object) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
         these entries (ADR-0014)."""
         if caller.agent is not None:

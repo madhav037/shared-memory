@@ -1,7 +1,9 @@
 """Signing in to the console with GitHub, and the sessions that follow (ADR-0007).
 
 A personal token proves who a Claude session belongs to; it never goes into a browser. The console instead sends the
-member to GitHub, and what comes back is matched to the member an admin linked that GitHub account to.
+member to GitHub, and what comes back is matched to the member an admin linked that GitHub account to. A hosted server
+has no GitHub app of its own: it sends the member to the platform, which signs them in with GitHub and hands the
+result back, signed (platform_sign_in.py). Either way the member is then signed in the same way.
 """
 
 from __future__ import annotations
@@ -21,15 +23,28 @@ from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity, Member
+from shared_memory.platform_sign_in import MAX_LIFETIME, InvalidSignIn, verify
 
 COOKIE = "shared_memory_console"
+# The cookie holding the nonce a hosted server sent the member to the platform with, until the sign-in comes back.
+NONCE_COOKIE = "shared_memory_sign_in_nonce"
 SIGN_IN_PATH = "/api/sign-in/github"
 CALLBACK_PATH = f"{SIGN_IN_PATH}/callback"
+# Where the platform hands a sign-in back to, as `?sign_in=<the handed-over sign-in>`.
+HANDED_OVER_PATH = "/api/sign-in/platform/callback"
 STATE_MINUTES = 10
 
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class SignInStarted:
+    """Where to send the member to sign in, and, when that is the platform, the nonce the browser keeps meanwhile."""
+
+    url: str
+    nonce: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,20 +68,33 @@ class ConsoleSessions:
         return self._settings.github_sign_in
 
     def _require_configured(self) -> None:
-        if not self.configured:
+        if self.configured:
+            return
+        if self._settings.signs_in_through_platform:
             raise Refused(
-                "Signing in with GitHub isn't set up on this server. "
-                "The person running it sets the GitHub app's client ID and secret."
+                "Signing in through the platform isn't set up on this server. "
+                "The person running it sets the platform's address, its public key and this server's subdomain."
             )
+        raise Refused(
+            "Signing in with GitHub isn't set up on this server. "
+            "The person running it sets the GitHub app's client ID and secret."
+        )
 
     def redirect_uri(self, base_url: str) -> str:
         """Where GitHub sends the member back: the console's own address when the server knows it."""
         root = (self._settings.console_url or base_url).rstrip("/")
         return f"{root}{CALLBACK_PATH}"
 
-    def start(self, base_url: str) -> str:
-        """Begin a sign-in: remember a one-time state and return the address on GitHub to send the member to."""
+    def start(self, base_url: str) -> SignInStarted:
+        """Begin a sign-in: remember a one-time state and return the address on GitHub to send the member to. A server
+        that signs in through the platform sends the member there instead, naming its subdomain, where to come back and
+        a one-time nonce, which the browser keeps in a cookie until the sign-in comes back carrying it."""
         self._require_configured()
+        if self._settings.signs_in_through_platform:
+            back = f"{(self._settings.console_url or base_url).rstrip('/')}{HANDED_OVER_PATH}"
+            nonce = secrets.token_urlsafe(24)
+            query = urlencode({"subdomain": self._settings.subdomain, "return_to": back, "nonce": nonce})
+            return SignInStarted(f"{self._settings.platform_url.rstrip('/')}/sign-in?{query}", nonce)
         state = secrets.token_urlsafe(24)
         now = self._clock()
         with self._db.transaction() as conn:
@@ -82,13 +110,50 @@ class ConsoleSessions:
                 "state": state,
             }
         )
-        return f"{self._settings.github_sign_in_url.rstrip('/')}/login/oauth/authorize?{query}"
+        return SignInStarted(f"{self._settings.github_sign_in_url.rstrip('/')}/login/oauth/authorize?{query}")
 
     def finish(self, code: str, state: str, base_url: str) -> str:
         """Complete a sign-in and return the session's token, or refuse with what to tell the member."""
         self._require_configured()
+        if self._settings.signs_in_through_platform:
+            raise Refused("This server signs members in through the platform, not with a GitHub app of its own.")
         self._spend_state(state)
-        account = self._account(self._access_token(code, base_url))
+        return self._sign_in_as(self._account(self._access_token(code, base_url)))
+
+    def finish_handed_over(self, text: str, nonce: str | None) -> str:
+        """Complete a sign-in the platform handed over and return the session's token, or refuse with what to tell the
+        member: it must be signed by the platform, name this server's subdomain, not have expired nor expire too far
+        ahead, carry the nonce this browser was sent with (`nonce`, from its cookie), and be used once. A sign-in landing
+        in another browser is refused before it is spent, so the browser that started it can still finish it."""
+        if not self._settings.signs_in_through_platform:
+            raise Refused("This server doesn't take sign-ins from the platform. Sign in with GitHub here.")
+        self._require_configured()
+        try:
+            handed = verify(text, self._settings.platform_public_key)
+        except InvalidSignIn as wrong:
+            raise Refused(str(wrong)) from None
+        if handed.subdomain != self._settings.subdomain:
+            raise Refused("That sign-in was for another team's server, so it can't sign you in here. Try again.")
+        now = self._clock()
+        if handed.expires <= now:
+            raise Refused("That sign-in took too long. Try again.")
+        if handed.expires > now + MAX_LIFETIME:
+            raise Refused("That sign-in couldn't be checked, so it can't be trusted. Try again.")
+        if not nonce or not secrets.compare_digest(handed.nonce.encode(), nonce.encode()):
+            raise Refused("That sign-in didn't start in this browser, so it can't sign you in here. Sign in again.")
+        with self._db.transaction() as conn:
+            conn.execute("DELETE FROM handed_over_sign_ins WHERE expires_at <= %s", (now,))
+            spent = conn.execute(
+                "INSERT INTO handed_over_sign_ins (id, expires_at) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING"
+                " RETURNING id",
+                (handed.id, handed.expires),
+            ).fetchone()
+        if spent is None:
+            raise Refused("That sign-in was already used. Sign in again.")
+        return self._sign_in_as(GitHubAccount(handed.github_id, handed.github_login))
+
+    def _sign_in_as(self, account: GitHubAccount) -> str:
+        """Sign in the member this GitHub account is linked to, and return the session's token."""
         try:
             member = self._identity.member_for_github(account.account_id, account.login)
         except Refused as refused:

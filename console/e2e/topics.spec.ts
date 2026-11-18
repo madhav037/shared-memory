@@ -8,6 +8,8 @@ test("a member pins a whole topic into every briefing, and unpins it", async ({ 
   await expect(page.getByTestId("folder-name")).toHaveText("Invoicing");
 
   await page.getByTestId("pin-topic").click();
+  // Pinned before leaving the page, so the briefing below is read after the pin, not raced against it.
+  await expect(page.getByTestId("unpin-topic")).toBeVisible();
 
   // A pinned topic belongs in the project's briefing, marked as a topic rather than one memory.
   await page.getByRole("navigation", { name: "Where this is" }).getByRole("link", { name: "Billing" }).click();

@@ -16,7 +16,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
-from shared_memory.challenges import DecidesAs
+from shared_memory.challenges import DecidesAs, Reason
+from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
@@ -37,9 +38,14 @@ class Status(BaseModel):
 
     signed_in: bool
     github_sign_in: bool
+    # Whether this is a hosted server, whose members the platform signs in: what setting up sign-in takes differs.
+    hosted: bool
     member: SignedInMember | None
     # The address every coding agent reaches this server at: the one the repository's files name.
     server_url: str
+    # The platform's address, where the landing page, the plans, the Terms and the Privacy Policy live: the console links
+    # there. None on a server that wasn't given one.
+    platform_url: str | None
 
 
 class AuditEvent(BaseModel):
@@ -85,16 +91,19 @@ class RateLimitChange(BaseModel):
 
 
 class LicenseState(BaseModel):
-    """The server's license: whether it is licensed, expiring, lapsed, unlicensed (no key) or invalid (a key that
-    can't be trusted), and what a trusted key says. Nothing here ever includes the key itself."""
+    """The server's license: whether it is licensed, expiring, lapsed, read-only (a hosted server's key has lapsed),
+    unlicensed (no key) or invalid (a key that can't be trusted), and what a trusted key says. Nothing here ever
+    includes the key itself."""
 
-    status: Literal["licensed", "expiring", "lapsed", "unlicensed", "invalid"]
+    status: Literal["licensed", "expiring", "lapsed", "read-only", "unlicensed", "invalid"]
     team: str | None
     member_cap: int | None
     issued: str | None
     expires: str | None
     key_id: str | None
     days_left: int | None
+    # The day a read-only hosted server will be stopped, fourteen days after its key lapsed (ADR-0022); otherwise null.
+    stops: str | None
     # Why there is no trusted key, in words an admin can act on.
     reason: str | None
     # Where the key came from: installed in the console, or set in the server's environment.
@@ -221,6 +230,17 @@ class PendingChallenge(BaseModel):
     replaces: str | None
 
 
+class DoubtEvidence(BaseModel):
+    """What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
+    quote, written repository:path:line, as the code has it."""
+
+    member_id: str
+    reasoning: str | None
+    code_reference: str | None
+    quoted_line: str | None
+    raised_at: datetime
+
+
 class OpenChallenge(BaseModel):
     """A challenge raised against this memory."""
 
@@ -228,10 +248,16 @@ class OpenChallenge(BaseModel):
     kind: str
     raised_by: str
     challenger_path: str | None
+    # The reason it names when it doubts the memory (CONTEXT.md: Reason); none for a supersede or a retire.
+    reason: Reason | None
     # Whether the member reading this may decide it, and in what capacity: as its author, as a lead of its project, as
     # an admin, or as anyone may once the fallback has passed or its author has left.
     may_decide: bool
     decides_as: DecidesAs | None
+    # For a doubt, shown to every member who can read the memory, deciders or not: how many members raised it and the
+    # evidence each raise brought, the first raiser's first. A challenge that names no reason has neither.
+    count: int | None
+    evidence: list[DoubtEvidence]
 
 
 class Pin(BaseModel):
@@ -267,6 +293,24 @@ class MemoryPath(BaseModel):
     path: str
 
 
+class InDoubtReason(BaseModel):
+    """One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is."""
+
+    reason: Reason
+    count: int
+    # Each code reference quoted for it, written repository:path:line, first quoted first and each once.
+    code_references: list[str]
+
+
+class InDoubtMark(BaseModel):
+    """What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
+    a session is shown, which the console shows as it is."""
+
+    count: int
+    reasons: list[InDoubtReason]
+    line: str
+
+
 class ChallengedMemory(BaseModel):
     """One side of a challenge: a memory as it stands now."""
 
@@ -299,6 +343,11 @@ class ChallengeDetail(BaseModel):
     challenger: ChallengedMemory | None
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
     reasoning: str | None
+    # For a doubt: the reason it names, every raise's evidence (the first raiser's first) and how many raises it has
+    # had: how many members, the first and each +1. A challenge that names no reason has none of them.
+    reason: Reason | None
+    evidence: list[DoubtEvidence]
+    count: int | None
 
 
 class RaisedChallenge(BaseModel):
@@ -306,6 +355,8 @@ class RaisedChallenge(BaseModel):
 
     challenge_id: int
     kind: str
+    # The reason a doubt names; none for any other kind.
+    reason: Reason | None
     target_path: str
     target_title: str
     challenger_path: str | None
@@ -389,6 +440,9 @@ class MemoryDetail(BaseModel):
     suspected_instructions: list[str]
     pending: list[PendingChallenge]
     open_challenges: list[OpenChallenge]
+    # The memory is in doubt: what its open doubts say, which the console shows and never clears (ADR-0009). None when
+    # nobody doubts it.
+    in_doubt: InDoubtMark | None
 
 
 class SearchHit(BaseModel):
@@ -680,11 +734,35 @@ class HeldLock(BaseModel):
     last_used_at: datetime
 
 
+class AwaitedMember(BaseModel):
+    """A member whose answer a standing-by session awaits."""
+
+    member_id: str
+    member_name: str
+
+
+class SessionStandby(BaseModel):
+    """A session standing by (ADR-0027): its coding agent waits for news without its member typing. awaits names the
+    members whose answer it awaits, as it was when the standby started: the earlier members its edit is gated on, those
+    its urgent messages not yet answered went to, and the member its latest message went to until they reply. It is
+    empty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the
+    server's clock, unless news, a newer standby or the member's next prompt ends it first."""
+
+    started_at: datetime
+    ends_at: datetime
+    awaits: list[AwaitedMember]
+
+
 class ActiveSession(BaseModel):
     """One active session of a member's coding agent. agent is None until the session has said which coding agent it
     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
     for a session that stated none it is the title of its member's card in Doing, and from_card says so; None when
-    there is neither. last_seen_at is when the session last called the server."""
+    there is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook
+    before a tool last named it, None until one has; touched_files are the files its tool calls named, each a path
+    from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
+    can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
+    nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
+    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise."""
 
     member_id: str
     member_name: str
@@ -694,16 +772,166 @@ class ActiveSession(BaseModel):
     from_card: bool
     started_at: datetime
     last_seen_at: datetime
+    branch: str | None
+    touched_files: list[str]
     locks: list[HeldLock]
+    can_be_gated: bool
+    standby: SessionStandby | None
+
+
+class NamedSession(BaseModel):
+    """An active session as a collision, a gate or a message names it: its member, its coding agent (None until it has
+    said which) and its activity (None when it has none). session_number tells it apart from the same member's other
+    sessions, so the page can tell two gates between the same two members apart; it is not the identifier its coding
+    agent sends, which never leaves its member (ADR-0018)."""
+
+    session_number: int
+    member_id: str
+    member_name: str
+    agent: str | None
+    activity: str | None
+
+
+class SessionCollision(BaseModel):
+    """Two active sessions found working on nearly the same thing. later is the session whose prompt or activity made
+    the collision, as cause says; earlier is the other. found_at is when it was found. The prompt is never shown."""
+
+    later: NamedSession
+    earlier: NamedSession
+    cause: Literal["prompt", "activity"]
+    found_at: datetime
+
+
+class GateWait(BaseModel):
+    """One earlier session a gate waits for, until the project's wait has passed (until), unless its member agrees.
+    refused says its member refused: the gate then holds past until, while that session stays active. on_my_work says
+    the earlier session is the signed-in member's, so they may agree or refuse from the console."""
+
+    earlier: NamedSession
+    until: datetime
+    refused: bool
+    on_my_work: bool
+
+
+class SessionGate(BaseModel):
+    """A later session whose file edits on colliding work are refused now, and the earlier sessions it waits for: the
+    gate stops waiting for each when the project's wait has passed, or at once when its member says it is different
+    work. The page counts the time left down from now (the server's clock when it answered) to each until."""
+
+    later: NamedSession
+    waits_for: list[GateWait]
+
+
+class SessionMessage(BaseModel):
+    """A message the signed-in member's sessions in the project sent or were sent, still kept: who sent it and who it is
+    for, by member ID and name, its text, when it was sent, and when a session of its recipient's was first told of it
+    (None while it waits). sent_by_me says it came from one of the signed-in member's sessions. message_id tells it
+apart from every other message. urgent says it gates the recipient's session on the colliding work until their member
+answers it, which a reply does."""
+
+    message_id: int
+    sender_member_id: str
+    sender_name: str
+    recipient_member_id: str
+    recipient_name: str
+    text: str
+    sent_at: datetime
+    delivered_at: datetime | None
+    sent_by_me: bool
+    urgent: bool
+
+
+class MessageToSend(BaseModel):
+    """A message from the signed-in member's session in the project to another member's sessions there, such as a
+    reply: the member it is for, by member ID, and its text, at most text_limit characters."""
+
+    to: str
+    text: str = Field(max_length=TEXT_LIMIT)
+
+
+class GateAnswer(BaseModel):
+    """The signed-in member's answer to a gate on their session's work, and their words for the gated member, if any,
+    at most text_limit characters."""
+
+    answer: Literal["agree", "refuse"]
+    text: str | None = Field(default=None, max_length=TEXT_LIMIT)
+
+
+class SessionHandoffNote(BaseModel):
+    """The handoff note of a session in the project that ended or went idle within the recent-work window (#515): whose
+    session it was, in which coding agent and repository, on which branch and with which files touched, what is done
+    and what is left, the activity it was written beside, whether the server put it together because the session left
+    none, and when it was written. Notes are written only by sessions or the server, never here (ADR-0026)."""
+
+    member_id: str
+    member_name: str
+    agent: str | None
+    repository: str | None
+    branch: str | None
+    touched_files: list[str]
+    done: str
+    left: str
+    activity: str | None
+    by_server: bool
+    written_at: datetime
+    last_seen_at: datetime
+
+
+class PossiblyOutdatedMemory(BaseModel):
+    """A memory on project health's possibly outdated list: no coding agent has recalled or read it for
+    `outdated_after_days`, and it isn't pinned. last_used is when one last did, or when it was last saved."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    last_used: datetime | None
+
+
+class DoubtedMemory(BaseModel):
+    """A memory on project health's in-doubt list, with what marks it so. Its open doubts are decided on the
+    challenges screen, never here (ADR-0009)."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+    author: str
+    author_name: str
+    in_doubt: InDoubtMark
+
+
+class ProjectHealth(BaseModel):
+    """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+    that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
+    reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
+
+    project_id: str
+    project_name: str
+    outdated_after_days: float
+    possibly_outdated: list[PossiblyOutdatedMemory]
+    in_doubt: list[DoubtedMemory]
 
 
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
-    or gone idle is not among them."""
+    or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
+    gates, the oldest first; the handoff notes of its sessions gone lately, the most recently seen first; and what only
+    the signed-in member sees: their own sessions' messages, the oldest first.
+    now is the server's clock when it answered. The page asks again every few seconds; asking changes no session and
+    delivers no message. text_limit is the most characters a reply or an answer's words may have."""
 
     project_id: str
     project_name: str
+    now: datetime
+    text_limit: int
     sessions: list[ActiveSession]
+    collisions: list[SessionCollision]
+    gates: list[SessionGate]
+    handoff_notes: list[SessionHandoffNote]
+    messages: list[SessionMessage]
 
 
 class Notice(BaseModel):
@@ -752,7 +980,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/sign-in/github",
         method="GET",
         operation_id="sign_in",
-        summary="Begin signing in: send the member to GitHub.",
+        summary="Begin signing in: send the member to GitHub, or to the platform on a hosted server.",
         answers=None,
     ),
     Declaration(
@@ -760,6 +988,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="sign_in_callback",
         summary="Finish signing in and return the member to the console.",
+        answers=None,
+    ),
+    Declaration(
+        path="/sign-in/platform/callback",
+        method="GET",
+        operation_id="sign_in_handed_over",
+        summary="Finish a sign-in the platform handed over, on a hosted server, and return the member to the console.",
         answers=None,
     ),
     Declaration(
@@ -905,11 +1140,48 @@ DECLARATIONS: tuple[Declaration, ...] = (
         query=("assignee", "label", "priority"),
     ),
     Declaration(
+        path="/projects/{project_id}/health",
+        method="GET",
+        operation_id="project_health",
+        summary=(
+            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
+            "doubt, with each one's count and reasons. Changes nothing."
+        ),
+        answers=ProjectHealth,
+    ),
+    Declaration(
         path="/projects/{project_id}/sessions",
         method="GET",
         operation_id="project_sessions",
-        summary="A project's active sessions: whose each is, its coding agent, its activity and the files it holds.",
+        summary=(
+            "A project's active sessions: whose each is, its coding agent, its activity and the files it holds; the "
+            "project's collisions and gates; and the signed-in member's own sessions' messages."
+        ),
         answers=ProjectSessions,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/messages",
+        method="POST",
+        operation_id="send_message",
+        summary=(
+            "Send a message, such as a reply, from the signed-in member's session in the project to another member's "
+            "sessions there, which hear it on their next tool call or prompt."
+        ),
+        answers=ProjectSessions,
+        changes=True,
+        accepts=MessageToSend,
+    ),
+    Declaration(
+        path="/projects/{project_id}/sessions/gates/{member_id}/answer",
+        method="POST",
+        operation_id="answer_gate",
+        summary=(
+            "Agree to or refuse the gate a member's session has on the signed-in member's session's work; the gated "
+            "session hears it on its next tool call or prompt."
+        ),
+        answers=ProjectSessions,
+        changes=True,
+        accepts=GateAnswer,
     ),
     Declaration(
         path="/projects/{project_id}/cards/{number}",

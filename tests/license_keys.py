@@ -34,6 +34,7 @@ def a_key(
     expires: date = date(2027, 9, 1),
     key_id: str = "k-1",
     version: int = 1,
+    hosted: bool = False,
 ) -> str:
     private = OTHER_PRIVATE if version == 2 else TEST_PRIVATE
-    return sign(private, version, License(team, member_cap, issued, expires, key_id))
+    return sign(private, version, License(team, member_cap, issued, expires, key_id, hosted))

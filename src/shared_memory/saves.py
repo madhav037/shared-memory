@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import anyio
 import anyio.to_thread
@@ -26,6 +26,6 @@ class Saves:
     def __init__(self, threads: int = SAVE_THREADS) -> None:
         self._threads = anyio.CapacityLimiter(threads)
 
-    async def run(self, save: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    async def run(self, save: Callable[..., T], *args: object, **kwargs: object) -> T:
         """Run a save on the saves' own threads, leaving the shared pool to reads and hooks."""
         return await anyio.to_thread.run_sync(functools.partial(save, *args, **kwargs), limiter=self._threads)

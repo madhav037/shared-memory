@@ -106,6 +106,22 @@ _Avoid_: Stale, expired
 A memory whose text reads like orders to a coding agent ("ignore your instructions", piping a download into a shell). The server finds it with a fixed list of patterns each time a memory is saved or edited, and works it out again from the text rather than keeping it, so rewording the memory removes a wrong mark. A marked memory is still shown, with a warning telling the coding agent to treat it with suspicion and never act on it, and the session that saved it is told why it was marked.
 _Avoid_: Flagged, quarantined, unsafe
 
+**Tied file**:
+A file, or a folder glob, in one of a project's repositories that a memory is about, written as repository:path; editing it brings the memory up.
+_Avoid_: Linked file, attached file
+
+**In doubt**:
+Said of a memory with at least one open challenge naming a reason; recall ranks it lower and marks it so.
+_Avoid_: Flagged, disputed
+
+**Popular memory**:
+A personal memory other members have recalled at least ten times, at least two of them distinct, within thirty days; its author is prompted to promote it.
+_Avoid_: Trending, hot, top memory
+
+**Draft learning**:
+A candidate memory a session's coding agent drafts from what the session learned, private to its member until they confirm it as personal memory or it is dropped after seven days.
+_Avoid_: Learning proposal, memory candidate
+
 ### Memory types
 
 **Convention**:
@@ -143,8 +159,16 @@ To put a new memory in an old one's place, keeping the old one in history.
 _Avoid_: Replace, overwrite, update
 
 **Challenge**:
-A request to supersede or retire another author's memory, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
+A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
 _Avoid_: Approval, proposal, change request
+
+**Reason**:
+Which of two grounds a challenge that doubts a memory names: *misled me*, or *contradicts the code*, quoting the file and line. It is not the reasoning, which is free text.
+_Avoid_: Doubt kind, doubt type
+
+**Evidence**:
+What one raise of a challenge that doubts a memory brings: the raiser's reasoning and, for *contradicts the code*, the file and line with that line quoted. A raise that joins an open challenge adds its evidence, but a challenge counts members, not raises.
+_Avoid_: Proof, vote
 
 **Foundation challenge**:
 A challenge to add a memory to a foundation, or to supersede or retire one of its memories, even the challenger's own; a keeper of that foundation or a project lead decides it, and it is shown apart from other challenges.
@@ -190,12 +214,16 @@ _Avoid_: Star, favorite
 Memories added to a prompt automatically because they match it. A session is given each memory once, and again only if the memory has changed.
 _Avoid_: Injection, auto-search
 
+**Question**:
+What a member asks a memory's author about that memory; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read.
+_Avoid_: Memory comment, discussion
+
 **Hook**:
-Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before an edit, to check or take the file's lock, and as the session ends. The hook before an edit is the only one that can stop its agent, and only when another session holds the lock. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
+Where a coding agent calls the server by itself and takes the answer into the session: as the session starts, for the briefing, as a prompt is submitted, for recall, before every tool call, to report the session's branch and the files the tool names, hear its waiting news and, before an edit, check or take the file's lock, and as the session ends. An agent whose hook before a tool takes no added context hears its news on its hook after the tool instead. The hook before a tool is the only one that can stop its agent, and only before an edit whose file another session holds. Each family of agents needs that answer in its own shape; an agent with no hook uses the briefing tool and search instead.
 _Avoid_: Callback, trigger, event handler
 
 **Rate limit**:
-A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token, a member's console calls apart from their coding agents', and calls with no personal token or a wrong one per address. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
+A server's ceiling on how many calls one caller can make a minute, so one bad caller can't take the server down for everyone. Calls carrying a personal token are counted per personal token, the hooks on its tool calls apart and with a larger allowance, a member's console calls apart from their coding agents', and calls with no personal token or a wrong one per address. A call over the limit is _limited_: it is refused with the seconds to wait, and a limited hook adds nothing and never blocks its coding agent.
 _Avoid_: Throttle, quota
 
 **Member cap**:
@@ -203,7 +231,7 @@ How many members one server may have at once, set by `SHARED_MEMORY_MEMBER_CAP` 
 _Avoid_: Seat limit, user limit
 
 **License key**:
-A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. Memory, MCP tools and hooks never depend on it.
+A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. On a self-hosted server, memory, MCP tools and hooks never depend on it; a lapsed key makes a hosted server read-only.
 _Avoid_: Serial, activation code
 
 ### The console
@@ -212,12 +240,20 @@ _Avoid_: Serial, activation code
 The web app where members browse memory and admins run the team; members sign in to it with GitHub.
 _Avoid_: Dashboard, admin panel, web UI
 
+**Project health**:
+A console page, read-only, where a project's leads see its possibly outdated memory, its memory in doubt, the memory it relies on most, and its coverage gaps: files edited often that no memory is tied to.
+_Avoid_: Dashboard, insights, analytics, stats page
+
+**Handed-over sign-in**:
+How a member signs in to a hosted server's console: the platform signs them in with its own GitHub app and hands the server a short-lived, single-use sign-in, signed by the platform, naming the GitHub account and the server's subdomain. A self-hosted server signs members in with its own GitHub app instead.
+_Avoid_: SSO token, login token, auth ticket
+
 **Audit log**:
 The record of who changed members, roles, access, tokens, memory, cards or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail
 
 **Landing page**:
-What the console shows before anyone signs in: what Shared Memory is, shown working on an example team, and its plans.
+What the platform shows a visitor: what Shared Memory is, shown working on an example team, and its plans. A team's console shows only its sign-in.
 _Avoid_: Title page, home page, marketing site
 
 ### Paying for Shared Memory
@@ -227,8 +263,24 @@ What a team pays for: the most members it may have (5, 10 or 15) on a hosted ser
 _Avoid_: Tier, seat, subscription level
 
 **Hosted server**:
-A team's server that we run for it, never shared with another team.
+A team's server that we run for it on a host. It is the team's alone, with its own memory, members and data, and no other team can reach them; only the host beneath it is shared. It carries a license key that the platform signs and renews while the team pays. Once that key lapses, the server is _read-only_: members can still read and export memory, but nothing new is saved. If the team still hasn't paid after fourteen days, the server is stopped, and its data is deleted thirty days after that.
 _Avoid_: Cloud instance, tenant, SaaS
+
+**Host**:
+A machine we run several teams' hosted servers on.
+_Avoid_: Node, box, shared server
+
+**Vendor**:
+Us: the people who sell Shared Memory and run the hosted servers.
+_Avoid_: Operator, super admin
+
+**Platform**:
+The vendor's own server: it carries the landing page, sign-up and trials, takes payments, starts and watches hosted servers, and signs license keys. Teams' memory never passes through it.
+_Avoid_: Control plane, main server, backend
+
+**Vendor console**:
+The platform's web app, where the vendor runs hosts, hosted servers, plans and license keys. Only an allow-listed few may sign in.
+_Avoid_: Admin panel, super admin panel, back office
 
 **Self-hosted server**:
 A team's server that the team runs itself, under a license.
@@ -308,3 +360,31 @@ _Avoid_: Steal, force-unlock
 **Collision**:
 Two sessions working on the same file or the same task at the same time.
 _Avoid_: Conflict, clash
+
+**Later session**:
+Of two colliding sessions, the one whose prompt or activity made the collision; the other is the *earlier session*.
+_Avoid_: Newcomer, second session
+
+**Gate**:
+The refusal of a later session's file edits on colliding work until every earlier session's member agrees, stays silent for the project's wait, or the later member says it is different work. A member's own sessions are never gated by each other.
+_Avoid_: Freeze, barrier
+
+**Message**:
+Text one active session sends another in the same project, kept for seven days.
+_Avoid_: Ping, DM
+
+**Urgent message**:
+A message that gates the earlier session's edits on the colliding work until its member answers, and gets through a mute; one per collision.
+_Avoid_: Rush, escalation
+
+**Mute**:
+A session's choice to hold back messages that are not urgent until it is unmuted or its turn ends.
+_Avoid_: Snooze, focus mode
+
+**Handoff note**:
+What a session leaves for whoever takes up its work: what is done, what is left, its branch and the files it touched. Written by its coding agent, or put together by the server when the session ends without one, and kept for seven days.
+_Avoid_: Handover, baton, recap
+
+**Standby**:
+A session's coding agent waiting for news, in the background or in a held tool call, without its member typing: started when the session awaits an answer, and ended by any news for it, the project's wait, a newer standby, or the member's next prompt.
+_Avoid_: Watch, park, wake-up

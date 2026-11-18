@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import posixpath
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from operator import itemgetter
@@ -376,7 +376,7 @@ def _ago(now: datetime, then: datetime) -> str:
     return "1 minute ago" if minutes == 1 else f"{minutes} minutes ago"
 
 
-def _taken_over(row: Any) -> str:
+def _taken_over(row: Mapping[str, Any]) -> str:
     """What an old holder is told of one takeover."""
     by = f"{row['by_name']} ({row['by_member_id']})" + (f" in {row['by_agent']}" if row["by_agent"] else "")
     activity = f"Their activity: {row['by_activity']}" if row["by_activity"] else "Their session has stated no activity."
@@ -387,7 +387,7 @@ def _taken_over(row: Any) -> str:
     )
 
 
-def _ended_by_pattern(row: Any) -> str:
+def _ended_by_pattern(row: Mapping[str, Any]) -> str:
     """What a holder is told of one lock that ended because its file now matches a never-lock pattern."""
     return (
         f"[session] This session no longer holds the lock on {named(row['repository'], row['path'])}: "
@@ -527,7 +527,7 @@ class Locks:
             ).fetchone()
             return moved, None
 
-    def _tell(self, conn: Conn, kept: Any, by: Session, activity: str | None, now: datetime) -> None:
+    def _tell(self, conn: Conn, kept: Mapping[str, Any], by: Session, activity: str | None, now: datetime) -> None:
         """Keep, for the holder of this lock's row, the word that `by` took the file over, and for what activity."""
         conn.execute(
             "INSERT INTO takeovers"
@@ -588,7 +588,9 @@ class Locks:
                 " WHERE project_id = %s AND repository = %s AND path = %s",
                 (project_id, repository, path),
             ).fetchone()
-        holder = self._active(project_id).get(kept["session_id"]) if kept else None
+        if kept is None:
+            return None
+        holder = self._active(project_id).get(kept["session_id"])
         return self._lock(kept, holder) if holder is not None else None
 
     def held(self, project_id: str) -> list[Lock]:
@@ -606,7 +608,7 @@ class Locks:
     def _active(self, project_id: str) -> dict[int, Session]:
         return {session.id: session for session in self._sessions.active(project_id)}
 
-    def _lock(self, row: Any, holder: Session) -> Lock:
+    def _lock(self, row: Mapping[str, Any], holder: Session) -> Lock:
         return Lock(
             project_id=row["project_id"],
             repository=row["repository"],

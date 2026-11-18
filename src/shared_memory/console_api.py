@@ -8,7 +8,8 @@ description and can't drift away from it. This module turns each declaration int
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from typing import Any
 from urllib.parse import quote
@@ -19,7 +20,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from shared_memory.activity import Activities
+from shared_memory.activity import Activities, SessionActivity
+from shared_memory.clock import Clock
+from shared_memory.collisions import Collision, Collisions
+from shared_memory.gates import Gate, Gates
+from shared_memory import health
+from shared_memory.handoff import HandoffNotes, Note
+from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
+from shared_memory.sessions import Session
+from shared_memory.standby import Standby, Standbys
+from shared_memory.talk import Talk
+from shared_memory.unhooked import Unhooked
 from shared_memory.audit import (
     ACCESS_GRANTED,
     ACCESS_REVOKED,
@@ -46,23 +57,27 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenge, Challenges, Waiting, project_of
+from shared_memory.challenges import Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
-from shared_memory.console_sessions import COOKIE, ConsoleSessions
+from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
 from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
     CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
-    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, Folder, HeldLock, IssuedToken, MemberSummary,
+    ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
+    DoubtedMemory, HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
     Members,
     MemoryAtVersion, MemoryDetail, MemoryHistory, MovedCard, NewMember, Notice, Notices, PREFIX, Pin,
     PinState,
-    Pins, ProjectBoard, ProjectDetail, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
+    Pins, PossiblyOutdatedMemory, ProjectBoard, ProjectDetail, ProjectHealth, ProjectName, ProjectRepository, ProjectSessions, ProjectSummary, Projects,
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
+    AwaitedMember, SessionStandby,
+    GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
+    SessionMessage,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -72,7 +87,7 @@ from shared_memory.ratelimit import Limits
 from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
-from shared_memory.memory import locate
+from shared_memory.memory import Memory, locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
@@ -84,6 +99,22 @@ CONSOLE_HEADER = "x-shared-memory-console"
 # fixes when it lands in Done). They wait for their turn with every other save, without holding a worker thread (see
 # `saves.py`).
 SAVING = frozenset({"retire_at", "decide_challenge", "move_card"})
+
+# The calls a read-only server refuses (a hosted server whose license key has lapsed, ADR-0022), the ones the memory
+# tools refuse too: every change to memory, inviting members and creating cards. Removing members, revoking personal
+# tokens, exporting and installing a renewed key keep working, as do card edits.
+REFUSED_WHILE_READ_ONLY = frozenset(
+    {
+        "retire_at",
+        "decide_challenge",
+        "pin_at",
+        "unpin_at",
+        "create_project",
+        "add_foundation",
+        "add_member",
+        "add_card",
+    }
+)
 
 
 # The board's refusals are written for a coding agent and name its tools and their fields. In the console the same
@@ -151,6 +182,47 @@ def _may_be_pinned(path: str) -> bool:
     return True
 
 
+# Where the nonce cookie is sent: only to the sign-in's own addresses.
+NONCE_PATH = "/api/sign-in"
+
+
+def _marked(in_doubt: InDoubt | None) -> InDoubtMark | None:
+    """A memory's in-doubt mark as the console is sent it, or None when nobody doubts it."""
+    return None if in_doubt is None else _mark(in_doubt)
+
+
+def _mark(in_doubt: InDoubt) -> InDoubtMark:
+    """The in-doubt mark of a memory that is in doubt, as the console is sent it."""
+    return InDoubtMark(
+        count=in_doubt.count,
+        reasons=[
+            InDoubtReason(reason=each.reason, count=each.count, code_references=list(each.code_references))
+            for each in in_doubt.reasons
+        ],
+        line=in_doubt.line(),
+    )
+
+
+def _with_evidence(challenge: dict[str, Any], doubt: Doubt | None) -> dict[str, Any]:
+    """An open challenge against a memory, with a doubt's count and evidence for whoever reads the memory."""
+    return {
+        **challenge,
+        "count": None if doubt is None else doubt.count,
+        "evidence": [] if doubt is None else [_evidence(each) for each in doubt.evidence],
+    }
+
+
+def _evidence(each: Evidence) -> DoubtEvidence:
+    reference = each.code_reference
+    return DoubtEvidence(
+        member_id=each.member_id,
+        reasoning=each.reasoning,
+        code_reference=None if reference is None else str(reference),
+        quoted_line=None if reference is None else reference.quoted_line,
+        raised_at=each.raised_at,
+    )
+
+
 def _sign_in_first() -> Response:
     return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
 
@@ -163,6 +235,121 @@ def _moment(asked: str | None, edge: time) -> datetime | None:
         return datetime.fromisoformat(asked) if "T" in asked else datetime.combine(date.fromisoformat(asked), edge, UTC)
     except ValueError:
         raise ValueError(f"{asked!r} is not a date") from None
+
+
+def _named_session(session: Session, activity: str | None) -> NamedSession:
+    """An active session as a collision, a gate or a message names it on the Sessions page."""
+    return NamedSession(
+        session_number=session.id,
+        member_id=session.member_id, member_name=session.member_name, agent=session.agent, activity=activity
+    )
+
+
+def _named(each: SessionActivity) -> NamedSession:
+    return _named_session(each.session, each.activity)
+
+
+def _standby_of(standby: Standby | None, names: dict[str, str]) -> SessionStandby | None:
+    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer on the team
+    by their member ID."""
+    if standby is None:
+        return None
+    return SessionStandby(
+        started_at=standby.started_at,
+        ends_at=standby.ends_at,
+        awaits=[AwaitedMember(member_id=one, member_name=names.get(one, one)) for one in standby.awaits],
+    )
+
+
+@dataclass(frozen=True)
+class Collided:
+    """A collision between two of a project's active sessions."""
+
+    later: SessionActivity
+    earlier: SessionActivity
+    collision: Collision
+
+
+class SessionTalk:
+    """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions, gates and
+    standbys (#528), one member's sessions' messages, and that member's replies and answers. Reading marks no message
+    delivered, which the
+    sessions' own calls do; it keeps a gate whose wait has passed as timed out, as every read of a gate does. A reply and an answer are `Talk`'s, the same operations the session
+    tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
+    edits or promotes a memory (ADR-0009, ADR-0026)."""
+
+    def __init__(
+        self,
+        collisions: Collisions,
+        gates: Gates,
+        unhooked: Unhooked,
+        messages: Messages,
+        handoff_notes: HandoffNotes,
+        talk: Talk,
+        standbys: Standbys,
+        clock: Clock,
+    ) -> None:
+        self._collisions = collisions
+        self._gates = gates
+        self._unhooked = unhooked
+        self._messages = messages
+        self._handoff_notes = handoff_notes
+        self._talk = talk
+        self._standbys = standbys
+        self._clock = clock
+
+    def now(self) -> datetime:
+        return self._clock()
+
+    def collided(self, active: Sequence[SessionActivity]) -> list[Collided]:
+        """The collisions between these active sessions, the oldest first."""
+        by_id = {each.session.id: each for each in active}
+        found: dict[tuple[int, int], Collision] = {}
+        for each in active:
+            for one in self._collisions.of(each.session):
+                if one.later_session_id in by_id and one.earlier_session_id in by_id:
+                    found[(one.later_session_id, one.earlier_session_id)] = one
+        return [
+            Collided(by_id[one.later_session_id], by_id[one.earlier_session_id], one)
+            for one in sorted(found.values(), key=lambda one: one.found_at)
+        ]
+
+    def gated(self, caller: Caller, project_id: str) -> list[Gate]:
+        """Each session gated now, the oldest gate first, as `Gates` works it out, answers included. A wait found
+        passed is kept as timed out, as any read of a gate does."""
+        return self._gates.in_project(caller, project_id)
+
+    def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
+        """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
+        return self._unhooked.can_be_gated([each.session for each in active])
+
+    def standing_by(self, project_id: str) -> dict[int, Standby]:
+        """The standbys held now in the project, by their session's id. Reading one leaves it held."""
+        return {each.session_id: each for each in self._standbys.in_project(project_id)}
+
+    def handoff_notes(self, project_id: str) -> list[tuple[Session, Note]]:
+        """The handoff notes of the project's sessions gone lately, each with its session, the most recently seen
+        first. A session gone idle without one gets one put together the first time it is asked for (#515)."""
+        return self._handoff_notes.recent(project_id)
+
+    def messages(self, project_id: str, member_id: str) -> list[Exchanged]:
+        """The messages this member's sessions in the project sent or were sent, still kept, the oldest first."""
+        return self._messages.exchanged(project_id, member_id)
+
+    def send(self, caller: Caller, to: str, text: str) -> None:
+        """Send a message from the caller's session in the project that `Talk.speaking` picks."""
+        self._talk.send(caller, self._talk.speaking(caller), to, text, from_console=True)
+
+    def answer(self, caller: Caller, member_id: str, answer: str, text: str | None) -> list[str]:
+        """The caller agrees to or refuses the gate the member with this member ID has on the caller's sessions'
+        work, or answers their urgent message, from each of the caller's sessions it concerns. The names of the members
+        answered."""
+        answered: list[str] = []
+        for session in self._talk.answering(caller, member_id):
+            for name in self._talk.answer(caller, session, member_id, answer, text, from_console=True):
+                if name not in answered:
+                    answered.append(name)
+        return answered
 
 
 class ConsoleApi:
@@ -187,8 +374,12 @@ class ConsoleApi:
         rate_limits: RateLimiter,
         licenses: Licenses,
         export: TeamExport,
+        talk: SessionTalk,
+        project_health: health.ProjectHealth,
     ) -> None:
         self._export_of = export
+        self._health = project_health
+        self._talk = talk
         self._settings = settings
         self._rate_limits_of = rate_limits
         self._licenses = licenses
@@ -211,6 +402,7 @@ class ConsoleApi:
             "status": self._status,
             "sign_in": self._sign_in,
             "sign_in_callback": self._sign_in_callback,
+            "sign_in_handed_over": self._sign_in_handed_over,
             "audit": self._audit_log,
             "export": self._export,
             "projects": self._projects,
@@ -228,6 +420,9 @@ class ConsoleApi:
             "board": self._board_of,
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
+            "project_health": self._project_health,
+            "send_message": self._send_message,
+            "answer_gate": self._answer_gate,
             "card": self._card,
             "add_card": self._add_card,
             "edit_card": self._edit_card,
@@ -265,6 +460,7 @@ class ConsoleApi:
             "sign_out": self._sign_out,
         }
         assert SAVING <= handlers.keys()
+        assert REFUSED_WHILE_READ_ONLY <= handlers.keys()
         routes = [self._route(declaration, handlers[declaration.operation_id]) for declaration in DECLARATIONS]
 
         async def describe(request: Request) -> Response:
@@ -282,12 +478,33 @@ class ConsoleApi:
                 except (ValueError, ValidationError) as wrong:
                     return JSONResponse({"message": _plainly(wrong)}, status_code=422)
             if declaration.operation_id in SAVING:
+                if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
+                    # Refused before it waits for its turn with every other save.
+                    refused = await anyio.to_thread.run_sync(self._read_only_refusal, request)
+                    if refused is not None:
+                        return refused
                 return await self._saves.run(handle, request)
+            if declaration.operation_id in REFUSED_WHILE_READ_ONLY:
+                return await anyio.to_thread.run_sync(self._unless_read_only, handle, request)
             return await anyio.to_thread.run_sync(handle, request)
 
         return Route(
             f"{PREFIX}{declaration.path}", endpoint, methods=[declaration.method], name=declaration.operation_id
         )
+
+    def _read_only_refusal(self, request: Request) -> Response | None:
+        """The refusal of a change a read-only server forbids, made before it waits for a turn or does anything. Only
+        a signed-in member hears it: anyone else is told to sign in first, as always."""
+        if self._member(request) is None:
+            return None
+        try:
+            self._licenses.ensure_writable()
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return None
+
+    def _unless_read_only(self, handle: Callable[[Request], Response], request: Request) -> Response:
+        return self._read_only_refusal(request) or handle(request)
 
     # --- the calls ---
 
@@ -296,9 +513,21 @@ class ConsoleApi:
 
     def _sign_in(self, request: Request) -> Response:
         try:
-            return RedirectResponse(self._sessions.start(self._root(request)), status_code=302)
+            started = self._sessions.start(self._root(request))
         except Refused as refused:
             return self._back_to_console(request, str(refused))
+        sent = RedirectResponse(started.url, status_code=302)
+        if started.nonce is not None:
+            sent.set_cookie(
+                NONCE_COOKIE,
+                started.nonce,
+                max_age=STATE_MINUTES * 60,
+                httponly=True,
+                secure=self._https(request),
+                samesite="lax",
+                path=NONCE_PATH,
+            )
+        return sent
 
     def _sign_in_callback(self, request: Request) -> Response:
         code, state = request.query_params.get("code", ""), request.query_params.get("state", "")
@@ -308,6 +537,24 @@ class ConsoleApi:
             token = self._sessions.finish(code, state, self._root(request))
         except Refused as refused:
             return self._back_to_console(request, str(refused))
+        return self._signed_in(request, token)
+
+    def _sign_in_handed_over(self, request: Request) -> Response:
+        handed_over = request.query_params.get("sign_in", "")
+        if not handed_over:
+            return self._back_to_console(request, "That sign-in didn't finish. Try again.")
+        try:
+            token = self._sessions.finish_handed_over(handed_over, request.cookies.get(NONCE_COOKIE))
+        except Refused as refused:
+            answer = self._back_to_console(request, str(refused))
+        else:
+            answer = self._signed_in(request, token)
+        # The nonce serves one sign-in, however it went.
+        answer.delete_cookie(NONCE_COOKIE, path=NONCE_PATH, httponly=True, secure=self._https(request), samesite="lax")
+        return answer
+
+    def _signed_in(self, request: Request, token: str) -> Response:
+        """Back to the console, holding the new session in its cookie."""
         signed_in = RedirectResponse(self._console_url(request), status_code=303)
         signed_in.set_cookie(
             COOKIE,
@@ -487,6 +734,12 @@ class ConsoleApi:
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
+        against = self._challenging.doubts_against(caller.team, [memory["path"]])[memory["path"]]
+        doubts = {each.challenge.id: each for each in against}
+        memory["open_challenges"] = [
+            _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
+        ]
+        memory["in_doubt"] = _marked(InDoubt.of(doubts.values()) if doubts else None)
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:
@@ -529,40 +782,159 @@ class ConsoleApi:
     # --- a project's active sessions, read: nothing here changes a session, an activity or a lock (ADR-0009) ---
 
     def _project_sessions(self, request: Request) -> Response:
-        def read(caller: Caller) -> ProjectSessions:
-            # `_browse` placed the caller in the project, which refuses a member who can't reach it: neither read
-            # below checks reach itself.
-            project = caller.require_project()
-            held: dict[int, list[HeldLock]] = {}
-            for lock in self._locks.held(project.project_id):
-                held.setdefault(lock.holder.id, []).append(
-                    HeldLock(
-                        repository=lock.repository,
-                        path=lock.path,
-                        taken_at=lock.taken_at,
-                        last_used_at=lock.last_used_at,
-                    )
-                )
-            return ProjectSessions(
-                project_id=project.project_id,
-                project_name=project.name,
-                sessions=[
-                    ActiveSession(
-                        member_id=each.session.member_id,
-                        member_name=each.session.member_name,
-                        agent=each.session.agent,
-                        repository=each.session.repository,
-                        activity=each.activity,
-                        from_card=each.from_card,
-                        started_at=each.session.started_at,
-                        last_seen_at=each.session.last_seen_at,
-                        locks=held.get(each.session.id, []),
-                    )
-                    for each in self._activities.in_project(project.project_id)
+        return self._browse(request, self._sessions_now)
+
+    # --- a project's health, read: nothing here pins, decides, retires or uses a memory (ADR-0009) ---
+
+    def _project_health(self, request: Request) -> Response:
+        def read(caller: Caller) -> ProjectHealth:
+            found = self._health.of(caller)
+            names = self._names(caller.member)
+
+            def about(path: str, memory: Memory) -> dict[str, str]:
+                return {
+                    "path": path,
+                    "title": memory.title,
+                    "summary": memory.summary,
+                    "type": memory.type,
+                    "author": memory.author,
+                    "author_name": names.get(memory.author, memory.author),
+                }
+
+            return ProjectHealth(
+                project_id=found.project.project_id,
+                project_name=found.project.name,
+                outdated_after_days=self._settings.outdated_after_days,
+                possibly_outdated=[
+                    PossiblyOutdatedMemory(**about(one.path, one.memory), last_used=one.last_used)
+                    for one in found.possibly_outdated
+                ],
+                in_doubt=[
+                    DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
+                    for one in found.in_doubt
                 ],
             )
 
         return self._browse(request, read)
+
+    # --- a member's reply and answer, through the same operations their session's tools use (ADR-0026) ---
+
+    def _send_message(self, request: Request) -> Response:
+        def send(caller: Caller) -> ProjectSessions:
+            asked: MessageToSend = request.state.asked
+            self._talk.send(caller, asked.to, asked.text)
+            return self._sessions_now(caller)
+
+        return self._browse(request, send)
+
+    def _answer_gate(self, request: Request) -> Response:
+        def answer(caller: Caller) -> ProjectSessions:
+            asked: GateAnswer = request.state.asked
+            self._talk.answer(caller, request.path_params["member_id"], asked.answer, asked.text)
+            return self._sessions_now(caller)
+
+        return self._browse(request, answer)
+
+    def _sessions_now(self, caller: Caller) -> ProjectSessions:
+        """The Sessions page as the caller sees it now. `_browse` placed the caller in the project, which refuses a
+        member who can't reach it: none of the reads below checks reach itself."""
+        project = caller.require_project()
+        held: dict[int, list[HeldLock]] = {}
+        for lock in self._locks.held(project.project_id):
+            held.setdefault(lock.holder.id, []).append(
+                HeldLock(
+                    repository=lock.repository,
+                    path=lock.path,
+                    taken_at=lock.taken_at,
+                    last_used_at=lock.last_used_at,
+                )
+            )
+        active = self._activities.in_project(project.project_id)
+        collided = self._talk.collided(active)
+        gateable = self._talk.can_be_gated(active)
+        standing_by = self._talk.standing_by(project.project_id)
+        names = self._names(caller.member)
+        mine = caller.member_id
+        return ProjectSessions(
+            project_id=project.project_id,
+            project_name=project.name,
+            now=self._talk.now(),
+            text_limit=TEXT_LIMIT,
+            collisions=[
+                SessionCollision(
+                    later=_named(one.later),
+                    earlier=_named(one.earlier),
+                    cause=one.collision.cause.value,
+                    found_at=one.collision.found_at,
+                )
+                for one in collided
+            ],
+            gates=[
+                SessionGate(
+                    later=_named(gate.later),
+                    waits_for=[
+                        GateWait(
+                            earlier=_named_session(one.earlier, one.activity),
+                            until=one.until,
+                            refused=one.refused,
+                            on_my_work=one.earlier.member_id == mine,
+                        )
+                        for one in gate.waiting
+                    ],
+                )
+                for gate in self._talk.gated(caller, project.project_id)
+            ],
+            handoff_notes=[
+                SessionHandoffNote(
+                    member_id=gone.member_id,
+                    member_name=gone.member_name,
+                    agent=gone.agent,
+                    repository=gone.repository,
+                    branch=gone.branch,
+                    touched_files=list(gone.touched_files),
+                    done=note.done,
+                    left=note.left,
+                    activity=note.activity,
+                    by_server=note.by_server,
+                    written_at=note.written_at,
+                    last_seen_at=gone.last_seen_at,
+                )
+                for gone, note in self._talk.handoff_notes(project.project_id)
+            ],
+            messages=[
+                SessionMessage(
+                    message_id=one.message_id,
+                    sender_member_id=one.sender_member_id,
+                    sender_name=one.sender_name,
+                    recipient_member_id=one.recipient_member_id,
+                    recipient_name=names.get(one.recipient_member_id, one.recipient_member_id),
+                    text=one.text,
+                    sent_at=one.sent_at,
+                    delivered_at=one.delivered_at,
+                    sent_by_me=one.sender_member_id == mine,
+                    urgent=one.urgent,
+                )
+                for one in self._talk.messages(project.project_id, mine)
+            ],
+            sessions=[
+                ActiveSession(
+                    member_id=each.session.member_id,
+                    member_name=each.session.member_name,
+                    agent=each.session.agent,
+                    repository=each.session.repository,
+                    activity=each.activity,
+                    from_card=each.from_card,
+                    started_at=each.session.started_at,
+                    last_seen_at=each.session.last_seen_at,
+                    branch=each.session.branch,
+                    touched_files=list(each.session.touched_files),
+                    locks=held.get(each.session.id, []),
+                    can_be_gated=gateable[each.session.id],
+                    standby=_standby_of(standing_by.get(each.session.id), names),
+                )
+                for each in active
+            ],
+        )
 
     def _card(self, request: Request) -> Response:
         def read(caller: Caller) -> CardDetail:
@@ -827,14 +1199,21 @@ class ConsoleApi:
         return JSONResponse(self._challenge_list(caller).model_dump(mode="json"))
 
     def _challenge_list(self, caller: Caller) -> ChallengeList:
-        waiting = [self._dispute(caller, one) for one in self._challenging.waiting_for(caller)]
+        found = self._challenging.waiting_for(caller)
+        doubts = {
+            doubt.challenge.id: doubt
+            for each in self._challenging.doubts_against(caller.team, [one.challenge.target_path for one in found]).values()
+            for doubt in each
+        }
+        waiting = [self._dispute(caller, one, doubts.get(one.challenge.id)) for one in found]
         raised = [
             RaisedChallenge(**one, target_title=self._target(caller, one["kind"], one["foundation"], one["target_path"]).title)
             for one in self._challenging.raised_by(caller)
         ]
         return ChallengeList(waiting=waiting, raised=raised)
 
-    def _dispute(self, caller: Caller, waiting: Waiting) -> ChallengeDetail:
+    def _dispute(self, caller: Caller, waiting: Waiting, doubt: Doubt | None) -> ChallengeDetail:
+        """A challenge waiting for this member, and for a doubt the evidence every raise of it brought."""
         challenge = waiting.challenge
         return ChallengeDetail(
             challenge_id=challenge.id,
@@ -849,6 +1228,9 @@ class ConsoleApi:
             target=self._target(caller, challenge.kind, challenge.foundation, challenge.target_path),
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,
+            reason=challenge.reason,
+            evidence=[] if doubt is None else [_evidence(each) for each in doubt.evidence],
+            count=None if doubt is None else doubt.count,
         )
 
     def _foundation_named(self, challenge: Challenge) -> str | None:
@@ -991,6 +1373,7 @@ class ConsoleApi:
             expires=held.expires.isoformat() if held else None,
             key_id=held.key_id if held else None,
             days_left=current.days_left,
+            stops=current.stops.isoformat() if current.stops else None,
             reason=current.reason,
             source=current.source,  # type: ignore[arg-type]
             you_may_change=member.is_owner or member.is_admin,
@@ -1126,7 +1509,9 @@ class ConsoleApi:
         return Status(
             signed_in=member is not None,
             github_sign_in=self._sessions.configured,
+            hosted=self._settings.signs_in_through_platform,
             server_url=self._server_url(request),
+            platform_url=self._settings.platform_url.rstrip("/") or None,
             member=None
             if member is None
             else SignedInMember(

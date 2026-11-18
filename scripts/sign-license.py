@@ -3,10 +3,14 @@
     uv run python scripts/sign-license.py --generate --private-key-file ~/secrets/shared-memory-license.key
     uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory-license.key \\
         --team "Acme" --member-cap 10 --expires 2027-11-06
+    uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory-license.key \\
+        --team "Acme" --member-cap 10 --expires 2026-12-06 --hosted
 
 The private key file holds the key's 32-byte seed as 64 hex characters. KEEP IT OFFLINE and OUTSIDE this repository:
 never commit it. `--generate` prints the matching public key to put in `PUBLIC_KEYS` in src/shared_memory/license.py
-(docs/deployment.md, "License keys"). The signed key is printed to standard output; nothing is sent anywhere.
+(docs/deployment.md, "License keys"). `--hosted` signs a hosted server's key, which makes the server read-only once it
+lapses (ADR-0022); without it the key is a self-hosted server's. The signed key is printed to standard output; nothing
+is sent anywhere.
 """
 
 from __future__ import annotations
@@ -55,6 +59,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--expires", type=date.fromisoformat, help="the last day the key is valid, as YYYY-MM-DD")
     parser.add_argument("--issued", type=date.fromisoformat, default=None, help="default: today")
     parser.add_argument("--key-id", help="default: the team, the issue date and the cap")
+    parser.add_argument(
+        "--hosted", action="store_true", help="a hosted server's key: the server turns read-only once it lapses"
+    )
     args = parser.parse_args(argv)
 
     if args.generate:
@@ -64,7 +71,8 @@ def main(argv: list[str]) -> int:
     issued = args.issued or date.today()
     key_id = args.key_id or f"{args.team.lower().replace(' ', '-')}-{issued.isoformat()}-{args.member_cap}"
     private = read_private(args.private_key_file)
-    key = sign(private, args.key_version, License(args.team, args.member_cap, issued, args.expires, key_id))
+    held = License(args.team, args.member_cap, issued, args.expires, key_id, hosted=args.hosted)
+    key = sign(private, args.key_version, held)
     # Check what was made against the public half before handing it over.
     verify(key, {args.key_version: bytes.fromhex(public_hex(private))})
     print(key)

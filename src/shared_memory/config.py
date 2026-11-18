@@ -9,6 +9,21 @@ from pathlib import Path
 # Below this a worker cannot keep a connection free for reads while saves hold theirs.
 MIN_POOL_CONNECTIONS = 4
 
+# The ways a server can sign members in to the console.
+SIGN_INS = ("github", "platform")
+
+# The longest one `stand_by` tool call is held by default, whatever seconds it asks for: the most any coding agent's
+# guidance asks for (Gemini CLI's, within its 10-minute tool timeout). The standby's own cap and the project's wait
+# still bound it.
+STAND_BY_TOOL_CAP_SECONDS = 300
+
+# What recall and search multiply the score of a memory in doubt by, unless the server's settings say otherwise.
+IN_DOUBT_PENALTY = 0.5
+
+# How similar two memories' embeddings must be for one to be named beside the other: promote's contradiction check
+# and a save's similar memories hold to the same bar, unless the server's settings say otherwise.
+SIMILAR_THRESHOLD = 0.62
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -29,7 +44,12 @@ class Settings:
     memory_word_limit: int = 600
     # A hook payload is a prompt plus a little metadata; a body past this is not read.
     hook_body_limit_bytes: int = 1_000_000
-    similar_threshold: float = 0.62
+    similar_threshold: float = SIMILAR_THRESHOLD
+    # How similar a memory in the saving member's reach must be for the save to name it. The same bar as promote's
+    # check, so what a save names is what promoting it would ask about.
+    save_similar_threshold: float = SIMILAR_THRESHOLD
+    # What recall and search multiply the score of a memory in doubt by: it ranks lower but is still found.
+    in_doubt_penalty: float = IN_DOUBT_PENALTY
     # The longest one database statement may run, waiting included, before its request fails.
     statement_timeout_seconds: float = 10.0
     allowed_hosts: tuple[str, ...] = ()
@@ -39,6 +59,14 @@ class Settings:
     github_sign_in_url: str = "https://github.com"
     github_api_url: str = "https://api.github.com"
     console_url: str = ""
+    # How members sign in to the console: "github", through this server's own GitHub OAuth app, or "platform", by a
+    # sign-in the platform hands over (platform_sign_in.py), which is how a hosted server signs members in. The platform
+    # is reached at platform_url, signs with the Ed25519 key whose public half is platform_public_key (hex), and names
+    # this server by its subdomain.
+    sign_in: str = "github"
+    platform_url: str = ""
+    platform_public_key: str = ""
+    subdomain: str = ""
     console_session_idle_hours: float = 24
     console_session_days: float = 7
     # How many server processes `serve` runs, and how many connections to Postgres all of them may hold together.
@@ -51,6 +79,21 @@ class Settings:
     # How similar two sessions' activities must be, as embeddings, for a collision warning. 0.75 is a guess that
     # needs tuning on real activity lines: they are short, and short lines score high against each other.
     collision_threshold: float = 0.75
+    # How long a later session's edits wait at the gate for a project that hasn't set its own wait (ADR-0024).
+    gate_wait_minutes: float = 5
+    # The longest a standby is held before it answers "nothing yet", never longer than the project's wait, and how
+    # often a held standby checks for news for its session (ADR-0027).
+    standby_cap_minutes: float = 5
+    standby_check_seconds: float = 2
+    # The longest one `stand_by` tool call is held, whatever seconds it asks for (STAND_BY_TOOL_CAP_SECONDS).
+    standby_tool_cap_seconds: float = STAND_BY_TOOL_CAP_SECONDS
+    # How long a message between sessions is kept, delivered or not.
+    message_kept_days: float = 7
+    # How long after a session ends or goes idle it still counts as recent: a message to it waits for its member's
+    # next session in the project, where one to a session gone longer is refused.
+    recent_work_hours: float = 24
+    # How long a session's handoff note is kept, written by its coding agent or put together by the server.
+    handoff_note_kept_days: float = 7
     # How long a memory may go without a coding agent recalling or reading it before it is labelled possibly outdated.
     outdated_after_days: float = 60
     # The rate limit (CONTEXT.md): whether it is in force, and how many calls one personal token may make a minute.
@@ -67,9 +110,30 @@ class Settings:
     # Where server errors are reported, with private data removed (monitoring.py). Empty: nothing is ever sent.
     sentry_dsn: str = ""
 
+    def __post_init__(self) -> None:
+        if self.sign_in not in SIGN_INS:
+            raise ValueError(
+                f"SHARED_MEMORY_SIGN_IN is {self.sign_in!r}: it should be \"github\" (the server's own GitHub app) or "
+                "\"platform\" (a sign-in the platform hands over)."
+            )
+
+    @property
+    def signs_in_through_platform(self) -> bool:
+        """Whether members sign in by a sign-in the platform hands over, as on a hosted server."""
+        return self.sign_in == "platform"
+
+    @property
+    def hosted(self) -> bool:
+        """Whether this is a hosted server: the platform signs its members in. Only a hosted server turns read-only
+        when its license key lapses, and it takes only a hosted server's key (ADR-0022)."""
+        return self.signs_in_through_platform
+
     @property
     def github_sign_in(self) -> bool:
-        """Whether this server can sign anyone in to the console."""
+        """Whether this server can sign anyone in to the console with GitHub: through its own GitHub app, or through
+        the platform's."""
+        if self.signs_in_through_platform:
+            return bool(self.platform_url and self.platform_public_key and self.subdomain)
         return bool(self.github_client_id and self.github_client_secret)
 
     @property
@@ -98,11 +162,24 @@ class Settings:
             github_sign_in_url=env.get("SHARED_MEMORY_GITHUB_SIGN_IN_URL", "https://github.com"),
             github_api_url=env.get("SHARED_MEMORY_GITHUB_API_URL", "https://api.github.com"),
             console_url=env.get("SHARED_MEMORY_CONSOLE_URL", ""),
+            sign_in=env.get("SHARED_MEMORY_SIGN_IN", "github").strip().lower() or "github",
+            platform_url=env.get("SHARED_MEMORY_PLATFORM_URL", "").strip(),
+            platform_public_key=env.get("SHARED_MEMORY_PLATFORM_PUBLIC_KEY", "").strip(),
+            subdomain=env.get("SHARED_MEMORY_SUBDOMAIN", "").strip().lower(),
             workers=int(env.get("SHARED_MEMORY_WORKERS", "2")),
             database_connections=int(env.get("SHARED_MEMORY_DATABASE_CONNECTIONS", "40")),
             query_cache_log_minutes=float(env.get("SHARED_MEMORY_QUERY_CACHE_LOG_MINUTES", "15")),
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
+            save_similar_threshold=float(env.get("SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD", str(SIMILAR_THRESHOLD))),
+            in_doubt_penalty=float(env.get("SHARED_MEMORY_IN_DOUBT_PENALTY", str(IN_DOUBT_PENALTY))),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
+            gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
+            standby_cap_minutes=float(env.get("SHARED_MEMORY_STANDBY_CAP_MINUTES", "5")),
+            standby_check_seconds=float(env.get("SHARED_MEMORY_STANDBY_CHECK_SECONDS", "2")),
+            standby_tool_cap_seconds=float(env.get("SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS", str(STAND_BY_TOOL_CAP_SECONDS))),
+            message_kept_days=float(env.get("SHARED_MEMORY_MESSAGE_KEPT_DAYS", "7")),
+            recent_work_hours=float(env.get("SHARED_MEMORY_RECENT_WORK_HOURS", "24")),
+            handoff_note_kept_days=float(env.get("SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS", "7")),
             outdated_after_days=float(env.get("SHARED_MEMORY_OUTDATED_AFTER_DAYS", "60")),
             rate_limit_on=env.get("SHARED_MEMORY_RATE_LIMIT", "on").strip().lower() not in ("off", "false", "0", "no"),
             rate_limit_token_per_minute=int(env.get("SHARED_MEMORY_RATE_LIMIT_TOKEN_PER_MINUTE", "120")),

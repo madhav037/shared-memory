@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from tests.support import REPO_ROOT, RunningServer, Session, Team
+from tests.support import REPO_ROOT, HostedConsole, RunningServer, Session, Team
 
 
 def get(server: RunningServer, path: str) -> dict[str, Any]:
@@ -20,7 +20,29 @@ def get(server: RunningServer, path: str) -> dict[str, Any]:
 def test_the_console_is_told_that_nobody_is_signed_in(server: RunningServer) -> None:
     status = get(server, "/api/status")
 
-    assert status == {"signed_in": False, "github_sign_in": False, "member": None, "server_url": server.url}
+    assert status == {
+        "signed_in": False,
+        "github_sign_in": False,
+        "hosted": False,
+        "member": None,
+        "server_url": server.url,
+        "platform_url": None,
+    }
+
+
+def test_the_console_is_told_the_platforms_address_so_its_links_to_the_landing_page_reach_it(
+    hosted_console: HostedConsole,
+) -> None:
+    status = get(hosted_console.server, "/api/status")
+
+    assert status["platform_url"] == hosted_console.platform.url.rstrip("/")
+
+
+def test_the_console_is_told_whether_the_server_is_hosted_so_it_says_what_setting_up_sign_in_takes(
+    hosted_console: HostedConsole, server: RunningServer
+) -> None:
+    assert get(hosted_console.server, "/api/status")["hosted"] is True
+    assert get(server, "/api/status")["hosted"] is False
 
 
 def test_the_console_is_told_the_address_agents_reach_the_server_at_the_one_the_repositorys_files_name(
@@ -46,8 +68,10 @@ def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: 
     assert document["components"]["schemas"]["Status"]["properties"].keys() == {
         "signed_in",
         "github_sign_in",
+        "hosted",
         "member",
         "server_url",
+        "platform_url",
     }
     assert "SignedInMember" in document["components"]["schemas"]
     assert document["paths"]["/api/sign-in/github"]["get"]["responses"].keys() == {"302"}

@@ -4,10 +4,16 @@ What a coding agent needs when it implements a ticket in its own worktree, next 
 
 ## Setting up
 
+- Branch from `origin/dev`, after `git fetch origin dev`, and check `git log -1` before starting: a worktree once
+  started on an old release commit.
 - Run `npm ci` in `console/` first: a new worktree has no `console/node_modules`.
 - The tests need the Postgres from `docker compose up -d db`, run once from the main checkout. Each checkout names
   its own test databases, so worktrees share that one Postgres. `SHARED_MEMORY_TEST_ADMIN_URL` (`tests/support.py`)
   points the tests at another Postgres.
+- The compose image gives pgvector 0.8 on Postgres 17; any other Postgres needs pgvector 0.8 or later. With an older
+  one (Ubuntu's 0.6) the tests stop at once with "pgvector 0.8 or later is needed (found 0.6.0)".
+- The tests need the search model in `.cache/fastembed`, which CI caches. Where it can't be downloaded, only CI's
+  server job is authoritative for the recall, search and contradiction tests.
 - The pre-commit hook in `.githooks/` runs `uv run ruff check`. `git config core.hooksPath .githooks`, run once in
   the main checkout, turns it on for that clone and every worktree made from it.
 
@@ -16,6 +22,17 @@ What a coding agent needs when it implements a ticket in its own worktree, next 
 - Run the test files for the seam you touch. The full `uv run pytest` takes four minutes and enough memory that
   several at once get killed; when agents work in parallel, CI runs the full suite.
 - Read pytest's own last line for the result. Piped through `tail`, the exit code is `tail`'s.
+
+## Waiting for CI
+
+Wait on a PR's `checks` job, or on its merge, with the Monitor tool: an until-loop on
+`gh pr view <n> --json state` or `gh pr checks <n>`. When memory runs low the guard kills background shell loops
+(twice in #373's run) and leaves a Monitor watch running.
+
+## Finishing
+
+Once your PR has merged, remove your worktree from the main checkout with `git worktree remove <path>`, and leave
+its branch in place: a PR stacked on it still needs it.
 
 ## The console's API contract
 
@@ -67,7 +84,35 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   It owns `activity_embeddings` (each session's activity as an embedding) and `collision_warnings` (what each session
   was warned about), and `collisions.warnings(caller, session)` is what `waiting_for` adds. `tests/test_collisions.py`
   runs its own server, whose embedder gives chosen activities chosen embeddings.
-- **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
+- **The gate** (ADR-0024) is `Gates` in `src/shared_memory/gates.py`, built in `build_app` as `gates`. It reads
+  `Collisions.of(session)` and owns `gate_ends` (how each later and earlier pair's gate ended), `gate_answers`
+  (each earlier member's agree or refuse, from `answer_gate`), `gate_starts` (the earlier session was told),
+  `gate_urgents` (an urgent message from `send_message`, which gates the earlier session until answered) and
+  `project_waits` (a project's own wait). The before-edit hook asks `gates.before_edit` before `locks.before_edit`; a gated edit takes
+  no lock. `tests/test_gates.py` runs its own server with `test_collisions.py`'s chosen embeddings.
+- **Mute** (#514) is `muted` on `sessions`, set by the `mute` tool through `Sessions.mute`. `waiting_for` passes
+  `urgent_only` to `messages.waiting_notices` for a muted session on anything but the prompt hook, so a message that is
+  not urgent waits for the next prompt or the unmute; gate notices and answers are untouched. `tests/test_mute.py`.
+- **Standby** (ADR-0027) is `Standbys` in `src/shared_memory/standby.py`, built in `build_app` as `standbys` and kept
+  on `app.state.standbys`. It owns `standbys`, one row per session's held standby. `await standbys.hold(session,
+  news, awaits, seconds=None, gone=None)` holds one until it ends and gives an `Ended` (`ending`: news, nothing_yet,
+  replaced, moved_on; `news`; `wait_left`; `message`): `news` is `functools.partial(waiting_for, caller, session)`,
+  `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
+  `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
+  the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws
+  on the tool hooks' rate limit, and doesn't count as a hook that reaches the session (#518), since an agent with no
+  hooks runs it too. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
+  (`STAND_BY_SECONDS`, 45, unless asked; at most `Settings.standby_tool_cap_seconds`), answering as the endpoint does
+  (`_standby_answer`). The cap and the check interval are `Settings.standby_cap_minutes` and
+  `standby_check_seconds`. `tests/test_standby.py`.
+- **Each agent's route to stand by** (#527) is in `connection.py`: `STAND_BY_IN_THE_BACKGROUND` (the background
+  command first, the tool as fallback) and `STAND_BY_WITH_THE_TOOL` (each agent's seconds a call, and the tool timeout
+  that allows them). `standby_habits` is the guidance AGENTS.md and Cursor's rule carry, with the background command
+  for a POSIX shell and for PowerShell (`background_standby`, `background_standby_powershell`); `stands_by(agent)` is
+  what each agent's connect output says. Claude Code's command is in the plugin's skill, whose "Standing by" names
+  every route too.
+- **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()`, `active_sessions()`,
+  `stand_by()` (a standby held on a thread of its own) and `on_standby()`.
 
 ### Locks
 
@@ -185,6 +230,14 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
 Its docstring lists the interface. Only recall and the `read` tool call `uses.used`; the console never does. Whether a
 memory is pinned comes from `briefing.pinned_among`. In tests, move the server's `TestClock` past
 `outdated_after_days`; `tests/test_outdated_memory.py` is the prior art.
+
+## Project health
+
+`ProjectHealth` in `src/shared_memory/health.py`, built in `build_app` beside `ConsoleApi`, is a read model with no
+table: `of(caller)` asks `Identity.looks_after`, `Uses` and `Challenges` about the project memory under
+`projects/<id>/shared` and gives a typed `Health`. `GET /api/projects/{project_id}/health` serves it; the console's
+page is `HealthPage.tsx`, linked from project settings when `you_may_change`. A later section of spec #504 adds a list
+to `Health` and to the `ProjectHealth` model. `tests/test_project_health.py` and `console/e2e/project-health.spec.ts`.
 
 ## Editing
 

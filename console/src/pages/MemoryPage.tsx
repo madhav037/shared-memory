@@ -15,9 +15,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../api/client";
-import { Dotted, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
+import { Dotted, InDoubtMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { doubtsUrl, says } from "../lib/challenge";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 import { inForce, whatHappened } from "../lib/versions";
@@ -201,6 +202,8 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
     );
 
   const challenged = memory.open_challenges.length > 0;
+  const doubts = memory.open_challenges.filter((challenge) => challenge.reason !== null);
+  const deciders = `${memory.author_name}${memory.level === "team" ? "" : ", a project lead"} or an admin`;
   const personal = memory.level === "personal";
   const project = projects.get(projectIn(memory.path) ?? "")?.name;
   return (
@@ -213,14 +216,31 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         <IconShieldCheck size={18} stroke={1.6} aria-hidden />
       )}
       <div>
+        {memory.in_doubt && (
+          <p data-testid="in-doubt">
+            {memory.in_doubt.line}. Recall ranks it lower and marks it for every coding agent until it is decided.{" "}
+            {doubts.some((challenge) => challenge.may_decide) ? (
+              <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
+                See its open doubts and decide
+              </Link>
+            ) : (
+              <>
+                {deciders} decides.{" "}
+                <Link to={doubtsUrl(memory.path)} data-testid="see-doubts">
+                  See its open doubts
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         {challenged && (
           <p data-testid="open-challenges">
             <b>{memory.open_challenges.length === 1 ? "Challenged." : `${memory.open_challenges.length} challenges.`}</b>{" "}
             {memory.open_challenges
-              .map((challenge) =>
-                challenge.kind === "retire"
-                  ? `${nameOf(challenge.raised_by)} wants to retire it`
-                  : `${nameOf(challenge.raised_by)} wants to supersede it`,
+              .map(
+                (challenge) =>
+                  `${nameOf(challenge.raised_by)} ${says(challenge)}` +
+                  (challenge.count !== null && challenge.count > 1 ? ` (+${challenge.count - 1})` : ""),
               )
               .join("; ")}
             .{" "}
@@ -229,10 +249,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
                 Until you decide, it stands as it is. <Link to="/challenges">Compare and decide</Link>
               </>
             ) : (
-              <>
-                Until {memory.author_name}
-                {memory.level === "team" ? "" : ", a project lead"} or an admin decides, it stands as it is.
-              </>
+              <>Until {deciders} decides, it stands as it is.</>
             )}
           </p>
         )}
@@ -327,6 +344,7 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
               <StatusMark status={memory.status} />
               {memory.status === "active" && <span className="mark">Current</span>}
               {memory.pinned && <PinnedMark />}
+              {memory.in_doubt && <InDoubtMark />}
               {memory.possibly_outdated && <OutdatedMark />}
               {memory.suspected_instructions.length > 0 && <SuspectedMark reasons={memory.suspected_instructions} />}
             </>

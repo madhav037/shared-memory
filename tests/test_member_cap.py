@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import pytest
 from anyio.from_thread import start_blocking_portal
 
+from shared_memory import cli
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
@@ -18,6 +20,7 @@ from tests.support import (
     ConsoleClient,
     FakeGitHub,
     RunningServer,
+    Session,
     TestClock,
     add,
     fresh_database,
@@ -119,3 +122,52 @@ def test_the_cap_is_read_from_the_environment() -> None:
     assert Settings.from_env({"SHARED_MEMORY_MEMBER_CAP": "10"}).member_cap == 10
     assert Settings.from_env({"SHARED_MEMORY_MEMBER_CAP": " "}).member_cap is None
     assert Settings.from_env({}).member_cap is None
+
+
+def count_members(console: Console, team: str) -> tuple[int, str, str]:
+    """Run `shared-memory count-members` as the platform does; return its exit code, stdout and stderr."""
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.run(["count-members", "--team", team], settings=console.server.settings, out=out, err=err)
+    return code, out.getvalue(), err.getvalue()
+
+
+def uncapped(console: Console) -> None:
+    """Lift the cap an earlier test left, so these tests can add the members they count."""
+    console.server.app.state.identity.member_cap = lambda: None
+
+
+def test_count_members_prints_the_teams_members_as_a_number_alone(console: Console) -> None:
+    uncapped(console)
+    team, owner_token = console.a_team("olive-count")
+    owner = Session(console.server, owner_token)
+    owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    owner.call("add_member", member_id="emp-3", name="Eve Eng")
+
+    assert count_members(console, team) == (0, "3\n", "")
+
+
+def test_count_members_leaves_out_removed_members_as_the_cap_does(console: Console) -> None:
+    uncapped(console)
+    team, owner_token = console.a_team("olive-count-removed")
+    owner = Session(console.server, owner_token)
+    owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    owner.call("remove_member", member_id="emp-2")
+
+    assert count_members(console, team) == (0, "1\n", "")
+
+
+def test_count_members_counts_only_that_team(console: Console) -> None:
+    uncapped(console)
+    team, _ = console.a_team("olive-count-own")
+    _, other_owner = console.a_team("olive-count-other")
+    Session(console.server, other_owner).call("add_member", member_id="emp-2", name="Dana Dev")
+
+    assert count_members(console, team) == (0, "1\n", "")
+
+
+def test_count_members_of_a_team_that_does_not_exist_fails_on_stderr(console: Console) -> None:
+    code, out, err = count_members(console, "no-such-team")
+
+    assert code != 0
+    assert out == ""
+    assert "no-such-team" in err
