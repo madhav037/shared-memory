@@ -17,7 +17,9 @@ from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, Reach, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.suspected import answer_for, reasons_for
+from shared_memory.locks import named
 from shared_memory.store import Change, Committer, MemoryStore
+from shared_memory.tied import Tie, TiedFiles, file_named
 from shared_memory.uses import Uses
 from shared_memory.validation import validate
 
@@ -62,6 +64,29 @@ class SimilarMemory:
         }
         if self.in_doubt is not None:
             answered["in_doubt"] = self.in_doubt.line()
+        return answered
+
+
+@dataclass(frozen=True)
+class TiedMemory:
+    """A memory within a session's reach tied to the file it asked about."""
+
+    tie: Tie
+    level: str
+    memory: Memory
+
+    def answer(self, in_doubt: InDoubt | None) -> dict[str, Any]:
+        """As `tied_memories` gives it, with the in-doubt line if it is in doubt."""
+        answered: dict[str, Any] = {
+            "path": self.tie.memory_path,
+            "level": self.level,
+            "tied_file": self.tie.tied_file,
+            "title": self.memory.title,
+            "summary": self.memory.summary,
+            "body": self.memory.body,
+        }
+        if in_doubt is not None:
+            answered["in_doubt"] = in_doubt.line()
         return answered
 
 
@@ -132,8 +157,10 @@ class MemoryService:
         challenges: Challenges,
         audit: Audit,
         uses: Uses,
+        tied: TiedFiles,
     ) -> None:
         self._settings = settings
+        self._tied = tied
         self._uses = uses
         self._identity = identity
         self._store = store
@@ -254,6 +281,27 @@ class MemoryService:
         if for_agent and (in_doubt := self._challenges.in_doubt(caller.team, [memory["path"]]).get(memory["path"])):
             memory["in_doubt"] = in_doubt.line()
         return memory
+
+    def tied_memories(self, caller: Caller, file: str) -> dict[str, Any]:
+        """The memories within the caller's reach tied to one file, written repository:path: their own personal memory
+        in this project, project memory they can reach and team memory. A memory in doubt carries its in-doubt line."""
+        project = caller.require_project()
+        repository, path = file_named(file)
+        ties = self._tied.tied_to(
+            caller.team, repository, path, Reach.of_member(caller.member_id, project.project_id, caller.unreachable)
+        )
+        found: list[TiedMemory] = []
+        for tie in ties:
+            try:
+                memory = self._store.read(caller.team, PurePosixPath(tie.memory_path))
+            except Refused:
+                continue  # moved or deleted since the index was read
+            found.append(TiedMemory(tie, locate(tie.memory_path).level, memory))
+        in_doubt = self._challenges.in_doubt(caller.team, [each.tie.memory_path for each in found])
+        return {
+            "file": named(repository, path),
+            "memories": [each.answer(in_doubt.get(each.tie.memory_path)) for each in found],
+        }
 
     def history(self, caller: Caller, path: str) -> dict[str, Any]:
         """Every version of one memory, newest first."""

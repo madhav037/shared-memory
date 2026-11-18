@@ -7,8 +7,8 @@ import re
 from collections import Counter
 
 from shared_memory.errors import Refused
-from shared_memory.identity import NAME_PATTERN
 from shared_memory.memory import KNOWN_ISSUE, Memory, type_folder
+from shared_memory.tied import tie_of
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("an AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -96,9 +96,7 @@ def validate(memory: Memory, word_limit: int) -> None:
     _single_line("summary", memory.summary, 300)
     type_folder(memory.type)
     for entry in memory.tied_files:
-        repository, _, path = entry.partition(":")
-        if not NAME_PATTERN.match(repository) or not path.strip() or "\n" in entry:
-            raise Refused(f"Tied file {entry!r} must be written as repository:path, for example billing-api:package.json.")
+        tie_of(entry)
     if memory.type == KNOWN_ISSUE and not _has_workaround(memory.body):
         raise Refused(
             "A known issue must say how to work around it: add a line 'Workaround: ...', or 'Workaround: none known' "
