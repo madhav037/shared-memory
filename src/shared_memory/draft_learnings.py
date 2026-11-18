@@ -21,6 +21,7 @@ What other modules stand on, all of it on `DraftLearnings`:
 - `confirm(caller, id, edits)`: save one as the member's personal memory; the save's answer.
 - `decline(caller, id)`: drop one.
 - `ASKING`: what a session that has just sent draft learnings is asked to do with them.
+- `asked_for_card(number)`: what a session that has just moved its own card to Done is asked to draft (#552).
 
 Only this module reads the `draft_learnings` table.
 """
@@ -104,6 +105,7 @@ class Kept:
 
     id: int
     title: str
+    card: int | None = None
 
 
 # What a session is asked to do with the draft learnings it just sent: put each to the member.
@@ -112,6 +114,15 @@ ASKING = (
     "personal memory, with edits if they changed it; decline_draft_learning(id) drops it. They stay private to "
     "the member until confirmed."
 )
+
+
+def asked_for_card(number: int) -> str:
+    """What a session is asked when it has just moved a card it is the assignee of to Done: finishing the work is when
+    its lessons get recorded, while the session still holds them."""
+    return (
+        f"Card {number} is done. Draft one to three learnings from its work that a teammate would need, none if nothing "
+        f"is worth keeping, and send them with draft_learnings, moment card_done and card {number}."
+    )
 
 
 def _none_waiting(draft_learning: int) -> Refused:
@@ -180,7 +191,7 @@ class DraftLearnings:
                 row = conn.execute(
                     "INSERT INTO draft_learnings (member_pk, project_id, session_id, moment, card, title, summary,"
                     " type, body, tied_files, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                    " RETURNING id",
+                    " RETURNING id, card",
                     (
                         caller.member.pk,
                         session.project_id,
@@ -196,7 +207,7 @@ class DraftLearnings:
                     ),
                 ).fetchone()
                 assert row is not None
-                kept.append(Kept(row["id"], each.title))
+                kept.append(Kept(row["id"], each.title, row["card"]))
         return kept
 
     def _claim(self, caller: Caller, draft_learning: int) -> DraftLearning:

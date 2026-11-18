@@ -670,7 +670,9 @@ BOARD_HABITS = """\
 - Call `claim_card` only when the member asks you to work on a card. On "take the next card", call it with no
   number: it claims the top card of the highest priority in To do.
 - Move a card to Done only once the member confirms the work is finished, and tell them what happened to any known
-  issue linked to it. Moving a card to Blocked needs a `blocked_reason`; pass `waits_on` if it waits on another card.
+  issue linked to it. When the move asks for draft learnings, send them with `draft_learnings` and the card's number,
+  then ask the member which to keep. Moving a card to Blocked needs a `blocked_reason`; pass `waits_on` if it waits on
+  another card.
 - When you find something broken that teammates will trip over, call `save_known_issue` with its symptom and a
   `Workaround: ...` line (`Workaround: none known` if there is none). Resolve any similar memories it returns with the
   member, and link the card that will fix it or let it add one.
