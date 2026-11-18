@@ -27,13 +27,17 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
+from shared_memory.connection import connection_kit
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
 from tests.test_connection_kit import (
+    POWERSHELLS,
+    background_standby_commands,
     claude_code_session_start_hook,
     claude_code_skill,
     standby_command,
     without_plugin_settings,
+    without_the_token,
 )
 from tests.test_gates import URGENT, answer_gate, collide, heard, send_urgent
 from tests.test_locks import take
@@ -544,6 +548,74 @@ def test_claude_codes_standby_command_run_in_a_posix_shell_hears_the_sessions_ne
     printed, errors = shell.communicate(timeout=ANSWERED_WITHIN_SECONDS)
     assert shell.returncode == 0, errors
     answer = json.loads(printed)
+    assert answer["ended"] == "news", answer
+    assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
+
+
+# Every other agent's background command (#527): Copilot in VS Code, Cursor and Copilot CLI copy it from AGENTS.md or
+# Cursor's rule, with the personal token in SHARED_MEMORY_TOKEN as their hooks read it.
+
+
+def background_standby(session: Session, shell: list[str], which: int) -> subprocess.Popen[str]:
+    """Run the kit's background standby command for this session, as the agent copies it, in `shell`: the POSIX
+    command (`which` 0) or the PowerShell one (1). Returns once the server holds the standby."""
+    assert session.token is not None and session.project is not None and session.repository is not None
+    files = connection_kit(
+        server_url=session.server.url,
+        marketplace="m",
+        project_id=session.project,
+        project_name="Billing",
+        repository=session.repository,
+    )
+    (agents_md,) = [file["contents"] for file in files if file["path"] == "AGENTS.md"]
+    command = background_standby_commands(agents_md)[which].replace("<session>", session.identifier)
+    running = subprocess.Popen(
+        [*shell, command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**without_the_token(), "SHARED_MEMORY_TOKEN": session.token},
+    )
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while session.identifier not in session.on_standby():
+        assert running.poll() is None, f"the standby ended at once: {running.communicate()}"
+        assert time.monotonic() < deadline, "the standby was never held"
+        time.sleep(CHECK_SECONDS / 2)
+    return running
+
+
+def printed_answer(running: subprocess.Popen[str]) -> dict[str, Any]:
+    printed, errors = running.communicate(timeout=ANSWERED_WITHIN_SECONDS)
+    assert running.returncode == 0, errors
+    answer: dict[str, Any] = json.loads(printed)
+    return answer
+
+
+@pytest.mark.skipif(shutil.which("curl") is None, reason="the background command runs curl, which isn't installed")
+def test_the_background_standby_command_run_in_a_posix_shell_hears_the_sessions_news(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    running = background_standby(dana, ["sh", "-c"], 0)
+
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I'm on the docs.")
+
+    answer = printed_answer(running)
+    assert answer["ended"] == "news", answer
+    assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="the background command for Windows runs in PowerShell, which isn't here")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+def test_the_background_standby_command_run_in_powershell_hears_the_sessions_news(
+    owner: Session, dana: Session, shell: str
+) -> None:
+    collide(owner, dana)
+    running = background_standby(dana, [shell, "-NoProfile", "-Command"], 1)
+
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I'm on the docs.")
+
+    answer = printed_answer(running)
     assert answer["ended"] == "news", answer
     assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
 

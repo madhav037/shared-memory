@@ -12,6 +12,11 @@ MIN_POOL_CONNECTIONS = 4
 # The ways a server can sign members in to the console.
 SIGN_INS = ("github", "platform")
 
+# The longest one `stand_by` tool call is held by default, whatever seconds it asks for: the most any coding agent's
+# guidance asks for (Gemini CLI's, within its 10-minute tool timeout). The standby's own cap and the project's wait
+# still bound it.
+STAND_BY_TOOL_CAP_SECONDS = 300
+
 
 def _optional_int(text: str) -> int | None:
     """A whole number from the environment, or None when the variable is unset or blank."""
@@ -68,9 +73,8 @@ class Settings:
     # often a held standby checks for news for its session (ADR-0027).
     standby_cap_minutes: float = 5
     standby_check_seconds: float = 2
-    # The longest one `stand_by` tool call is held, whatever seconds it asks for: as long as the longest tool timeout a
-    # coding agent allows (Gemini CLI's 300 s). The standby's own cap and the project's wait still bound it.
-    standby_tool_cap_seconds: float = 300
+    # The longest one `stand_by` tool call is held, whatever seconds it asks for (STAND_BY_TOOL_CAP_SECONDS).
+    standby_tool_cap_seconds: float = STAND_BY_TOOL_CAP_SECONDS
     # How long a message between sessions is kept, delivered or not.
     message_kept_days: float = 7
     # How long after a session ends or goes idle it still counts as recent: a message to it waits for its member's
@@ -158,7 +162,7 @@ class Settings:
             gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
             standby_cap_minutes=float(env.get("SHARED_MEMORY_STANDBY_CAP_MINUTES", "5")),
             standby_check_seconds=float(env.get("SHARED_MEMORY_STANDBY_CHECK_SECONDS", "2")),
-            standby_tool_cap_seconds=float(env.get("SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS", "300")),
+            standby_tool_cap_seconds=float(env.get("SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS", str(STAND_BY_TOOL_CAP_SECONDS))),
             message_kept_days=float(env.get("SHARED_MEMORY_MESSAGE_KEPT_DAYS", "7")),
             recent_work_hours=float(env.get("SHARED_MEMORY_RECENT_WORK_HOURS", "24")),
             handoff_note_kept_days=float(env.get("SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS", "7")),

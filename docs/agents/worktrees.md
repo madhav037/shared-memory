@@ -98,6 +98,12 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   (`STAND_BY_SECONDS`, 45, unless asked; at most `Settings.standby_tool_cap_seconds`), answering as the endpoint does
   (`_standby_answer`). The cap and the check interval are `Settings.standby_cap_minutes` and
   `standby_check_seconds`. `tests/test_standby.py`.
+- **Each agent's route to stand by** (#527) is in `connection.py`: `STAND_BY_IN_THE_BACKGROUND` (the background
+  command first, the tool as fallback) and `STAND_BY_WITH_THE_TOOL` (each agent's seconds a call, and the tool timeout
+  that allows them). `standby_habits` is the guidance AGENTS.md and Cursor's rule carry, with the background command
+  for a POSIX shell and for PowerShell (`background_standby`, `background_standby_powershell`); `stands_by(agent)` is
+  what each agent's connect output says. Claude Code's command is in the plugin's skill, whose "Standing by" names
+  every route too.
 - **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()`, `active_sessions()`,
   `stand_by()` (a standby held on a thread of its own) and `on_standby()`.
 

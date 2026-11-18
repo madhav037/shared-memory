@@ -15,8 +15,16 @@ from typing import Any
 import pytest
 
 from shared_memory.agents import agent_named
-from shared_memory.connection import connection_kit, repository_branch, repository_root, working_folder_branch
+from shared_memory.config import Settings
+from shared_memory.connection import (
+    STAND_BY_WITH_THE_TOOL,
+    connection_kit,
+    repository_branch,
+    repository_root,
+    working_folder_branch,
+)
 from shared_memory.hooks import AGENTS
+from shared_memory.standby import STAND_BY_SECONDS
 from tests.support import REPO_ROOT, Session, Team, edit_tool, member
 
 
@@ -920,3 +928,217 @@ def test_claude_codes_session_start_hook_without_an_environment_file_only_briefs
 
     assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", "")
     assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"]
+
+
+# Every other agent's kit says how it stands by (ADR-0027, #527): the background command first and the `stand_by` tool
+# as its fallback where an agent's wake-up after its turn ends is not yet known, and the tool everywhere else, each
+# call as long as the agent's tool timeout allows.
+
+#: The kit file whose connect output (`how`) says how each agent that may be woken stands by.
+STANDS_BY_IN_THE_BACKGROUND = {
+    "Copilot in VS Code": ".vscode/mcp.json",
+    "Copilot CLI": ".github/hooks/shared-memory.json",
+    "Cursor on macOS and Linux": ".cursor/hooks.json",
+}
+#: The kit file whose connect output says how each tool agent stands by, and the seconds of each `stand_by` call.
+STANDS_BY_WITH_THE_TOOL = {
+    "Codex": (".codex/config.toml", 45),
+    "Gemini CLI": (".gemini/settings.json", 300),
+    "Cline": ("~/.cline/data/settings/cline_mcp_settings.json", 45),
+    "Devin Desktop": (".devin/hooks.v1.json", 45),
+    "Cursor on Windows": (".cursor/hooks.json", 45),
+}
+#: Where every agent but Claude Code is given its session habits.
+GUIDANCE = ("AGENTS.md", ".cursor/rules/shared-memory.mdc")
+
+
+def kit_how() -> dict[str, str]:
+    """What the connect output says of each kit file, by path, its whitespace evened out."""
+    files = connection_kit(
+        server_url="https://memory.example.com",
+        marketplace="raven-memory/shared-memory",
+        project_id="billing-3f2a",
+        project_name="Billing",
+        repository="billing-api",
+    )
+    return {file["path"]: " ".join(file["how"].split()) for file in files}
+
+
+@pytest.mark.parametrize("agent", list(STANDS_BY_IN_THE_BACKGROUND))
+def test_the_connect_output_of_an_agent_that_may_be_woken_names_the_background_command_then_the_tool(agent: str) -> None:
+    how = kit_how()[STANDS_BY_IN_THE_BACKGROUND[agent]]
+
+    assert f"{agent} stands by with the background command" in how
+    assert "for a POSIX shell and for PowerShell" in how
+    assert "calls the stand_by tool instead" in how, "the fallback"
+
+
+@pytest.mark.parametrize("agent", list(STANDS_BY_WITH_THE_TOOL))
+def test_the_connect_output_of_a_tool_agent_names_the_stand_by_tool_and_the_length_its_timeout_allows(agent: str) -> None:
+    path, seconds = STANDS_BY_WITH_THE_TOOL[agent]
+
+    how = kit_how()[path]
+
+    assert f"{agent} stands by with the stand_by tool, each call held up to {seconds} seconds" in how
+
+
+def test_the_lengths_the_tool_agents_are_given_fit_the_servers_cap_and_each_agents_tool_timeout() -> None:
+    given = {each.agent: each for each in STAND_BY_WITH_THE_TOOL}
+    cap = Settings.from_env({}).standby_tool_cap_seconds
+
+    assert {agent: each.seconds for agent, each in given.items()} == {
+        agent: seconds for agent, (_, seconds) in STANDS_BY_WITH_THE_TOOL.items()
+    }
+    for each in STAND_BY_WITH_THE_TOOL:
+        assert each.seconds <= cap, each.agent
+        assert each.seconds == STAND_BY_SECONDS or each.allows is not None, f"{each.agent}: longer only where allowed"
+        assert each.allows is None or each.seconds < each.allows, each.agent
+    (cline,) = json.loads(kit_files()["~/.cline/data/settings/cline_mcp_settings.json"])["mcpServers"].values()
+    assert cline["timeout"] == given["Cline"].allows, "the kit sets the timeout Cline's calls are held within"
+
+
+def test_every_agents_guidance_names_each_agents_route_to_stand_by() -> None:
+    files = kit_files()
+    background = (
+        "In Copilot in VS Code, Cursor on macOS and Linux and Copilot CLI, run the standby command below in the "
+        "background"
+    )
+    tool = "In Codex, Gemini CLI, Cline, Devin Desktop, Cursor on Windows and any other coding agent, call `stand_by`"
+
+    for path in GUIDANCE:
+        said = " ".join(files[path].split())
+        assert background in said, path
+        assert "call `stand_by` instead" in said, (path, "the background agents' fallback")
+        assert tool in said, path
+        assert "`seconds` 300 in Gemini CLI and 45 in the others" in said, path
+        assert "`wait_left_seconds` above 0, call it again" in said, path
+
+
+#: When every agent stands by and what it does with the answer, as #526's STANDBY_HABITS say for Claude Code, less
+#: Claude Code's own tool.
+EVERY_AGENTS_STANDBY_HABITS = tuple(habit for habit in STANDBY_HABITS if habit != "run_in_background")
+
+
+def test_every_agents_guidance_says_when_to_stand_by_and_what_to_do_with_the_answer() -> None:
+    files = kit_files()
+
+    for path in GUIDANCE:
+        said = " ".join(files[path].split())
+        for habit in EVERY_AGENTS_STANDBY_HABITS:
+            assert habit in said, (path, habit)
+
+
+def background_standby_commands(guidance: str) -> tuple[str, str]:
+    """The background standby command a guidance file gives, for a POSIX shell and for PowerShell, `<session>` and
+    all, as the agent copies it."""
+    posix = guidance.split("```sh\n", 1)[1].split("\n```", 1)[0]
+    powershell = guidance.split("```powershell\n", 1)[1].split("\n```", 1)[0]
+    return posix, powershell
+
+
+def test_the_background_standby_command_is_written_for_a_posix_shell_and_for_powershell() -> None:
+    files = kit_files()
+    posix, powershell = background_standby_commands(files["AGENTS.md"])
+
+    assert background_standby_commands(files[".cursor/rules/shared-memory.mdc"]) == (posix, powershell)
+    assert "-H 'X-Shared-Memory-Project: billing-3f2a' -H 'X-Shared-Memory-Repository: billing-api'" in posix
+    assert "'X-Shared-Memory-Project' = 'billing-3f2a'; 'X-Shared-Memory-Repository' = 'billing-api'" in powershell
+    for command in (posix, powershell):
+        assert "'https://memory.example.com/hooks/standby'" in command
+        assert """'{"session_id":"<session>"}'""" in command
+        assert "'Shared Memory did not answer this standby.'" in command
+    assert """printf 'header = "Authorization: Bearer %s"\\n' "$SHARED_MEMORY_TOKEN" | curl""" in posix
+    assert 'Authorization = "Bearer $env:SHARED_MEMORY_TOKEN"' in powershell
+
+
+def test_the_background_standby_command_is_held_as_long_as_claude_codes() -> None:
+    posix, powershell = background_standby_commands(kit_files()["AGENTS.md"])
+    claude_code = standby_command(claude_code_skill())
+
+    seconds = claude_code.split("--max-time ", 1)[1].split()[0]
+    assert f"--max-time {seconds} " in posix
+    assert f"-TimeoutSec {seconds} " in powershell
+
+
+def test_the_background_standby_command_never_puts_the_token_on_its_command_line(tmp_path: Path) -> None:
+    token = "smt_never-on-the-command-line"
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    curl = shims / "curl"
+    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > "$SEEN/input"\n', encoding="utf-8")
+    curl.chmod(0o755)
+    posix, _ = background_standby_commands(kit_files()["AGENTS.md"])
+
+    ran = subprocess.run(
+        ["sh", "-c", posix.replace("<session>", "test-session")],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "PATH": f"{shims}{os.pathsep}{os.environ['PATH']}",
+            "SEEN": str(tmp_path),
+            "SHARED_MEMORY_TOKEN": token,
+        },
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert token not in (tmp_path / "arguments").read_text(encoding="utf-8")
+    assert f"Authorization: Bearer {token}" in (tmp_path / "input").read_text(encoding="utf-8")
+
+
+def without_the_token() -> dict[str, str]:
+    return {key: value for key, value in os.environ.items() if key != "SHARED_MEMORY_TOKEN"}
+
+
+def test_the_background_standby_command_without_a_token_says_to_call_stand_by_instead(tmp_path: Path) -> None:
+    posix, _ = background_standby_commands(kit_files()["AGENTS.md"])
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    curl = shims / "curl"
+    curl.write_text('#!/bin/sh\ntouch "$SEEN/called"\n', encoding="utf-8")
+    curl.chmod(0o755)
+
+    ran = subprocess.run(
+        ["sh", "-c", posix.replace("<session>", "test-session")],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**without_the_token(), "PATH": f"{shims}{os.pathsep}{os.environ['PATH']}", "SEEN": str(tmp_path)},
+    )
+
+    assert (ran.returncode, ran.stderr) == (0, "")
+    assert "call stand_by instead" in ran.stdout
+    assert not (tmp_path / "called").exists(), "nothing is sent without a token"
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="The background command for Windows runs in PowerShell, which isn't here")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+def test_the_background_standby_command_in_powershell_without_a_token_says_to_call_stand_by_instead(shell: str) -> None:
+    _, powershell = background_standby_commands(kit_files()["AGENTS.md"])
+
+    ran = subprocess.run(
+        [shell, "-NoProfile", "-Command", powershell.replace("<session>", "test-session")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=without_the_token(),
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert "call stand_by instead" in ran.stdout
+
+
+def test_the_skill_names_each_agents_route_to_stand_by_and_the_tool_agents_lengths() -> None:
+    said = " ".join(standing_by_section(claude_code_skill()).split())
+
+    assert (
+        "In Copilot in VS Code, Cursor on macOS and Linux and Copilot CLI, stand by with the background command" in said
+    )
+    assert "call the `stand_by` tool instead" in said
+    assert (
+        "In Codex, Gemini CLI, Cline, Devin Desktop, Cursor on Windows and any other coding agent, call `stand_by`"
+        in said
+    )
+    assert "`seconds` 300 in Gemini CLI and 45 in the others" in said
+    assert "`wait_left_seconds` above 0, call it again" in said

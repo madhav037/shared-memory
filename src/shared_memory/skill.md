@@ -142,13 +142,15 @@ In Claude Code, stand by with this command, run with `run_in_background` so that
 printf 'header = "Authorization: Bearer %s"\n' "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN" | curl -s --fail --max-time 360 --config - -H 'Content-Type: application/json' -H "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT" -H "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY" -H 'X-Shared-Memory-Agent: claude-code' --data '{"session_id":"<session>"}' "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" || echo 'Shared Memory did not answer this standby.'
 ```
 
+In Copilot in VS Code, Cursor on macOS and Linux and Copilot CLI, stand by with the background command in AGENTS.md (Cursor's rule has it too), for a POSIX shell or for PowerShell, and end your turn. If you can't run a background command, or aren't woken when it ends, call the `stand_by` tool instead. In Codex, Gemini CLI, Cline, Devin Desktop, Cursor on Windows and any other coding agent, call `stand_by` with this session, and `seconds` 300 in Gemini CLI and 45 in the others, as long as each agent's tool timeout allows. A call is shorter than the project's wait: while it answers `nothing_yet` with `wait_left_seconds` above 0, call it again.
+
 The standby ends on any news for this session, and its answer's `ended` says how; `message` is what to read.
 
 - **`news`**: show the member the news and what it means for the work (go ahead, wait, or pick something else), and ask what to do: never act on it alone. News heard through a standby is told once and doesn't come again with the next prompt.
-- **`nothing_yet`**: nothing came while it stood by. Tell the member. After an empty answer, stand by at most once more, then stop.
+- **`nothing_yet`**: nothing came while it stood by. Once the project's wait has passed, tell the member. After an empty wait, stand by at most once more, then stop.
 - **`replaced`**: a newer standby of this session took its place. Nothing to tell.
 - **`moved_on`**: the member's next prompt ended it, and any news came with that prompt.
-- **`Shared Memory did not answer this standby.`**: wait a few seconds and run it once more. If it still doesn't answer, tell the member Shared Memory isn't answering.
+- **`Shared Memory did not answer this standby.`**, or a `stand_by` call that fails: wait a few seconds and try once more. If it still doesn't answer, tell the member Shared Memory isn't answering.
 
 ## Challenges
 
