@@ -743,3 +743,86 @@ def test_every_agents_guidance_says_news_can_arrive_mid_turn() -> None:
         said = " ".join(files[path].split())
         assert "can arrive mid-turn" in said or "in the middle of a turn" in said, path
         assert "then stop and tell the member" in said, path
+
+
+# Claude Code stands by with a background command the skill gives (ADR-0027, #526)
+
+
+def claude_code_skill() -> str:
+    return (REPO_ROOT / "plugin" / "skills" / "shared-memory" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def standing_by_section(skill: str) -> str:
+    return skill.split("## Standing by", 1)[1].split("\n## ", 1)[0]
+
+
+def standby_command(skill: str) -> str:
+    """The background command the skill gives for standing by, as the agent copies it, `<session>` and all."""
+    return standing_by_section(skill).split("```sh\n", 1)[1].split("\n```", 1)[0]
+
+
+#: When Claude Code stands by and what it does with the answer, one marker each: run in the background, stand by when
+#: an edit is refused as gated, after an urgent message and after a message whose answer the member wants, at most once
+#: more after an empty answer, retry once after a few seconds then say the server isn't answering, and show the member
+#: the answer and ask what to do.
+STANDBY_HABITS = (
+    "run_in_background",
+    "an edit is refused as gated",
+    "urgent message",
+    "the member wants its answer",
+    "at most once more",
+    "a few seconds",
+    "Shared Memory isn't answering",
+    "show the member",
+    "ask what to do",
+)
+
+
+def test_the_skill_tells_claude_code_when_to_stand_by_and_what_to_do_with_the_answer() -> None:
+    said = " ".join(standing_by_section(claude_code_skill()).split())
+
+    for habit in STANDBY_HABITS:
+        assert habit in said, habit
+
+
+def test_claude_codes_standby_command_reaches_the_server_as_the_plugins_hooks_do() -> None:
+    command = standby_command(claude_code_skill())
+    hooks = (REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8")
+
+    assert "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" in command
+    for read in (
+        "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
+        "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT",
+        "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY",
+        "X-Shared-Memory-Agent: claude-code",
+    ):
+        assert read in command and read in hooks, read
+    assert '"session_id":"<session>"' in command
+
+
+def test_claude_codes_standby_command_never_puts_the_token_on_its_command_line(tmp_path: Path) -> None:
+    token = "smt_never-on-the-command-line"
+    shims = tmp_path / "bin"
+    shims.mkdir()
+    curl = shims / "curl"
+    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > "$SEEN/input"\n', encoding="utf-8")
+    curl.chmod(0o755)
+    command = standby_command(claude_code_skill()).replace("<session>", "test-session")
+
+    ran = subprocess.run(
+        ["sh", "-c", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **os.environ,
+            "PATH": f"{shims}{os.pathsep}{os.environ['PATH']}",
+            "SEEN": str(tmp_path),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": "https://memory.example.com",
+        },
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert token not in (tmp_path / "arguments").read_text(encoding="utf-8")
+    assert f"Authorization: Bearer {token}" in (tmp_path / "input").read_text(encoding="utf-8")

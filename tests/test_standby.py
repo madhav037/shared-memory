@@ -11,6 +11,10 @@ embeddings."""
 from __future__ import annotations
 
 import dataclasses
+import json
+import os
+import shutil
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future
@@ -24,6 +28,7 @@ from shared_memory.app import build_app
 from shared_memory.config import Settings
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
+from tests.test_connection_kit import claude_code_skill, standby_command
 from tests.test_gates import URGENT, answer_gate, collide, heard, send_urgent
 from tests.test_locks import take
 from tests.test_messages import ASKED, PROMPT, REPLIED, send
@@ -361,6 +366,42 @@ def test_each_session_of_a_member_has_its_own_standby(dana: Session) -> None:
     assert still_held(first), "another session's standby replaces nothing"
     end(dana, first)
     end(other, second)
+
+
+# Claude Code's background command (#526)
+
+
+@pytest.mark.skipif(shutil.which("curl") is None, reason="Claude Code's standby command runs curl, which isn't installed")
+def test_claude_codes_standby_command_run_in_a_posix_shell_hears_the_sessions_news(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    assert dana.token is not None and dana.project is not None and dana.repository is not None
+    command = standby_command(claude_code_skill()).replace("<session>", dana.identifier)
+    shell = subprocess.Popen(
+        ["sh", "-c", command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={
+            **os.environ,
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": dana.token,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": dana.server.url,
+            "SHARED_MEMORY_PROJECT": dana.project,
+            "SHARED_MEMORY_REPOSITORY": dana.repository,
+        },
+    )
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while dana.identifier not in dana.on_standby():
+        assert shell.poll() is None, f"the standby ended at once: {shell.communicate()}"
+        assert time.monotonic() < deadline, "the standby was never held"
+        time.sleep(CHECK_SECONDS / 2)
+
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I'm on the docs.")
+
+    printed, errors = shell.communicate(timeout=ANSWERED_WITHIN_SECONDS)
+    assert shell.returncode == 0, errors
+    answer = json.loads(printed)
+    assert answer["ended"] == "news", answer
+    assert "agreed" in answer["message"] and "Go ahead, I'm on the docs." in answer["message"]
 
 
 # Settings
