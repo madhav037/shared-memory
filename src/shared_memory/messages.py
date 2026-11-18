@@ -21,6 +21,7 @@ What other modules stand on, all of it on `Messages`:
 - `check(text)`: the text as it is kept, refused when empty or too long.
 - `waiting_notices(session, urgent_only)`: what a session is told once: each message waiting for it, or only the urgent
   ones, for a muted session asking on a tool call (#514); the rest keep waiting. Asking marks them delivered.
+- `awaiting_reply(session)`: the member IDs of the members whose reply this session's latest message awaits.
 - `exchanged(project_id, member_id)`: the messages a member's sessions in a project sent or were sent, still kept,
   changing nothing: what the console shows.
 """
@@ -204,6 +205,25 @@ class Messages:
             notice(row["sender_name"], row["sender_member_id"], row["sent_at"], row["text"], row["urgent"])
             for row in told.values()
         ]
+
+    def awaiting_reply(self, session: Session) -> list[str]:
+        """The member IDs of the members whose reply this session awaits: the member its latest message, still kept,
+        went to, unless they have sent its member a message in the project since. An urgent message's answer is the
+        gate's to know (`Gates.urgent_awaits`), since it may come as an answer to the gate rather than a message."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT recipient_member_id, urgent, sent_at FROM messages WHERE sender_session_id = %s AND sent_at > %s"
+                " ORDER BY sent_at DESC, id DESC LIMIT 1",
+                (session.id, self._clock() - self._kept),
+            ).fetchone()
+            if row is None or row["urgent"]:
+                return []
+            replied = conn.execute(
+                "SELECT 1 FROM messages WHERE project_id = %s AND sender_member_id = %s AND recipient_member_id = %s"
+                " AND sent_at >= %s LIMIT 1",
+                (session.project_id, row["recipient_member_id"], session.member_id, row["sent_at"]),
+            ).fetchone()
+        return [] if replied else [row["recipient_member_id"]]
 
     def exchanged(self, project_id: str, member_id: str) -> list[Exchanged]:
         """The messages this member's sessions in the project sent or were sent, still kept, the oldest first. Read

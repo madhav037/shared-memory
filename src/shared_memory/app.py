@@ -5,7 +5,8 @@ import dataclasses
 import functools
 import json
 import logging
-from collections.abc import Callable, Mapping
+import math
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import timedelta
 from typing import Any, TypeVar
 
@@ -64,6 +65,7 @@ from shared_memory.recall import Recall
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
+from shared_memory.standby import STAND_BY_SECONDS, Ended, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
@@ -195,6 +197,24 @@ def _bearer(value: str | None) -> str | None:
     return None
 
 
+def _standby_answer(ended: Ended) -> dict[str, Any]:
+    """How a standby ended, as `/hooks/standby` and the `stand_by` tool both answer it: `ended`, `news`, `message` and,
+    for nothing yet, `wait_left_seconds`."""
+    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message}
+    if ended.wait_left is not None:
+        answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
+    return answer
+
+
+@dataclasses.dataclass(frozen=True)
+class _HookCall:
+    """A hook call whose personal token was taken and that names its project: its caller, carrying the coding agent
+    the hook names, and its JSON payload, None when that is unreadable or too big."""
+
+    caller: Caller
+    payload: dict[str, Any] | None
+
+
 async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
     """The hook's JSON payload, or None when it is unreadable or runs past `limit` bytes. A body that says it is too
     big is not read at all, and one that turns out to be is read no further than the limit."""
@@ -289,6 +309,7 @@ def build_app(
     talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
+    standbys = Standbys(settings, db, sessions, gates.wait, clock)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -358,16 +379,23 @@ def build_app(
         reported = _reported_name(ctx.session, ctx.request_context.request)
         return dataclasses.replace(authenticate(ctx.headers or {}), agent=agent_named(reported))
 
-    def session_of(current: Caller, payload: dict[str, Any]) -> Session | None:
-        """The session whose hook sent this payload, seen now, or None when the payload names none. Every hook that
-        runs for a session calls this, which is what keeps the session active."""
+    def session_seen(current: Caller, payload: dict[str, Any]) -> Session | None:
+        """The session this payload names, in the way every hook names it, seen now, or None when it names none.
+        Seeing it is what keeps the session active. A standby calls this alone: an agent with no hooks runs one too
+        (Copilot in VS Code), and it refuses no edit."""
         identifier = hooks.session_in(payload)
         if identifier is None:
             return None
         # A hook's caller carries the coding agent the hook said it runs in, which the session keeps only while no
         # tool call has reported one.
-        session = sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
-        unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
+        return sessions.touch(dataclasses.replace(current, agent=None), identifier, hooked_by=current.agent)
+
+    def session_of(current: Caller, payload: dict[str, Any]) -> Session | None:
+        """The session whose hook sent this payload, seen now, or None when the payload names none. Every hook that
+        runs for a session calls this, and so the session is known to be one a hook reaches."""
+        session = session_seen(current, payload)
+        if session is not None:
+            unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
         return session
 
     def waiting_for(
@@ -458,31 +486,18 @@ def build_app(
         recall budget too; given up on, the required part runs without it and the optional part is dropped, since it
         would wait on the same model.
         """
-        headers = Headers(scope=request.scope)
         answer_format = request.query_params.get("format")
-
-        def authenticated() -> Caller | Refused:
-            try:
-                return authenticate(headers)
-            except Refused as refused:
-                return refused
-
         parts: list[str | None] = []
         try:
-            current = await anyio.to_thread.run_sync(authenticated)
-            if isinstance(current, Refused):
-                connected = headers.get("x-shared-memory-project") or headers.get("authorization")
+            call = await hook_call(request)
+            if isinstance(call, Refused):
+                connected = request.headers.get("x-shared-memory-project") or request.headers.get("authorization")
                 if report_refusals and connected:
-                    return JSONResponse(hooks.notice(answer_format, f"Shared Memory is unavailable: {current}"))
+                    return JSONResponse(hooks.notice(answer_format, f"Shared Memory is unavailable: {call}"))
                 return JSONResponse({})
-            if current.project is None:
+            if call is None or call.payload is None:
                 return JSONResponse({})
-            current = dataclasses.replace(
-                current, agent=hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), answer_format)
-            )
-            payload = await _hook_payload(request, settings.hook_body_limit_bytes)
-            if payload is None:
-                return JSONResponse({})
+            current, payload = call.caller, call.payload
             named_event = hooks.event_in(payload, event)
             ready = first is None or await within_recall_budget(first, current, payload) is not None
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
@@ -497,6 +512,27 @@ def build_app(
         if not context:
             return JSONResponse({})
         return JSONResponse(answer(answer_format, named_event, context))
+
+    async def hook_call(request: Request) -> _HookCall | Refused | None:
+        """What every hook call opens with: its caller, authenticated from the headers before the body is read, so a
+        call without a valid personal token costs next to nothing; then, once it names its project, the coding agent
+        the hook names and the payload. Why it was refused, or None when it names no project."""
+        headers = Headers(scope=request.scope)
+
+        def authenticated() -> Caller | Refused:
+            try:
+                return authenticate(headers)
+            except Refused as refused:
+                return refused
+
+        current = await anyio.to_thread.run_sync(authenticated)
+        if isinstance(current, Refused):
+            return current
+        if current.project is None:
+            return None
+        agent = hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), request.query_params.get("format"))
+        payload = await _hook_payload(request, settings.hook_body_limit_bytes)
+        return _HookCall(dataclasses.replace(current, agent=agent), payload)
 
     @server.custom_route("/health", methods=["GET"])  # type: ignore[untyped-decorator]
     async def health(request: Request) -> Response:
@@ -529,6 +565,8 @@ def build_app(
             # The session's part comes after the member's: what this session is told once. A module that has
             # something for the session's next prompt adds it here.
             session = session_of(current, payload)
+            if session:
+                standbys.end(session)  # its member moved on (ADR-0027)
             told = [challenges.prompt_notices(current), *(waiting_for(current, session, embedded[0], prompted=True) if session else [])]
             return "\n\n".join(part for part in told if part) or None
 
@@ -585,6 +623,8 @@ def build_app(
             if reason is not None:
                 stopped = True
                 return reason
+            if files:
+                gates.edit_went_ahead(session)
             return news_for(current, session) if hears else None
 
         def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
@@ -602,6 +642,74 @@ def build_app(
             return news_for(current, session) if session else None
 
         return await hook(request, "PostToolUse", news)
+
+    @server.custom_route("/hooks/standby", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def standby(request: Request) -> Response:
+        """A session awaiting an answer stands by (ADR-0027): the request is held until there is news for the session,
+        which it answers with, told once, or until the standby ends without news. Its coding agent runs it as a
+        background command where it can be woken when that ends. The personal token comes in the Authorization header
+        as every hook's does, never in the address or the command. A refusal is a 401 or a 400 with `message`; every
+        other answer is a 200 with `ended` (news, nothing_yet, replaced or moved_on), `news`, `message` and, for
+        nothing yet, `wait_left_seconds`."""
+        try:
+            call = await hook_call(request)
+            if isinstance(call, Refused):
+                return JSONResponse({"message": f"Shared Memory refused this standby: {call}"}, status_code=401)
+            if call is None:
+                return JSONResponse(
+                    {"message": "A standby names its project in the X-Shared-Memory-Project header."}, status_code=400
+                )
+            current, payload = call.caller, call.payload
+            if payload is None or hooks.session_in(payload) is None:
+                return JSONResponse(
+                    {"message": "A standby names its session, as session_id in a JSON body, as every hook does."},
+                    status_code=400,
+                )
+            named: dict[str, Any] = payload
+
+            def standing_by() -> tuple[Caller, Session]:
+                session = session_seen(current, named)
+                assert session is not None
+                return current, session
+
+            ended = await stand_by_until_it_ends(standing_by, gone=request.is_disconnected)
+        except Refused as refused:
+            return JSONResponse({"message": f"Shared Memory refused this standby: {refused}"}, status_code=400)
+        except Exception:
+            log.exception("standby failed")
+            return JSONResponse({"message": "Shared Memory could not hold this standby."}, status_code=503)
+        return JSONResponse(_standby_answer(ended))
+
+    async def stand_by_until_it_ends(
+        standing_by: Callable[[], tuple[Caller, Session]],
+        seconds: float | None = None,
+        gone: Callable[[], Awaitable[bool]] | None = None,
+    ) -> Ended:
+        """Hold a standby for the session `standing_by` names, which `/hooks/standby` and the `stand_by` tool each
+        find in their own way, until it ends, and give how it ended. Its news is what every hook is told; whose answer
+        it awaits is kept for the console. A refusal in naming the session is raised before anything is held."""
+
+        def started() -> tuple[Caller, Session, tuple[str, ...]]:
+            current, session = standing_by()
+            return current, session, awaited_by(current, session)
+
+        current, session, awaits = await anyio.to_thread.run_sync(started)
+        news = functools.partial(waiting_for, current, session)
+        return await standbys.hold(session, news, awaits, seconds=seconds, gone=gone)
+
+    def awaited_by(current: Caller, session: Session) -> tuple[str, ...]:
+        """The member IDs of the members whose answer a session standing by awaits, kept for the console: the earlier
+        members its gate waits for, those its unanswered urgent messages went to, and the member its latest message
+        went to, until they reply."""
+        return tuple(
+            dict.fromkeys(
+                [
+                    *(each.earlier.member_id for each in gates.waiting(current, session)),
+                    *gates.urgent_awaits(session),
+                    *messages.awaiting_reply(session),
+                ]
+            )
+        )
 
     def composed_briefing(
         current: Caller, named: str | None, session: Session | None, with_sessions: bool = True
@@ -1219,6 +1327,25 @@ def build_app(
         return {"session": calling.identifier, "muted": calling.muted, "notices": waiting_for(current, calling)}
 
     @server.tool()
+    async def stand_by(session: str, ctx: Context, seconds: float = STAND_BY_SECONDS) -> dict[str, Any]:
+        """Stand by while this session awaits an answer: held up to seconds (the server caps it), ending with its news,
+        told once. On nothing_yet, call it again until the project's wait has passed, then once more at most."""
+
+        def standing_by() -> tuple[Caller, Session]:
+            current = caller(ctx)
+            return current, sessions.touch(current, session)
+
+        # The HTTP request the call came in on (JSON responses, one request per call): it says when the agent has gone.
+        request = ctx.request_context.request
+        gone = request.is_disconnected if isinstance(request, Request) else None
+        held = min(seconds, settings.standby_tool_cap_seconds)
+        try:
+            ended = await stand_by_until_it_ends(standing_by, seconds=held, gone=gone)
+        except Refused as refused:
+            raise ToolError(str(refused)) from refused
+        return _standby_answer(ended)
+
+    @server.tool()
     @_refusals_as_tool_errors
     def leave_handoff_note(session: str, done: str, left: str, ctx: Context) -> dict[str, Any]:
         """Leave this session's handoff note, what is done and what is left, for whoever takes up its work: when your
@@ -1394,7 +1521,7 @@ def build_app(
             rate_limits,
             licenses,
             TeamExport(settings, identity, board, audit),
-            SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, clock),
+            SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.
@@ -1407,6 +1534,7 @@ def build_app(
     app.state.licenses = licenses
     app.state.database = db
     app.state.sessions = sessions
+    app.state.standbys = standbys
     app.state.locks = locks
     app.state.project_patterns = project_patterns
     return app

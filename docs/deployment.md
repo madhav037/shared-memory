@@ -333,6 +333,14 @@ session's edits wait until its member answers or the wait has passed since it wa
 urgent message and "different work" is in the audit log with the collision's score, never an answer's or a message's
 text, for tuning the threshold above.
 
+A session awaiting an answer stands by ([ADR-0027](./adr/0027-a-session-awaiting-an-answer-stands-by.md)): the server
+holds its request, checks every `SHARED_MEMORY_STANDBY_CHECK_SECONDS` (default 2) for news for it, and answers as soon
+as there is any, or with "nothing yet" after `SHARED_MEMORY_STANDBY_CAP_MINUTES` (default 5, and never longer than the
+project's wait). A coding agent that can't be woken by a background command calls the `stand_by` tool instead, held
+45 seconds unless it asks for more, and never longer than `SHARED_MEMORY_STANDBY_TOOL_CAP_SECONDS` (default 300, the
+longest tool timeout a coding agent allows). All three are optional in `.env`. A waiting session costs one held request
+and one small check per interval.
+
 ## How long messages between sessions are kept
 
 A session can send a message to another session in its project with the `send_message` tool. A message is kept for

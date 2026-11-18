@@ -27,6 +27,7 @@ from shared_memory.gates import Gate, Gates
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
+from shared_memory.standby import Standby, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.audit import (
@@ -72,6 +73,7 @@ from shared_memory.console_contract import (
     RaisedChallenge, RateLimitChange, RateLimits,
     RepositoryName,
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
+    AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage,
 )
@@ -208,6 +210,18 @@ def _named(each: SessionActivity) -> NamedSession:
     return _named_session(each.session, each.activity)
 
 
+def _standby_of(standby: Standby | None, names: dict[str, str]) -> SessionStandby | None:
+    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer on the team
+    by their member ID."""
+    if standby is None:
+        return None
+    return SessionStandby(
+        started_at=standby.started_at,
+        ends_at=standby.ends_at,
+        awaits=[AwaitedMember(member_id=one, member_name=names.get(one, one)) for one in standby.awaits],
+    )
+
+
 @dataclass(frozen=True)
 class Collided:
     """A collision between two of a project's active sessions."""
@@ -218,8 +232,9 @@ class Collided:
 
 
 class SessionTalk:
-    """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions and gates, one
-    member's sessions' messages, and that member's replies and answers. Reading marks no message delivered, which the
+    """What the Sessions page reads and does of sessions that talk (spec #507): a project's collisions, gates and
+    standbys (#528), one member's sessions' messages, and that member's replies and answers. Reading marks no message
+    delivered, which the
     sessions' own calls do; it keeps a gate whose wait has passed as timed out, as every read of a gate does. A reply and an answer are `Talk`'s, the same operations the session
     tools call, from one of the member's own sessions, which hears what its member did (story 38). Nothing here saves,
     edits or promotes a memory (ADR-0009, ADR-0026)."""
@@ -232,6 +247,7 @@ class SessionTalk:
         messages: Messages,
         handoff_notes: HandoffNotes,
         talk: Talk,
+        standbys: Standbys,
         clock: Clock,
     ) -> None:
         self._collisions = collisions
@@ -240,6 +256,7 @@ class SessionTalk:
         self._messages = messages
         self._handoff_notes = handoff_notes
         self._talk = talk
+        self._standbys = standbys
         self._clock = clock
 
     def now(self) -> datetime:
@@ -266,6 +283,10 @@ class SessionTalk:
     def can_be_gated(self, active: Sequence[SessionActivity]) -> dict[int, bool]:
         """Whether each of these sessions' edits can be refused, by its id: not in a coding agent with no hooks (#518)."""
         return self._unhooked.can_be_gated([each.session for each in active])
+
+    def standing_by(self, project_id: str) -> dict[int, Standby]:
+        """The standbys held now in the project, by their session's id. Reading one leaves it held."""
+        return {each.session_id: each for each in self._standbys.in_project(project_id)}
 
     def handoff_notes(self, project_id: str) -> list[tuple[Session, Note]]:
         """The handoff notes of the project's sessions gone lately, each with its session, the most recently seen
@@ -750,6 +771,7 @@ class ConsoleApi:
         active = self._activities.in_project(project.project_id)
         collided = self._talk.collided(active)
         gateable = self._talk.can_be_gated(active)
+        standing_by = self._talk.standing_by(project.project_id)
         names = self._names(caller.member)
         mine = caller.member_id
         return ProjectSessions(
@@ -827,6 +849,7 @@ class ConsoleApi:
                     touched_files=list(each.session.touched_files),
                     locks=held.get(each.session.id, []),
                     can_be_gated=gateable[each.session.id],
+                    standby=_standby_of(standing_by.get(each.session.id), names),
                 )
                 for each in active
             ],

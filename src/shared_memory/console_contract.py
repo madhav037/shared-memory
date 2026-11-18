@@ -689,6 +689,25 @@ class HeldLock(BaseModel):
     last_used_at: datetime
 
 
+class AwaitedMember(BaseModel):
+    """A member whose answer a standing-by session awaits."""
+
+    member_id: str
+    member_name: str
+
+
+class SessionStandby(BaseModel):
+    """A session standing by (ADR-0027): its coding agent waits for news without its member typing. awaits names the
+    members whose answer it awaits, as it was when the standby started: the earlier members its edit is gated on, those
+    its urgent messages not yet answered went to, and the member its latest message went to until they reply. It is
+    empty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the
+    server's clock, unless news, a newer standby or the member's next prompt ends it first."""
+
+    started_at: datetime
+    ends_at: datetime
+    awaits: list[AwaitedMember]
+
+
 class ActiveSession(BaseModel):
     """One active session of a member's coding agent. agent is None until the session has said which coding agent it
     runs in, and repository is None for a session whose connection names none. activity is what the session stated;
@@ -698,7 +717,7 @@ class ActiveSession(BaseModel):
     from its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.
     can_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):
     nothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent
-    and no hook of the session has called."""
+    and no hook of the session has called. standby is the session's standby while it stands by, None otherwise."""
 
     member_id: str
     member_name: str
@@ -712,6 +731,7 @@ class ActiveSession(BaseModel):
     touched_files: list[str]
     locks: list[HeldLock]
     can_be_gated: bool
+    standby: SessionStandby | None
 
 
 class NamedSession(BaseModel):

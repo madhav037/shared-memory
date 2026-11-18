@@ -87,7 +87,26 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **Mute** (#514) is `muted` on `sessions`, set by the `mute` tool through `Sessions.mute`. `waiting_for` passes
   `urgent_only` to `messages.waiting_notices` for a muted session on anything but the prompt hook, so a message that is
   not urgent waits for the next prompt or the unmute; gate notices and answers are untouched. `tests/test_mute.py`.
-- **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()` and `active_sessions()`.
+- **Standby** (ADR-0027) is `Standbys` in `src/shared_memory/standby.py`, built in `build_app` as `standbys` and kept
+  on `app.state.standbys`. It owns `standbys`, one row per session's held standby. `await standbys.hold(session,
+  news, awaits, seconds=None, gone=None)` holds one until it ends and gives an `Ended` (`ending`: news, nothing_yet,
+  replaced, moved_on; `news`; `wait_left`; `message`): `news` is `functools.partial(waiting_for, caller, session)`,
+  `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
+  `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
+  the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws
+  on the tool hooks' rate limit, and doesn't count as a hook that reaches the session (#518), since an agent with no
+  hooks runs it too. The `stand_by` tool is the held-call route: the same `hold` with `seconds`
+  (`STAND_BY_SECONDS`, 45, unless asked; at most `Settings.standby_tool_cap_seconds`), answering as the endpoint does
+  (`_standby_answer`). The cap and the check interval are `Settings.standby_cap_minutes` and
+  `standby_check_seconds`. `tests/test_standby.py`.
+- **Each agent's route to stand by** (#527) is in `connection.py`: `STAND_BY_IN_THE_BACKGROUND` (the background
+  command first, the tool as fallback) and `STAND_BY_WITH_THE_TOOL` (each agent's seconds a call, and the tool timeout
+  that allows them). `standby_habits` is the guidance AGENTS.md and Cursor's rule carry, with the background command
+  for a POSIX shell and for PowerShell (`background_standby`, `background_standby_powershell`); `stands_by(agent)` is
+  what each agent's connect output says. Claude Code's command is in the plugin's skill, whose "Standing by" names
+  every route too.
+- **In tests**, the driver's `Session` has an `identifier`, `as_session(identifier)`, `end()`, `active_sessions()`,
+  `stand_by()` (a standby held on a thread of its own) and `on_standby()`.
 
 ### Locks
 

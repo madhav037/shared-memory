@@ -205,3 +205,30 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
 
   await page.screenshot({ path: test.info().outputPath("sessions-answered.png"), fullPage: true });
 });
+
+// Last of all: Olive's third session and Mira's third join Billing here and stay.
+test("a session standing by shows whose answer it waits for, and the mark goes when the standby ends", async ({ page }) => {
+  await openSessions(page, "Billing");
+  const waiting = page.getByTestId("standby");
+  await expect(waiting).toHaveCount(0);
+
+  // Mira's third session is gated on the work Olive's third stated, and its coding agent stands by for Olive's answer.
+  expect((await page.request.post(`${teammates}/stand-by`)).ok()).toBe(true);
+
+  await expect(waiting).toHaveCount(1);
+  await expect(waiting).toHaveText("waiting for Olive Owner’s answer");
+  const mira = page.getByTestId("session").filter({ has: waiting });
+  await expect(mira.getByTestId("session-activity")).toHaveText("Moving the currency formatting into one shared helper");
+  await expect(mira).toContainText("Mira Maker");
+  // The mark only shows: nothing on a session changes it, and nothing on the page writes memory (ADR-0009).
+  await expect(page.getByTestId("sessions").getByRole("button")).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("sessions-standing-by.png"), fullPage: true });
+
+  // Mira moves on: her next prompt ends the standby, and the next time the page asks, the mark has gone.
+  const moved = await page.request.post(`${teammates}/move-on`);
+  expect(((await moved.json()) as { ended: string }).ended).toBe("moved_on");
+
+  await expect(waiting).toHaveCount(0);
+  const stillActive = page.getByTestId("session").filter({ hasText: "Mira Maker" });
+  await expect(stillActive.filter({ hasText: "Moving the currency formatting" })).toHaveCount(1);
+});

@@ -8,12 +8,15 @@ import hashlib
 import os
 import secrets
 import tempfile
+import time
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import Future
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+import httpx
 import psycopg
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 from starlette.applications import Starlette
@@ -70,6 +73,11 @@ MIRAS_MESSAGE = "Is the retry UI yours? I can take the back end."
 SPLIT_ACTIVITY = "Splitting the invoice module into its own package"
 # What Mira's second session asks Olive, for Olive to reply to from the console.
 MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
+# The work a third session of Olive's states, and a third of Mira's too, when a journey asks Mira's to stand by: Mira's
+# is then gated on Olive's work, and stands by for Olive's answer.
+WAITED_ON_ACTIVITY = "Moving the currency formatting into one shared helper"
+# How long the stand-in gives a standby to be held, or to end once Mira moves on.
+STANDBY_SECONDS = 15
 
 
 def olives_token(settings: Settings, seeded: str) -> str:
@@ -91,7 +99,9 @@ class Teammates:
     session in Billing states Raj's activity, so it collides with his and is gated; on `POST /message` it sends Olive a
     message. On `POST /gate-olive` a second session of Olive's states a piece of work and a second session of Mira's
     states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
-    question; `GET /heard` says what Mira's second session hears on its next tool call. Each is the session's own call
+    question; `GET /heard` says what Mira's second session hears on its next tool call. On `POST /stand-by` a third
+    session of Olive's and a third of Mira's state the same work, so Mira's is gated on Olive's, and Mira's stands by in
+    the background, held until `POST /move-on`, where her next prompt ends it. Each is the session's own call
     over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
     personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
@@ -126,6 +136,28 @@ class Teammates:
         def heard(request: Request) -> Response:
             return JSONResponse({"heard": added_context(mira_split.use(search_tool("invoices")))})
 
+        # Mira's third session, in Claude Code, whose standby runs in the background as Claude Code runs it.
+        mira_waiting = mira.as_agent("claude-code").as_session("mira-waiting")
+        standing: list[Future[httpx.Response]] = []
+
+        def stand_by(request: Request) -> Response:
+            olives = olive().as_session("olive-waited-on")
+            olives.call("set_activity", activity=WAITED_ON_ACTIVITY, session=olives.identifier)
+            mira_waiting.call("set_activity", activity=WAITED_ON_ACTIVITY, session=mira_waiting.identifier)
+            held = mira_waiting.stand_by()
+            deadline = time.monotonic() + STANDBY_SECONDS
+            while mira_waiting.identifier not in mira_waiting.on_standby():
+                if held.done() or time.monotonic() > deadline:
+                    return JSONResponse({"standing_by": False}, status_code=500)
+                time.sleep(0.05)
+            standing.append(held)
+            return JSONResponse({"standing_by": True})
+
+        def move_on(request: Request) -> Response:
+            mira_waiting.prompt("Leave that for now and write the changelog entry.")
+            ended = standing.pop().result(timeout=STANDBY_SECONDS).json()["ended"]
+            return JSONResponse({"ended": ended})
+
         app = Starlette(
             routes=[
                 Route("/collide", collide, methods=["POST"]),
@@ -133,6 +165,8 @@ class Teammates:
                 Route("/gate-olive", gate_olive, methods=["POST"]),
                 Route("/ask-olive", ask_olive, methods=["POST"]),
                 Route("/heard", heard, methods=["GET"]),
+                Route("/stand-by", stand_by, methods=["POST"]),
+                Route("/move-on", move_on, methods=["POST"]),
             ]
         )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)

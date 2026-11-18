@@ -18,19 +18,22 @@ since the urgent message was sent. It is the same gate, read the same way, in th
 Kept in Postgres, so every worker agrees (ADR-0013):
 
 - `gate_ends`: per later and earlier session, how the gate between them ended (`different_work` or `timed_out`), and
-  whether the earlier session has been told. A timeout is kept the first time a read finds the wait passed, which is
+  whether the earlier session has been told, and of a timeout, the later session too. A timeout is kept the first time a read finds the wait passed, which is
   when it is written to the audit log.
 - `gate_answers`: per later and earlier session, the earlier member's answer (`agreed` or `refused`), their words for
   the later session, and whether the later session has been told. A refusal may be changed to agree; an agreement
   stands.
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
+- `gate_waits`: per later and earlier session, that the later session's gate was found waiting for the earlier one,
+  with the earlier member's name as it was then, so that when the earlier session ends or goes idle, which lifts the
+  gate on it, the later session is told once (story 5 of #523). Kept past the earlier session's end for that.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
   member answered it. Its primary key is what keeps it to one per collision.
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
-All but `project_waits` are cleared through `Sessions.on_gone` when either session ends or comes back from idle, as the
-collision is.
+All but `project_waits` and `gate_waits` are cleared through `Sessions.on_gone` when either session ends or comes back
+from idle, as the collision is; `gate_waits` only when its later session does.
 
 What other modules stand on, all of it on `Gates`:
 
@@ -43,11 +46,15 @@ What other modules stand on, all of it on `Gates`:
 - `in_project(caller, project_id)`: each session gated now and whom it waits for, answers included: what the console
   shows. A wait it finds passed is kept as timed out, as every read of a gate does.
 - `waiting_notices(caller, session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
-  each one ended; as a later session, each answer to its gate.
+  each one ended; as a later session, each answer to its gate and each gate lifted at the project's wait or by its
+  earlier session ending or going idle, so a session standing by hears it (ADR-0027).
+- `edit_went_ahead(session)`: this session's edit went ahead, which shows its gate gone: how it lifted need not be
+  told as well.
 - `waiting(caller, session)`: the earlier sessions this session's gate waits for now, for `Unhooked` to tell a
   session no hook reaches (#518).
 - `urgent_for(session, to)` and `send_urgent(caller, session, collisions)`: the collisions an urgent message from this
   session to this member would gate, refused unless one is not yet urgent; then keep each and audit it.
+- `urgent_awaits(session)`: the member IDs of the members whose answer this later session's urgent messages await.
 - `replied(session, to)`: this session sent this member a message, which answers their urgent messages to it.
 - `wait(project_id)` and `set_wait(caller, minutes)`: the project's wait.
 """
@@ -92,6 +99,9 @@ CREATE TABLE IF NOT EXISTS gate_ends (
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
 CREATE INDEX IF NOT EXISTS gate_ends_earlier ON gate_ends (earlier_session_id) WHERE NOT told;
+-- The later session has been told its gate lifted at the project's wait: by its next call that is not an edit, which
+-- would itself show the gate gone. Only a timeout is told to the later session; it said different work itself.
+ALTER TABLE gate_ends ADD COLUMN IF NOT EXISTS later_told BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS gate_answers (
     later_session_id BIGINT NOT NULL REFERENCES sessions(id),
@@ -110,6 +120,15 @@ CREATE INDEX IF NOT EXISTS gate_answers_later ON gate_answers (later_session_id)
 CREATE TABLE IF NOT EXISTS gate_starts (
     later_session_id BIGINT NOT NULL REFERENCES sessions(id),
     earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    PRIMARY KEY (later_session_id, earlier_session_id)
+);
+
+-- The later session's gate was found waiting for the earlier session, whose member's name it keeps as it was then:
+-- when the earlier session ends or goes idle, the later session is told its gate on it lifted.
+CREATE TABLE IF NOT EXISTS gate_waits (
+    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    earlier_name TEXT NOT NULL,
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
 
@@ -274,6 +293,24 @@ def _ended(by: Ending, row_name: str, minutes: int) -> str:
     )
 
 
+def _lifted(earlier_name: str, minutes: int) -> str:
+    """What a later session is told when its gate on one earlier session lifts at the project's wait."""
+    return (
+        f"[gate] The project's wait ({minutes} minutes) passed with no answer from {earlier_name}'s session: this "
+        "session's edits on nearly the same work as theirs go ahead, once every other session the gate waits for has "
+        "agreed or the wait has passed. Tell your member."
+    )
+
+
+def _earlier_gone(earlier_name: str) -> str:
+    """What a later session is told when the earlier session its gate waited for ends or goes idle, which lifts it."""
+    return (
+        f"[gate] {earlier_name}'s session ended or went idle, so this session's gate on it has lifted: its edits on "
+        "nearly the same work as theirs go ahead, once every other session the gate waits for has agreed or the wait "
+        "has passed. Tell your member."
+    )
+
+
 def _started(later: Session, until: datetime) -> str:
     """What an earlier session is told when a later session's gate waits on its work: who, and how to answer."""
     agent = f" in {later.agent}" if later.agent else ""
@@ -343,6 +380,7 @@ class Gates:
         self._default_wait = round(settings.gate_wait_minutes)
         self._db = db
         self._identity = identity
+        self._sessions = sessions
         self._activities = activities
         self._collisions = collisions
         self._audit = audit
@@ -360,6 +398,8 @@ class Gates:
                 f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
                 (gone, gone),
             )
+        # Kept past the earlier session's end, which its later session is still to be told of.
+        conn.execute("DELETE FROM gate_waits WHERE later_session_id = ANY(%s)", (gone,))
 
     # The project's wait
 
@@ -453,9 +493,14 @@ class Gates:
         """The earlier sessions this session's gate waits for now. A pair whose wait has just been found passed with no
         answer is kept as timed out, and written to the audit log once."""
         waiting, passed = self._work_out(session)
-        for earlier, collision in passed:
-            self._end(caller, session, earlier, collision, Ending.TIMED_OUT)
+        self._keep_timed_out(caller, session, passed)
         return waiting
+
+    def _keep_timed_out(self, caller: Caller, later: Session, passed: Sequence[tuple[Session, Collision]]) -> None:
+        """Keep as timed out the gate of this later session on each of these earlier sessions, its wait found passed
+        with no answer."""
+        for earlier, collision in passed:
+            self._end(caller, later, earlier, collision, Ending.TIMED_OUT)
 
     def in_project(self, caller: Caller, project_id: str) -> list[Gate]:
         """Each of the project's active sessions gated now, the oldest gate first, with the earlier sessions it waits
@@ -465,8 +510,7 @@ class Gates:
         gates = []
         for each in active:
             waiting, passed = self._work_out(each.session, active)
-            for earlier, collision in passed:
-                self._end(caller, each.session, earlier, collision, Ending.TIMED_OUT)
+            self._keep_timed_out(caller, each.session, passed)
             if waiting:
                 gates.append(Gate(each, waiting))
         return sorted(gates, key=lambda gate: min(one.collision.found_at for one in gate.waiting))
@@ -499,9 +543,9 @@ class Gates:
         whoever's call found it, unless another call already did."""
         with self._db.transaction() as conn:
             kept = conn.execute(
-                "INSERT INTO gate_ends (later_session_id, earlier_session_id, ended_by, ended_at)"
-                " VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING later_session_id",
-                (later.id, earlier.id, by, self._clock()),
+                "INSERT INTO gate_ends (later_session_id, earlier_session_id, ended_by, ended_at, later_told)"
+                " VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING later_session_id",
+                (later.id, earlier.id, by, self._clock(), by != Ending.TIMED_OUT),
             ).fetchone()
         if kept is None:
             return False
@@ -519,6 +563,15 @@ class Gates:
         now = self._clock()
         reasons = [*([refusal(waiting, now)] if waiting else []), *([urgent_refusal(urgents, now)] if urgents else [])]
         return "\n\n".join(reasons) or None
+
+    def edit_went_ahead(self, session: Session) -> None:
+        """This session's edit went ahead, every check before it having passed, which shows its gate gone: a gate
+        lifted at the wait, or by its earlier session's end, need not be told as well."""
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE gate_ends SET later_told = TRUE WHERE later_session_id = %s AND NOT later_told", (session.id,)
+            )
+            conn.execute("DELETE FROM gate_waits WHERE later_session_id = %s", (session.id,))
 
     def different_work(self, caller: Caller, session: Session) -> list[str]:
         """Lift this session's gate at once: its member says it is different work. The names of the members it was
@@ -615,6 +668,28 @@ class Gates:
             if kept is None or earlier is None:
                 continue
             self._audited(URGENT_MESSAGE, caller, session.project_id, earlier.session.member_id, "earlier", each)
+
+    def urgent_awaits(self, session: Session) -> list[str]:
+        """The member IDs of the members whose answer this later session's urgent messages await: each sent less than
+        the project's wait ago to a session of theirs still active, and not yet answered."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT earlier_session_id, sent_at FROM gate_urgents WHERE later_session_id = %s"
+                " AND answered_at IS NULL ORDER BY sent_at",
+                (session.id,),
+            ).fetchall()
+        if not rows:
+            return []
+        now = self._clock()
+        wait = timedelta(minutes=self.wait(session.project_id))
+        active = self._active_others(session)
+        return list(
+            dict.fromkeys(
+                active[row["earlier_session_id"]].session.member_id
+                for row in rows
+                if row["earlier_session_id"] in active and now < row["sent_at"] + wait
+            )
+        )
 
     def replied(self, session: Session, to: str) -> None:
         """This session sent the member with this member ID a message: it answers each urgent message of theirs that
@@ -747,8 +822,13 @@ class Gates:
     def waiting_notices(self, caller: Caller, session: Session) -> list[str]:
         """What a session is told once. As an earlier session: that a later session's gate waits on its work, and how
         each gate on its work ended, a wait it finds passed kept as timed out now, so it hears of it though the later
-        session stays quiet. As a later session: each answer to its gate. Asking marks them told."""
+        session stays quiet. As a later session: each answer to its gate, each gate on an earlier session lifted at the
+        project's wait, a wait it finds passed kept as timed out now, and each lifted by its earlier session ending or
+        going idle. Asking marks them told."""
         self._time_out_on_work(caller, session)
+        waiting, passed = self._work_out(session)
+        self._keep_timed_out(caller, session, passed)
+        gone = self._earlier_sessions_gone(session, waiting)
         with self._db.transaction() as conn:
             ends = conn.execute(
                 "UPDATE gate_ends SET told = TRUE WHERE earlier_session_id = %s AND NOT told"
@@ -760,8 +840,13 @@ class Gates:
                 " RETURNING earlier_session_id, answer, text",
                 (session.id,),
             ).fetchall()
-        notices = [*self._starts(session)]
-        if ends or answers:
+            lifted = conn.execute(
+                "UPDATE gate_ends SET later_told = TRUE WHERE later_session_id = %s AND NOT later_told"
+                " RETURNING earlier_session_id",
+                (session.id,),
+            ).fetchall()
+        notices = [*self._starts(session), *(_earlier_gone(name) for name in gone)]
+        if ends or answers or lifted:
             others = {each.session.id: each.session for each in self._activities.in_project(session.project_id)}
             minutes = self.wait(session.project_id)
             notices += [
@@ -774,7 +859,41 @@ class Gates:
                 for row in answers
                 if row["earlier_session_id"] in others
             ]
+            notices += [
+                _lifted(others[row["earlier_session_id"]].member_name, minutes)
+                for row in lifted
+                if row["earlier_session_id"] in others
+            ]
         return notices
+
+    def _earlier_sessions_gone(self, later: Session, waiting: Sequence[Waiting]) -> list[str]:
+        """The names of the members whose session this later session's gate waited for and that has since ended or
+        gone idle, each given once. Keeps whom the gate waits for now, for the next time it is asked. A gate lifted on
+        an earlier session still active was lifted by an answer, the wait or different work, each told where it is."""
+        with self._db.transaction() as conn:
+            for each in waiting:
+                conn.execute(
+                    "INSERT INTO gate_waits (later_session_id, earlier_session_id, earlier_name) VALUES (%s, %s, %s)"
+                    " ON CONFLICT DO NOTHING",
+                    (later.id, each.earlier.id, each.earlier.member_name),
+                )
+            rows = conn.execute(
+                "SELECT earlier_session_id FROM gate_waits WHERE later_session_id = %s"
+                " AND NOT earlier_session_id = ANY(%s)",
+                (later.id, [each.earlier.id for each in waiting]),
+            ).fetchall()
+        lifted = [row["earlier_session_id"] for row in rows]
+        if not lifted:
+            return []
+        gone = set(lifted) - self._sessions.still_active(lifted)
+        with self._db.transaction() as conn:
+            # Deleted as it is read, so two workers asking at once tell it once.
+            told = conn.execute(
+                "DELETE FROM gate_waits WHERE later_session_id = %s AND earlier_session_id = ANY(%s)"
+                " RETURNING earlier_session_id, earlier_name",
+                (later.id, lifted),
+            ).fetchall()
+        return [row["earlier_name"] for row in told if row["earlier_session_id"] in gone]
 
     def _time_out_on_work(self, caller: Caller, session: Session) -> None:
         """Keep as timed out each gate on this earlier session's work whose wait has passed with no answer."""

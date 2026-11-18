@@ -2612,7 +2612,7 @@
         "type": "object"
       },
       "ActiveSession": {
-        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called.",
+        "description": "One active session of a member's coding agent. agent is None until the session has said which coding agent it\nruns in, and repository is None for a session whose connection names none. activity is what the session stated;\nfor a session that stated none it is the title of its member's card in Doing, and from_card says so; None when\nthere is neither. last_seen_at is when the session last called the server. branch is its git branch as its hook\nbefore a tool last named it, None until one has; touched_files are the files its tool calls named, each a path\nfrom its repository's root, the most recent first. Neither the tools it called nor its prompts are ever shown.\ncan_be_gated is False for a session in a coding agent that has no hooks (Copilot in VS Code, Cursor on Windows):\nnothing refuses its edits, so a gate on it is only guidance. It is known once a tool call has reported the agent\nand no hook of the session has called. standby is the session's standby while it stands by, None otherwise.",
         "properties": {
           "member_id": {
             "title": "Member Id",
@@ -2697,6 +2697,16 @@
           "can_be_gated": {
             "title": "Can Be Gated",
             "type": "boolean"
+          },
+          "standby": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionStandby"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2711,9 +2721,29 @@
           "branch",
           "touched_files",
           "locks",
-          "can_be_gated"
+          "can_be_gated",
+          "standby"
         ],
         "title": "ActiveSession",
+        "type": "object"
+      },
+      "AwaitedMember": {
+        "description": "A member whose answer a standing-by session awaits.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "member_name": {
+            "title": "Member Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "member_name"
+        ],
+        "title": "AwaitedMember",
         "type": "object"
       },
       "GateWait": {
@@ -3045,6 +3075,35 @@
           "urgent"
         ],
         "title": "SessionMessage",
+        "type": "object"
+      },
+      "SessionStandby": {
+        "description": "A session standing by (ADR-0027): its coding agent waits for news without its member typing. awaits names the\nmembers whose answer it awaits, as it was when the standby started: the earlier members its edit is gated on, those\nits urgent messages not yet answered went to, and the member its latest message went to until they reply. It is\nempty for a standby that awaits no member in particular. ends_at is when it ends with nothing yet, by the\nserver's clock, unless news, a newer standby or the member's next prompt ends it first.",
+        "properties": {
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "awaits": {
+            "items": {
+              "$ref": "#/components/schemas/AwaitedMember"
+            },
+            "title": "Awaits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "started_at",
+          "ends_at",
+          "awaits"
+        ],
+        "title": "SessionStandby",
         "type": "object"
       },
       "ProjectSessions": {
