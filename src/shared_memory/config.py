@@ -64,6 +64,10 @@ class Settings:
     collision_threshold: float = 0.75
     # How long a later session's edits wait at the gate for a project that hasn't set its own wait (ADR-0024).
     gate_wait_minutes: float = 5
+    # The longest a standby is held before it answers "nothing yet", never longer than the project's wait, and how
+    # often a held standby checks for news for its session (ADR-0027).
+    standby_cap_minutes: float = 5
+    standby_check_seconds: float = 2
     # How long a message between sessions is kept, delivered or not.
     message_kept_days: float = 7
     # How long after a session ends or goes idle it still counts as recent: a message to it waits for its member's
@@ -149,6 +153,8 @@ class Settings:
             session_idle_minutes=float(env.get("SHARED_MEMORY_SESSION_IDLE_MINUTES", "30")),
             collision_threshold=float(env.get("SHARED_MEMORY_COLLISION_THRESHOLD", "0.75")),
             gate_wait_minutes=float(env.get("SHARED_MEMORY_GATE_WAIT_MINUTES", "5")),
+            standby_cap_minutes=float(env.get("SHARED_MEMORY_STANDBY_CAP_MINUTES", "5")),
+            standby_check_seconds=float(env.get("SHARED_MEMORY_STANDBY_CHECK_SECONDS", "2")),
             message_kept_days=float(env.get("SHARED_MEMORY_MESSAGE_KEPT_DAYS", "7")),
             recent_work_hours=float(env.get("SHARED_MEMORY_RECENT_WORK_HOURS", "24")),
             handoff_note_kept_days=float(env.get("SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS", "7")),
