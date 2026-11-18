@@ -171,7 +171,7 @@ MAY_ASK: dict[str, set[str]] = {
     "_lifecycle": {"add_foundation", "decide_challenge", "remove_foundation", "retire"},
     # Challenges are read and decided here, never raised: only a session raises one, a doubt included (#539). Retiring
     # another author's memory asks its author through `_lifecycle.retire`, as a session's retire does.
-    "_challenging": {"doubts_against", "in_doubt", "open_challenge", "raised_by", "told", "waiting_for"},
+    "_challenging": {"doubts_against", "open_challenge", "raised_by", "told", "waiting_for"},
 }
 
 

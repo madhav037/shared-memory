@@ -4,7 +4,7 @@ import { openInContents, signInAs } from "./helpers";
 
 // Tess leads Payments. Wes wrote "Refunds are allowed for 14 days" there; Olive's session says it contradicts the code,
 // and Raj's joined that doubt as a +1 with a line of its own. Olive raised it, so it is Tess's to decide as a lead. The
-// two journeys run in this order on purpose: rejecting the doubt takes the mark away, and the first one needs it.
+// journeys run in this order on purpose: rejecting the doubt takes the mark away, and the first two need it.
 
 const REFUNDS = "Refunds are allowed for 14 days";
 
@@ -15,10 +15,12 @@ test("a memory view shows the in-doubt mark and links to the memory's open doubt
   await expect(page.getByTestId("memory-details").getByTestId("in-doubt-mark")).toHaveText("In doubt");
   const inDoubt = page.getByTestId("in-doubt");
   await expect(inDoubt).toContainText(
-    "In doubt. 2 say it contradicts payments-api:src/refunds.py:18, payments-api:src/support/policy.py:7.",
+    "In doubt: 2 say it contradicts payments-api:src/refunds.py:18, payments-api:src/support/policy.py:7.",
   );
-  // A doubt is said once, in the in-doubt line, not again as a request to supersede it.
-  await expect(page.getByTestId("open-challenges")).toHaveCount(0);
+  // The open doubt is listed with its reason and its +1, as a doubt, not as a request to supersede it.
+  await expect(page.getByTestId("open-challenges")).toContainText(
+    "Challenged. Olive Owner doubts it: contradicts the code (+1).",
+  );
 
   await inDoubt.getByRole("link", { name: "See its open doubts and decide" }).click();
   await expect(page).toHaveURL(/\/challenges\?path=/);
@@ -26,6 +28,25 @@ test("a memory view shows the in-doubt mark and links to the memory's open doubt
   const dispute = page.getByTestId("waiting");
   await expect(dispute.getByRole("heading", { name: REFUNDS })).toBeVisible();
   await expect(dispute.getByTestId("doubt-reason")).toHaveText("Contradicts the code");
+});
+
+test("a member who can't decide a doubt reads it and its evidence, and is asked to decide nothing", async ({ page }) => {
+  await signInAs(page, 2, "dana");
+  await openInContents(page, "Payments", "Project memory", "Gotchas", REFUNDS);
+
+  await expect(page.getByTestId("open-challenges")).toContainText("Olive Owner doubts it: contradicts the code (+1)");
+  const inDoubt = page.getByTestId("in-doubt");
+  await expect(inDoubt).toContainText("Wes Writer, a project lead or an admin decides.");
+
+  await inDoubt.getByRole("link", { name: "See its open doubts" }).click();
+  await expect(page).toHaveURL(/\/challenges\?path=/);
+  await expect(page.getByTestId("nothing-waiting")).toBeVisible();
+  const doubt = page.getByTestId("others-doubt");
+  await expect(doubt.getByTestId("doubt-reason")).toHaveText("Contradicts the code");
+  await expect(doubt.getByTestId("doubt-count")).toHaveText("+1");
+  await expect(doubt.getByTestId("evidence-entry")).toHaveCount(2);
+  await expect(doubt.getByTestId("evidence-entry").last()).toContainText("Support approved a refund on day 20 yesterday.");
+  await expect(page.getByTestId("others-doubts").getByRole("button")).toHaveCount(0);
 });
 
 test("a lead sees a doubt with its +1s and evidence on the challenges page, rejects it, and the memory's in-doubt mark goes", async ({

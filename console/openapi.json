@@ -4421,8 +4421,64 @@
         "title": "Folder",
         "type": "object"
       },
+      "DoubtEvidence": {
+        "description": "What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they\nquote, written repository:path:line, as the code has it.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "code_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Reference"
+          },
+          "quoted_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Line"
+          },
+          "raised_at": {
+            "format": "date-time",
+            "title": "Raised At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "reasoning",
+          "code_reference",
+          "quoted_line",
+          "raised_at"
+        ],
+        "title": "DoubtEvidence",
+        "type": "object"
+      },
       "InDoubtMark": {
-        "description": "What marks a memory in doubt (CONTEXT.md): how many raises its open doubts have had, and for which reasons.",
+        "description": "What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line\na session is shown, which the console shows as it is.",
         "properties": {
           "count": {
             "title": "Count",
@@ -4434,17 +4490,22 @@
             },
             "title": "Reasons",
             "type": "array"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
           }
         },
         "required": [
           "count",
-          "reasons"
+          "reasons",
+          "line"
         ],
         "title": "InDoubtMark",
         "type": "object"
       },
       "InDoubtReason": {
-        "description": "One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is.",
+        "description": "One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.",
         "properties": {
           "reason": {
             "enum": [
@@ -4537,6 +4598,24 @@
               }
             ],
             "title": "Decides As"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/DoubtEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
           }
         },
         "required": [
@@ -4546,7 +4625,9 @@
           "challenger_path",
           "reason",
           "may_decide",
-          "decides_as"
+          "decides_as",
+          "count",
+          "evidence"
         ],
         "title": "OpenChallenge",
         "type": "object"
@@ -5199,62 +5280,6 @@
           "status"
         ],
         "title": "ChallengedMemory",
-        "type": "object"
-      },
-      "DoubtEvidence": {
-        "description": "What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they\nquote, written repository:path:line, as the code has it.",
-        "properties": {
-          "member_id": {
-            "title": "Member Id",
-            "type": "string"
-          },
-          "reasoning": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reasoning"
-          },
-          "code_reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Code Reference"
-          },
-          "quoted_line": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quoted Line"
-          },
-          "raised_at": {
-            "format": "date-time",
-            "title": "Raised At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "member_id",
-          "reasoning",
-          "code_reference",
-          "quoted_line",
-          "raised_at"
-        ],
-        "title": "DoubtEvidence",
         "type": "object"
       },
       "RaisedChallenge": {

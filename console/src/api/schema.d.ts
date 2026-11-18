@@ -1983,18 +1983,41 @@ export interface components {
             inside: components["schemas"]["FolderSection"][];
         };
         /**
+         * DoubtEvidence
+         * @description What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
+         *     quote, written repository:path:line, as the code has it.
+         */
+        DoubtEvidence: {
+            /** Member Id */
+            member_id: string;
+            /** Reasoning */
+            reasoning: string | null;
+            /** Code Reference */
+            code_reference: string | null;
+            /** Quoted Line */
+            quoted_line: string | null;
+            /**
+             * Raised At
+             * Format: date-time
+             */
+            raised_at: string;
+        };
+        /**
          * InDoubtMark
-         * @description What marks a memory in doubt (CONTEXT.md): how many raises its open doubts have had, and for which reasons.
+         * @description What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
+         *     a session is shown, which the console shows as it is.
          */
         InDoubtMark: {
             /** Count */
             count: number;
             /** Reasons */
             reasons: components["schemas"]["InDoubtReason"][];
+            /** Line */
+            line: string;
         };
         /**
          * InDoubtReason
-         * @description One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is.
+         * @description One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is.
          */
         InDoubtReason: {
             /**
@@ -2026,6 +2049,10 @@ export interface components {
             may_decide: boolean;
             /** Decides As */
             decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left") | null;
+            /** Count */
+            count: number | null;
+            /** Evidence */
+            evidence: components["schemas"]["DoubtEvidence"][];
         };
         /**
          * PendingChallenge
@@ -2243,26 +2270,6 @@ export interface components {
             author: string;
             /** Status */
             status: string;
-        };
-        /**
-         * DoubtEvidence
-         * @description What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
-         *     quote, written repository:path:line, as the code has it.
-         */
-        DoubtEvidence: {
-            /** Member Id */
-            member_id: string;
-            /** Reasoning */
-            reasoning: string | null;
-            /** Code Reference */
-            code_reference: string | null;
-            /** Quoted Line */
-            quoted_line: string | null;
-            /**
-             * Raised At
-             * Format: date-time
-             */
-            raised_at: string;
         };
         /**
          * RaisedChallenge

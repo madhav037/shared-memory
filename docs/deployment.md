@@ -328,6 +328,12 @@ memory in the project, and the project and team memory they can read) whose embe
 `SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD` (default 0.62, the same bar as promote's check; optional in `.env`; from 0 to
 1). Raise it if saves name memories that aren't near-copies; lower it if near-copies go unnamed.
 
+## How far a memory in doubt ranks down
+
+Recall and search multiply the score of a memory in doubt (one with an open challenge naming a reason) by
+`SHARED_MEMORY_IN_DOUBT_PENALTY` (default 0.5, optional in `.env`; above 0 and below 1). It still ranks, only lower.
+Lower it if doubted memories still crowd out sound ones; raise it toward 1 if they disappear from recall.
+
 ## How long a gated session waits
 
 When a session's prompt or activity collides with another member's active session, the later session's file edits are

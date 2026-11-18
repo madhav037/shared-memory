@@ -733,16 +733,18 @@ class Lifecycle:
             raise Refused(f"There is no open challenge {challenge_id} in your team.")
         caller.require_reach(challenge.target_path)
         caller.require_reach(challenge.challenger_path)
-        decides_as = self._challenges.require_decider(caller, challenge)
+        # Who raised it, asked once: it settles who may decide, and who is told how it ended.
+        raisers = self._challenges.raisers([challenge])[challenge.id]
+        decides_as = self._challenges.require_decider(caller, challenge, raisers)
         decider = caller.member_id
 
         if decision == "reject":
             self._challenges.decide(challenge, "rejected", decider)
-            self._decided(caller, challenge, "rejected", decides_as)
+            self._decided(caller, challenge, raisers, "rejected", decides_as)
             stands = "The memory stands as it is." if challenge.kind == DOUBT else "Your memory stays where it is."
             self._challenges.tell_raisers(
                 caller.team,
-                challenge,
+                raisers,
                 f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. {stands}",
             )
             return {"status": "rejected", "challenge_id": challenge.id}
@@ -750,7 +752,7 @@ class Lifecycle:
         if challenge.kind == "add":
             result, outcome = self._accept_add(caller, challenge)
             self._challenges.decide(challenge, "accepted", decider)
-            self._decided(caller, challenge, "accepted", decides_as)
+            self._decided(caller, challenge, raisers, "accepted", decides_as)
             self._challenges.tell(caller.team, challenge.raised_by, outcome)
             return result
         target_path = PurePosixPath(challenge.target_path)
@@ -762,8 +764,8 @@ class Lifecycle:
         else:
             result, outcome = self._accept_supersede(caller, challenge, challenge.challenger_path)
         self._challenges.decide(challenge, "accepted", decider)
-        self._decided(caller, challenge, "accepted", decides_as)
-        self._challenges.tell_raisers(caller.team, challenge, outcome)
+        self._decided(caller, challenge, raisers, "accepted", decides_as)
+        self._challenges.tell_raisers(caller.team, raisers, outcome)
         self._challenges.close_all_against(
             caller.team,
             challenge.target_path,
@@ -772,14 +774,16 @@ class Lifecycle:
         )
         return result
 
-    def _decided(self, caller: Caller, challenge: Challenge, decision: str, decides_as: DecidesAs) -> None:
+    def _decided(
+        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...], decision: str, decides_as: DecidesAs
+    ) -> None:
         """Record a decision with the capacity it was made in, and tell the author when it wasn't theirs."""
         named = {} if challenge.reason is None else {"reason": challenge.reason}
         self._audit.memory(
             caller, CHALLENGE_DECIDED, challenge.target_path, project_id=project_of(challenge),
             challenge_id=challenge.id, decision=decision, challenge=challenge.kind, **named, decided_as=decides_as,
         )  # fmt: skip
-        self._challenges.tell_author(caller, challenge, decides_as, decision)
+        self._challenges.tell_author(caller, challenge, raisers, decides_as, decision)
 
     def _accept_supersede(self, caller: Caller, challenge: Challenge, challenger_path: str) -> tuple[dict[str, Any], str]:
         challenger_location = locate(challenger_path)

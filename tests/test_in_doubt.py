@@ -18,9 +18,10 @@ import pytest
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
-from shared_memory.config import Settings
+from shared_memory.config import IN_DOUBT_PENALTY, Settings
 from shared_memory.embeddings import DIMENSIONS, FastEmbedEmbedder
 from tests.support import (
+    REPO_ROOT,
     RunningServer,
     Session,
     added_context,
@@ -101,13 +102,13 @@ class Billing:
         self.owner = team.owner().in_project(self.project, "billing-api")
         self.dana = member(team, self.project, "emp-2", "Dana Dev")
         self.cole = member(team, self.project, "emp-3", "Cole Coder")
-        self.erin = member(team, self.project, "emp-4", "Erin Engineer")
+        self.frank = member(team, self.project, "emp-5", "Frank Fixer")
 
     def doubt(self, path: str) -> int:
         """Three members say the memory misled them, and its author says it contradicts the code."""
         first = self.dana.call("challenge", path=path, reason="misled", reasoning="It rounded the wrong way.")
         self.cole.call("challenge", path=path, reason="misled")
-        self.erin.call("challenge", path=path, reason="misled")
+        self.frank.call("challenge", path=path, reason="misled")
         self.owner.call("challenge", path=path, reason="contradicts_code", **TAX_LINE)
         challenge_id: int = first["challenge_id"]
         return challenge_id
@@ -235,3 +236,15 @@ def test_once_its_doubt_is_rejected_a_memory_ranks_as_before_and_loses_the_mark(
 def test_in_doubt_penalty_reads_its_environment_variable_and_defaults_to_one_half() -> None:
     assert Settings.from_env({}).in_doubt_penalty == 0.5
     assert Settings.from_env({"SHARED_MEMORY_IN_DOUBT_PENALTY": "0.25"}).in_doubt_penalty == 0.25
+
+
+def test_the_deployment_docs_and_the_compose_file_give_the_in_doubt_penalty_its_default() -> None:
+    """A limit is named once: the docs and the compose file are static text, so this holds their default to the
+    setting's."""
+    name, default = "SHARED_MEMORY_IN_DOUBT_PENALTY", Settings.from_env({}).in_doubt_penalty
+    compose = (REPO_ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+    docs = " ".join((REPO_ROOT / "docs" / "deployment.md").read_text(encoding="utf-8").split())
+
+    assert f"{name}: ${{{name}:-{default:g}}}" in compose
+    assert f"`{name}` (default {default:g}" in docs
+    assert default == Settings.in_doubt_penalty == IN_DOUBT_PENALTY, "the environment's default is the setting's own"

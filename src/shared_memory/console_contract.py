@@ -230,6 +230,17 @@ class PendingChallenge(BaseModel):
     replaces: str | None
 
 
+class DoubtEvidence(BaseModel):
+    """What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
+    quote, written repository:path:line, as the code has it."""
+
+    member_id: str
+    reasoning: str | None
+    code_reference: str | None
+    quoted_line: str | None
+    raised_at: datetime
+
+
 class OpenChallenge(BaseModel):
     """A challenge raised against this memory."""
 
@@ -243,6 +254,10 @@ class OpenChallenge(BaseModel):
     # an admin, or as anyone may once the fallback has passed or its author has left.
     may_decide: bool
     decides_as: DecidesAs | None
+    # For a doubt, shown to every member who can read the memory, deciders or not: how many members raised it and the
+    # evidence each raise brought, the first raiser's first. A challenge that names no reason has neither.
+    count: int | None
+    evidence: list[DoubtEvidence]
 
 
 class Pin(BaseModel):
@@ -279,7 +294,7 @@ class MemoryPath(BaseModel):
 
 
 class InDoubtReason(BaseModel):
-    """One reason a memory is in doubt for: how many raises name it and, for contradicts_code, where the code is."""
+    """One reason a memory is in doubt for: how many members name it and, for contradicts_code, where the code is."""
 
     reason: Reason
     count: int
@@ -288,21 +303,12 @@ class InDoubtReason(BaseModel):
 
 
 class InDoubtMark(BaseModel):
-    """What marks a memory in doubt (CONTEXT.md): how many raises its open doubts have had, and for which reasons."""
+    """What marks a memory in doubt (CONTEXT.md): how many members doubt it, for which reasons, and the in-doubt line
+    a session is shown, which the console shows as it is."""
 
     count: int
     reasons: list[InDoubtReason]
-
-
-class DoubtEvidence(BaseModel):
-    """What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
-    quote, written repository:path:line, as the code has it."""
-
-    member_id: str
-    reasoning: str | None
-    code_reference: str | None
-    quoted_line: str | None
-    raised_at: datetime
+    line: str
 
 
 class ChallengedMemory(BaseModel):
@@ -338,7 +344,7 @@ class ChallengeDetail(BaseModel):
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
     reasoning: str | None
     # For a doubt: the reason it names, every raise's evidence (the first raiser's first) and how many raises it has
-    # had, the first and each +1. A challenge that names no reason has none of them.
+    # had: how many members, the first and each +1. A challenge that names no reason has none of them.
     reason: Reason | None
     evidence: list[DoubtEvidence]
     count: int | None

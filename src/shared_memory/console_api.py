@@ -195,7 +195,17 @@ def _marked(in_doubt: InDoubt | None) -> InDoubtMark | None:
             InDoubtReason(reason=each.reason, count=each.count, code_references=list(each.code_references))
             for each in in_doubt.reasons
         ],
+        line=in_doubt.line(),
     )
+
+
+def _with_evidence(challenge: dict[str, Any], doubt: Doubt | None) -> dict[str, Any]:
+    """An open challenge against a memory, with a doubt's count and evidence for whoever reads the memory."""
+    return {
+        **challenge,
+        "count": None if doubt is None else doubt.count,
+        "evidence": [] if doubt is None else [_evidence(each) for each in doubt.evidence],
+    }
 
 
 def _evidence(each: Evidence) -> DoubtEvidence:
@@ -717,7 +727,12 @@ class ConsoleApi:
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
-        memory["in_doubt"] = _marked(self._challenging.in_doubt(caller.team, [memory["path"]]).get(memory["path"]))
+        against = self._challenging.doubts_against(caller.team, [memory["path"]])[memory["path"]]
+        doubts = {each.challenge.id: each for each in against}
+        memory["open_challenges"] = [
+            _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
+        ]
+        memory["in_doubt"] = _marked(InDoubt.of(doubts.values()) if doubts else None)
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:

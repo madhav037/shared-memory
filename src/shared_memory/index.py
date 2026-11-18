@@ -363,7 +363,8 @@ class SearchIndex:
     ) -> list[Hit]:
         """Active sections visible from a project, or from several, ranked by meaning and exact words together.
 
-        limit None returns every candidate, for a caller that ranks them again before it cuts them. member_id, when
+        limit None returns every candidate, for a caller that ranks them again before it cuts them: at most
+        `_CANDIDATES` found by meaning and `_CANDIDATES` by exact words, so never more than twice that. member_id, when
         given, limits personal memory to that member's own. `source` is where the query came from,
         for the query cache's counts.
         """

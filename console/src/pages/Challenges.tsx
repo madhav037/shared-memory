@@ -7,6 +7,7 @@ import {
   decideChallenge,
   fetchChallenges,
   fetchMembers,
+  fetchMemoryAt,
   type ChallengeDetail,
   type ChallengeList,
   type DoubtEvidence,
@@ -19,7 +20,7 @@ import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
-import { REASON_NAMES } from "../lib/doubt";
+import { asks, REASON_NAMES } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
@@ -52,6 +53,7 @@ export function Challenges({
     setSlip(null);
     heading.current?.focus();
   };
+  const shown = !answer ? [] : only ? answer.waiting.filter((one) => one.target.path === only) : answer.waiting;
 
   return (
     <div className="medium">
@@ -77,17 +79,14 @@ export function Challenges({
               Only the challenges against one memory. <Link to="/challenges">Show every challenge</Link>
             </p>
           )}
-          {answer.waiting.length === 0 ? (
+          {shown.length === 0 ? (
             <p className="empty" data-testid="nothing-waiting">
               {slip ? "Nothing else is waiting for your decision." : "Nothing is waiting for your decision."}
             </p>
           ) : (
-            <Waiting
-              waiting={only ? answer.waiting.filter((one) => one.target.path === only) : answer.waiting}
-              who={who}
-              onDecided={decided}
-            />
+            <Waiting waiting={shown} who={who} onDecided={decided} />
           )}
+          {only && <OthersDoubts path={only} who={who} />}
           <Raised raised={answer.raised} who={who} />
         </>
       )}
@@ -341,28 +340,10 @@ function Proposal({
       <p className="proposal-by">
         <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
         {challenge.reason ? (
-          <>
-            <b>{who(challenge.raised_by)}</b> doubts it{" "}
-            <span className="mark alert" data-testid="doubt-reason">
-              {REASON_NAMES[challenge.reason]}
-            </span>
-            {challenge.count !== null && challenge.count > 1 && (
-              <>
-                {" "}
-                <span className="mark" data-testid="doubt-count" title={`${challenge.count} have raised it`}>
-                  +{challenge.count - 1}
-                </span>
-              </>
-            )}
-          </>
+          <DoubtBy raisedBy={challenge.raised_by} reason={challenge.reason} count={challenge.count} who={who} />
         ) : (
           <>
-            <b>{who(challenge.raised_by)}</b> wants to{" "}
-            {adding
-              ? `add it to the ${challenge.foundation_name} foundation`
-              : challenge.kind === "retire"
-                ? "retire it"
-                : "supersede it"}
+            <b>{who(challenge.raised_by)}</b> wants to {asks(challenge)}
           </>
         )}{" "}
         ·{" "}
@@ -497,6 +478,62 @@ function Proposal({
   );
 }
 
+/** Who doubts a memory first, for which reason, and how many members have joined them. */
+function DoubtBy({
+  raisedBy,
+  reason,
+  count,
+  who,
+}: {
+  raisedBy: string;
+  reason: keyof typeof REASON_NAMES;
+  count: number | null;
+  who: (memberId: string) => string;
+}) {
+  return (
+    <>
+      <b>{who(raisedBy)}</b> doubts it{" "}
+      <span className="mark alert" data-testid="doubt-reason">
+        {REASON_NAMES[reason]}
+      </span>
+      {count !== null && count > 1 && (
+        <>
+          {" "}
+          <span className="mark" data-testid="doubt-count" title={`${count} members have raised it`}>
+            +{count - 1}
+          </span>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The open doubts against one memory that this member can read but not decide: shown, never decided here. */
+function OthersDoubts({ path, who }: { path: string; who: (memberId: string) => string }) {
+  const { answer } = useAsked((signal) => fetchMemoryAt(path, signal), [path]);
+  const doubts = (answer?.open_challenges ?? []).filter((one) => one.reason !== null && !one.may_decide);
+  if (!answer || doubts.length === 0) return null;
+  return (
+    <section data-testid="others-doubts">
+      <h2 className="section-heading">Open doubts about {answer.title}</h2>
+      <p className="standfirst">
+        {answer.author_name}
+        {answer.level === "team" ? "" : ", a project lead"} or an admin decides these. Until then, recall ranks the
+        memory lower and marks it for every coding agent.
+      </p>
+      {doubts.map((one) => (
+        <div className="proposal" key={one.challenge_id} data-testid="others-doubt">
+          <p className="proposal-by">
+            <IconScale size={14} stroke={1.6} aria-hidden style={{ verticalAlign: "-2px", marginRight: 6 }} />
+            {one.reason && <DoubtBy raisedBy={one.raised_by} reason={one.reason} count={one.count} who={who} />}
+          </p>
+          {one.evidence.length > 0 && <EvidenceList evidence={one.evidence} who={who} />}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Every raise of a doubt, the first raiser's first: who, when, why, and the line of code it quotes. */
 function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memberId: string) => string }) {
   return (
@@ -566,13 +603,7 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                     )}
                   </td>
                   <td>
-                    {one.reason
-                      ? `doubting it: ${REASON_NAMES[one.reason].toLowerCase()}`
-                      : one.kind === "add"
-                        ? "to add a memory"
-                        : one.kind === "retire"
-                          ? "to retire it"
-                          : "to supersede it"}
+                    to {asks(one)}
                     {one.reasoning && (
                       <div className="raised-reasoning" data-testid="raised-reasoning">
                         {one.reasoning}

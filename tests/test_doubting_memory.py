@@ -107,19 +107,38 @@ def test_raising_a_doubt_in_a_restricted_project_the_member_isnt_in_is_refused_w
     assert owner.in_project(billing, "billing-api").call("read", path=path)["open_challenges"] == []
 
 
-def test_the_same_memory_with_the_same_reason_joins_the_open_doubt_as_a_plus_one(
+def test_the_same_memory_with_the_same_reason_joins_the_open_doubt_as_a_plus_one_from_each_other_member(
     team: Team, owner: Session, dana: Session
 ) -> None:
     cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    frank = member(team, dana.project or "", "emp-5", "Frank Fixer")
     path = promote_keeping_both(owner, TAX)
     first = doubt(dana, path, "contradicts_code", **TAX_LINE)
 
     second = doubt(cole, path, "contradicts_code", **TAX_LINE, reasoning="tax.py charges twenty percent.")
-    third = doubt(dana.as_session("another-session"), path, "contradicts_code", **TAX_LINE)
+    third = doubt(frank, path, "contradicts_code", **TAX_LINE)
 
     assert second == {"challenge_id": first["challenge_id"], "joined": True, "count": 2}
     assert third == {"challenge_id": first["challenge_id"], "joined": True, "count": 3}
     assert len(owner.call("read", path=path)["open_challenges"]) == 1
+
+
+def test_a_member_raising_the_same_doubt_again_from_another_session_adds_evidence_but_not_to_the_count(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    path = promote_keeping_both(owner, TAX)
+    first = doubt(dana, path, reasoning="My invoices came out wrong.")
+    doubt(cole, path)
+
+    again = doubt(dana.as_session("another-session"), path, reasoning="My refunds came out wrong too.")
+
+    assert again == {"challenge_id": first["challenge_id"], "joined": True, "count": 2}
+    briefing = added_context(owner.start())
+    assert f"- Challenge {first['challenge_id']}, a doubt: 2 say it misled them." in briefing
+    assert "  - emp-2 — reasoning: My invoices came out wrong." in briefing
+    assert "  - emp-2 — reasoning: My refunds came out wrong too." in briefing
+    assert "In doubt: 2 say it misled them" in owner.call("read", path=path)["in_doubt"]
 
 
 def test_two_sessions_raising_the_same_doubt_at_once_give_one_challenge_with_two_pieces_of_evidence(
