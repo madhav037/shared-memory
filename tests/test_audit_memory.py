@@ -5,7 +5,14 @@ from __future__ import annotations
 from typing import Any, get_args
 
 from shared_memory import audit
-from tests.support import Console, ConsoleClient, Session, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, promote_keeping_both, signed_in_owner
+
+DOUBTED = {
+    "title": "Sales tax is fifteen percent",
+    "summary": "Invoices add fifteen percent sales tax.",
+    "type": "convention",
+    "body": "Every invoice adds a flat fifteen percent sales tax on the subtotal.",
+}
 
 
 def log(client: ConsoleClient, **filters: Any) -> list[dict[str, Any]]:
@@ -123,6 +130,54 @@ def test_a_challenge_raised_and_decided_from_a_session_is_recorded(
     assert decided[0]["actor"] == "E1001"
     assert challenged[0]["actor"] == "emp-2"
     assert challenged[0]["target"] == promoted
+
+
+def test_deciding_a_doubt_records_who_decided_in_what_capacity_and_the_outcome(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_project(console, signed_out, "olive-changes-doubt", 920)
+    dana = Session(console.server, owner.call("add_member", member_id="emp-2", name="Dana Dev")["personal_token"])
+    dana_in_project = dana.in_project(project, "billing-api")
+    cole = Session(console.server, owner.call("add_member", member_id="emp-3", name="Cole Coder")["personal_token"])
+    doubted = promote_keeping_both(dana_in_project, DOUBTED)
+    rejected = cole.in_project(project, "billing-api").call(
+        "challenge", path=doubted, reason="misled", reasoning="It misled my session."
+    )
+    retired = dana_in_project.call(
+        "challenge", path=doubted, reason="contradicts_code", code_reference="billing-api:src/tax.py:42",
+        quoted_line="RATE = Decimal('0.20')",
+    )  # fmt: skip
+
+    in_project.call("decide_challenge", challenge_id=rejected["challenge_id"], decision="reject")
+    dana_in_project.call("decide_challenge", challenge_id=retired["challenge_id"], decision="accept")
+
+    decided = log(signed_out, project=project, kind="challenge_decided")
+    assert [(event["actor"], event["target"], event["detail"]) for event in decided] == [
+        (
+            "emp-2",
+            doubted,
+            {
+                "challenge_id": retired["challenge_id"],
+                "decision": "accepted",
+                "challenge": "doubt",
+                "reason": "contradicts_code",
+                "decided_as": "author",
+                "agent": "another agent",
+            },
+        ),
+        (
+            "E1001",
+            doubted,
+            {
+                "challenge_id": rejected["challenge_id"],
+                "decision": "rejected",
+                "challenge": "doubt",
+                "reason": "misled",
+                "decided_as": "lead",
+                "agent": "another agent",
+            },
+        ),
+    ]
 
 
 def test_the_log_filters_memory_changes_by_project_member_and_kind(
