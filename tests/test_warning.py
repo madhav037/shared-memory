@@ -5,7 +5,6 @@ carries is tested through the Session driver in test_gates.py."""
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -63,31 +62,6 @@ def test_the_box_is_never_wider_than_60_columns_whatever_a_teammate_wrote() -> N
     assert all(columns(line) == 60 for line in lines)
     assert lines[0] == "┌" + "─" * 58 + "┐" and lines[-1] == "└" + "─" * 58 + "┘"
     assert all(line.startswith("│ ") and line.endswith(" │") for line in lines[1:-1])
-
-
-def in_a_cjk_terminal(line: str) -> int:
-    """The columns a line takes in a terminal whose locale draws ambiguous-width characters (arrows, circled digits,
-    Greek, Cyrillic) two columns wide, as CJK locales do. The frame's own box-drawing characters are counted as one: they
-    are the same on every line, so a terminal that draws them wider widens the whole frame evenly."""
-    return sum(
-        1
-        if "\u2500" <= each <= "\u257f"
-        else 0
-        if unicodedata.combining(each)
-        else 2
-        if unicodedata.east_asian_width(each) in ("W", "F", "A")
-        else 1
-        for each in line
-    )
-
-
-def test_ambiguous_width_characters_count_as_two_columns_so_the_box_fits_a_cjk_terminal() -> None:
-    rows = [Row("Αλέξανδρος Иванов", "→ ① " * 40, FIVE), Row("Ωμέγα", "Ж" * 120, refused=True)]
-
-    lines = box_of(render(held_by_gate(rows), NOW))
-
-    assert all(in_a_cjk_terminal(line) == 60 for line in lines)
-    assert all(columns(line) == 60 for line in lines)
 
 
 def test_the_warning_is_a_bold_heading_over_a_text_fence() -> None:

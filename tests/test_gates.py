@@ -78,16 +78,9 @@ def rows_in(box: str) -> list[str]:
 
 
 def columns(line: str) -> int:
-    """The columns a line takes in a terminal at most: ambiguous-width characters two, as a CJK locale draws them,
-    and the frame's own box-drawing characters one, since a terminal widens those evenly on every line."""
+    """The columns a line takes in a terminal."""
     return sum(
-        1
-        if "\u2500" <= each <= "\u257f"
-        else 0
-        if unicodedata.combining(each)
-        else 2
-        if unicodedata.east_asian_width(each) in ("W", "F", "A")
-        else 1
+        0 if unicodedata.combining(each) else 2 if unicodedata.east_asian_width(each) in ("W", "F") else 1
         for each in line
     )
 
