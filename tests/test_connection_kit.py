@@ -776,8 +776,8 @@ def standby_command(skill: str) -> str:
 
 #: When Claude Code stands by and what it does with the answer, one marker each: run in the background, stand by when
 #: an edit is refused as gated, after an urgent message and after a message whose answer the member wants, at most once
-#: more after an empty answer, retry once after a few seconds then say the server isn't answering, and show the member
-#: the answer and ask what to do.
+#: more after an empty answer, retry once after a few seconds then say the server isn't answering, show the member
+#: the answer and ask what to do, and show the warning the answer's `member` holds first (#590).
 STANDBY_HABITS = (
     "run_in_background",
     "an edit is refused as gated",
@@ -788,6 +788,7 @@ STANDBY_HABITS = (
     "Shared Memory isn't answering",
     "show the member",
     "ask what to do",
+    "`member`",
 )
 
 

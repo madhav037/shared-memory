@@ -9,14 +9,17 @@ terminal or an IDE's chat pane. `headline` is the same warning as one line, for 
 of its own (Claude Code's `systemMessage`). `shown` puts warnings before the agent-only lines of a notice, under the
 words that ask the agent to show them first, and gives a `Shown`: the notice's text, still carrying its warnings and
 the headlines its member is yet to be shown, through every module that passes notices on as text. `joined` joins
-notices keeping both; `warnings_in` and `headlines_in` read them back where the answer is made.
+notices keeping both; `warnings_in` and `headlines_in` read them back where the answer is made, and `agent_lines_in`
+the lines meant for the agent alone, for an answer that hands the warnings over on their own (a standby's `member`).
+`gathered` tells the warnings of several notices first, then their agent-only lines.
 
 Anything a teammate wrote (a name, an activity, quoted words) is escaped before it is drawn, so it cannot break the
 frame or the fence, and quoted words are cut at `QUOTED_LINES` lines, the full text being the agent's to give below.
 Times are relative ("14 min left"), with the clock time added in the reader's own time zone when one is known, never
 in UTC. Members are never given gendered pronouns.
 
-The builders (`held_by_gate`, `asked_by_gate`) are the wording of each warning; the gate gives them plain data.
+The builders (`held_by_gate`, `asked_by_gate`, `standby_heard_nothing`) are the wording of each warning; the gate and
+the standby give them plain data.
 """
 
 from __future__ import annotations
@@ -131,15 +134,25 @@ class Shown(str):
     """A notice's text that carries warnings, and still says which: what it shows the member, as data, and the
     headlines the member is still to be shown on a line of their own, none when they already were (a refused edit
     repeats). It is the notice's text wherever text is wanted; joining notices keeps what they carry only through
-    `joined`, since any other way of building on a string gives a plain one."""
+    `joined`, since any other way of building on a string gives a plain one. It keeps its lines meant for the agent alone
+    apart as well, so an answer that hands the warnings over on their own (a standby's `member`) can tell the rest
+    after them."""
 
     warnings: tuple[Warning, ...]
     headlines: tuple[str, ...]
+    agent_lines: tuple[str, ...]
 
-    def __new__(cls, text: str, warnings: Sequence[Warning] = (), headlines: Sequence[str] = ()) -> Shown:
+    def __new__(
+        cls,
+        text: str,
+        warnings: Sequence[Warning] = (),
+        headlines: Sequence[str] = (),
+        agent_lines: Sequence[str] = (),
+    ) -> Shown:
         made = super().__new__(cls, text)
         made.warnings = tuple(warnings)
         made.headlines = tuple(headlines)
+        made.agent_lines = tuple(agent_lines)
         return made
 
 
@@ -152,9 +165,10 @@ def shown(
     headlined: bool = True,
 ) -> Shown:
     """A notice that carries warnings: the words asking the agent to show them first, the warnings, then the lines
-    meant for the agent alone. It carries their headlines too, unless the member has already been shown them."""
+    meant for the agent alone. It carries their headlines too, unless the member has already been shown them, and its
+    agent-only lines apart."""
     text = "\n\n".join([LEAD_IN, *(render(each, now, zone) for each in warnings), agent_lines])
-    return Shown(text, warnings, [headline(each) for each in warnings] if headlined else ())
+    return Shown(text, warnings, [headline(each) for each in warnings] if headlined else (), [agent_lines])
 
 
 def joined(notices: Iterable[str | None]) -> str:
@@ -169,6 +183,7 @@ def joined(notices: Iterable[str | None]) -> str:
         text,
         [warning for each in carried for warning in each.warnings],
         [line for each in carried for line in each.headlines],
+        [line for each in told for line in agent_lines_in(each)],
     )
 
 
@@ -180,6 +195,18 @@ def warnings_in(text: str) -> tuple[Warning, ...]:
 def headlines_in(text: str) -> tuple[str, ...]:
     """The headlines a notice's text is still to show its member on a line of their own; none for a plain one."""
     return text.headlines if isinstance(text, Shown) else ()
+
+
+def agent_lines_in(text: str) -> tuple[str, ...]:
+    """A notice's lines meant for the agent alone, without the warnings it shows first: all of a plain one."""
+    return text.agent_lines if isinstance(text, Shown) else (text,)
+
+
+def gathered(warnings: Sequence[str], agent_lines: Sequence[str]) -> str:
+    """Rendered warnings and the agent-only lines of one or more notices told together: `LEAD_IN` and every warning
+    first, then every agent's line. With no warning there is nothing to show first, and no `LEAD_IN`."""
+    first = [LEAD_IN, *warnings] if warnings else []
+    return "\n\n".join([*first, *(each for each in agent_lines if each)])
 
 
 def time_left(now: datetime, until: datetime, zone: tzinfo | None = None) -> str:
@@ -320,4 +347,24 @@ def asked_by_gate(row: Row) -> Warning:
         until=row.until,
         then="then their edit goes ahead without your answer",
         replies=("agree", "refuse"),
+    )
+
+
+def standby_heard_nothing(until: datetime | None) -> Warning:
+    """Told to the member whose session stood by and heard nothing: how long is left of the project's wait, `until`,
+    or that it has passed."""
+    if until is None:
+        return Warning(
+            mark=Mark.PASSED,
+            heading="No answer, and the project's wait has passed",
+            says=("Your session stood by, and no answer came for it. The project's wait has passed with no answer.",),
+            after=("Your session stands by at most once more, then stops.",),
+        )
+    return Warning(
+        mark=Mark.PASSED,
+        heading="No answer yet",
+        says=("Your session stood by, and no answer came for it yet.",),
+        until=until,
+        then="then the project's wait passes",
+        after=("Your session can stand by once more: you will hear the answer here without typing anything.",),
     )

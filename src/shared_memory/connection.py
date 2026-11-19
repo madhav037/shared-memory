@@ -640,9 +640,10 @@ def standby_habits(hooks_url: str, project_id: str, repository: str) -> str:
     return f"""\
 - Stand by when this session awaits an answer: when an edit is refused as gated and when you have sent an urgent
   message; after any other message, only when the member wants its answer. A standby ends with the session's news:
-  show the member the news and what it means for the work, and ask what to do. When the project's wait passes with
-  nothing, tell the member, and stand by at most once more. When Shared Memory doesn't answer, wait a few seconds
-  and try once more, then tell the member Shared Memory isn't answering.
+  show the member the news and what it means for the work, and ask what to do. Its answer's `member`, when not null,
+  is a warning: show it to the member first, word for word. When the project's wait passes with nothing, stand by at
+  most once more. When Shared Memory doesn't answer, wait a few seconds and try once more, then tell the member
+  Shared Memory isn't answering.
 - In {_joined_with_and([guidance_name(agent) for agent in STAND_BY_IN_THE_BACKGROUND])}, run the standby command below in the background, with this
   session's identifier in place of `<session>`, and end your turn: it ends with the session's news. If you can't run
   a background command, aren't woken when it ends, or it says {TOKEN_VARIABLE} is not set, call `stand_by` instead.

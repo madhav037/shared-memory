@@ -96,7 +96,9 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **Standby** (ADR-0027) is `Standbys` in `src/shared_memory/standby.py`, built in `build_app` as `standbys` and kept
   on `app.state.standbys`. It owns `standbys`, one row per session's held standby. `await standbys.hold(session,
   news, awaits, seconds=None, gone=None)` holds one until it ends and gives an `Ended` (`ending`: news, nothing_yet,
-  replaced, moved_on; `news`; `wait_left`; `message`): `news` is `functools.partial(waiting_for, caller, session)`,
+  replaced, moved_on; `news`; `wait_left`; `at`; `message(zone)`; `member(zone)`, the warnings the news' `warning.Shown`
+  notices carry (`warning.warnings_in`, rendered at `at`), or nothing_yet's hourglass warning): `news` is
+  `functools.partial(waiting_for, caller, session)`,
   `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
   `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
   the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws

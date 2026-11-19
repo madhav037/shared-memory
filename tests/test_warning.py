@@ -13,14 +13,17 @@ from shared_memory.warning import (
     Mark,
     Row,
     Warning,
+    agent_lines_in,
     asked_by_gate,
     columns,
+    gathered,
     headline,
     headlines_in,
     held_by_gate,
     joined,
     render,
     shown,
+    standby_heard_nothing,
     time_left,
     warnings_in,
 )
@@ -191,3 +194,34 @@ def test_plain_notices_carry_nothing() -> None:
     assert told == "one\n\ntwo"
     assert warnings_in(told) == () and headlines_in(told) == ()
     assert joined([None, ""]) == ""
+
+
+def test_a_notice_keeps_its_agents_lines_apart_from_the_warnings_it_shows_first() -> None:
+    asked = asked_by_gate(Row("Dana Dev", "webhooks", FIVE))
+
+    told = joined(["[message] plain", shown([asked], "[gate] For the agent alone.", NOW)])
+
+    assert agent_lines_in(told) == ("[message] plain", "[gate] For the agent alone.")
+    assert agent_lines_in("[message] plain") == ("[message] plain",)
+
+
+def test_gathered_notices_show_every_warning_first_then_every_agents_line() -> None:
+    asked = render(asked_by_gate(Row("Dana Dev", None, FIVE)), NOW)
+
+    assert gathered([asked], ["one", "", "two"]) == f"{LEAD_IN}\n\n{asked}\n\none\n\ntwo"
+    assert gathered([], ["one", "two"]) == "one\n\ntwo", "no warning, nothing to show first"
+
+
+def test_standby_heard_nothing_says_so_with_the_time_left_of_the_wait() -> None:
+    rendered = render(standby_heard_nothing(NOW + timedelta(minutes=7)), NOW, ZoneInfo("Asia/Kolkata"))
+
+    assert rendered.startswith(f"**{Mark.PASSED} ")
+    said = inside(rendered)
+    assert "stood by" in said and "7 min left (until 2:37 pm your time)" in said
+    assert "stand by once more" in said
+
+
+def test_standby_heard_nothing_after_the_wait_says_the_wait_has_passed() -> None:
+    said = inside(render(standby_heard_nothing(None), NOW))
+
+    assert "wait has passed" in said and "min left" not in said
