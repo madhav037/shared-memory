@@ -233,14 +233,19 @@ def escaped(text: str) -> str:
 
 
 def columns(text: str) -> int:
-    """The columns text takes in a terminal: two for a wide character, none for a combining one."""
+    """The columns text takes in a terminal, at most: two for a wide character, and for an ambiguous one (an arrow, a
+    circled digit, Greek, Cyrillic), which a CJK locale's terminal draws two wide; none for a combining one. The frame's
+    own box-drawing characters count one: they are on every line alike, so a terminal that draws them wider widens the
+    whole frame evenly, and a teammate's words never hold one (`escaped`)."""
     return sum(_columns(each) for each in text)
 
 
 def _columns(character: str) -> int:
     if unicodedata.combining(character):
         return 0
-    return 2 if unicodedata.east_asian_width(character) in ("W", "F") else 1
+    if _FRAME_LIKE.fullmatch(character):
+        return 1
+    return 2 if unicodedata.east_asian_width(character) in ("W", "F", "A") else 1
 
 
 def _name(text: str) -> str:
