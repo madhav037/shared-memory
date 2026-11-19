@@ -461,16 +461,15 @@ def build_app(
 
     def reader_zone(current: Caller, session: Session) -> tzinfo | None:
         """The time zone a warning told to this session is read in: its member's chosen zone, else the one detected
-        from their browser, else none, when the warning's times stay relative (`time_zone.used`). The session's UTC
-        offset, which its session-start hook reports, is the next fallback (#592): it goes in here, as
-        `time_zone.used`'s `utc_offset_minutes`.
+        from their browser, else the UTC offset its session-start hook reported from its machine's clock (#592), else
+        none, when the warning's times stay relative (`time_zone.used`).
 
         Every warning a session is told takes its zone from here, for the session reading it, never the member whose
         act it tells of: the gates' refusal and notices (endings included) through `waiting_for` and the before-edit
         hook, an urgent message's (#589) through `waiting_for` and the before-edit hook too, and the standby's `member`
         and `message` through `_standby_answer`. A new warning takes a `zone` parameter and is handed
         `reader_zone(current, session)` the same way."""
-        return time_zone.used(identity.time_zone(current.member.pk))
+        return time_zone.used(identity.time_zone(current.member.pk), session.utc_offset_minutes)
 
     def waiting_for(
         current: Caller, session: Session, prompt: list[float] | None = None, prompted: bool = False
@@ -664,8 +663,14 @@ def build_app(
 
     @server.custom_route("/hooks/session-start", methods=["POST"])  # type: ignore[untyped-decorator]
     async def session_start(request: Request) -> Response:
+        # The UTC offset of the machine the session runs on, for its warnings' clock times while its member has no
+        # time zone (#592). A hook that sends none, or one that is not an offset, leaves the one kept as it is.
+        utc_offset = hooks.utc_offset_named(request.headers.get(hooks.UTC_OFFSET_HEADER.lower()))
+
         def briefed(current: Caller, payload: dict[str, Any]) -> str | None:
             session = session_of(current, payload)
+            if session and utc_offset is not None:
+                session = sessions.keep_utc_offset(session, utc_offset)
             if session and hooks.source_in(payload) == "compact":
                 recall.forget(session)
             named = briefing_line(session) if session else None

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "q() { printf '%s' \"$1\" | sed \"s/'/'\\\\\\\\''/g\"; }; [ -z \"$CLAUDE_ENV_FILE\" ] || printf \"export CLAUDE_PLUGIN_OPTION_SERVER_URL='%s'\\nexport CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN='%s'\\n\" \"$(q \"$CLAUDE_PLUGIN_OPTION_SERVER_URL\")\" \"$(q \"$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\")\" >> \"$CLAUDE_ENV_FILE\" 2>/dev/null; curl -s --fail --max-time 5 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-start\" || echo '{\"systemMessage\":\"Shared Memory is unavailable: the server did not answer.\"}'",
+            "command": "q() { printf '%s' \"$1\" | sed \"s/'/'\\\\\\\\''/g\"; }; [ -z \"$CLAUDE_ENV_FILE\" ] || printf \"export CLAUDE_PLUGIN_OPTION_SERVER_URL='%s'\\nexport CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN='%s'\\n\" \"$(q \"$CLAUDE_PLUGIN_OPTION_SERVER_URL\")\" \"$(q \"$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\")\" >> \"$CLAUDE_ENV_FILE\" 2>/dev/null; curl -s --fail --max-time 5 -H 'Content-Type: application/json' -H \"Authorization: Bearer $CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN\" -H \"X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT\" -H \"X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY\" -H 'X-Shared-Memory-Agent: claude-code' -H \"X-Shared-Memory-Utc-Offset: $(date +%z)\" --data-binary @- \"$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/session-start\" || echo '{\"systemMessage\":\"Shared Memory is unavailable: the server did not answer.\"}'",
             "timeout": 6
           }
         ]

@@ -303,6 +303,66 @@ def test_a_warning_stays_relative_for_a_reader_with_no_time_zone(owner: Session,
         assert "your time" not in said and "am" not in said.split() and "pm" not in said.split()
 
 
+# The session's UTC offset (#592): every kit's session-start hook gives its machine's, and a warning to a member with no
+# time zone gives its clock time at that offset.
+
+
+def test_a_warning_gives_the_clock_time_at_the_utc_offset_its_session_started_with_for_a_member_with_no_time_zone(
+    owner: Session, dana: Session
+) -> None:
+    dana.start(utc_offset="+0530")
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "5 min left (until 2:35 pm your time)" in said
+
+
+def test_a_utc_offset_as_powershell_gives_it_counts_too(owner: Session, dana: Session) -> None:
+    dana.start(utc_offset="-04:00")
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "5 min left (until 5:05 am your time)" in said
+
+
+def test_the_members_own_time_zone_comes_before_the_utc_offset_its_session_started_with(
+    signing_in: Console, team: Team, owner: Session, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-over-offset", 5928, chosen="Europe/Berlin")
+    dana.start(utc_offset="+0530")
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "5 min left (until 11:05 am your time)" in said
+
+
+@pytest.mark.parametrize("malformed", ["Asia/Kolkata", "+5:30", "+0599", "+2500", "0530", ""])
+def test_a_malformed_utc_offset_is_ignored(owner: Session, dana: Session, malformed: str) -> None:
+    started = dana.start(utc_offset=malformed)
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "hookSpecificOutput" in started, "the session is briefed all the same"
+    assert "5 min left" in said
+    assert "your time" not in said
+
+
+def test_a_session_start_hook_without_a_utc_offset_still_briefs_and_keeps_the_one_given_before(
+    owner: Session, dana: Session
+) -> None:
+    dana.start(utc_offset="+0530")
+
+    started = dana.start()
+    collide(owner, dana)
+
+    assert "hookSpecificOutput" in started
+    assert "5 min left (until 2:35 pm your time)" in warning_says(reason_in(dana.edit(FILE)))
+
+
 def test_a_standby_that_hears_nothing_gives_the_clock_time_in_its_members_time_zone(
     signing_in: Console, team: Team, dana: Session
 ) -> None:
