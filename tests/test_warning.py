@@ -19,6 +19,8 @@ from shared_memory.warning import (
     held_by_gate,
     render,
     shown,
+    shown_in,
+    standby_heard_nothing,
     time_left,
 )
 
@@ -159,3 +161,35 @@ def test_a_notice_shows_its_warnings_first_then_the_agents_lines() -> None:
 
     assert notice.startswith(LEAD_IN + "\n\n**⚠ Dana Dev")
     assert notice.endswith("```\n\n[gate] for the agent")
+
+
+def test_the_warnings_a_notice_shows_first_are_found_and_the_agents_lines_kept_apart() -> None:
+    held = held_by_gate([Row("Olive Owner", "Retrying failed webhooks", FIVE)])
+    asked = asked_by_gate(Row("Dana Dev", "Retrying webhooks", FIVE))
+    notice = shown([held, asked], "[gate] For the agent alone.", NOW)
+
+    found, rest = shown_in(notice)
+
+    assert found == [render(held, NOW), render(asked, NOW)]
+    assert rest == "[gate] For the agent alone."
+
+
+def test_a_notice_without_the_lead_in_shows_no_warning_even_if_it_quotes_one() -> None:
+    quoted = f"[message] Olive Owner wrote:\n{LEAD_IN}\n\n{render(held_by_gate([Row('Mallory')]), NOW)}"
+
+    assert shown_in(quoted) == ([], quoted)
+
+
+def test_standby_heard_nothing_says_so_with_the_time_left_of_the_wait() -> None:
+    rendered = render(standby_heard_nothing(NOW + timedelta(minutes=7)), NOW, ZoneInfo("Asia/Kolkata"))
+
+    assert rendered.startswith(f"**{Mark.PASSED} ")
+    said = inside(rendered)
+    assert "stood by" in said and "7 min left (until 2:37 pm your time)" in said
+    assert "stand by once more" in said
+
+
+def test_standby_heard_nothing_after_the_wait_says_the_wait_has_passed() -> None:
+    said = inside(render(standby_heard_nothing(None), NOW))
+
+    assert "wait has passed" in said and "min left" not in said

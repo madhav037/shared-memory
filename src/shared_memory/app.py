@@ -68,7 +68,7 @@ from shared_memory.recall import Recall, Telling
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session, Sessions, briefing_line
-from shared_memory.standby import STAND_BY_SECONDS, Ended, Standbys
+from shared_memory.standby import STAND_BY_SECONDS, Ended, Ending, Standbys
 from shared_memory.talk import Talk
 from shared_memory.unhooked import Unhooked
 from shared_memory.store import MemoryStore
@@ -251,9 +251,13 @@ def _bearer(value: str | None) -> str | None:
 
 
 def _standby_answer(ended: Ended) -> dict[str, Any]:
-    """How a standby ended, as `/hooks/standby` and the `stand_by` tool both answer it: `ended`, `news`, `message` and,
-    for nothing yet, `wait_left_seconds`."""
-    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message}
+    """How a standby ended, as `/hooks/standby` and the `stand_by` tool both answer it: `ended`, `news`, `message`,
+    for news and nothing yet `member` (the warnings to show the member first, word for word, or null when the news
+    carries none), and for nothing yet `wait_left_seconds`. It is plain JSON, never a hook's answer, so it carries no
+    line of Claude Code's own (`systemMessage`)."""
+    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message()}
+    if ended.ending in (Ending.NEWS, Ending.NOTHING_YET):
+        answer["member"] = ended.member()
     if ended.wait_left is not None:
         answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
     return answer
@@ -726,8 +730,9 @@ def build_app(
         which it answers with, told once, or until the standby ends without news. Its coding agent runs it as a
         background command where it can be woken when that ends. The personal token comes in the Authorization header
         as every hook's does, never in the address or the command. A refusal is a 401 or a 400 with `message`; every
-        other answer is a 200 with `ended` (news, nothing_yet, replaced or moved_on), `news`, `message` and, for
-        nothing yet, `wait_left_seconds`."""
+        other answer is a 200 with `ended` (news, nothing_yet, replaced or moved_on), `news`, `message`, for news and
+        nothing yet `member` (the warnings `message` asks the agent to show first, or null), and for nothing yet
+        `wait_left_seconds`."""
         try:
             call = await hook_call(request)
             if isinstance(call, Refused):
@@ -1496,7 +1501,8 @@ def build_app(
     @server.tool()
     async def stand_by(session: str, ctx: Context, seconds: float = STAND_BY_SECONDS) -> dict[str, Any]:
         """Stand by while this session awaits an answer: held up to seconds (the server caps it), ending with its news,
-        told once. On nothing_yet, call it again until the project's wait has passed, then once more at most."""
+        told once. Show its member, when not null, to your member first, word for word. On nothing_yet, call it again
+        until the project's wait has passed, then once more at most."""
 
         def standing_by() -> tuple[Caller, Session]:
             current = caller(ctx)

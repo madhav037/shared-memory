@@ -14,7 +14,11 @@ frame or the fence, and quoted words are cut at `QUOTED_LINES` lines, the full t
 Times are relative ("14 min left"), with the clock time added in the reader's own time zone when one is known, never
 in UTC. Members are never given gendered pronouns.
 
-The builders (`held_by_gate`, `asked_by_gate`) are the wording of each warning; the gate gives them plain data.
+`shown_in` finds the warnings again in such a notice, for an answer that hands them over on their own (a standby's
+`member`), and `gathered` tells the warnings of several notices first, then their agent-only lines.
+
+The builders (`held_by_gate`, `asked_by_gate`, `standby_heard_nothing`) are the wording of each warning; the gate and
+the standby give them plain data.
 """
 
 from __future__ import annotations
@@ -45,6 +49,8 @@ _RULE = "─" * (WIDTH - 2)
 _FRAME_LIKE = re.compile(r"[─-▟]")
 # Markdown's emphasis and code marks, escaped in the bold heading.
 _MARKDOWN = re.compile(r"([\\`*_\[\]])")
+# A warning as `render` draws it. No escaped word draws the frame's characters, so a box can't end early.
+_RENDERED = re.compile(rf"\*\*[^\n]+\*\*\n\n```text\n┌{_RULE}┐\n(?:│[^│\n]*│\n)*└{_RULE}┘\n```")
 
 
 class Mark(StrEnum):
@@ -128,7 +134,30 @@ def headline(warning: Warning) -> str:
 def shown(warnings: Sequence[Warning], agent_lines: str, now: datetime, zone: tzinfo | None = None) -> str:
     """A notice that carries warnings: the words asking the agent to show them first, the warnings, then the lines
     meant for the agent alone."""
-    return "\n\n".join([LEAD_IN, *(render(each, now, zone) for each in warnings), agent_lines])
+    return gathered([render(each, now, zone) for each in warnings], [agent_lines])
+
+
+def shown_in(notice: str) -> tuple[list[str], str]:
+    """The rendered warnings a notice made by `shown` shows first, and the lines after them, meant for the agent alone.
+    A notice that doesn't open with `LEAD_IN` shows none, whatever it quotes: it is all the agent's."""
+    at = len(LEAD_IN) + 2
+    if not notice.startswith(f"{LEAD_IN}\n\n"):
+        return [], notice
+    found: list[str] = []
+    while (drawn := _RENDERED.match(notice, at)) is not None:
+        found.append(drawn.group())
+        at = drawn.end()
+        if not notice.startswith("\n\n", at):
+            break
+        at += 2
+    return (found, notice[at:]) if found else ([], notice)
+
+
+def gathered(warnings: Sequence[str], agent_lines: Sequence[str]) -> str:
+    """Rendered warnings and the agent-only lines of one or more notices told together: `LEAD_IN` and every warning
+    first, then every agent's line. With no warning there is nothing to show first, and no `LEAD_IN`."""
+    first = [LEAD_IN, *warnings] if warnings else []
+    return "\n\n".join([*first, *(each for each in agent_lines if each)])
 
 
 def time_left(now: datetime, until: datetime, zone: tzinfo | None = None) -> str:
@@ -269,4 +298,24 @@ def asked_by_gate(row: Row) -> Warning:
         until=row.until,
         then="then their edit goes ahead without your answer",
         replies=("agree", "refuse"),
+    )
+
+
+def standby_heard_nothing(until: datetime | None) -> Warning:
+    """Told to the member whose session stood by and heard nothing: how long is left of the project's wait, `until`,
+    or that it has passed."""
+    if until is None:
+        return Warning(
+            mark=Mark.PASSED,
+            heading="No answer, and the project's wait has passed",
+            says=("Your session stood by, and no answer came for it. The project's wait has passed with no answer.",),
+            after=("Your session stands by at most once more, then stops.",),
+        )
+    return Warning(
+        mark=Mark.PASSED,
+        heading="No answer yet",
+        says=("Your session stood by, and no answer came for it yet.",),
+        until=until,
+        then="then the project's wait passes",
+        after=("Your session can stand by once more: you will hear the answer here without typing anything.",),
     )
