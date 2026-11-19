@@ -1,7 +1,13 @@
 import { Select } from "@mantine/core";
 import { useState } from "react";
 
-import { chooseMyTimeZone, fetchMyTimeZone, reportMyTimeZone, type YourTimeZoneChoices } from "../api/client";
+import {
+  chooseMyTimeZone,
+  fetchMyTimeZone,
+  reportMyTimeZone,
+  type YourTimeZone as YourTimeZoneKept,
+  type YourTimeZoneChoices,
+} from "../api/client";
 import { Placeholder, Refusal } from "../components/Bits";
 import { browserTimeZone, DETECT, zoneChoices, zoneLabel } from "../lib/timeZone";
 import { useAsked } from "../lib/useAsked";
@@ -16,13 +22,19 @@ export function YourSettings() {
   );
 }
 
+/** Report this browser's time zone as the member's detected one, when the browser knows it, the server offers it, and
+ * it isn't the one already detected; null when there is nothing to report. */
+async function reportThisBrowser(offered: readonly string[], detected: string | null = null): Promise<YourTimeZoneKept | null> {
+  const browser = browserTimeZone();
+  return browser && browser !== detected && offered.includes(browser) ? reportMyTimeZone(browser) : null;
+}
+
 /** The member's time zone, with this browser's zone kept as the detected one first if nothing is chosen and the
  * console's report after sign-in hasn't reached the server yet. */
 async function withThisBrowser(signal: AbortSignal): Promise<YourTimeZoneChoices> {
   const asked = await fetchMyTimeZone(signal);
-  const browser = browserTimeZone();
-  const reported = asked.chosen === null && browser && asked.detected !== browser && asked.time_zones.includes(browser);
-  return reported ? { ...asked, ...(await reportMyTimeZone(browser)) } : asked;
+  const reported = asked.chosen === null ? await reportThisBrowser(asked.time_zones, asked.detected) : null;
+  return { ...asked, ...reported };
 }
 
 function YourTimeZone() {
@@ -37,10 +49,9 @@ function YourTimeZone() {
     setSaving(true);
     setProblem(null);
     try {
-      let kept = await chooseMyTimeZone(value === DETECT ? null : value);
-      const browser = browserTimeZone();
-      if (value === DETECT && browser && answer.time_zones.includes(browser)) kept = await reportMyTimeZone(browser);
-      setAnswer({ ...answer, ...kept });
+      const kept = await chooseMyTimeZone(value === DETECT ? null : value);
+      const reported = value === DETECT ? await reportThisBrowser(answer.time_zones) : null;
+      setAnswer({ ...answer, ...kept, ...reported });
     } catch (refusal) {
       setProblem((refusal as Error).message);
     } finally {

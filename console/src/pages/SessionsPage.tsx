@@ -39,16 +39,17 @@ function waitKey(gate: SessionGate, earlier: NamedSession, until: string): strin
   return `${gate.later.session_number} ${earlier.session_number} ${until}`;
 }
 
-/** Whether this browser can show alerts at all: the Notification API is missing in some browsers and webviews. */
-function alertsHere(): boolean {
+/** Whether this browser can show notifications at all: the Notification API is missing in some browsers and webviews. */
+function notificationsHere(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
 /**
- * Show a browser alert for each message or gate for the signed-in member that arrives while the page is open, once the
- * member has allowed alerts. What the first answer already holds was there before the page opened, so it raises none.
+ * Show a browser notification for each message or gate for the signed-in member that arrives while the page is open,
+ * once the member has allowed them. What the first answer already holds was there before the page opened, so it shows
+ * none.
  */
-function useAlerts(found: ProjectSessions | null) {
+function useNotifications(found: ProjectSessions | null) {
   const seen = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!found) return;
@@ -67,10 +68,11 @@ function useAlerts(found: ProjectSessions | null) {
       seen.current = new Set(forMe.keys());
       return;
     }
-    for (const [key, alert] of forMe) {
+    for (const [key, notification] of forMe) {
       if (seen.current.has(key)) continue;
       seen.current.add(key);
-      if (alertsHere() && Notification.permission === "granted") new Notification(alert.title, { body: alert.body, tag: key });
+      if (notificationsHere() && Notification.permission === "granted")
+        new Notification(notification.title, { body: notification.body, tag: key });
     }
   }, [found]);
 }
@@ -79,7 +81,7 @@ function useAlerts(found: ProjectSessions | null) {
  * A project's active sessions: whose each is, the coding agent it runs in, its branch, its activity, the files it holds
  * a lock on and the files it has touched; the project's collisions and gates, each gate's time left counting down; and
  * the signed-in member's own sessions' messages. It asks again every few seconds. From here a member replies to a
- * message and agrees to or refuses a gate on their own session's work (ADR-0026), and is alerted when one arrives; a
+ * message and agrees to or refuses a gate on their own session's work (ADR-0026), and is notified when one arrives; a
  * lock and an activity move only from a session, and nothing here ever writes memory (ADR-0009).
  */
 export function SessionsPage() {
@@ -107,7 +109,7 @@ export function SessionsPage() {
     const asking = window.setInterval(reload, EVERY_MS);
     return () => window.clearInterval(asking);
   }, [reload]);
-  useAlerts(found);
+  useNotifications(found);
   const changed = useCallback((answer: ProjectSessions) => setAnswer(shown(answer)), [setAnswer, shown]);
 
   if (refused)
@@ -139,7 +141,7 @@ export function SessionsPage() {
         </span>
         <ProjectLinks projectId={found.project_id} here="sessions" />
       </div>
-      <AlertsChoice />
+      <NotifyChoice />
 
       {found.gates.length > 0 && <Gates found={found} onChanged={changed} />}
       {found.collisions.length > 0 && <Collisions collisions={found.collisions} />}
@@ -301,31 +303,31 @@ function Activity({ session }: { session: NamedSession }) {
   );
 }
 
-/** Whether this browser shows alerts, and the way to allow them while it hasn't been asked. */
-function AlertsChoice() {
-  const [permission, setPermission] = useState(() => (alertsHere() ? Notification.permission : null));
+/** Whether this browser shows notifications, and the way to allow them while it hasn't been asked. */
+function NotifyChoice() {
+  const [permission, setPermission] = useState(() => (notificationsHere() ? Notification.permission : null));
   if (permission === null) return null;
   if (permission === "granted")
     return (
-      <p className="talk-alerts" data-testid="alerts">
+      <p className="talk-notify" data-testid="notify">
         <IconBell size={14} stroke={1.6} aria-hidden />
         This browser notifies you when a message or a gate for you arrives while the page is open.
       </p>
     );
   if (permission === "denied")
     return (
-      <p className="talk-alerts" data-testid="alerts">
+      <p className="talk-notify" data-testid="notify">
         This browser blocks notifications from the console; allow them in its site settings to hear of messages and gates here.
       </p>
     );
   return (
-    <p className="talk-alerts" data-testid="alerts">
+    <p className="talk-notify" data-testid="notify">
       <Button
         size="xs"
         variant="default"
         leftSection={<IconBell size={14} stroke={1.6} aria-hidden />}
         onClick={() => void Notification.requestPermission().then(setPermission)}
-        data-testid="allow-alerts"
+        data-testid="allow-notify"
       >
         Notify me in this browser
       </Button>

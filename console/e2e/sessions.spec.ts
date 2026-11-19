@@ -135,17 +135,17 @@ test("a new gate and a new message appear on the Sessions page without reloading
 });
 
 // After the one above, and last: Olive's second session and Mira's second join Billing here and stay.
-test("Olive refuses, then agrees to, a gate on her work and replies to a message from the page, alerted as each arrives", async ({
+test("Olive refuses, then agrees to, a gate on her work and replies to a message from the page, notified as each arrives", async ({
   page,
   context,
 }) => {
-  // The browser has allowed the console's alerts; each one shown is noted, so the journey can see it fired. Headless
+  // The browser has allowed the console's notifications; each one shown is noted, so the journey can see it fired. Headless
   // Chromium reports its notification permission as denied even once granted, so the page is handed a Notification
-  // that says granted and only notes each alert.
+  // that says granted and only notes each notification.
   await context.grantPermissions(["notifications"]);
   await page.addInitScript(() => {
     const shown: string[] = [];
-    (window as unknown as { alertsShown: string[] }).alertsShown = shown;
+    (window as unknown as { notificationsShown: string[] }).notificationsShown = shown;
     class Noted {
       static readonly permission: NotificationPermission = "granted";
       static requestPermission(): Promise<NotificationPermission> {
@@ -157,11 +157,11 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
     }
     window.Notification = Noted as unknown as typeof Notification;
   });
-  const alertsShown = () => page.evaluate(() => (window as unknown as { alertsShown: string[] }).alertsShown);
+  const notificationsShown = () => page.evaluate(() => (window as unknown as { notificationsShown: string[] }).notificationsShown);
   const heard = async () => ((await (await page.request.get(`${teammates}/heard`)).json()) as { heard: string }).heard;
 
   await openSessions(page, "Billing");
-  await expect(page.getByTestId("alerts")).toContainText("This browser notifies you");
+  await expect(page.getByTestId("notify")).toContainText("This browser notifies you");
   // The journey before this one left Mira's first session gated on Olive's first too (its activity is her card in
   // Doing, on the same webhook retries), so this one watches the wait on Olive's second session's work alone.
   const onMine = page
@@ -174,7 +174,7 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
   expect((await page.request.post(`${teammates}/gate-olive`)).ok()).toBe(true);
 
   await expect(onMine).toHaveCount(1);
-  await expect.poll(alertsShown).toContain("Mira Maker’s session waits on your work");
+  await expect.poll(notificationsShown).toContain("Mira Maker’s session waits on your work");
 
   await onMine.getByTestId("refuse").click();
 
@@ -194,7 +194,7 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
     .filter({ hasText: "May I take the invoice tests while you split the module?" });
 
   await expect(question).toHaveCount(1);
-  await expect.poll(alertsShown).toContain("Mira Maker sent you a message");
+  await expect.poll(notificationsShown).toContain("Mira Maker sent you a message");
   await question.getByTestId("reply").click();
   await question.getByTestId("reply-text").fill("Yes, the tests are yours.");
   await question.getByTestId("reply-send").click();
