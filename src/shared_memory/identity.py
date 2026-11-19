@@ -16,6 +16,7 @@ from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
+from shared_memory.time_zone import MemberTimeZone, checked
 
 NAME_LIMIT = 64
 PROJECT_ID_ATTEMPTS = 5
@@ -436,6 +437,35 @@ class Identity:
                 (self._clock(), member.pk),
             )
             return self._issue_token(conn, member.pk)
+
+    def time_zone(self, member_pk: int) -> MemberTimeZone:
+        """A member's time zone as kept: the one they chose and the one detected for them, each None until set."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT chosen_time_zone, detected_time_zone FROM members WHERE id = %s", (member_pk,)
+            ).fetchone()
+        if row is None:
+            return MemberTimeZone(None, None)
+        return MemberTimeZone(row["chosen_time_zone"], row["detected_time_zone"])
+
+    def detect_time_zone(self, member: Member, name: str) -> MemberTimeZone:
+        """Keep the time zone a member's browser reported as the one detected for them, while they have chosen none: a
+        choice sticks until they choose to have it detected again."""
+        checked(name)
+        with self._db.transaction() as conn:
+            conn.execute(
+                "UPDATE members SET detected_time_zone = %s WHERE id = %s AND chosen_time_zone IS NULL",
+                (name, member.pk),
+            )
+        return self.time_zone(member.pk)
+
+    def choose_time_zone(self, member: Member, name: str | None) -> MemberTimeZone:
+        """A member chooses their own time zone, or None to have it detected for them again."""
+        if name is not None:
+            checked(name)
+        with self._db.transaction() as conn:
+            conn.execute("UPDATE members SET chosen_time_zone = %s WHERE id = %s", (name, member.pk))
+        return self.time_zone(member.pk)
 
     def _github_free(self, conn: Conn, team_pk: int, login: str, except_pk: int | None) -> None:
         taken = conn.execute(

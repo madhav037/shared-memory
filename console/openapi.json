@@ -1859,6 +1859,78 @@
         }
       }
     },
+    "/api/my-time-zone": {
+      "get": {
+        "operationId": "my_time_zone",
+        "summary": "The signed-in member's time zone, and every time zone they can choose from.",
+        "responses": {
+          "200": {
+            "description": "The signed-in member's time zone, and every time zone they can choose from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YourTimeZoneChoices"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "choose_my_time_zone",
+        "summary": "Choose the signed-in member's time zone, or none to have it detected from their browser.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChosenTimeZone"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Choose the signed-in member's time zone, or none to have it detected from their browser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YourTimeZone"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/my-time-zone/detected": {
+      "post": {
+        "operationId": "report_my_time_zone",
+        "summary": "Report the time zone the signed-in member's browser is set to, kept while they have chosen none.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectedTimeZone"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Report the time zone the signed-in member's browser is set to, kept while they have chosen none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YourTimeZone"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/members/{member_id}/token": {
       "post": {
         "operationId": "reissue_token",
@@ -6147,6 +6219,115 @@
           "admin"
         ],
         "title": "AdminChange",
+        "type": "object"
+      },
+      "YourTimeZoneChoices": {
+        "description": "The signed-in member's time zone, and every time zone they can choose from.",
+        "properties": {
+          "chosen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen"
+          },
+          "detected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected"
+          },
+          "time_zones": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Time Zones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chosen",
+          "detected",
+          "time_zones"
+        ],
+        "title": "YourTimeZoneChoices",
+        "type": "object"
+      },
+      "YourTimeZone": {
+        "description": "The signed-in member's time zone: the one they chose, and the one detected from their browser. Times are shown\nin the chosen one, else the detected one. Each is an IANA name, or None until set.",
+        "properties": {
+          "chosen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen"
+          },
+          "detected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected"
+          }
+        },
+        "required": [
+          "chosen",
+          "detected"
+        ],
+        "title": "YourTimeZone",
+        "type": "object"
+      },
+      "ChosenTimeZone": {
+        "description": "The time zone a member chooses, or None to have it detected from their browser.",
+        "properties": {
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "title": "ChosenTimeZone",
+        "type": "object"
+      },
+      "DetectedTimeZone": {
+        "description": "The time zone the member's browser is set to.",
+        "properties": {
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "title": "DetectedTimeZone",
         "type": "object"
       }
     }

@@ -21,6 +21,9 @@ from shared_memory.app import build_app
 from shared_memory.config import Settings
 from tests.support import (
     REPO_ROOT,
+    Console,
+    ConsoleClient,
+    FakeGitHub,
     WORKING_FOLDER,
     RunningServer,
     Session,
@@ -70,22 +73,35 @@ def columns(line: str) -> int:
 
 
 @pytest.fixture(scope="module")
-def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[RunningServer]:
-    """This module's own server, in place of the one every other module shares, for the chosen embeddings."""
-    settings = Settings(
-        database_url=fresh_database("shared_memory_gates"),
-        memory_root=tmp_path_factory.mktemp("gates-memory"),
-        model_cache=REPO_ROOT / ".cache" / "fastembed",
-        rate_limit_on=False,
-    )
-    clock = TestClock()
-    embedder = ChosenSimilarity(settings.model_cache)
+def signing_in(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
+    """This module's own server, in place of the one every other module shares, for the chosen embeddings, with a
+    fake GitHub its members sign in to the console through, to choose their time zone."""
+    memory = tmp_path_factory.mktemp("gates-memory")
     with start_blocking_portal() as portal:
+        github = FakeGitHub(portal, Settings("", memory, memory))
+        settings = Settings(
+            database_url=fresh_database("shared_memory_gates"),
+            memory_root=memory,
+            model_cache=REPO_ROOT / ".cache" / "fastembed",
+            github_client_id="client-id",
+            github_client_secret="client-secret",
+            github_sign_in_url=github.url,
+            github_api_url=github.url,
+            rate_limit_on=False,
+        )
+        clock = TestClock()
+        embedder = ChosenSimilarity(settings.model_cache)
         running = RunningServer(build_app(settings, clock=clock, embedder=embedder), settings, clock, portal)
         try:
-            yield running
+            yield Console(running, github, clock)
         finally:
             running.stop()
+            github.stop()
+
+
+@pytest.fixture(scope="module")
+def server(signing_in: Console) -> RunningServer:
+    return signing_in.server
 
 
 def collide(earlier: Session, later: Session) -> None:
@@ -207,6 +223,111 @@ def test_the_box_is_a_text_fence_hard_wrapped_at_60_columns_with_no_gendered_pro
         whole = f"{heading}\n{box}"
         assert not re.search(r"\b(he|she|him|her|his|hers|himself|herself)\b", whole, re.IGNORECASE)
         assert "UTC" not in whole and "+00:00" not in whole and "09:05" not in whole
+
+
+# Local times (#591): a warning gives the clock time in its reader's time zone, the one they chose in the console, else
+# the one their browser reported, and stays relative with none. The gate here is found at 09:00 UTC and its wait of 5
+# minutes passes at 09:05 UTC.
+
+
+def in_time_zone(
+    signing_in: Console,
+    team: Team,
+    member_id: str,
+    github: str,
+    account: int,
+    detected: str | None = None,
+    chosen: str | None = None,
+) -> None:
+    """A member signs in to the console, whose browser reports `detected`, and chooses `chosen`."""
+    team.server.run_cli("link-github", "--team", team.code, "--member-id", member_id, "--github", github)
+    signing_in.github.as_(account, github)
+    client: ConsoleClient = signing_in.client()
+    try:
+        client.sign_in()
+        if detected is not None:
+            assert client.post_json("/api/my-time-zone/detected", {"time_zone": detected}).status_code == 200
+        if chosen is not None:
+            assert client.post_json("/api/my-time-zone", {"time_zone": chosen}).status_code == 200
+    finally:
+        client.close()
+
+
+def warning_says(notice: str) -> str:
+    """What a notice's warning box says, its lines joined back up."""
+    _, box = warning_in(notice)
+    return " ".join(line.strip("│ ") for line in box.splitlines())
+
+
+def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_they_chose(
+    signing_in: Console, team: Team, owner: Session, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-chosen", 5921, detected="America/New_York", chosen="Asia/Kolkata")
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "5 min left (until 2:35 pm your time)" in said
+
+
+def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_detected_for_them(
+    signing_in: Console, team: Team, owner: Session, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-detected", 5922, detected="America/New_York")
+    collide(owner, dana)
+
+    said = warning_says(reason_in(dana.edit(FILE)))
+
+    assert "5 min left (until 5:05 am your time)" in said
+
+
+def test_the_asked_members_warning_gives_the_clock_time_in_their_own_time_zone(
+    signing_in: Console, team: Team, owner: Session, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "owner-1", "olive-zone-asked", 5923, chosen="Europe/Berlin")
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-asked", 5924, chosen="Asia/Kolkata")
+    collide(owner, dana)
+
+    said = warning_says(heard(owner))
+
+    assert "5 min left (until 11:05 am your time)" in said, "Olive's zone, not Dana's"
+
+
+def test_a_warning_stays_relative_for_a_reader_with_no_time_zone(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    held, asked = warning_says(reason_in(dana.edit(FILE))), warning_says(heard(owner))
+
+    for said in (held, asked):
+        assert "5 min left" in said
+        assert "your time" not in said and "am" not in said.split() and "pm" not in said.split()
+
+
+def test_a_standby_that_hears_nothing_gives_the_clock_time_in_its_members_time_zone(
+    signing_in: Console, team: Team, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-standby", 5925, chosen="Asia/Kolkata")
+    dana.start()
+
+    answer = dana.call("stand_by", session=dana.identifier, seconds=0)
+
+    assert answer["ended"] == "nothing_yet"
+    assert "5 min left (until 2:35 pm your time)" in warning_says(answer["member"])
+    assert answer["member"] in answer["message"]
+
+
+def test_a_standbys_news_gives_the_clock_time_in_the_time_zone_of_the_member_standing_by(
+    signing_in: Console, team: Team, owner: Session, dana: Session
+) -> None:
+    in_time_zone(signing_in, team, "owner-1", "olive-zone-standby", 5926, chosen="Europe/Berlin")
+    in_time_zone(signing_in, team, "emp-2", "dana-zone-standby-news", 5927, chosen="Asia/Kolkata")
+    collide(owner, dana)
+
+    answer = owner.call("stand_by", session=owner.identifier, seconds=0)
+
+    assert answer["ended"] == "news"
+    said = warning_says(answer["member"])
+    assert "5 min left (until 11:05 am your time)" in said, "Olive reads it, so Olive's zone, not Dana's"
 
 
 def test_agent_only_instructions_still_follow_the_warning(owner: Session, dana: Session) -> None:

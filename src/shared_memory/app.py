@@ -7,7 +7,7 @@ import json
 import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import timedelta
+from datetime import timedelta, tzinfo
 from typing import Any, NotRequired, TypedDict, TypeVar
 
 import anyio
@@ -27,7 +27,7 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from shared_memory import hooks, onboarding, warning
+from shared_memory import hooks, onboarding, time_zone, warning
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
@@ -250,14 +250,15 @@ def _bearer(value: str | None) -> str | None:
     return None
 
 
-def _standby_answer(ended: Ended) -> dict[str, Any]:
+def _standby_answer(ended: Ended, zone: tzinfo | None) -> dict[str, Any]:
     """How a standby ended, as `/hooks/standby` and the `stand_by` tool both answer it: `ended`, `news`, `message`,
     for news and nothing yet `member` (the warnings to show the member first, word for word, or null when the news
-    carries none), and for nothing yet `wait_left_seconds`. It is plain JSON, never a hook's answer, so it carries no
-    line of Claude Code's own (`systemMessage`)."""
-    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message()}
+    carries none), and for nothing yet `wait_left_seconds`. `zone` is the time zone of the member whose session stood
+    by, the warnings' reader (`reader_zone`). It is plain JSON, never a hook's answer, so it carries no line of Claude
+    Code's own (`systemMessage`)."""
+    answer: dict[str, Any] = {"ended": ended.ending.value, "news": ended.news, "message": ended.message(zone)}
     if ended.ending in (Ending.NEWS, Ending.NOTHING_YET):
-        answer["member"] = ended.member()
+        answer["member"] = ended.member(zone)
     if ended.wait_left is not None:
         answer["wait_left_seconds"] = math.ceil(ended.wait_left.total_seconds())
     return answer
@@ -458,6 +459,18 @@ def build_app(
             unhooked.heard_by_hook(session)  # so its edits can be gated (#518)
         return session
 
+    def reader_zone(current: Caller, session: Session) -> tzinfo | None:
+        """The time zone a warning told to this session is read in: its member's chosen zone, else the one detected
+        from their browser, else none, when the warning's times stay relative (`time_zone.used`). The session's UTC
+        offset, which its session-start hook reports, is the next fallback (#592): it goes in here, as
+        `time_zone.used`'s `utc_offset_minutes`.
+
+        Every warning a session is told takes its zone from here, for the session reading it, never the member whose
+        act it tells of: the gates' refusal and notices (endings included) through `waiting_for` and the before-edit
+        hook, and the standby's `member` and `message` through `_standby_answer`. A new warning (urgent messages,
+        #589) takes a `zone` parameter and is handed `reader_zone(current, session)` the same way."""
+        return time_zone.used(identity.time_zone(current.member.pk))
+
     def waiting_for(
         current: Caller, session: Session, prompt: list[float] | None = None, prompted: bool = False
     ) -> list[str]:
@@ -476,7 +489,7 @@ def build_app(
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
-            *gates.waiting_notices(current, session),
+            *gates.waiting_notices(current, session, reader_zone(current, session)),
             *unhooked.notices(current, session),
             *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
             *talk.waiting_notices(session),
@@ -696,7 +709,8 @@ def build_app(
                 return None
             sessions.report(session, branch, hooks.named_files(payload, root))
             files = hooks.edited_files(payload, root)
-            reason = gates.before_edit(current, session, files) or locks.before_edit(session, files)
+            zone = reader_zone(current, session)
+            reason = gates.before_edit(current, session, files, zone) or locks.before_edit(session, files)
             if reason is not None:
                 stopped = True
                 return reason
@@ -759,22 +773,23 @@ def build_app(
                 assert session is not None
                 return current, session
 
-            ended = await stand_by_until_it_ends(standing_by, gone=request.is_disconnected)
+            answer = await stand_by_until_it_ends(standing_by, gone=request.is_disconnected)
         except Refused as refused:
             return JSONResponse({"message": f"Shared Memory refused this standby: {refused}"}, status_code=400)
         except Exception:
             log.exception("standby failed")
             return JSONResponse({"message": "Shared Memory could not hold this standby."}, status_code=503)
-        return JSONResponse(_standby_answer(ended))
+        return JSONResponse(answer)
 
     async def stand_by_until_it_ends(
         standing_by: Callable[[], tuple[Caller, Session]],
         seconds: float | None = None,
         gone: Callable[[], Awaitable[bool]] | None = None,
-    ) -> Ended:
+    ) -> dict[str, Any]:
         """Hold a standby for the session `standing_by` names, which `/hooks/standby` and the `stand_by` tool each
-        find in their own way, until it ends, and give how it ended. Its news is what every hook is told; whose answer
-        it awaits is kept for the console. A refusal in naming the session is raised before anything is held."""
+        find in their own way, until it ends, and give how it ended as both answer it (`_standby_answer`), its
+        warnings in the time zone of the member whose session stood by. Its news is what every hook is told; whose
+        answer it awaits is kept for the console. A refusal in naming the session is raised before anything is held."""
 
         def started() -> tuple[Caller, Session, tuple[str, ...]]:
             current, session = standing_by()
@@ -782,7 +797,9 @@ def build_app(
 
         current, session, awaits = await anyio.to_thread.run_sync(started)
         news = functools.partial(waiting_for, current, session)
-        return await standbys.hold(session, news, awaits, seconds=seconds, gone=gone)
+        ended = await standbys.hold(session, news, awaits, seconds=seconds, gone=gone)
+        zone = await anyio.to_thread.run_sync(reader_zone, current, session)
+        return _standby_answer(ended, zone)
 
     def awaited_by(current: Caller, session: Session) -> tuple[str, ...]:
         """The member IDs of the members whose answer a session standing by awaits, kept for the console: the earlier
@@ -1518,10 +1535,10 @@ def build_app(
         gone = request.is_disconnected if isinstance(request, Request) else None
         held = min(seconds, settings.standby_tool_cap_seconds)
         try:
-            ended = await stand_by_until_it_ends(standing_by, seconds=held, gone=gone)
+            answer = await stand_by_until_it_ends(standing_by, seconds=held, gone=gone)
         except Refused as refused:
             raise ToolError(str(refused)) from refused
-        return _standby_answer(ended)
+        return answer
 
     @server.tool()
     @_refusals_as_tool_errors
