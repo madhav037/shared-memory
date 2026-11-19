@@ -55,6 +55,15 @@ AGENT_HEADER = "X-Shared-Memory-Agent"
 # hooks post without a shell, so they cannot ask git and send none.
 BRANCH_HEADER = "X-Shared-Memory-Branch"
 
+# The header a session-start hook gives its machine's UTC offset in, for the warnings' clock times when the member has
+# no time zone (#592): `date +%z` (`+0530`) or PowerShell's `Get-Date -Format zzz` (`+05:30`). Copilot CLI's hooks post
+# without a shell, so they cannot ask the clock and send none.
+UTC_OFFSET_HEADER = "X-Shared-Memory-Utc-Offset"
+
+# A UTC offset as `date +%z` or PowerShell's `zzz` gives it. No clock is set further than 14 hours from UTC.
+_UTC_OFFSET = re.compile(r"([+-])(\d{2}):?(\d{2})")
+UTC_OFFSET_LIMIT_MINUTES = 14 * 60
+
 # The longest branch name kept. Git allows longer, but nobody reads one past this.
 BRANCH_LIMIT = 200
 
@@ -232,6 +241,19 @@ def branch_named(value: str | None) -> str | None:
     return branch if branch and branch != "HEAD" and len(branch) <= BRANCH_LIMIT else None
 
 
+def utc_offset_named(value: str | None) -> int | None:
+    """The UTC offset a hook sent in `UTC_OFFSET_HEADER`, in minutes east of UTC: None for none, or for one that is not
+    an offset a clock can be set to."""
+    found = _UTC_OFFSET.fullmatch((value or "").strip())
+    if found is None:
+        return None
+    sign, hours, minutes = found.groups()
+    if int(minutes) >= 60:
+        return None
+    offset = (int(hours) * 60 + int(minutes)) * (-1 if sign == "-" else 1)
+    return offset if abs(offset) <= UTC_OFFSET_LIMIT_MINUTES else None
+
+
 def edited_files(payload: Mapping[str, Any], root: str | None = None) -> list[str]:
     """The files an edit tool is about to change, each as a path from its repository's root: none when the payload
     names no file, and without any it names outside that root.
@@ -385,3 +407,10 @@ def notice(format: str | None, text: str) -> dict[str, Any]:
     """A word for the member rather than for the model, such as that Shared Memory is unavailable. Claude Code's format
     is the only one with a field for it; the rest are answered empty, which leaves their sessions untouched."""
     return {"systemMessage": text} if _named(format) == CLAUDE else {}
+
+
+def headline(agent: str | None, text: str) -> dict[str, Any]:
+    """A warning's headline, the line Claude Code shows its member itself in `systemMessage`. Only a hook that names
+    Claude Code in `AGENT_HEADER` gets it: Codex asks for Claude Code's format too, as Devin Desktop does on all but
+    its hook before a tool, so the format can't tell them apart. Every other hook is answered without it."""
+    return {"systemMessage": text} if agent == CLAUDE_CODE.name else {}

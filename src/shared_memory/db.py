@@ -93,6 +93,9 @@ CREATE TABLE IF NOT EXISTS project_access (
 ALTER TABLE members ADD COLUMN IF NOT EXISTS github_login TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS github_user_id BIGINT;
+-- A member's time zone (spec #585): the IANA name they chose in the console, and the one their browser reported.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS chosen_time_zone TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS detected_time_zone TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_login_per_team
     ON members (team_id, lower(github_login)) WHERE github_login IS NOT NULL;

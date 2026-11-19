@@ -23,6 +23,7 @@ from shared_memory.hooks import (
     CURSOR,
     DEVIN,
     GEMINI_CLI,
+    UTC_OFFSET_HEADER,
     AgentHooks,
 )
 from shared_memory.standby import STAND_BY_SECONDS
@@ -125,6 +126,12 @@ POWERSHELL_BRANCH = (
 )
 
 
+# What a session-start hook gives its machine's UTC offset with (#592): `+0530` in a POSIX shell, `+05:30` in
+# PowerShell. The server keeps it on the session for the warnings' clock times while its member has no time zone.
+POSIX_UTC_OFFSET = "$(date +%z)"
+POWERSHELL_UTC_OFFSET = f"$headers['{UTC_OFFSET_HEADER}'] = (Get-Date -Format zzz)"
+
+
 def hook_command(
     hooks_url: str,
     event: str,
@@ -137,6 +144,7 @@ def hook_command(
     otherwise: str = "",
     agent: str = "",
     branch: str = "",
+    utc_offset: bool = False,
 ) -> str:
     """The command a hook runs to post its payload and print what the server answers.
 
@@ -145,7 +153,8 @@ def hook_command(
     command is `codex_powershell`. `root` is what the shell names the repository's root with (`repository_root`),
     for an agent that gives its hooks a folder. `agent` names the coding agent the hook runs in, so a session known
     only by its hooks is known with its agent. `branch` is what the shell names the session's git branch with
-    (`repository_branch`, `working_folder_branch`), for the hook before each tool.
+    (`repository_branch`, `working_folder_branch`), for the hook before each tool. `utc_offset` sends the machine's
+    UTC offset, for the session-start hook.
     """
     token = "$" + TOKEN_VARIABLE
     quote = "'"
@@ -161,6 +170,8 @@ def hook_command(
         headers["X-Shared-Memory-Root"] = root
     if branch:
         headers[BRANCH_HEADER] = branch
+    if utc_offset:
+        headers[UTC_OFFSET_HEADER] = POSIX_UTC_OFFSET
     # A POSIX shell reads a variable only inside double quotes.
     written = " ".join(
         f"-H {'"' if '$' in value else quote}{name}: {value}{'"' if '$' in value else quote}"
@@ -196,13 +207,15 @@ CODEX_HOOKS = (
 def codex_powershell(hooks_url: str, endpoint: str, project_id: str, repository: str, seconds: int) -> str:
     """What Codex runs on Windows, as `-Command` in PowerShell: pwsh where it is installed, Windows PowerShell where
     not (#275; Codex 0.162.1 was seen running pwsh, never cmd.exe). One line that works in both, posting the payload
-    as Cline's .ps1 does and naming the repository's root before an edit as `working_folder_root` does. A server that
-    is down, slow or unhappy leaves it printing nothing."""
+    as Cline's .ps1 does, naming the repository's root before an edit as `working_folder_root` does, and the machine's
+    UTC offset as a session starts. A server that is down, slow or unhappy leaves it printing nothing."""
     root = (
         "try { $up = git rev-parse --show-cdup 2>$null; "
         "if ($LASTEXITCODE -eq 0) { $headers['X-Shared-Memory-Root'] = \"$((Get-Location).Path)/$up\" } } catch { }; "
         f"{POWERSHELL_BRANCH}"
         if endpoint == "before-edit"
+        else f"{POWERSHELL_UTC_OFFSET}; "
+        if endpoint == "session-start"
         else ""
     )
     return (
@@ -233,7 +246,15 @@ def codex_hooks(hooks_url: str, project_id: str, repository: str) -> str:
         root = working_folder_root() if endpoint == "before-edit" else ""
         branch = working_folder_branch() if endpoint == "before-edit" else ""
         posix = hook_command(
-            hooks_url, endpoint, project_id, repository, seconds=seconds, root=root, agent=CODEX.header, branch=branch
+            hooks_url,
+            endpoint,
+            project_id,
+            repository,
+            seconds=seconds,
+            root=root,
+            agent=CODEX.header,
+            branch=branch,
+            utc_offset=endpoint == "session-start",
         )
         windows = codex_powershell(hooks_url, endpoint, project_id, repository, seconds)
         written += f"""
@@ -331,6 +352,14 @@ if (started && event === "before-edit") {{
   }}
 }}
 
+// The machine's UTC offset as `date +%z` gives it (+0530), for the clock times in this session's warnings while its
+// member has no time zone.
+if (event === "session-start") {{
+  const east = -new Date().getTimezoneOffset();
+  const two = (n) => String(Math.floor(n)).padStart(2, "0");
+  headers[{json.dumps(UTC_OFFSET_HEADER)}] = `${{east < 0 ? "-" : "+"}}${{two(Math.abs(east) / 60)}}${{two(Math.abs(east) % 60)}}`;
+}}
+
 let payload = "";
 if (!process.stdin.isTTY) {{
   for await (const chunk of process.stdin) payload += chunk;
@@ -361,7 +390,9 @@ def copilot_cli_hook(hooks_url: str, project_id: str, repository: str) -> dict[s
     thrown away would take this member's waiting challenges with it. The hook before a tool runs on every tool, with
     no matcher (ADR-0025); its answer takes no added context, so the session's news comes on postToolUse, which
     appends it to the tool's result. The server knows the CLI's file-edit tools (`edit` and `create`). A hook that
-    posts lets the tool through when the server is down or slow. It runs no shell, so it cannot name the branch.
+    posts lets the tool through when the server is down or slow. It runs no shell, so it cannot name the branch, nor
+    give the machine's UTC offset as a session starts: its warnings' clock times need its member's time zone, chosen or
+    detected in the console, and stay relative without one (#592).
     """
 
     def posting(endpoint: str, seconds: int, **more: object) -> dict[str, Any]:
@@ -413,6 +444,7 @@ def cursor_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, 
             otherwise=otherwise,
             agent=CURSOR.header,
             branch=working_folder_branch() if endpoint == "before-edit" else "",
+            utc_offset=endpoint == "session-start",
         )
 
     return {
@@ -640,9 +672,10 @@ def standby_habits(hooks_url: str, project_id: str, repository: str) -> str:
     return f"""\
 - Stand by when this session awaits an answer: when an edit is refused as gated and when you have sent an urgent
   message; after any other message, only when the member wants its answer. A standby ends with the session's news:
-  show the member the news and what it means for the work, and ask what to do. When the project's wait passes with
-  nothing, tell the member, and stand by at most once more. When Shared Memory doesn't answer, wait a few seconds
-  and try once more, then tell the member Shared Memory isn't answering.
+  show the member the news and what it means for the work, and ask what to do. Its answer's `member`, when not null,
+  is a warning: show it to the member first, word for word. When the project's wait passes with nothing, stand by at
+  most once more. When Shared Memory doesn't answer, wait a few seconds and try once more, then tell the member
+  Shared Memory isn't answering.
 - In {_joined_with_and([guidance_name(agent) for agent in STAND_BY_IN_THE_BACKGROUND])}, run the standby command below in the background, with this
   session's identifier in place of `<session>`, and end your turn: it ends with the session's news. If you can't run
   a background command, aren't woken when it ends, or it says {TOKEN_VARIABLE} is not set, call `stand_by` instead.
@@ -737,6 +770,7 @@ def devin_hooks(hooks_url: str, project_id: str, repository: str) -> dict[str, A
                             root=repository_root("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
                             agent=DEVIN.header,
                             branch=repository_branch("DEVIN_PROJECT_DIR") if endpoint == "before-edit" else "",
+                            utc_offset=endpoint == "session-start",
                         ),
                         "timeout": seconds + 1,
                     }
@@ -779,6 +813,7 @@ def cline_script(hooks_url: str, event: str, endpoint: str, project_id: str, rep
         root=working_folder_root() if endpoint == "before-edit" else "",
         agent=CLINE.header,
         branch=working_folder_branch() if endpoint == "before-edit" else "",
+        utc_offset=endpoint == "session-start",
     )
     return f"""#!/bin/sh
 # Shared Memory: {CLINE_DOING[event]}. Cline hands this script its payload and reads what it prints.
@@ -800,6 +835,12 @@ try {
 } catch {
   # No git here: the server reads the root from the payload, and knows no branch.
 }
+"""
+
+
+# What Cline's session-start script on Windows gives the machine's UTC offset with, as `date +%z` does in a POSIX shell.
+CLINE_POWERSHELL_UTC_OFFSET = f"""# This machine's UTC offset, for the clock times in the task's warnings while its member has no time zone.
+{POWERSHELL_UTC_OFFSET}
 """
 
 
@@ -833,7 +874,11 @@ exit 0
         "__REPOSITORY__": repository,
         "__AGENT_HEADER__": AGENT_HEADER,
         "__AGENT__": CLINE.header,
-        "__ROOT__": CLINE_POWERSHELL_ROOT if endpoint == "before-edit" else "",
+        "__ROOT__": CLINE_POWERSHELL_ROOT
+        if endpoint == "before-edit"
+        else CLINE_POWERSHELL_UTC_OFFSET
+        if endpoint == "session-start"
+        else "",
     }
     for placeholder, value in written.items():
         template = template.replace(placeholder, value)

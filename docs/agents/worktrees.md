@@ -74,6 +74,11 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   line the briefing shows, and `ACTIVITY_LIMIT` the one place the length cap is named. That module owns the
   `session_activities` table and asks the board for the card through `Board.doing_titles`.
 - **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
+- **The session's UTC offset** (#592): `Session.utc_offset_minutes`, minutes east of UTC, which its session-start hook
+  gives in `X-Shared-Memory-Utc-Offset` (`date +%z` in a POSIX shell, `Get-Date -Format zzz` in PowerShell, worked
+  out in node by Gemini CLI's script) and the route keeps with `sessions.keep_utc_offset` (`hooks.utc_offset_named`
+  reads it; a missing or malformed header leaves the kept one as it is). `reader_zone` in `app.py` falls back to it
+  after the member's chosen and detected time zone. Copilot CLI's hooks post without a shell, so they send none.
 - **Words waiting for a session** are gathered in one place, `waiting_for(current, session)` in `app.py`: the prompt
   hook asks it, and so do `take_lock`, `release_lock` and `set_activity`, whose answers carry them as `notices` for
   an agent with no prompt hook. Each is told once, wherever it is told. A module with something for a session adds it
@@ -96,7 +101,9 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **Standby** (ADR-0027) is `Standbys` in `src/shared_memory/standby.py`, built in `build_app` as `standbys` and kept
   on `app.state.standbys`. It owns `standbys`, one row per session's held standby. `await standbys.hold(session,
   news, awaits, seconds=None, gone=None)` holds one until it ends and gives an `Ended` (`ending`: news, nothing_yet,
-  replaced, moved_on; `news`; `wait_left`; `message`): `news` is `functools.partial(waiting_for, caller, session)`,
+  replaced, moved_on; `news`; `wait_left`; `at`; `message(zone)`; `member(zone)`, the warnings the news' `warning.Shown`
+  notices carry (`warning.warnings_in`, rendered at `at`), or nothing_yet's hourglass warning): `news` is
+  `functools.partial(waiting_for, caller, session)`,
   `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
   `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
   the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws

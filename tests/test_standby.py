@@ -41,7 +41,7 @@ from tests.test_connection_kit import (
     without_the_token,
 )
 from tests.test_before_edit import reason_in
-from tests.test_gates import GATED, URGENT, answer_gate, collide, heard, send_urgent
+from tests.test_gates import GATED, SHOW_FIRST, URGENT, answer_gate, collide, heard, send_urgent, warning_in
 from tests.test_locks import FILE, take
 from tests.test_messages import ASKED, PROMPT, REPLIED, send
 from tests.test_mute import mute
@@ -307,6 +307,125 @@ def test_a_muted_sessions_standby_ends_on_an_urgent_message(owner: Session, dana
     assert URGENT in news_in(held)
 
 
+# What the member is shown (#590)
+
+
+def said_in(box: str) -> str:
+    """What a warning's box says, its lines joined, frame left out."""
+    return " ".join(line.strip("│ ") for line in box.splitlines()[1:-1] if line.strip("│ "))
+
+
+def assert_shows_the_gate_warning_first(answer: dict[str, Any]) -> None:
+    """The earlier session hears a gate start: `member` holds its warning, `message` shows it first."""
+    assert answer["ended"] == "news"
+    member = answer["member"]
+    assert member.startswith("**⚠ Dana Dev is waiting on you**")
+    heading, box = warning_in(member)
+    assert heading == "⚠ Dana Dev is waiting on you"
+    assert "5 min left" in said_in(box) and "agree · refuse" in said_in(box)
+    assert answer["message"].startswith(f"{SHOW_FIRST}\n\n{member}\n\n")
+    assert "answer_gate" in answer["message"].removeprefix(f"{SHOW_FIRST}\n\n{member}"), "the agent's lines follow"
+    assert SHOW_FIRST not in answer["message"].removeprefix(SHOW_FIRST), "the instruction is given once"
+    assert any(each.startswith(SHOW_FIRST) and "[gate] Dana Dev (emp-2)" in each for each in answer["news"])
+
+
+def test_standby_hook_news_with_a_warning_answers_member_and_shows_it_first(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    assert_shows_the_gate_warning_first(answer_of(owner.stand_by()))
+
+
+def test_stand_by_tool_news_with_a_warning_answers_member_and_shows_it_first(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    assert_shows_the_gate_warning_first(owner.call("stand_by", session=owner.identifier, seconds=20))
+
+
+def test_standby_hook_news_without_a_warning_answers_member_null_and_the_news_as_before(
+    owner: Session, dana: Session
+) -> None:
+    owner.start()
+    dana.start()
+    held = standing_by(dana)
+
+    send(owner, "emp-2", ASKED)
+
+    answer = answer_of(held)
+    assert answer["ended"] == "news"
+    assert any(ASKED in each for each in answer["news"]), "an ordinary message, which carries no warning"
+    assert "member" in answer and answer["member"] is None
+    assert answer["message"] == "\n\n".join(answer["news"])
+    assert not answer["message"].startswith(SHOW_FIRST)
+
+
+def test_standby_hook_nothing_yet_answers_member_with_the_hourglass_warning_and_the_time_left(
+    team: Team, owner: Session
+) -> None:
+    owner.call("project_wait", minutes=12)
+    owner.start()
+    held = standing_by(owner)
+
+    team.server.clock.advance(minutes=5)
+
+    answer = answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    heading, box = warning_in(answer["member"])
+    assert heading.startswith("⏳ ")
+    assert "7 min left" in said_in(box) and "stand by once more" in said_in(box)
+    assert "UTC" not in answer["member"]
+    assert answer["message"].startswith(f"{SHOW_FIRST}\n\n{answer['member']}\n\n[standby] Nothing yet")
+    assert "7 minutes" in answer["message"]
+
+
+def test_standby_hook_nothing_yet_after_the_projects_wait_says_the_wait_has_passed(team: Team, owner: Session) -> None:
+    owner.call("project_wait", minutes=2)
+    owner.start()
+    held = standing_by(owner)
+
+    team.server.clock.advance(minutes=2)
+
+    answer = answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    heading, box = warning_in(answer["member"])
+    assert heading.startswith("⏳ ")
+    assert "wait has passed" in said_in(box) and "min left" not in said_in(box)
+    assert answer["message"].startswith(SHOW_FIRST)
+
+
+def test_stand_by_tool_nothing_yet_answers_member_with_the_hourglass_warning_and_the_time_left(
+    team: Team, owner: Session
+) -> None:
+    owner.start()
+    held = standing_by_the_tool(owner, seconds=20)
+
+    team.server.clock.advance(seconds=20)
+
+    answer = tool_answer_of(held)
+    assert answer["ended"] == "nothing_yet"
+    heading, box = warning_in(answer["member"])
+    assert heading.startswith("⏳ ") and "5 min left" in said_in(box)
+    assert answer["message"].startswith(f"{SHOW_FIRST}\n\n{answer['member']}")
+
+
+def test_standby_answers_that_neither_hear_news_nor_nothing_yet_carry_no_member(dana: Session) -> None:
+    dana.start()
+    first = standing_by(dana)
+
+    second = dana.stand_by()
+
+    replaced = answer_of(first)
+    assert replaced["ended"] == "replaced" and "member" not in replaced
+    moved_on = end(dana, second)
+    assert moved_on["ended"] == "moved_on" and "member" not in moved_on
+
+
+def test_stand_by_tool_description_documents_the_member_field(dana: Session) -> None:
+    _, described = dana.on_connecting()
+
+    said = described["stand_by"]
+    assert "member" in said and "word for word" in said
+
+
 # Told once
 
 
@@ -455,7 +574,11 @@ def test_stand_by_ends_with_an_answer_given_meanwhile(owner: Session, dana: Sess
     news = "\n\n".join(answer["news"])
     assert "[gate]" in news and "Olive Owner" in news and "agreed" in news
     assert "Go ahead, I'm on the docs." in news
-    assert answer["message"] == news
+    member = answer["member"]
+    assert member.startswith("**✅ Olive Owner agreed**")
+    assert "Go ahead, I'm on the docs." in warning_in(member)[1]
+    assert answer["message"].startswith(f"{SHOW_FIRST}\n\n{member}\n\n")
+    assert "[gate] Olive Owner (owner-1) agreed" in answer["message"].removeprefix(f"{SHOW_FIRST}\n\n{member}")
 
 
 def test_stand_by_answers_nothing_yet_after_its_seconds(team: Team, owner: Session) -> None:

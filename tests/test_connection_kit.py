@@ -7,8 +7,11 @@ import os
 import shutil
 import socket
 import subprocess
+import threading
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -719,6 +722,183 @@ def test_copilot_cli_posts_without_a_shell_so_names_no_branch() -> None:
     assert "X-Shared-Memory-Branch" not in hooks["preToolUse"][0]["headers"]
 
 
+# Every kit's session-start hook gives its machine's UTC offset (#592), which the server keeps on the session for the
+# clock times in its warnings while its member has no time zone. These run each hook in a machine set to India's time.
+INDIA = "Asia/Kolkata"
+INDIA_OFFSET = "X-Shared-Memory-Utc-Offset: +0530"
+
+
+def codex_session_start(files: dict[str, str], field: str) -> str:
+    command: str = tomllib.loads(files[".codex/config.toml"])["hooks"]["SessionStart"][0]["hooks"][0][field]
+    return command
+
+
+#: Where each kit keeps what its session-start hook runs in a POSIX shell.
+POSIX_SESSION_START: dict[str, Callable[[dict[str, str]], str]] = {
+    "Claude Code": lambda files: claude_code_session_start_hook(),
+    "Codex": lambda files: codex_session_start(files, "command"),
+    "Cursor": lambda files: json.loads(files[".cursor/hooks.json"])["hooks"]["sessionStart"][0]["command"],
+    "Devin Desktop": lambda files: json.loads(files[".devin/hooks.v1.json"])["SessionStart"][0]["hooks"][0]["command"],
+    "Cline": lambda files: files[".clinerules/hooks/TaskStart"],
+}
+
+#: Where each kit keeps what its session-start hook runs in PowerShell, and how PowerShell runs it.
+POWERSHELL_SESSION_START: dict[str, tuple[Callable[[dict[str, str]], str], str]] = {
+    "Codex on Windows": (lambda files: codex_session_start(files, "command_windows"), "-Command"),
+    "Cline on Windows": (lambda files: files[".clinerules/hooks/TaskStart.ps1"], "-File"),
+}
+
+
+@pytest.mark.parametrize("agent", list(POSIX_SESSION_START))
+def test_every_agents_session_start_hook_gives_its_machines_utc_offset(agent: str, tmp_path: Path) -> None:
+    command = POSIX_SESSION_START[agent](kit_files())
+
+    ran = subprocess.run(
+        ["sh", "-c", command],
+        input=SESSION_START,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **without_plugin_settings(),
+            **recording_curl(tmp_path),
+            "TZ": INDIA,
+            "SHARED_MEMORY_TOKEN": "smt_test",
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": "smt_test",
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": "https://memory.example.com",
+        },
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    assert INDIA_OFFSET in (tmp_path / "arguments").read_text(encoding="utf-8").split("\n")
+
+
+@pytest.mark.parametrize("agent", list(POWERSHELL_SESSION_START))
+def test_every_agents_session_start_hook_in_powershell_gives_its_machines_utc_offset(agent: str) -> None:
+    command, _ = POWERSHELL_SESSION_START[agent]
+
+    assert "$headers['X-Shared-Memory-Utc-Offset'] = (Get-Date -Format zzz)" in command(kit_files())
+
+
+def test_only_the_session_start_hook_gives_the_utc_offset() -> None:
+    files = kit_files()
+
+    for path in (
+        ".clinerules/hooks/UserPromptSubmit",
+        ".clinerules/hooks/PreToolUse",
+        ".clinerules/hooks/TaskComplete",
+        ".clinerules/hooks/PreToolUse.ps1",
+    ):
+        assert "X-Shared-Memory-Utc-Offset" not in files[path], path
+    assert "X-Shared-Memory-Utc-Offset" not in codex_before_tool(files, "command")
+    assert "X-Shared-Memory-Utc-Offset" not in codex_before_tool(files, "command_windows")
+
+
+def test_copilot_cli_posts_without_a_shell_so_gives_no_utc_offset() -> None:
+    hooks = json.loads(kit_files()[".github/hooks/shared-memory.json"])["hooks"]
+
+    assert "X-Shared-Memory-Utc-Offset" not in hooks["sessionStart"][0]["headers"]
+
+
+@contextmanager
+def recording_server() -> Iterator[tuple[str, list[dict[str, str]]]]:
+    """A server that answers every POST with `{}` and records each one's headers: its address and what it heard."""
+    heard: list[dict[str, str]] = []
+
+    class Recording(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802  # the name http.server calls
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            heard.append({name.lower(): value for name, value in self.headers.items()})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+    listening = ThreadingHTTPServer(("127.0.0.1", 0), Recording)
+    thread = threading.Thread(target=listening.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{listening.server_address[1]}", heard
+    finally:
+        listening.shutdown()
+        listening.server_close()
+
+
+def kit_files_for(server_url: str) -> dict[str, str]:
+    """The connection kit's files by path, for a server at this address."""
+    files = connection_kit(
+        server_url=server_url, marketplace="m", project_id="billing-3f2a", project_name="Billing", repository="billing-api"
+    )
+    return {file["path"]: file["contents"] for file in files}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_geminis_session_start_hook_gives_its_machines_utc_offset(tmp_path: Path) -> None:
+    with recording_server() as (url, heard):
+        script = tmp_path / "shared-memory.mjs"
+        script.write_text(kit_files_for(url)[".gemini/hooks/shared-memory.mjs"], encoding="utf-8")
+
+        ran = subprocess.run(
+            ["node", str(script), "session-start"],
+            input=SESSION_START,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, "TZ": INDIA, "SHARED_MEMORY_TOKEN": "smt_test"},
+        )
+
+    assert ran.returncode == 0, ran.stderr
+    assert [each.get("x-shared-memory-utc-offset") for each in heard] == ["+0530"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
+def test_geminis_hook_gives_a_utc_offset_west_of_utc_with_its_sign(tmp_path: Path) -> None:
+    with recording_server() as (url, heard):
+        script = tmp_path / "shared-memory.mjs"
+        script.write_text(kit_files_for(url)[".gemini/hooks/shared-memory.mjs"], encoding="utf-8")
+
+        subprocess.run(
+            ["node", str(script), "session-start"],
+            input=SESSION_START,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, "TZ": "America/St_Johns", "SHARED_MEMORY_TOKEN": "smt_test"},
+        )
+
+    assert heard[0].get("x-shared-memory-utc-offset") in ("-0330", "-0230"), "Newfoundland, in or out of summer time"
+
+
+@pytest.mark.skipif(not POWERSHELLS, reason="these hooks run in PowerShell, which isn't here")
+@pytest.mark.parametrize("shell", POWERSHELLS)
+@pytest.mark.parametrize("agent", list(POWERSHELL_SESSION_START))
+def test_every_agents_powershell_session_start_hook_sends_its_machines_utc_offset(
+    agent: str, shell: str, tmp_path: Path
+) -> None:
+    command, runs_with = POWERSHELL_SESSION_START[agent]
+    with recording_server() as (url, heard):
+        written = command(kit_files_for(url))
+        if runs_with == "-File":
+            script = tmp_path / "TaskStart.ps1"
+            script.write_text(written, encoding="utf-8")
+            written = str(script)
+
+        ran = subprocess.run(
+            [shell, "-NoProfile", runs_with, written],
+            input=SESSION_START,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, "TZ": INDIA, "SHARED_MEMORY_TOKEN": "smt_test"},
+        )
+
+    assert ran.returncode == 0, ran.stderr
+    assert [each.get("x-shared-memory-utc-offset") for each in heard] == ["+05:30"]
+
+
 #: The kits whose hook before a tool takes no added context, and the hook after a tool each hears its news on.
 HEARS_AFTER_A_TOOL: dict[str, Callable[[dict[str, str]], str]] = {
     "Gemini CLI": lambda files: json.loads(files[".gemini/settings.json"])["hooks"]["AfterTool"][0]["hooks"][0]["command"],
@@ -776,8 +956,8 @@ def standby_command(skill: str) -> str:
 
 #: When Claude Code stands by and what it does with the answer, one marker each: run in the background, stand by when
 #: an edit is refused as gated, after an urgent message and after a message whose answer the member wants, at most once
-#: more after an empty answer, retry once after a few seconds then say the server isn't answering, and show the member
-#: the answer and ask what to do.
+#: more after an empty answer, retry once after a few seconds then say the server isn't answering, show the member
+#: the answer and ask what to do, and show the warning the answer's `member` holds first (#590).
 STANDBY_HABITS = (
     "run_in_background",
     "an edit is refused as gated",
@@ -788,7 +968,30 @@ STANDBY_HABITS = (
     "Shared Memory isn't answering",
     "show the member",
     "ask what to do",
+    "`member`",
 )
+
+
+#: What the skill says of a warning (#586), one marker each: the lead-in it comes under, shown first, word for word, never
+#: paraphrased or left out, the fence kept, the lines after it the agent's, each gate's reply words, and a reply word
+#: being the member's decision.
+WARNING_HABITS = (
+    "Show your member this first, word for word:",
+    "Show the member the heading and the box first",
+    "never paraphrase it, shorten it or leave it out",
+    "keep the fence",
+    "The lines after the warning are for you alone",
+    "*wait* (stand by), *different work* and *pick something else*",
+    "*agree* and *refuse*",
+    "that is their decision",
+)
+
+
+def test_the_skill_tells_the_agent_to_show_a_warning_word_for_word_first_and_take_a_reply_word_as_the_members_decision() -> None:
+    said = " ".join(claude_code_skill().split())
+
+    for habit in WARNING_HABITS:
+        assert habit in said, habit
 
 
 def test_the_skill_tells_claude_code_when_to_stand_by_and_what_to_do_with_the_answer() -> None:
