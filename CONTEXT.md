@@ -52,6 +52,10 @@ _Avoid_: ACL, allowlist, permissions
 The secret that proves which member a session belongs to; issued once per member.
 _Avoid_: API key, password, project token
 
+**Time zone**:
+The zone a member's times are shown in: the one they chose, or else the one detected for them, from their browser when they sign in to the console or from their session until then.
+_Avoid_: Timezone, locale, region
+
 ### Memory
 
 **Memory**:
@@ -392,3 +396,7 @@ _Avoid_: Handover, baton, recap
 **Standby**:
 A session's coding agent waiting for news, in the background or in a held tool call, without its member typing: started when the session awaits an answer, and ended by any news for it, the project's wait, a newer standby, or the member's next prompt.
 _Avoid_: Watch, park, wake-up
+
+**Warning**:
+What a gate or standby tells the member themselves, word for word, rather than their coding agent: that a wait on their work or their teammate's has started or ended, who it waits for, how long is left in their time zone, and what they can reply.
+_Avoid_: Alert, banner, callout, popup
