@@ -10,12 +10,12 @@
 # Changing anything above the release stage changes the base, and the next deploy sends it whole.
 
 # Only pyproject.toml's dependencies reach the base, so the linters' or the tests' settings changing leaves it alone.
-FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS dependencies
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS dependencies
 COPY deploy/server_base.py pyproject.toml /tmp/
 RUN python /tmp/server_base.py dependencies /tmp/pyproject.toml > /tmp/dependencies.toml \
     && touch -d @0 /tmp/dependencies.toml
 
-FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS base
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS base
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
