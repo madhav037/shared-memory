@@ -286,9 +286,9 @@ def _wrapped(text: str, first: str = "", hanging: str = "") -> list[str]:
     lines: list[str] = []
     line, bare = first, True
     for word in text.split():
-        joined = line + (word if bare else f" {word}")
-        if columns(joined) <= _INNER:
-            line, bare = joined, False
+        longer = line + (word if bare else f" {word}")
+        if columns(longer) <= _INNER:
+            line, bare = longer, False
             continue
         if not bare:
             lines.append(line)
@@ -320,11 +320,17 @@ def _names(rows: Sequence[Row]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def _until(rows: Sequence[Row]) -> datetime | None:
+    """When a wait for these members passes with no answer: when the last of their parts does, or never while any of
+    them refused, which holds it past the wait."""
+    if any(row.refused for row in rows):
+        return None
+    return max((row.until for row in rows if row.until is not None), default=None)
+
+
 def held_by_gate(rows: Sequence[Row]) -> Warning:
     """Told to the member whose edit a gate holds: one row per member it waits for, how long is left, that their
     session stands by, and what they can reply."""
-    open_rows = [row.until for row in rows if not row.refused and row.until is not None]
-    refused = any(row.refused for row in rows)
     whose = "Another member's session is" if len(rows) == 1 else "Other members' sessions are"
     return Warning(
         mark=Mark.WAITS,
@@ -334,7 +340,7 @@ def held_by_gate(rows: Sequence[Row]) -> Warning:
             "planning still work.",
         ),
         rows=tuple(rows),
-        until=None if refused or not open_rows else max(open_rows),
+        until=_until(rows),
         then="then your edit goes ahead on its own, unless they refuse",
         after=("Your session stands by: you will hear their answer here without typing anything.",),
         replies=("wait", "different work", "pick something else"),
@@ -486,7 +492,6 @@ def urgent_message(member_name: str, words: str, until: datetime | None) -> Warn
 def urgent_waits(rows: Sequence[Row]) -> Warning:
     """Told to the member whose edit is refused because an urgent message waits for their answer: one row per member
     who sent one, and how long until the edits go ahead without an answer."""
-    open_rows = [row.until for row in rows if row.until is not None]
     sent = "sent you an urgent message" if len(rows) == 1 else "each sent you an urgent message"
     return Warning(
         mark=Mark.WAITS,
@@ -496,7 +501,7 @@ def urgent_waits(rows: Sequence[Row]) -> Warning:
             "searching and planning still work.",
         ),
         rows=tuple(rows),
-        until=max(open_rows) if open_rows else None,
+        until=_until(rows),
         then="then your edits go ahead without your answer",
         after=("Tell your agent your answer and it sends it, or say it is different work. Your edits then go ahead.",),
     )

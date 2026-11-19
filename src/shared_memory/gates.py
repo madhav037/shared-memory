@@ -24,14 +24,14 @@ Kept in Postgres, so every worker agrees (ADR-0013):
   the later session, and whether the later session has been told. A refusal may be changed to agree; an agreement
   stands.
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
-- `gate_headlines`: per later and earlier session, that the later session's member has been shown the headline of a
-  refusal of its edit on that gate, which only the first refusal carries (see `warning.headline`).
+- `refusal_headlines`: per held and holding session, that the held session's member has been shown the headline of a
+  refusal of its edit, which only the first refusal carries (see `warning.headline`): a gate's later session held by
+  its earlier one, or an earlier session held by the later one's urgent message.
 - `gate_waits`: per later and earlier session, that the later session's gate was found waiting for the earlier one,
   with the earlier member's name as it was then, so that when the earlier session ends or goes idle, which lifts the
   gate on it, the later session is told once (story 5 of #523). Kept past the earlier session's end for that.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
-  member answered it, and whether the earlier member has been shown the headline of a refusal of its edit on it,
-  which only the first refusal carries. Its primary key is what keeps it to one per collision.
+  member answered it. Its primary key is what keeps it to one per collision.
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
@@ -69,7 +69,7 @@ What other modules stand on, all of it on `Gates`:
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
@@ -130,12 +130,13 @@ CREATE TABLE IF NOT EXISTS gate_starts (
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
 
--- The later session's member has been shown the headline of its refusal on this earlier session: once per gate, since
--- a refused edit repeats.
-CREATE TABLE IF NOT EXISTS gate_headlines (
-    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
-    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
-    PRIMARY KEY (later_session_id, earlier_session_id)
+-- The held session's member has been shown the headline of a refusal of its edit while the holding session holds it:
+-- once, since a refused edit repeats. A gate's later session is held by its earlier one, and an urgent message's
+-- earlier session by the later one that sent it, so the pair in its order says which.
+CREATE TABLE IF NOT EXISTS refusal_headlines (
+    held_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    holding_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    PRIMARY KEY (held_session_id, holding_session_id)
 );
 
 -- The later session's gate was found waiting for the earlier session, whose member's name it keeps as it was then:
@@ -155,8 +156,6 @@ CREATE TABLE IF NOT EXISTS gate_urgents (
     answered_at TIMESTAMPTZ,
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
--- The earlier session's member has been shown the headline of a refusal of its edit on this urgent message: once.
-ALTER TABLE gate_urgents ADD COLUMN IF NOT EXISTS headlined BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS gate_urgents_earlier ON gate_urgents (earlier_session_id) WHERE answered_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS project_waits (
@@ -276,41 +275,35 @@ def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None)
     return "\n".join(lines)
 
 
-def _held_rows(waiting: Sequence[Waiting]) -> list[warning.Row]:
-    """The rows of a held member's warning: one per member the gate waits for, whatever number of their sessions,
-    refused if any of those refused, else until the last of their waits passes."""
-    members: dict[str, list[Waiting]] = {}
-    for each in waiting:
-        members.setdefault(each.earlier.member_id, []).append(each)
+@dataclass(frozen=True)
+class _Hold:
+    """One session holding a member's edit, as a refusal's warning reads it: the session, what it is working on, when
+    its wait passes, and whether its member refused, which holds it past that."""
+
+    holding: Session
+    activity: str | None
+    until: datetime
+    refused: bool = False
+
+
+def _rows(holds: Sequence[_Hold]) -> list[warning.Row]:
+    """The rows of a refused edit's warning: one per member holding it, whatever number of their sessions, refused if
+    any of those refused, else until the last of their waits passes."""
+    members: dict[str, list[_Hold]] = {}
+    for each in holds:
+        members.setdefault(each.holding.member_id, []).append(each)
     rows = []
     for theirs in members.values():
-        activities = list(dict.fromkeys(each.activity for each in theirs if each.activity))
-        refused = any(each.refused for each in theirs)
+        refused_by_them = any(each.refused for each in theirs)
         rows.append(
             warning.Row(
-                theirs[0].earlier.member_name,
-                "; ".join(activities) or None,
-                None if refused else max(each.until for each in theirs),
-                refused,
+                theirs[0].holding.member_name,
+                "; ".join(dict.fromkeys(each.activity for each in theirs if each.activity)) or None,
+                None if refused_by_them else max(each.until for each in theirs),
+                refused_by_them,
             )
         )
     return rows
-
-
-def _urgent_rows(urgents: Sequence[Urgent]) -> list[warning.Row]:
-    """The rows of the warning on an edit an urgent message holds: one per member who sent one, whatever number of
-    their sessions, until the last of their waits passes."""
-    members: dict[str, list[Urgent]] = {}
-    for each in urgents:
-        members.setdefault(each.later.member_id, []).append(each)
-    return [
-        warning.Row(
-            theirs[0].later.member_name,
-            "; ".join(dict.fromkeys(each.activity for each in theirs if each.activity)) or None,
-            max(each.until for each in theirs),
-        )
-        for theirs in members.values()
-    ]
 
 
 def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
@@ -458,11 +451,14 @@ class Gates:
     @staticmethod
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         gone = list(ids)
-        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_headlines", "gate_urgents"):
+        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents"):
             conn.execute(
-                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of five names written here
+                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
                 (gone, gone),
             )
+        conn.execute(
+            "DELETE FROM refusal_headlines WHERE held_session_id = ANY(%s) OR holding_session_id = ANY(%s)", (gone, gone)
+        )
         # Kept past the earlier session's end, which its later session is still to be told of.
         conn.execute("DELETE FROM gate_waits WHERE later_session_id = ANY(%s)", (gone,))
 
@@ -629,53 +625,28 @@ class Gates:
         waiting = self.waiting(caller, session)
         urgents = self._urgents(session)
         now = self._clock()
-        held = (
-            [
-                warning.shown(
-                    [warning.held_by_gate(_held_rows(waiting))],
-                    refusal(waiting, now),
-                    now,
-                    zone,
-                    headlined=self._first_refusal(session, waiting),
-                )
-            ]
-            if waiting
-            else []
-        )
+        refusals: list[tuple[Callable[[Sequence[warning.Row]], warning.Warning], list[_Hold], str]] = []
+        if waiting:
+            gate = [_Hold(each.earlier, each.activity, each.until, each.refused) for each in waiting]
+            refusals.append((warning.held_by_gate, gate, refusal(waiting, now)))
         if urgents:
-            held.append(
-                warning.shown(
-                    [warning.urgent_waits(_urgent_rows(urgents))],
-                    urgent_refusal(urgents, now),
-                    now,
-                    zone,
-                    headlined=self._first_urgent_refusal(session, urgents),
-                )
-            )
-        return warning.joined(held) or None
+            urgent = [_Hold(each.later, each.activity, each.until) for each in urgents]
+            refusals.append((warning.urgent_waits, urgent, urgent_refusal(urgents, now)))
+        told = []
+        for build, holds, agent_lines in refusals:
+            headlined = self._first_refusal(session, holds)
+            told.append(warning.shown([build(_rows(holds))], agent_lines, now, zone, headlined=headlined))
+        return warning.joined(told) or None
 
-    def _first_refusal(self, later: Session, waiting: Sequence[Waiting]) -> bool:
-        """Whether this refusal of the later session's edit is the first on any of the gates it waits on, and so
-        carries the warning's headline; kept, so the next refusal on the same gates does not."""
-        with self._db.transaction() as conn:
-            fresh = [
-                conn.execute(
-                    "INSERT INTO gate_headlines (later_session_id, earlier_session_id) VALUES (%s, %s)"
-                    " ON CONFLICT DO NOTHING RETURNING later_session_id",
-                    (later.id, each.earlier.id),
-                ).fetchone()
-                for each in waiting
-            ]
-        return any(row is not None for row in fresh)
-
-    def _first_urgent_refusal(self, earlier: Session, urgents: Sequence[Urgent]) -> bool:
-        """Whether this refusal of the earlier session's edit is the first on any of the urgent messages that hold it,
-        and so carries the warning's headline; kept, so the next refusal on the same messages does not."""
+    def _first_refusal(self, held: Session, holds: Sequence[_Hold]) -> bool:
+        """Whether this refusal of the held session's edit is the first while any of these sessions holds it, and so
+        carries the warning's headline; kept, so the next refusal while the same sessions hold it does not."""
         with self._db.transaction() as conn:
             fresh = conn.execute(
-                "UPDATE gate_urgents SET headlined = TRUE WHERE earlier_session_id = %s AND later_session_id = ANY(%s)"
-                " AND answered_at IS NULL AND NOT headlined RETURNING later_session_id",
-                (earlier.id, [each.later.id for each in urgents]),
+                "INSERT INTO refusal_headlines (held_session_id, holding_session_id)"
+                " SELECT DISTINCT %s::bigint, holding FROM unnest(%s::bigint[]) AS holds(holding)"
+                " ON CONFLICT DO NOTHING RETURNING holding_session_id",
+                (held.id, [each.holding.id for each in holds]),
             ).fetchall()
         return bool(fresh)
 
