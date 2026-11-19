@@ -16,10 +16,13 @@ from shared_memory.warning import (
     asked_by_gate,
     columns,
     headline,
+    headlines_in,
     held_by_gate,
+    joined,
     render,
     shown,
     time_left,
+    warnings_in,
 )
 
 NOW = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
@@ -159,3 +162,32 @@ def test_a_notice_shows_its_warnings_first_then_the_agents_lines() -> None:
 
     assert notice.startswith(LEAD_IN + "\n\n**⚠ Dana Dev")
     assert notice.endswith("```\n\n[gate] for the agent")
+
+
+def test_a_notice_carries_its_warnings_and_headlines_through_joining() -> None:
+    asked = asked_by_gate(Row("Dana Dev", "webhooks", FIVE))
+    held = held_by_gate([Row("Olive Owner", "webhooks", FIVE)])
+
+    told = joined(["[message] plain", shown([asked], "agent lines", NOW), None, shown([held], "more", NOW)])
+
+    assert told.startswith("[message] plain\n\n" + LEAD_IN)
+    assert warnings_in(told) == (asked, held)
+    assert headlines_in(told) == (headline(asked), headline(held))
+
+
+def test_a_notice_whose_member_was_shown_its_headline_carries_its_warning_alone() -> None:
+    held = held_by_gate([Row("Olive Owner", "webhooks", FIVE)])
+
+    again = shown([held], "agent lines", NOW, headlined=False)
+
+    assert warnings_in(again) == (held,)
+    assert headlines_in(again) == ()
+    assert again == shown([held], "agent lines", NOW), "the same text"
+
+
+def test_plain_notices_carry_nothing() -> None:
+    told = joined(["one", "two"])
+
+    assert told == "one\n\ntwo"
+    assert warnings_in(told) == () and headlines_in(told) == ()
+    assert joined([None, ""]) == ""

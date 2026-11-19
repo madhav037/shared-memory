@@ -24,6 +24,8 @@ Kept in Postgres, so every worker agrees (ADR-0013):
   the later session, and whether the later session has been told. A refusal may be changed to agree; an agreement
   stands.
 - `gate_starts`: per later and earlier session, that the earlier session has been told the gate waits on its work.
+- `gate_headlines`: per later and earlier session, that the later session's member has been shown the headline of a
+  refusal of its edit on that gate, which only the first refusal carries (see `warning.headline`).
 - `gate_waits`: per later and earlier session, that the later session's gate was found waiting for the earlier one,
   with the earlier member's name as it was then, so that when the earlier session ends or goes idle, which lifts the
   gate on it, the later session is told once (story 5 of #523). Kept past the earlier session's end for that.
@@ -40,7 +42,8 @@ What other modules stand on, all of it on `Gates`:
 - `before_edit(caller, session, paths)`: why the before-edit hook refuses an edit of these files, or None. A gate's
   refusal opens with a warning for the member (see `warning`), whose reply words include different work, and its
   lines for the agent open with different work too, since a wrong collision now stops real work. The earlier
-  session's notice that a gate waits on its work carries a warning as well.
+  session's notice that a gate waits on its work carries a warning as well. Both carry the warning's headline for the
+  member (`warning.Shown`), a refused edit only on the first refusal of a given gate.
 - `different_work(caller, session)`: lift this session's gate at once; the names of the members it was waiting for.
 - `answer(caller, session, member_id, answer, text)`: the earlier member agrees to or refuses the gates a member's
   sessions have on this session's work; the names of the members answered. `answerable(session, member_id)` says
@@ -120,6 +123,14 @@ CREATE INDEX IF NOT EXISTS gate_answers_later ON gate_answers (later_session_id)
 
 -- The earlier session has been told that the later session's gate waits on its work.
 CREATE TABLE IF NOT EXISTS gate_starts (
+    later_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
+    PRIMARY KEY (later_session_id, earlier_session_id)
+);
+
+-- The later session's member has been shown the headline of its refusal on this earlier session: once per gate, since
+-- a refused edit repeats.
+CREATE TABLE IF NOT EXISTS gate_headlines (
     later_session_id BIGINT NOT NULL REFERENCES sessions(id),
     earlier_session_id BIGINT NOT NULL REFERENCES sessions(id),
     PRIMARY KEY (later_session_id, earlier_session_id)
@@ -417,9 +428,9 @@ class Gates:
     @staticmethod
     def _clear(conn: Conn, ids: Sequence[int]) -> None:
         gone = list(ids)
-        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_urgents"):
+        for table in ("gate_ends", "gate_answers", "gate_starts", "gate_headlines", "gate_urgents"):
             conn.execute(
-                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of four names written here
+                f"DELETE FROM {table} WHERE later_session_id = ANY(%s) OR earlier_session_id = ANY(%s)",  # noqa: S608  # the table is one of five names written here
                 (gone, gone),
             )
         # Kept past the earlier session's end, which its later session is still to be told of.
@@ -585,9 +596,33 @@ class Gates:
         waiting = self.waiting(caller, session)
         urgents = self._urgents(session)
         now = self._clock()
-        held = [warning.shown([warning.held_by_gate(_held_rows(waiting))], refusal(waiting, now), now)] if waiting else []
-        reasons = [*held, *([urgent_refusal(urgents, now)] if urgents else [])]
-        return "\n\n".join(reasons) or None
+        held = (
+            [
+                warning.shown(
+                    [warning.held_by_gate(_held_rows(waiting))],
+                    refusal(waiting, now),
+                    now,
+                    headlined=self._first_refusal(session, waiting),
+                )
+            ]
+            if waiting
+            else []
+        )
+        return warning.joined([*held, *([urgent_refusal(urgents, now)] if urgents else [])]) or None
+
+    def _first_refusal(self, later: Session, waiting: Sequence[Waiting]) -> bool:
+        """Whether this refusal of the later session's edit is the first on any of the gates it waits on, and so
+        carries the warning's headline; kept, so the next refusal on the same gates does not."""
+        with self._db.transaction() as conn:
+            fresh = [
+                conn.execute(
+                    "INSERT INTO gate_headlines (later_session_id, earlier_session_id) VALUES (%s, %s)"
+                    " ON CONFLICT DO NOTHING RETURNING later_session_id",
+                    (later.id, each.earlier.id),
+                ).fetchone()
+                for each in waiting
+            ]
+        return any(row is not None for row in fresh)
 
     def edit_went_ahead(self, session: Session) -> None:
         """This session's edit went ahead, every check before it having passed, which shows its gate gone: a gate
@@ -942,7 +977,7 @@ class Gates:
         whose member has not answered, while the wait runs."""
         now = self._clock()
         wait: timedelta | None = None
-        told = []
+        told: list[str] = []
         for each in self._on_work(session):
             if each.ended or each.answer is not None:
                 continue

@@ -27,7 +27,7 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from shared_memory import hooks, onboarding
+from shared_memory import hooks, onboarding, warning
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
 from shared_memory.audit import PROJECT_CREATED, Audit
@@ -492,7 +492,7 @@ def build_app(
 
     def news_for(current: Caller, session: Session) -> str | None:
         """What is waiting for a session, as one added context for a hook's answer, or None when nothing is."""
-        return "\n\n".join(waiting_for(current, session)) or None
+        return warning.joined(waiting_for(current, session)) or None
 
     HookPart = Callable[[Caller, dict[str, Any]], str | None]
     # A hook's optional part: what recall tells, recorded as told only once the answer carries it.
@@ -544,6 +544,9 @@ def build_app(
         is dropped stays untold. A `first` step, which the parts stand on (the prompt's embedding), has the
         recall budget too; given up on, the required part runs without it and the optional part is dropped, since it
         would wait on the same model.
+
+        A part's notices that carry warnings (`warning.Shown`) add their headlines to the answer as one line for the
+        member, in the formats with a field for one (Claude Code's `systemMessage`), each notice's once.
         """
         answer_format = request.query_params.get("format")
         parts: list[str | None] = []
@@ -570,10 +573,12 @@ def build_app(
         except Exception:
             log.exception("%s hook failed", event)
             return JSONResponse({})
-        context = "\n\n".join(part for part in parts if part)
+        context = warning.joined(parts)
         if not context:
             return JSONResponse({})
-        return JSONResponse(answer(answer_format, named_event, context))
+        headlines = warning.headlines_in(context)
+        member_line = hooks.notice(answer_format, "\n".join(headlines)) if headlines else {}
+        return JSONResponse({**answer(answer_format, named_event, context), **member_line})
 
     async def hook_call(request: Request) -> _HookCall | Refused | None:
         """What every hook call opens with: its caller, authenticated from the headers before the body is read, so a
@@ -630,7 +635,7 @@ def build_app(
             if session:
                 standbys.end(session)  # its member moved on (ADR-0027)
             told = [challenges.prompt_notices(current), *(waiting_for(current, session, embedded[0], prompted=True) if session else [])]
-            return "\n\n".join(part for part in told if part) or None
+            return warning.joined(told) or None
 
         def recalled(current: Caller, payload: dict[str, Any]) -> Telling | None:
             prompt = hooks.prompt_in(payload)

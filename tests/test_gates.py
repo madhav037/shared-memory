@@ -7,6 +7,7 @@ prompt scores 0.8 against it, so Dana's is the later session."""
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from collections.abc import Iterator
@@ -217,6 +218,54 @@ def test_agent_only_instructions_still_follow_the_warning(owner: Session, dana: 
     assert refused.startswith(GATED) and "different_work" in refused and "ask your member" in refused
     assert asked.startswith("[gate] Dana Dev (emp-2)") and "answer_gate" in asked and '"emp-2"' in asked
     assert "never on your own judgment" in asked
+
+
+# The headline Claude Code shows its member itself (#587)
+
+# The formats other than Claude Code's, each told its news by the hook it hears news in.
+OTHER_FORMATS = ["gemini", "devin", "copilot-cli", "cursor", "cline"]
+
+
+def test_claude_code_format_carries_the_headline_with_the_gate_warning_on_both_members_notices(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+
+    refused = dana.edit(FILE)
+    told = owner.use(search_tool("webhook"))
+
+    assert warning_in(reason_in(refused))[0] == "⚠ Your edit waits for Olive Owner"
+    assert refused["systemMessage"] == "⚠ Your edit waits for Olive Owner. Read the box below."
+    assert warning_in(added_context(told))[0] == "⚠ Dana Dev is waiting on you"
+    assert told["systemMessage"] == "⚠ Dana Dev is waiting on you. Read the box below."
+    assert "systemMessage" not in owner.use(search_tool("webhook")), "once per notice"
+
+
+def test_a_second_refusal_of_the_same_gate_keeps_the_warning_without_the_headline(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    first = dana.edit(FILE)
+
+    second = dana.edit(FILE)
+
+    assert "systemMessage" in first
+    assert denied(second)
+    assert warning_in(reason_in(second))[0] == "⚠ Your edit waits for Olive Owner"
+    assert "systemMessage" not in second
+
+
+@pytest.mark.parametrize("format", OTHER_FORMATS)
+def test_other_formats_get_no_system_message(owner: Session, dana: Session, format: str) -> None:
+    collide(owner, dana)
+
+    refused = dana.edit(FILE, format=format)
+    told = owner.use(search_tool("webhook"), format=format, after=True)
+
+    assert SHOW_FIRST in json.dumps(refused, ensure_ascii=False)
+    assert "Dana Dev is waiting on you" in json.dumps(told, ensure_ascii=False)
+    assert "systemMessage" not in refused
+    assert "systemMessage" not in told
 
 
 def test_a_gated_session_may_still_read(owner: Session, dana: Session) -> None:

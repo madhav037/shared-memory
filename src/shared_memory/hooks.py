@@ -382,6 +382,7 @@ def source_in(payload: Mapping[str, Any]) -> str | None:
 
 
 def notice(format: str | None, text: str) -> dict[str, Any]:
-    """A word for the member rather than for the model, such as that Shared Memory is unavailable. Claude Code's format
-    is the only one with a field for it; the rest are answered empty, which leaves their sessions untouched."""
+    """A word for the member rather than for the model, such as that Shared Memory is unavailable, or a warning's
+    headline. Claude Code's format is the only one with a field for it; the rest are answered empty, which leaves their
+    sessions untouched."""
     return {"systemMessage": text} if _named(format) == CLAUDE else {}
