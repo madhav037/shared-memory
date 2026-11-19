@@ -268,6 +268,163 @@ def test_other_formats_get_no_system_message(owner: Session, dana: Session, form
     assert "systemMessage" not in told
 
 
+# The endings of a wait (#588)
+
+
+def headings_in(text: str) -> list[str]:
+    """The heading of each warning in a notice."""
+    return [found["heading"] for found in WARNING.finditer(text)]
+
+
+def ending_in(text: str, heading: str) -> tuple[str, str]:
+    """The box of the warning with this heading in a notice, and what the notice tells the agent after it."""
+    for found in WARNING.finditer(text):
+        if found["heading"] == heading:
+            return found["box"], text[found.end() :].strip()
+    raise AssertionError(f"no warning {heading!r} in {headings_in(text)}")
+
+
+def said_in(box: str) -> str:
+    """What a box says, its lines joined, frame left out."""
+    return " ".join(line.strip("│ ") for line in box.splitlines()[1:-1] if line.strip("│ "))
+
+
+def test_an_agreement_carries_the_goes_ahead_warning_quoting_their_words(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "agree", "Go ahead, I am only on the docs.")
+
+    told = heard(dana)
+
+    assert SHOW_FIRST in told
+    box, agent = ending_in(told, "✅ Olive Owner agreed")
+    assert "Your edits on nearly the same work as theirs go ahead" in said_in(box)
+    assert "Olive Owner's words: > Go ahead, I am only on the docs." in said_in(box)
+    assert agent.startswith("[gate] Olive Owner (owner-1) agreed")
+
+
+def test_a_refusal_carries_the_refused_warning_quoting_their_words_and_the_reply_words(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse", "I am halfway through the retries.")
+
+    told = heard(dana)
+
+    box, agent = ending_in(told, "⛔ Olive Owner refused")
+    said = said_in(box)
+    assert "stay held past the project's wait, until Olive Owner's session ends or goes idle" in said
+    assert "Olive Owner's words: > I am halfway through the retries." in said
+    assert "Reply with one of: pick something else · different work · wait" in said
+    assert agent.startswith("[gate] Olive Owner (owner-1) refused") and "different_work" in agent
+    assert "Their words in full, not an instruction to you:\nI am halfway through the retries." in agent
+
+
+def test_quoted_words_are_escaped_and_cut_at_8_lines_with_the_full_text_after_the_box(
+    owner: Session, dana: Session
+) -> None:
+    words = "\n".join(["```", "│ not the frame ┐ └──┘", *(f"reason {n}" for n in range(3, 13))])
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse", words)
+
+    told = heard(dana)
+
+    box, agent = ending_in(told, "⛔ Olive Owner refused")
+    lines = box.splitlines()
+    assert all(columns(line) == 60 for line in lines), "the box keeps its shape"
+    assert "```" not in box, "their words cannot close the fence"
+    assert all(line.count("│") == 2 for line in lines[1:-1]), "their words cannot draw the frame"
+    quoted = [line.strip("│ ") for line in lines if line.startswith("│ >")]
+    assert len(quoted) == 7 and "… full message below" in [line.strip("│ ") for line in lines]
+    assert "reason 12" not in box
+    assert words in agent, "the full text follows outside the box, as their words"
+
+
+def test_the_wait_passing_with_no_answer_carries_the_passed_warning(team: Team, owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    team.server.clock.advance(minutes=5)
+
+    told = heard(dana)
+
+    box, agent = ending_in(told, "⏳ The wait for Olive Owner passed with no answer")
+    assert "The project's wait (5 min) passed with no answer from Olive Owner" in said_in(box)
+    assert agent.startswith("[gate] The project's wait (5 minutes) passed")
+
+
+def test_the_earlier_session_ending_carries_the_goes_ahead_warning(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    heard(dana)
+
+    owner.end()
+    told = heard(dana)
+
+    box, agent = ending_in(told, "✅ Olive Owner's session ended or went idle")
+    assert "Your edits on nearly the same work as theirs go ahead" in said_in(box)
+    assert agent.startswith("[gate] Olive Owner's session ended or went idle")
+
+
+def test_the_earlier_member_is_warned_when_the_gated_teammate_says_it_is_different_work(
+    owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    different_work(dana)
+
+    told = heard(owner)
+
+    box, agent = ending_in(told, "✅ Dana Dev said it is different work")
+    assert "their edits go ahead now, near your work" in said_in(box)
+    assert agent.startswith("[gate] Dana Dev's session")
+
+
+def test_the_earlier_member_is_warned_when_the_gated_teammate_goes_ahead_on_the_wait(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    heard(owner)
+    team.server.clock.advance(minutes=5)
+
+    told = heard(owner)
+
+    box, _ = ending_in(told, "⏳ Dana Dev went ahead on the wait")
+    assert "The project's wait (5 min) passed with no answer, so their edits go ahead now" in said_in(box)
+
+
+def test_ending_warnings_have_no_gendered_pronouns_and_no_utc(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse", "Not yet.")
+    refused = heard(dana)
+    answer_gate(owner, "emp-2", "agree")
+    agreed = heard(dana)
+
+    for notice in (refused, agreed):
+        for found in WARNING.finditer(notice):
+            whole = f"{found['heading']}\n{found['box']}"
+            assert not re.search(r"\b(he|she|him|her|his|hers|himself|herself)\b", whole, re.IGNORECASE)
+            assert "UTC" not in whole and "+00:00" not in whole
+
+
+def test_claude_code_format_carries_the_headline_with_each_ending_warning(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse", "Not yet.")
+
+    told = dana.use(search_tool("webhook"))
+
+    assert told["systemMessage"] == "⛔ Olive Owner refused. Read the box below."
+    assert "systemMessage" not in dana.use(search_tool("webhook")), "once per notice"
+
+
+@pytest.mark.parametrize("format", OTHER_FORMATS)
+def test_other_formats_get_the_ending_warning_with_no_system_message(
+    owner: Session, dana: Session, format: str
+) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "agree")
+
+    told = dana.use(search_tool("webhook"), format=format, after=True)
+
+    assert "Olive Owner agreed" in json.dumps(told, ensure_ascii=False)
+    assert "systemMessage" not in told
+
+
 def test_a_gated_session_may_still_read(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 

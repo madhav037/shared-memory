@@ -13,16 +13,21 @@ from shared_memory.warning import (
     Mark,
     Row,
     Warning,
+    agreed,
     asked_by_gate,
     columns,
+    earlier_gone,
     headline,
     headlines_in,
     held_by_gate,
     joined,
+    refused,
     render,
     shown,
     time_left,
+    wait_passed,
     warnings_in,
+    went_ahead,
 )
 
 NOW = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
@@ -141,6 +146,7 @@ def test_no_warning_gives_a_member_a_gendered_pronoun() -> None:
     texts = [
         render(held_by_gate([Row("Olive Owner", None, FIVE), Row("Cole Coder", None, refused=True)]), NOW),
         render(asked_by_gate(Row("Dana Dev", None, FIVE)), NOW),
+        *(render(each, NOW) for each in ENDINGS),
     ]
 
     for text in texts:
@@ -191,3 +197,52 @@ def test_plain_notices_carry_nothing() -> None:
     assert told == "one\n\ntwo"
     assert warnings_in(told) == () and headlines_in(told) == ()
     assert joined([None, ""]) == ""
+
+
+# The endings of a wait (#588)
+
+ENDINGS = [
+    agreed("Olive Owner", "Go ahead."),
+    refused("Olive Owner", "Not yet."),
+    wait_passed("Olive Owner", 5),
+    earlier_gone("Olive Owner"),
+    went_ahead("Dana Dev", True, 5),
+    went_ahead("Dana Dev", False, 5),
+]
+
+
+def test_each_ending_carries_its_mark_and_heading() -> None:
+    assert [render(each, NOW).splitlines()[0] for each in ENDINGS] == [
+        "**✅ Olive Owner agreed**",
+        "**⛔ Olive Owner refused**",
+        "**⏳ The wait for Olive Owner passed with no answer**",
+        "**✅ Olive Owner's session ended or went idle**",
+        "**✅ Dana Dev said it is different work**",
+        "**⏳ Dana Dev went ahead on the wait**",
+    ]
+
+
+def test_a_refusal_quotes_the_members_words_and_gives_the_reply_words() -> None:
+    said = inside(render(refused("Olive Owner", "I am halfway through the retries."), NOW))
+
+    assert "until Olive Owner's session ends or goes idle" in said
+    assert "Olive Owner's words: > I am halfway through the retries." in said
+    assert "Reply with one of: pick something else · different work · wait" in said
+
+
+def test_an_agreement_quotes_the_members_words_when_there_are_any() -> None:
+    assert "Olive Owner's words: > Go ahead." in inside(render(agreed("Olive Owner", "Go ahead."), NOW))
+    assert "words:" not in inside(render(agreed("Olive Owner"), NOW))
+
+
+def test_the_earlier_member_is_told_the_teammate_now_works_near_their_work() -> None:
+    different = inside(render(went_ahead("Dana Dev", True, 5), NOW))
+    waited = inside(render(went_ahead("Dana Dev", False, 5), NOW))
+
+    assert "said it is different work" in different and "near your work" in different
+    assert "The project's wait (5 min) passed with no answer" in waited and "near your work" in waited
+
+
+def test_each_ending_is_drawn_at_60_columns() -> None:
+    for each in ENDINGS:
+        assert all(columns(line) == 60 for line in box_of(render(each, NOW)))

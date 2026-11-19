@@ -16,7 +16,9 @@ frame or the fence, and quoted words are cut at `QUOTED_LINES` lines, the full t
 Times are relative ("14 min left"), with the clock time added in the reader's own time zone when one is known, never
 in UTC. Members are never given gendered pronouns.
 
-The builders (`held_by_gate`, `asked_by_gate`) are the wording of each warning; the gate gives them plain data.
+The builders are the wording of each warning; the gate gives them plain data. A wait starts with `held_by_gate` and
+`asked_by_gate`, and ends with `agreed`, `refused`, `wait_passed` and `earlier_gone` for the held member and
+`went_ahead` for the earlier one.
 """
 
 from __future__ import annotations
@@ -320,4 +322,81 @@ def asked_by_gate(row: Row) -> Warning:
         until=row.until,
         then="then their edit goes ahead without your answer",
         replies=("agree", "refuse"),
+    )
+
+
+# The endings of a wait (#588). The held member hears each answer and lift; the earlier member hears that the gated
+# teammate went ahead.
+
+# What a held member hears of their own part once one member's part of the gate is over.
+_ONCE_EVERY_OTHER = (
+    "Your edits on nearly the same work as theirs go ahead, once every other member the gate waits for has agreed or "
+    "the wait has passed."
+)
+
+
+def agreed(member_name: str, words: str | None = None) -> Warning:
+    """Told to the held member when a member the gate waits for agrees, quoting their words if they gave any."""
+    return Warning(
+        mark=Mark.GOES_AHEAD,
+        heading=f"{member_name} agreed",
+        says=(_ONCE_EVERY_OTHER,),
+        quoted=words,
+        quoted_from=member_name,
+    )
+
+
+def refused(member_name: str, words: str | None = None) -> Warning:
+    """Told to the held member when a member the gate waits for refuses, quoting their words if they gave any, and
+    what they can reply now."""
+    return Warning(
+        mark=Mark.REFUSED,
+        heading=f"{member_name} refused",
+        says=(
+            f"Your edits on nearly the same work as theirs stay held past the project's wait, until {member_name}'s "
+            "session ends or goes idle.",
+        ),
+        quoted=words,
+        quoted_from=member_name,
+        replies=("pick something else", "different work", "wait"),
+    )
+
+
+def wait_passed(member_name: str, minutes: int) -> Warning:
+    """Told to the held member when the project's wait passes with no answer from a member the gate waits for."""
+    return Warning(
+        mark=Mark.PASSED,
+        heading=f"The wait for {member_name} passed with no answer",
+        says=(f"The project's wait ({minutes} min) passed with no answer from {member_name}.", _ONCE_EVERY_OTHER),
+    )
+
+
+def earlier_gone(member_name: str) -> Warning:
+    """Told to the held member when the session of a member the gate waits for ends or goes idle."""
+    return Warning(
+        mark=Mark.GOES_AHEAD,
+        heading=f"{member_name}'s session ended or went idle",
+        says=(f"{member_name} is no longer holding your work.", _ONCE_EVERY_OTHER),
+    )
+
+
+def went_ahead(member_name: str, different_work: bool, minutes: int) -> Warning:
+    """Told to the earlier member when the teammate their work held goes ahead: it said it is different work, or the
+    project's wait passed with no answer."""
+    if different_work:
+        return Warning(
+            mark=Mark.GOES_AHEAD,
+            heading=f"{member_name} said it is different work",
+            says=(
+                f"{member_name}'s session was waiting on nearly the same work as yours. They said it is different "
+                "work, so their edits go ahead now, near your work.",
+            ),
+        )
+    return Warning(
+        mark=Mark.PASSED,
+        heading=f"{member_name} went ahead on the wait",
+        says=(
+            f"{member_name}'s session was waiting on nearly the same work as yours. The project's wait ({minutes} "
+            "min) passed with no answer, so their edits go ahead now, near your work.",
+        ),
     )
