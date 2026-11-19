@@ -257,29 +257,42 @@ class Session:
             return str(refused)
         raise AssertionError(f"{tool} was not refused")
 
-    def _hook(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
+    def _hook(
+        self, event: str, payload: dict[str, Any], format: str | None = None, utc_offset: str | None = None
+    ) -> dict[str, Any]:
         body = {"session_id": self.identifier, "cwd": WORKING_FOLDER, "hook_event_name": CLAUDE_EVENTS[event], **payload}
-        return self.hook_payload(event, body, format)
+        return self.hook_payload(event, body, format, utc_offset=utc_offset)
 
     def hook_payload(
-        self, event: str, payload: dict[str, Any], format: str | None = None, branch: str | None = None
+        self,
+        event: str,
+        payload: dict[str, Any],
+        format: str | None = None,
+        branch: str | None = None,
+        utc_offset: str | None = None,
     ) -> dict[str, Any]:
-        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format, and
-        naming the session's git branch as the hook before a tool does."""
+        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format,
+        naming the session's git branch as the hook before a tool does, and giving the machine's UTC offset as the
+        session-start hook does."""
+        sent = {
+            **({"X-Shared-Memory-Branch": branch} if branch is not None else {}),
+            **({"X-Shared-Memory-Utc-Offset": utc_offset} if utc_offset is not None else {}),
+        }
         response = httpx.post(
             f"{self.server.url}/hooks/{event}",
             json=payload,
             params={"format": format} if format else None,
-            headers={**self.headers(), **({"X-Shared-Memory-Branch": branch} if branch is not None else {})},
+            headers={**self.headers(), **sent},
             timeout=60,
         )
         assert response.status_code == 200, response.text
         data: dict[str, Any] = response.json()
         return data
 
-    def start(self, format: str | None = None) -> dict[str, Any]:
-        """Fire the session-start hook and return its hook output."""
-        return self._hook("session-start", {"source": "startup"}, format)
+    def start(self, format: str | None = None, utc_offset: str | None = None) -> dict[str, Any]:
+        """Fire the session-start hook and return its hook output, giving the machine's UTC offset (`+0530`) as every
+        kit's hook does, where one is given."""
+        return self._hook("session-start", {"source": "startup"}, format, utc_offset)
 
     def prompt(self, text: str, format: str | None = None) -> dict[str, Any]:
         """Fire the prompt-submitted hook and return its hook output."""
