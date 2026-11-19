@@ -60,8 +60,19 @@ def after_warning(text: str) -> str:
 
 
 def rows_in(box: str) -> list[str]:
-    """The member rows of a warning's box, each as it opens."""
-    return [line.strip("│ ") for line in box.splitlines() if line.startswith("│ - ")]
+    """The member rows of a warning's box, each whole: a row opens with "- " and its wrapped lines hang under it."""
+    rows: list[str] = []
+    in_row = False
+    for line in box.splitlines():
+        text = line.strip("│ ")
+        if line.startswith("│ - "):
+            rows.append(text)
+            in_row = True
+        elif in_row and line.startswith("│   ") and text:
+            rows[-1] += f" {text}"
+        else:
+            in_row = False
+    return rows
 
 
 def columns(line: str) -> int:

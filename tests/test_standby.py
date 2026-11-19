@@ -344,13 +344,15 @@ def test_stand_by_tool_news_with_a_warning_answers_member_and_shows_it_first(own
 def test_standby_hook_news_without_a_warning_answers_member_null_and_the_news_as_before(
     owner: Session, dana: Session
 ) -> None:
-    state(dana, RETRIES)
+    owner.start()
+    dana.start()
     held = standing_by(dana)
 
-    state(owner, WEBHOOKS)
+    send(owner, "emp-2", ASKED)
 
     answer = answer_of(held)
     assert answer["ended"] == "news"
+    assert any(ASKED in each for each in answer["news"]), "an ordinary message, which carries no warning"
     assert "member" in answer and answer["member"] is None
     assert answer["message"] == "\n\n".join(answer["news"])
     assert not answer["message"].startswith(SHOW_FIRST)
