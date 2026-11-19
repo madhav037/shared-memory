@@ -404,7 +404,13 @@ def source_in(payload: Mapping[str, Any]) -> str | None:
 
 
 def notice(format: str | None, text: str) -> dict[str, Any]:
-    """A word for the member rather than for the model, such as that Shared Memory is unavailable, or a warning's
-    headline. Claude Code's format is the only one with a field for it; the rest are answered empty, which leaves their
-    sessions untouched."""
+    """A word for the member rather than for the model, such as that Shared Memory is unavailable. Claude Code's format
+    is the only one with a field for it; the rest are answered empty, which leaves their sessions untouched."""
     return {"systemMessage": text} if _named(format) == CLAUDE else {}
+
+
+def headline(agent: str | None, text: str) -> dict[str, Any]:
+    """A warning's headline, the line Claude Code shows its member itself in `systemMessage`. Only a hook that names
+    Claude Code in `AGENT_HEADER` gets it: Codex asks for Claude Code's format too, as Devin Desktop does on all but
+    its hook before a tool, so the format can't tell them apart. Every other hook is answered without it."""
+    return {"systemMessage": text} if agent == CLAUDE_CODE.name else {}

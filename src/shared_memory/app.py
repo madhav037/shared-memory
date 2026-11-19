@@ -564,7 +564,8 @@ def build_app(
         would wait on the same model.
 
         A part's notices that carry warnings (`warning.Shown`) add their headlines to the answer as one line for the
-        member, in the formats with a field for one (Claude Code's `systemMessage`), each notice's once.
+        member, each notice's once, when the hook is Claude Code's (`hooks.headline`): no other agent has a field
+        for one.
         """
         answer_format = request.query_params.get("format")
         parts: list[str | None] = []
@@ -595,7 +596,7 @@ def build_app(
         if not context:
             return JSONResponse({})
         headlines = warning.headlines_in(context)
-        member_line = hooks.notice(answer_format, "\n".join(headlines)) if headlines else {}
+        member_line = hooks.headline(current.agent, "\n".join(headlines)) if headlines else {}
         return JSONResponse({**answer(answer_format, named_event, context), **member_line})
 
     async def hook_call(request: Request) -> _HookCall | Refused | None:

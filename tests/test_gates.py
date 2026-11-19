@@ -17,8 +17,10 @@ import psycopg
 import pytest
 from anyio.from_thread import start_blocking_portal
 
+from shared_memory import hooks
 from shared_memory.app import build_app
 from shared_memory.config import Settings
+from shared_memory.hooks import CLAUDE_CODE, CLINE, CODEX, COPILOT_CLI, CURSOR, DEVIN, GEMINI_CLI, AgentHooks
 from tests.support import (
     REPO_ROOT,
     Console,
@@ -414,32 +416,41 @@ def test_agent_only_instructions_still_follow_the_warning(owner: Session, dana: 
 
 # The headline Claude Code shows its member itself (#587)
 
-# The formats other than Claude Code's, each told its news by the hook it hears news in.
-OTHER_FORMATS = ["gemini", "devin", "copilot-cli", "cursor", "cline"]
+# The agents other than Claude Code, each hooked as its kit hooks it. Codex asks for Claude Code's answer format and
+# Devin Desktop does too on all but its hook before a tool, so only the agent each hook names tells them apart.
+OTHER_AGENTS = [CODEX, GEMINI_CLI, DEVIN, COPILOT_CLI, CURSOR, CLINE]
 
 
-def test_claude_code_format_carries_the_headline_with_the_gate_warning_on_both_members_notices(
+def told_news(session: Session) -> dict[str, Any]:
+    """What the session's agent is answered on its next tool call, in the hook its kit hears news in: the one before
+    the tool where that takes added context, else the one after it."""
+    assert session.hooks_of is not None
+    before = hooks.hears_before_tool(session.hooks_of.format)
+    return session.use(search_tool("webhook"), after=not before)
+
+
+def test_claude_code_carries_the_headline_with_the_gate_warning_on_both_members_notices(
     owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
 
-    refused = dana.edit(FILE)
-    told = owner.use(search_tool("webhook"))
+    refused = dana.hooked_by(CLAUDE_CODE).edit(FILE)
+    told = owner.hooked_by(CLAUDE_CODE).use(search_tool("webhook"))
 
     assert warning_in(reason_in(refused))[0] == "⚠ Your edit waits for Olive Owner"
     assert refused["systemMessage"] == "⚠ Your edit waits for Olive Owner. Read the box below."
     assert warning_in(added_context(told))[0] == "⚠ Dana Dev is waiting on you"
     assert told["systemMessage"] == "⚠ Dana Dev is waiting on you. Read the box below."
-    assert "systemMessage" not in owner.use(search_tool("webhook")), "once per notice"
+    assert "systemMessage" not in owner.hooked_by(CLAUDE_CODE).use(search_tool("webhook")), "once per notice"
 
 
 def test_a_second_refusal_of_the_same_gate_keeps_the_warning_without_the_headline(
     owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
-    first = dana.edit(FILE)
+    first = dana.hooked_by(CLAUDE_CODE).edit(FILE)
 
-    second = dana.edit(FILE)
+    second = dana.hooked_by(CLAUDE_CODE).edit(FILE)
 
     assert "systemMessage" in first
     assert denied(second)
@@ -447,12 +458,21 @@ def test_a_second_refusal_of_the_same_gate_keeps_the_warning_without_the_headlin
     assert "systemMessage" not in second
 
 
-@pytest.mark.parametrize("format", OTHER_FORMATS)
-def test_other_formats_get_no_system_message(owner: Session, dana: Session, format: str) -> None:
+def test_a_hook_that_names_no_agent_gets_the_gate_warning_with_no_system_message(owner: Session, dana: Session) -> None:
     collide(owner, dana)
 
-    refused = dana.edit(FILE, format=format)
-    told = owner.use(search_tool("webhook"), format=format, after=True)
+    refused = dana.edit(FILE)
+
+    assert warning_in(reason_in(refused))[0] == "⚠ Your edit waits for Olive Owner"
+    assert "systemMessage" not in refused
+
+
+@pytest.mark.parametrize("agent", OTHER_AGENTS, ids=lambda agent: agent.header)
+def test_other_agents_get_no_system_message(owner: Session, dana: Session, agent: AgentHooks) -> None:
+    collide(owner, dana)
+
+    refused = dana.hooked_by(agent).edit(FILE)
+    told = told_news(owner.hooked_by(agent))
 
     assert SHOW_FIRST in json.dumps(refused, ensure_ascii=False)
     assert "Dana Dev is waiting on you" in json.dumps(told, ensure_ascii=False)
@@ -594,24 +614,24 @@ def test_ending_warnings_have_no_gendered_pronouns_and_no_utc(owner: Session, da
             assert "UTC" not in whole and "+00:00" not in whole
 
 
-def test_claude_code_format_carries_the_headline_with_each_ending_warning(owner: Session, dana: Session) -> None:
+def test_claude_code_carries_the_headline_with_each_ending_warning(owner: Session, dana: Session) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "refuse", "Not yet.")
 
-    told = dana.use(search_tool("webhook"))
+    told = dana.hooked_by(CLAUDE_CODE).use(search_tool("webhook"))
 
     assert told["systemMessage"] == "⛔ Olive Owner refused. Read the box below."
-    assert "systemMessage" not in dana.use(search_tool("webhook")), "once per notice"
+    assert "systemMessage" not in dana.hooked_by(CLAUDE_CODE).use(search_tool("webhook")), "once per notice"
 
 
-@pytest.mark.parametrize("format", OTHER_FORMATS)
-def test_other_formats_get_the_ending_warning_with_no_system_message(
-    owner: Session, dana: Session, format: str
+@pytest.mark.parametrize("agent", OTHER_AGENTS, ids=lambda agent: agent.header)
+def test_other_agents_get_the_ending_warning_with_no_system_message(
+    owner: Session, dana: Session, agent: AgentHooks
 ) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "agree")
 
-    told = dana.use(search_tool("webhook"), format=format, after=True)
+    told = told_news(dana.hooked_by(agent))
 
     assert "Olive Owner agreed" in json.dumps(told, ensure_ascii=False)
     assert "systemMessage" not in told
@@ -1249,27 +1269,25 @@ def test_urgent_warnings_have_no_gendered_pronouns_and_no_utc(owner: Session, da
             assert "UTC" not in whole and "+00:00" not in whole and "09:05" not in whole
 
 
-def test_claude_code_format_carries_the_headline_with_an_arriving_urgent_message_once(
-    owner: Session, dana: Session
-) -> None:
+def test_claude_code_carries_the_headline_with_an_arriving_urgent_message_once(owner: Session, dana: Session) -> None:
     collide(owner, dana)
     heard(owner)
     send_urgent(dana, "owner-1")
 
-    told = owner.use(search_tool("webhook"))
+    told = owner.hooked_by(CLAUDE_CODE).use(search_tool("webhook"))
 
     assert told["systemMessage"] == f"{URGENT_SENT}. Read the box below."
-    assert "systemMessage" not in owner.use(search_tool("webhook")), "once per notice"
+    assert "systemMessage" not in owner.hooked_by(CLAUDE_CODE).use(search_tool("webhook")), "once per notice"
 
 
-def test_claude_code_format_carries_the_headline_with_the_urgent_refusal_only_on_the_first_refusal(
+def test_claude_code_carries_the_headline_with_the_urgent_refusal_only_on_the_first_refusal(
     owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     send_urgent(dana, "owner-1")
-    first = owner.edit("src/other.py")
+    first = owner.hooked_by(CLAUDE_CODE).edit("src/other.py")
 
-    second = owner.edit("src/other.py")
+    second = owner.hooked_by(CLAUDE_CODE).edit("src/other.py")
 
     assert first["systemMessage"] == f"{URGENT_WAITS}. Read the box below."
     assert denied(second)
@@ -1293,16 +1311,16 @@ def test_urgent_warnings_give_the_clock_time_in_the_recipients_own_time_zone(
     assert "5 min left (until 11:05 am your time), then your edits go ahead" in refused, "Olive's zone, not Dana's"
 
 
-@pytest.mark.parametrize("format", OTHER_FORMATS)
-def test_other_formats_get_the_urgent_warnings_with_no_system_message(
-    owner: Session, dana: Session, format: str
+@pytest.mark.parametrize("agent", OTHER_AGENTS, ids=lambda agent: agent.header)
+def test_other_agents_get_the_urgent_warnings_with_no_system_message(
+    owner: Session, dana: Session, agent: AgentHooks
 ) -> None:
     collide(owner, dana)
     heard(owner)
     send_urgent(dana, "owner-1")
 
-    told = owner.use(search_tool("webhook"), format=format, after=True)
-    refused = owner.edit("src/other.py", format=format)
+    told = told_news(owner.hooked_by(agent))
+    refused = owner.hooked_by(agent).edit("src/other.py")
 
     assert "Dana Dev sent you an urgent message" in json.dumps(told, ensure_ascii=False)
     assert "Your edits wait for your answer to Dana Dev" in json.dumps(refused, ensure_ascii=False)
