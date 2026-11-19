@@ -364,7 +364,7 @@ def build_app(
     project_patterns = ProjectPatterns(db, identity, audit, clock)
     collisions = Collisions(settings, db, sessions, activities, queries, clock)
     gates = Gates(settings, db, identity, sessions, activities, collisions, audit, clock)
-    messages = Messages(settings, db, sessions, clock)
+    messages = Messages(settings, db, sessions, gates.wait, clock)
     unhooked = Unhooked(db, sessions, gates, clock)
     talk = Talk(settings, db, sessions, collisions, gates, messages, clock)
     # After `collisions`: its listener keeps an ended session's last activity, which the note is put together from.
@@ -467,8 +467,9 @@ def build_app(
 
         Every warning a session is told takes its zone from here, for the session reading it, never the member whose
         act it tells of: the gates' refusal and notices (endings included) through `waiting_for` and the before-edit
-        hook, and the standby's `member` and `message` through `_standby_answer`. A new warning (urgent messages,
-        #589) takes a `zone` parameter and is handed `reader_zone(current, session)` the same way."""
+        hook, an urgent message's (#589) through `waiting_for` and the before-edit hook too, and the standby's `member`
+        and `message` through `_standby_answer`. A new warning takes a `zone` parameter and is handed
+        `reader_zone(current, session)` the same way."""
         return time_zone.used(identity.time_zone(current.member.pk))
 
     def waiting_for(
@@ -485,13 +486,14 @@ def build_app(
         asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
         compares with the other sessions' activities, and says it is `prompted`: a muted session hears its messages
         that are not urgent only then, or once it unmutes (#514); everything else gets through a mute."""
+        zone = reader_zone(current, session)
         return [
             *sessions.waiting_notices(session),
             *locks.waiting_notices(session),
             *collisions.warnings(current, session, prompt),
-            *gates.waiting_notices(current, session, reader_zone(current, session)),
+            *gates.waiting_notices(current, session, zone),
             *unhooked.notices(current, session),
-            *messages.waiting_notices(session, urgent_only=session.muted and not prompted),
+            *messages.waiting_notices(session, urgent_only=session.muted and not prompted, zone=zone),
             *talk.waiting_notices(session),
             *recent_work(current, session, prompt),
         ]

@@ -30,7 +30,8 @@ Kept in Postgres, so every worker agrees (ADR-0013):
   with the earlier member's name as it was then, so that when the earlier session ends or goes idle, which lifts the
   gate on it, the later session is told once (story 5 of #523). Kept past the earlier session's end for that.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
-  member answered it. Its primary key is what keeps it to one per collision.
+  member answered it, and whether the earlier member has been shown the headline of a refusal of its edit on it,
+  which only the first refusal carries. Its primary key is what keeps it to one per collision.
 - `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
@@ -154,6 +155,8 @@ CREATE TABLE IF NOT EXISTS gate_urgents (
     answered_at TIMESTAMPTZ,
     PRIMARY KEY (later_session_id, earlier_session_id)
 );
+-- The earlier session's member has been shown the headline of a refusal of its edit on this urgent message: once.
+ALTER TABLE gate_urgents ADD COLUMN IF NOT EXISTS headlined BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS gate_urgents_earlier ON gate_urgents (earlier_session_id) WHERE answered_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS project_waits (
@@ -292,6 +295,22 @@ def _held_rows(waiting: Sequence[Waiting]) -> list[warning.Row]:
             )
         )
     return rows
+
+
+def _urgent_rows(urgents: Sequence[Urgent]) -> list[warning.Row]:
+    """The rows of the warning on an edit an urgent message holds: one per member who sent one, whatever number of
+    their sessions, until the last of their waits passes."""
+    members: dict[str, list[Urgent]] = {}
+    for each in urgents:
+        members.setdefault(each.later.member_id, []).append(each)
+    return [
+        warning.Row(
+            theirs[0].later.member_name,
+            "; ".join(dict.fromkeys(each.activity for each in theirs if each.activity)) or None,
+            max(each.until for each in theirs),
+        )
+        for theirs in members.values()
+    ]
 
 
 def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
@@ -623,7 +642,17 @@ class Gates:
             if waiting
             else []
         )
-        return warning.joined([*held, *([urgent_refusal(urgents, now)] if urgents else [])]) or None
+        if urgents:
+            held.append(
+                warning.shown(
+                    [warning.urgent_waits(_urgent_rows(urgents))],
+                    urgent_refusal(urgents, now),
+                    now,
+                    zone,
+                    headlined=self._first_urgent_refusal(session, urgents),
+                )
+            )
+        return warning.joined(held) or None
 
     def _first_refusal(self, later: Session, waiting: Sequence[Waiting]) -> bool:
         """Whether this refusal of the later session's edit is the first on any of the gates it waits on, and so
@@ -638,6 +667,17 @@ class Gates:
                 for each in waiting
             ]
         return any(row is not None for row in fresh)
+
+    def _first_urgent_refusal(self, earlier: Session, urgents: Sequence[Urgent]) -> bool:
+        """Whether this refusal of the earlier session's edit is the first on any of the urgent messages that hold it,
+        and so carries the warning's headline; kept, so the next refusal on the same messages does not."""
+        with self._db.transaction() as conn:
+            fresh = conn.execute(
+                "UPDATE gate_urgents SET headlined = TRUE WHERE earlier_session_id = %s AND later_session_id = ANY(%s)"
+                " AND answered_at IS NULL AND NOT headlined RETURNING later_session_id",
+                (earlier.id, [each.later.id for each in urgents]),
+            ).fetchall()
+        return bool(fresh)
 
     def edit_went_ahead(self, session: Session) -> None:
         """This session's edit went ahead, every check before it having passed, which shows its gate gone: a gate

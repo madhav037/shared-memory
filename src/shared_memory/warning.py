@@ -20,7 +20,8 @@ in UTC. Members are never given gendered pronouns.
 
 The builders are the wording of each warning; the gate and the standby give them plain data. A wait starts with
 `held_by_gate` and `asked_by_gate`, and ends with `agreed`, `refused`, `wait_passed` and `earlier_gone` for the held
-member and `went_ahead` for the earlier one; `standby_heard_nothing` is a standby that heard nothing.
+member and `went_ahead` for the earlier one; `standby_heard_nothing` is a standby that heard nothing. An urgent message
+is quoted by `urgent_message` as it arrives, and `urgent_waits` tells its recipient why an edit waits for their answer.
 """
 
 from __future__ import annotations
@@ -445,4 +446,52 @@ def standby_heard_nothing(until: datetime | None) -> Warning:
         until=until,
         then="then the project's wait passes",
         after=("Your session can stand by once more: you will hear the answer here without typing anything.",),
+    )
+
+
+# Urgent messages (#589). The member sent one hears it quoted, and that their edits on the same work wait for their
+# answer; while it waits, a refused edit tells them so.
+
+
+def urgent_message(member_name: str, words: str, until: datetime | None) -> Warning:
+    """Told to the member sent an urgent message: their edits on nearly the same work as the sender's wait for their
+    answer until `until`, when they wait no longer (none once the project's wait has passed), and the message quoted."""
+    if until is None:
+        says = (
+            f"{member_name}'s session is on nearly the same work as yours. The project's wait has passed, so your "
+            "edits no longer wait for your answer.",
+        )
+    else:
+        says = (
+            f"{member_name}'s session is on nearly the same work as yours. Your edits on nearly the same work as "
+            "theirs wait for your answer.",
+        )
+    return Warning(
+        mark=Mark.WAITS,
+        heading=f"{member_name} sent you an urgent message",
+        says=says,
+        until=until,
+        then="then your edits wait no longer",
+        after=(f"Tell your agent your answer and it sends it to {member_name}, or say it is different work.",),
+        quoted=words,
+        quoted_from=member_name,
+    )
+
+
+def urgent_waits(rows: Sequence[Row]) -> Warning:
+    """Told to the member whose edit is refused because an urgent message waits for their answer: one row per member
+    who sent one, and how long until the edits go ahead without an answer."""
+    open_rows = [row.until for row in rows if row.until is not None]
+    sent = "sent you an urgent message" if len(rows) == 1 else "each sent you an urgent message"
+    return Warning(
+        mark=Mark.WAITS,
+        heading=f"Your edits wait for your answer to {_names(rows)}",
+        says=(
+            f"{_names(rows)} {sent} on nearly the same work as yours, so your agent stopped before editing. Reading, "
+            "searching and planning still work.",
+        ),
+        rows=tuple(rows),
+        until=max(open_rows) if open_rows else None,
+        then="then your edits go ahead without your answer",
+        after=("Tell your agent your answer and it sends it, or say it is different work. Your edits then go ahead.",),
     )

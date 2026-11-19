@@ -28,6 +28,8 @@ from shared_memory.warning import (
     shown,
     standby_heard_nothing,
     time_left,
+    urgent_message,
+    urgent_waits,
     wait_passed,
     warnings_in,
     went_ahead,
@@ -280,3 +282,33 @@ def test_standby_heard_nothing_after_the_wait_says_the_wait_has_passed() -> None
     said = inside(render(standby_heard_nothing(None), NOW))
 
     assert "wait has passed" in said and "min left" not in said
+
+
+# Urgent messages (#589)
+
+
+def test_an_urgent_message_is_quoted_in_its_warning_with_the_time_left_until_edits_wait_no_longer() -> None:
+    rendered = render(urgent_message("Dana Dev", "Hold the retries.\nThe contract changed.", FIVE), NOW)
+
+    assert rendered.startswith(f"**{Mark.WAITS} Dana Dev sent you an urgent message**")
+    said = inside(rendered)
+    assert "wait for your answer" in said
+    assert "5 min left, then your edits wait no longer." in said
+    assert "Dana Dev's words: > Hold the retries. > The contract changed." in said
+    assert all(columns(line) == 60 for line in box_of(rendered))
+
+
+def test_an_urgent_message_after_the_wait_says_edits_no_longer_wait() -> None:
+    said = inside(render(urgent_message("Dana Dev", "Hold.", None), NOW))
+
+    assert "no longer wait" in said and "min left" not in said
+
+
+def test_an_urgent_refusal_says_edits_wait_for_your_answer_with_each_sender_and_the_time_left() -> None:
+    rendered = render(urgent_waits([Row("Dana Dev", "webhooks", FIVE)]), NOW, ZoneInfo("Asia/Kolkata"))
+
+    assert rendered.startswith(f"**{Mark.WAITS} Your edits wait for your answer to Dana Dev**")
+    said = inside(rendered)
+    assert '- Dana Dev, working on "webhooks"' in said
+    assert "5 min left (until 2:35 pm your time), then your edits go ahead without your answer." in said
+    assert not re.search(r"\b(he|she|him|her|his|hers)\b", said, re.IGNORECASE)
