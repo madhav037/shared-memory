@@ -893,6 +893,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/my-time-zone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in member's time zone, and every time zone they can choose from. */
+        get: operations["my_time_zone"];
+        put?: never;
+        /** Choose the signed-in member's time zone, or none to have it detected from their browser. */
+        post: operations["choose_my_time_zone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/my-time-zone/detected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report the time zone the signed-in member's browser is set to, kept while they have chosen none. */
+        post: operations["report_my_time_zone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/members/{member_id}/token": {
         parameters: {
             query?: never;
@@ -2169,8 +2204,8 @@ export interface components {
             superseded_by: string | null;
             /** Exception To */
             exception_to: string | null;
-            /** Related Files */
-            related_files: string[];
+            /** Tied Files */
+            tied_files: string[];
             /** Promoted By */
             promoted_by: string | null;
             /** Imported By */
@@ -2607,6 +2642,45 @@ export interface components {
         AdminChange: {
             /** Admin */
             admin: boolean;
+        };
+        /**
+         * YourTimeZoneChoices
+         * @description The signed-in member's time zone, and every time zone they can choose from.
+         */
+        YourTimeZoneChoices: {
+            /** Chosen */
+            chosen: string | null;
+            /** Detected */
+            detected: string | null;
+            /** Time Zones */
+            time_zones: string[];
+        };
+        /**
+         * YourTimeZone
+         * @description The signed-in member's time zone: the one they chose, and the one detected from their browser. Times are shown
+         *     in the chosen one, else the detected one. Each is an IANA name, or None until set.
+         */
+        YourTimeZone: {
+            /** Chosen */
+            chosen: string | null;
+            /** Detected */
+            detected: string | null;
+        };
+        /**
+         * ChosenTimeZone
+         * @description The time zone a member chooses, or None to have it detected from their browser.
+         */
+        ChosenTimeZone: {
+            /** Time Zone */
+            time_zone: string | null;
+        };
+        /**
+         * DetectedTimeZone
+         * @description The time zone the member's browser is set to.
+         */
+        DetectedTimeZone: {
+            /** Time Zone */
+            time_zone: string;
         };
     };
     responses: never;
@@ -3948,6 +4022,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssuedToken"];
+                };
+            };
+        };
+    };
+    my_time_zone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in member's time zone, and every time zone they can choose from. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YourTimeZoneChoices"];
+                };
+            };
+        };
+    };
+    choose_my_time_zone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChosenTimeZone"];
+            };
+        };
+        responses: {
+            /** @description Choose the signed-in member's time zone, or none to have it detected from their browser. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YourTimeZone"];
+                };
+            };
+        };
+    };
+    report_my_time_zone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectedTimeZone"];
+            };
+        };
+        responses: {
+            /** @description Report the time zone the signed-in member's browser is set to, kept while they have chosen none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YourTimeZone"];
                 };
             };
         };

@@ -18,8 +18,9 @@ from shared_memory.index import Hit, Reach, SearchIndex, split_sections
 from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
+from shared_memory.tied import Tie, TiedFiles, file_named
 from shared_memory.uses import Uses
-from shared_memory.validation import validate
+from shared_memory.validation import validate, validate_tied_files
 
 
 def _promoting(path: str) -> str:
@@ -65,6 +66,29 @@ class SimilarMemory:
         return answered
 
 
+@dataclass(frozen=True)
+class TiedMemory:
+    """A memory within a session's reach tied to the file it asked about."""
+
+    tie: Tie
+    level: str
+    memory: Memory
+
+    def answer(self, in_doubt: InDoubt | None) -> dict[str, Any]:
+        """As `tied_memories` gives it, with the in-doubt line if it is in doubt."""
+        answered: dict[str, Any] = {
+            "path": self.tie.memory_path,
+            "level": self.level,
+            "tied_file": self.tie.tied_file,
+            "title": self.memory.title,
+            "summary": self.memory.summary,
+            "body": self.memory.body,
+        }
+        if in_doubt is not None:
+            answered["in_doubt"] = in_doubt.line()
+        return answered
+
+
 def _resolving(similar: list[SimilarMemory]) -> str:
     """What to do about the similar memories a save named."""
     return (
@@ -103,7 +127,7 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
         "replaces": memory.replaces,
         "superseded_by": memory.superseded_by,
         "exception_to": memory.exception_to,
-        "related_files": memory.related_files,
+        "tied_files": memory.tied_files,
         "promoted_by": memory.promoted_by,
         "imported_by": memory.imported_by,
         "imported_from": memory.imported_from,
@@ -132,8 +156,10 @@ class MemoryService:
         challenges: Challenges,
         audit: Audit,
         uses: Uses,
+        tied: TiedFiles,
     ) -> None:
         self._settings = settings
+        self._tied = tied
         self._uses = uses
         self._identity = identity
         self._store = store
@@ -180,7 +206,7 @@ class MemoryService:
         summary: str,
         type: str,
         body: str,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
         topic: str | None = None,
     ) -> dict[str, Any]:
         project = caller.require_project()
@@ -194,7 +220,7 @@ class MemoryService:
             type=type,
             author=caller.member_id,
             body=body,
-            related_files=list(related_files or []),
+            tied_files=list(tied_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
         folder = level_folder("personal", type, project.project_id, caller.member_id)
@@ -254,6 +280,27 @@ class MemoryService:
         if for_agent and (in_doubt := self._challenges.in_doubt(caller.team, [memory["path"]]).get(memory["path"])):
             memory["in_doubt"] = in_doubt.line()
         return memory
+
+    def tied_memories(self, caller: Caller, file: str) -> dict[str, Any]:
+        """The memories tied to one file, written repository:path, within recall's reach: their own personal memory in
+        this project, this project's memory and team memory. A memory in doubt carries its in-doubt line."""
+        project = caller.require_project()
+        asked = file_named(file)
+        ties = self._tied.tied_to(
+            caller.team, asked.repository, [asked.path], Reach.of_recall(caller.member_id, project.project_id)
+        )
+        found: list[TiedMemory] = []
+        for tie in ties:
+            try:
+                memory = self._store.read(caller.team, PurePosixPath(tie.memory_path))
+            except Refused:
+                continue  # moved or deleted since the index was read
+            found.append(TiedMemory(tie, locate(tie.memory_path).level, memory))
+        in_doubt = self._challenges.in_doubt(caller.team, [each.tie.memory_path for each in found])
+        return {
+            "file": asked.written,
+            "memories": [each.answer(in_doubt.get(each.tie.memory_path)) for each in found],
+        }
 
     def history(self, caller: Caller, path: str) -> dict[str, Any]:
         """Every version of one memory, newest first."""
@@ -461,7 +508,7 @@ class MemoryService:
         title: str | None,
         summary: str | None,
         body: str | None,
-        related_files: list[str] | None,
+        tied_files: list[str] | None,
     ) -> None:
         """Embed an edit's new text before its save takes its turn. A refusal is left for the save itself to raise."""
         try:
@@ -486,9 +533,9 @@ class MemoryService:
         summary: str | None = None,
         type: str | None = None,
         body: str | None = None,
-        related_files: list[str] | None = None,
+        tied_files: list[str] | None = None,
     ) -> dict[str, Any]:
-        self._prepare_edit(caller, path, title, summary, body, related_files)
+        self._prepare_edit(caller, path, title, summary, body, tied_files)
         with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "edit")
             if type is not None and type != location.type:
@@ -501,7 +548,7 @@ class MemoryService:
                 title=memory.title if title is None else title.strip(),
                 summary=memory.summary if summary is None else summary.strip(),
                 body=memory.body if body is None else body,
-                related_files=memory.related_files if related_files is None else list(related_files),
+                tied_files=memory.tied_files if tied_files is None else list(tied_files),
             )
             validate(edited, self._settings.memory_word_limit)
             change.message = f"Edit: {edited.title}"
@@ -512,6 +559,18 @@ class MemoryService:
         if reasons := reasons_for(edited):
             described.update(answer_for(reasons))
         return described
+
+    def tie(self, caller: Caller, path: str, tied_files: list[str]) -> dict[str, Any]:
+        """Replace the tied files of the caller's own personal memory. Whether project and team memory may be retied
+        too is undecided (#503), so until then they are retied by superseding them."""
+        validate_tied_files(tied_files)
+        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
+            location, memory = self._own_personal_memory(caller, change, path, "tie")
+            tied = replace(memory, tied_files=list(tied_files))
+            change.message = f"Tie: {tied.title}"
+            change.write(location.path, tied)
+            change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
+        return describe(location.path, tied)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
         with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:

@@ -74,6 +74,11 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
   line the briefing shows, and `ACTIVITY_LIMIT` the one place the length cap is named. That module owns the
   `session_activities` table and asks the board for the card through `Board.doing_titles`.
 - **The idle time**: `sessions.idle_after`, from `Settings.session_idle_minutes`.
+- **The session's UTC offset** (#592): `Session.utc_offset_minutes`, minutes east of UTC, which its session-start hook
+  gives in `X-Shared-Memory-Utc-Offset` (`date +%z` in a POSIX shell, `Get-Date -Format zzz` in PowerShell, worked
+  out in node by Gemini CLI's script) and the route keeps with `sessions.keep_utc_offset` (`hooks.utc_offset_named`
+  reads it; a missing or malformed header leaves the kept one as it is). `reader_zone` in `app.py` falls back to it
+  after the member's chosen and detected time zone. Copilot CLI's hooks post without a shell, so they send none.
 - **Words waiting for a session** are gathered in one place, `waiting_for(current, session)` in `app.py`: the prompt
   hook asks it, and so do `take_lock`, `release_lock` and `set_activity`, whose answers carry them as `notices` for
   an agent with no prompt hook. Each is told once, wherever it is told. A module with something for a session adds it
@@ -96,7 +101,9 @@ Only that module reads the `sessions` table; another module's rows refer to `Ses
 - **Standby** (ADR-0027) is `Standbys` in `src/shared_memory/standby.py`, built in `build_app` as `standbys` and kept
   on `app.state.standbys`. It owns `standbys`, one row per session's held standby. `await standbys.hold(session,
   news, awaits, seconds=None, gone=None)` holds one until it ends and gives an `Ended` (`ending`: news, nothing_yet,
-  replaced, moved_on; `news`; `wait_left`; `message`): `news` is `functools.partial(waiting_for, caller, session)`,
+  replaced, moved_on; `news`; `wait_left`; `at`; `message(zone)`; `member(zone)`, the warnings the news' `warning.Shown`
+  notices carry (`warning.warnings_in`, rendered at `at`), or nothing_yet's hourglass warning): `news` is
+  `functools.partial(waiting_for, caller, session)`,
   `seconds` a shorter hold for a held tool call, `gone` the request's `is_disconnected`. The prompt hook calls
   `standbys.end(session)`. `standbys.in_project(project_id)` gives each `Standby` held now (`session_id`, `awaits`:
   the member IDs whose answer it awaits) for the console. `POST /hooks/standby` is the background route; it draws
@@ -202,6 +209,13 @@ runs it on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`; another agent's
   prompt.
 - **The decision** is `locks.before_edit(session, files)`, beside `Locks`: it takes or keeps each file's lock and
   gives the reason the edit is blocked, or None to let it through. `app.py` only wires the hook to it.
+- **Tied memories** (#549) are the hook's optional part, as recall is the prompt hook's: `recall.for_edit(caller,
+  files, session)` gives the memories within the caller's reach tied to the edited files (`tied.tied_to`), in recall's
+  framing and fence, through `hooks.answered`, and only where `hooks.hears_before_tool` (Claude Code, Codex, Cline).
+  It runs within the recall budget or is dropped, only for an edit that went ahead: a gated or locked edit is told
+  only why, and its memories stay untold. What it tells goes in `recall_told` with recall's, every section of each
+  memory, so neither hook repeats the other, and a compaction's `recall.forget` starts both over. A tied memory
+  counts as told while some section of it was told and none told has changed since.
 - **Blocked** (`hooks.blocked`), only when another active session holds the file. The reason is who holds the file,
   followed by `TAKEOVER_IS_POSSIBLE` (`locks.py`) in place of take_lock's own advice (`Held.told`):
   - `claude`: `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",

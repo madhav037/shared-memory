@@ -20,7 +20,7 @@ const FIELD_NAMES: Record<string, string> = {
   title: "its title",
   summary: "its summary",
   type: "its type",
-  related_files: "its related files",
+  tied_files: "its tied files",
 };
 
 export type History = {

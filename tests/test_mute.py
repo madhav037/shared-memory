@@ -17,7 +17,7 @@ from shared_memory.config import Settings
 from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
 from tests.test_before_edit import ALLOWED, reason_in
 from tests.test_collisions import ChosenSimilarity
-from tests.test_gates import GATED, URGENT, answer_gate, collide, heard, send_urgent
+from tests.test_gates import GATED, URGENT, after_warning, answer_gate, collide, heard, send_urgent
 from tests.test_locks import FILE
 from tests.test_messages import ASKED, PROMPT, send
 
@@ -176,7 +176,7 @@ def test_a_gated_later_session_is_told_the_earlier_session_is_muted_and_the_wait
     mute(owner)
     reason = reason_in(dana.edit(FILE))
 
-    assert reason.startswith(GATED)
+    assert after_warning(reason).startswith(GATED)
     assert "Olive Owner (owner-1)" in reason and "muted" in reason
     assert "5 minutes left" in reason, "the wait runs the same"
 

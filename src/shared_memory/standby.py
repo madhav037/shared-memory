@@ -7,7 +7,8 @@ asking the one place every hook asks (`waiting_for` in `app.py`), which marks wh
 is any, it answers with that news. Otherwise it ends at its cap, `Settings.standby_cap_minutes` and never longer than
 the project's wait, measured against the server's clock, answering "nothing yet" with the time left of the project's
 wait; or at the session's next prompt, which ends it (`end`) and answers "your member moved on", the prompt hook
-delivering the news itself.
+delivering the news itself. For news and nothing yet, the answer hands the member's warning over on its own as well
+(`Ended.member`): every warning the news shows first, or an hourglass warning with the time left.
 
 It is worked out against Postgres, so any worker can hold a standby while another records the answer or the prompt
 (ADR-0013): `standbys` keeps each session's held standby, under the random name of the request holding it, and a
@@ -32,12 +33,13 @@ import math
 import secrets
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 
 import anyio
 import anyio.to_thread
 
+from shared_memory import warning
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database
@@ -94,17 +96,29 @@ def _minutes(left: timedelta) -> str:
 @dataclass(frozen=True)
 class Ended:
     """How a standby ended, and what it hands over: the session's news, or with nothing yet, the time left of the
-    project's wait."""
+    project's wait; and, for both, when the standby ended. The news is `waiting_for`'s own notices, never stored, so a
+    notice that carries warnings is still a `warning.Shown`."""
 
     ending: Ending
     news: list[str] = field(default_factory=list)
     wait_left: timedelta | None = None
+    at: datetime | None = None
 
-    @property
-    def message(self) -> str:
-        """What the coding agent is told."""
+    def member(self, zone: tzinfo | None = None) -> str | None:
+        """The warnings the member is shown first, word for word (spec #585): for news, every warning its notices
+        carry (`warning.warnings_in`), drawn as the standby ends, so a notice that carries one has it handed over here
+        as well; for nothing yet, the hourglass warning with the time left of the project's wait, in the reader's time
+        zone when known. None for news that carries no warning, and for every other ending."""
+        warnings = self._warnings(zone)
+        return "\n\n".join(warnings) or None
+
+    def message(self, zone: tzinfo | None = None) -> str:
+        """What the coding agent is told: when there is a warning, `warning.LEAD_IN` and the warnings first, then the
+        lines meant for the agent alone."""
         if self.ending == Ending.NEWS:
-            return "\n\n".join(self.news)
+            return warning.gathered(
+                self._warnings(zone), [line for each in self.news for line in warning.agent_lines_in(each)]
+            )
         if self.ending == Ending.NOTHING_YET:
             left = self.wait_left or timedelta()
             then = (
@@ -112,7 +126,9 @@ class Ended:
                 if left > timedelta()
                 else "The project's wait has passed."
             )
-            return f"[standby] Nothing yet: no news came for this session while it stood by. {then} Tell your member."
+            return warning.gathered(
+                self._warnings(zone), [f"[standby] Nothing yet: no news came for this session while it stood by. {then}"]
+            )
         if self.ending == Ending.REPLACED:
             return "[standby] A newer standby of this session replaced this one, and hears its news instead."
         if self.ending == Ending.MOVED_ON:
@@ -121,6 +137,15 @@ class Ended:
                 "came with that prompt."
             )
         return "[standby] Ended: the request went away."
+
+    def _warnings(self, zone: tzinfo | None) -> list[str]:
+        if self.ending == Ending.NEWS and self.at is not None:
+            return [warning.render(each, self.at, zone) for notice in self.news for each in warning.warnings_in(notice)]
+        if self.ending == Ending.NOTHING_YET and self.at is not None:
+            left = self.wait_left or timedelta()
+            until = self.at + left if left > timedelta() else None
+            return [warning.render(warning.standby_heard_nothing(until), self.at, zone)]
+        return []
 
 
 class Standbys:
@@ -165,11 +190,13 @@ class Standbys:
                     return ended
                 found = await anyio.to_thread.run_sync(news)
                 if found:
-                    ended = Ended(Ending.NEWS, found)
+                    ended = Ended(Ending.NEWS, found, at=self._clock())
                     return ended
                 now = self._clock()
                 if now >= wait.ends_at:
-                    ended = Ended(Ending.NOTHING_YET, wait_left=max(timedelta(), wait.started_at + wait.project_wait - now))
+                    ended = Ended(
+                        Ending.NOTHING_YET, wait_left=max(timedelta(), wait.started_at + wait.project_wait - now), at=now
+                    )
                     return ended
                 await anyio.sleep(self._every)
         finally:

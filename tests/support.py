@@ -14,7 +14,7 @@ import uuid
 from collections.abc import AsyncIterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,7 @@ from starlette.routing import Route
 from shared_memory import cli, platform_sign_in
 from shared_memory.config import Settings
 from shared_memory.fence import unfenced
+from shared_memory.hooks import AGENT_HEADER, CLAUDE, DEVIN, AgentHooks
 from shared_memory.sessions import Session as KnownSession
 from shared_memory.sessions import Sessions
 from shared_memory.standby import Standbys
@@ -161,6 +162,9 @@ class Session:
     agent: str | None = None
     # What the session's coding agent sends in every hook payload to tell this session from its others.
     identifier: str = "test-session"
+    # The agent whose hooks this session's hook calls are made as its kit makes them: naming it in `AGENT_HEADER`, and
+    # asking for its answer format where its kit does. None posts them naming no agent, in Claude Code's format.
+    hooks_of: AgentHooks | None = None
 
     def headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -173,15 +177,30 @@ class Session:
         return headers
 
     def in_project(self, project: str, repository: str = "app") -> Session:
-        return Session(self.server, self.token, project, repository, self.agent, self.identifier)
+        return replace(self, project=project, repository=repository)
 
     def as_agent(self, name: str) -> Session:
         """The same member and project, from a coding agent that reports itself by this name."""
-        return Session(self.server, self.token, self.project, self.repository, name, self.identifier)
+        return replace(self, agent=name)
 
     def as_session(self, identifier: str) -> Session:
         """Another session of the same member in the same project, known by its own identifier."""
-        return Session(self.server, self.token, self.project, self.repository, self.agent, identifier)
+        return replace(self, identifier=identifier)
+
+    def hooked_by(self, agent: AgentHooks) -> Session:
+        """The same session, its hooks run by this agent's plugin or kit: each names the agent in `AGENT_HEADER`, and
+        asks for the answer format the kit asks for at that endpoint, unless a call asks for another."""
+        return replace(self, hooks_of=agent)
+
+    def _kit_format(self, endpoint: str) -> str | None:
+        """The answer format this session's agent's kit asks for at this endpoint: none for Claude Code's and Codex's
+        (Claude Code's format is the default), Devin Desktop's only before an edit, and every other kit's everywhere."""
+        agent = self.hooks_of
+        if agent is None or agent.format == CLAUDE:
+            return None
+        if agent == DEVIN and endpoint != "before-edit":
+            return None
+        return agent.format
 
     def _client(self, transport: Any) -> Client:
         info = types.Implementation(name=self.agent, version="1.0") if self.agent else None
@@ -257,29 +276,43 @@ class Session:
             return str(refused)
         raise AssertionError(f"{tool} was not refused")
 
-    def _hook(self, event: str, payload: dict[str, Any], format: str | None = None) -> dict[str, Any]:
+    def _hook(
+        self, event: str, payload: dict[str, Any], format: str | None = None, utc_offset: str | None = None
+    ) -> dict[str, Any]:
         body = {"session_id": self.identifier, "cwd": WORKING_FOLDER, "hook_event_name": CLAUDE_EVENTS[event], **payload}
-        return self.hook_payload(event, body, format)
+        return self.hook_payload(event, body, format, utc_offset=utc_offset)
 
     def hook_payload(
-        self, event: str, payload: dict[str, Any], format: str | None = None, branch: str | None = None
+        self,
+        event: str,
+        payload: dict[str, Any],
+        format: str | None = None,
+        branch: str | None = None,
+        utc_offset: str | None = None,
     ) -> dict[str, Any]:
-        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format, and
-        naming the session's git branch as the hook before a tool does."""
+        """Post one hook payload exactly as an agent's hook sends it, asking for an agent family's answer format,
+        naming the session's git branch as the hook before a tool does, and giving the machine's UTC offset as the
+        session-start hook does."""
+        sent = {
+            **({AGENT_HEADER: self.hooks_of.header} if self.hooks_of is not None else {}),
+            **({"X-Shared-Memory-Branch": branch} if branch is not None else {}),
+            **({"X-Shared-Memory-Utc-Offset": utc_offset} if utc_offset is not None else {}),
+        }
         response = httpx.post(
             f"{self.server.url}/hooks/{event}",
             json=payload,
-            params={"format": format} if format else None,
-            headers={**self.headers(), **({"X-Shared-Memory-Branch": branch} if branch is not None else {})},
+            params={"format": asked} if (asked := format or self._kit_format(event)) else None,
+            headers={**self.headers(), **sent},
             timeout=60,
         )
         assert response.status_code == 200, response.text
         data: dict[str, Any] = response.json()
         return data
 
-    def start(self, format: str | None = None) -> dict[str, Any]:
-        """Fire the session-start hook and return its hook output."""
-        return self._hook("session-start", {"source": "startup"}, format)
+    def start(self, format: str | None = None, utc_offset: str | None = None) -> dict[str, Any]:
+        """Fire the session-start hook and return its hook output, giving the machine's UTC offset (`+0530`) as every
+        kit's hook does, where one is given."""
+        return self._hook("session-start", {"source": "startup"}, format, utc_offset)
 
     def prompt(self, text: str, format: str | None = None) -> dict[str, Any]:
         """Fire the prompt-submitted hook and return its hook output."""

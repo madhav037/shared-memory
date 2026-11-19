@@ -43,7 +43,7 @@ class Memory:
     replaces: str | None = None
     superseded_by: str | None = None
     exception_to: str | None = None
-    related_files: list[str] = field(default_factory=list)
+    tied_files: list[str] = field(default_factory=list)
     promoted_by: str | None = None
     # Set when an imported memory was promoted in its writer's name (ADR-0016): the importer, and the source it was
     # cut from, written repository:path.
@@ -68,10 +68,13 @@ class Memory:
         if not match:
             raise Refused("This file has no memory header.")
         header = yaml.safe_load(match.group(1)) or {}
+        # Memory saved before related files became tied files says so in its header: read it as tied files.
+        if "related_files" in header:
+            header.setdefault("tied_files", header.pop("related_files"))
         known = {f.name for f in fields(cls)}
         values = {key: value for key, value in header.items() if key in known}
         values["body"] = match.group(2).strip()
-        values.setdefault("related_files", [])
+        values.setdefault("tied_files", [])
         return cls(**values)
 
 

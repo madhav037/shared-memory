@@ -23,6 +23,8 @@ What other modules stand on, all of it on `Sessions`:
 - `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
 - `report(session, branch, files)`: where a session is, from its hook before a tool: its git branch and the files
   that tool named, kept beside the session as the files it touched (ADR-0025).
+- `keep_utc_offset(session, minutes)`: the UTC offset its session-start hook reported, kept as
+  `Session.utc_offset_minutes` for the warnings' clock times when its member has no time zone (#592).
 - `mute(session, on)`: mute or unmute a session; `Session.muted` says which it is (#514).
 - `idle_after`: the idle time, from `Settings.session_idle_minutes`.
 
@@ -74,6 +76,10 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS touched_files TEXT[] NOT NULL DEFA
 -- or after it had ended starts unmuted.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- The UTC offset, in minutes east of UTC, its session-start hook last reported from its machine's clock (#592), or
+-- NULL while none has. It outlasts an idle spell or an end: the machine's clock has not moved.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS utc_offset_minutes INTEGER;
+
 CREATE INDEX IF NOT EXISTS sessions_not_ended ON sessions (project_id, last_seen_at) WHERE ended_at IS NULL;
 -- A project's sessions by when they were last seen, ended or not, for those gone a little while.
 CREATE INDEX IF NOT EXISTS sessions_by_project ON sessions (project_id, last_seen_at);
@@ -121,6 +127,8 @@ class Session:
     touched_files: tuple[str, ...] = ()
     # Its messages that are not urgent wait for its next prompt or its unmute (#514).
     muted: bool = False
+    # The UTC offset, in minutes east of UTC, its session-start hook last reported, or None while none has (#592).
+    utc_offset_minutes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -203,7 +211,8 @@ class Sessions:
             row = conn.execute(
                 "INSERT INTO sessions (member_id, project_id, identifier, repository, agent, started_at, last_seen_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (member_id, project_id, identifier) DO NOTHING"
-                " RETURNING id, repository, agent, started_at, branch, touched_files, muted",
+                " RETURNING id, repository, agent, started_at, branch, touched_files, muted,"
+                " utc_offset_minutes",
                 (*key, caller.repository, caller.agent or hooked_by, now, now),
             ).fetchone()
             if row is None:
@@ -225,7 +234,8 @@ class Sessions:
                     " branch = CASE WHEN %s THEN NULL ELSE branch END,"
                     " touched_files = CASE WHEN %s THEN '{}' ELSE touched_files END,"
                     " muted = muted AND NOT %s"
-                    " WHERE id = %s RETURNING id, repository, agent, started_at, branch, touched_files, muted",
+                    " WHERE id = %s RETURNING id, repository, agent, started_at, branch, touched_files, muted,"
+                " utc_offset_minutes",
                     (
                         now, ended, now, idle, ended, ended, caller.repository, caller.agent, hooked_by,
                         idle or ended, idle or ended, idle or ended, known["id"],
@@ -245,7 +255,17 @@ class Sessions:
             branch=row["branch"],
             touched_files=tuple(row["touched_files"]),
             muted=row["muted"],
+            utc_offset_minutes=row["utc_offset_minutes"],
         )
+
+    def keep_utc_offset(self, session: Session, minutes: int) -> Session:
+        """Keep the UTC offset this session's session-start hook reported, in minutes east of UTC: the fallback for
+        the clock times in its warnings while its member has no time zone. The session as it now is."""
+        if minutes == session.utc_offset_minutes:
+            return session
+        with self._db.transaction() as conn:
+            conn.execute("UPDATE sessions SET utc_offset_minutes = %s WHERE id = %s", (minutes, session.id))
+        return dataclasses.replace(session, utc_offset_minutes=minutes)
 
     def mute(self, session: Session, on: bool) -> Session:
         """Mute this session, or unmute it: while muted, its messages that are not urgent wait for its next prompt or
@@ -286,7 +306,7 @@ class Sessions:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
-                " touched_files, muted FROM sessions"
+                " touched_files, muted, utc_offset_minutes FROM sessions"
                 " WHERE project_id = %s AND ended_at IS NULL AND last_seen_at > %s ORDER BY started_at, id",
                 (project_id, self._clock() - self.idle_after),
             ).fetchall()
@@ -301,7 +321,7 @@ class Sessions:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, identifier, member_id, project_id, repository, agent, started_at, last_seen_at, branch,"
-                " touched_files, muted, (ended_at IS NULL AND last_seen_at > %s) AS active FROM sessions"
+                " touched_files, muted, utc_offset_minutes, (ended_at IS NULL AND last_seen_at > %s) AS active FROM sessions"
                 " WHERE project_id = %s AND last_seen_at > %s AND COALESCE(ended_at, last_seen_at + %s) > %s"
                 " ORDER BY last_seen_at DESC, id DESC",
                 (now - self.idle_after, project_id, now - within - self.idle_after, self.idle_after, now - within),
@@ -387,4 +407,5 @@ def _session(row: dict[str, Any], member_id: str, member_name: str) -> Session:
         branch=row["branch"],
         touched_files=tuple(row["touched_files"]),
         muted=row["muted"],
+        utc_offset_minutes=row["utc_offset_minutes"],
     )

@@ -366,6 +366,13 @@ matches its activity is reminded who worked on it, and given its handoff note. A
 `leave_handoff_note` or put together by the server when a session ends or goes idle without one, is kept for
 `SHARED_MEMORY_HANDOFF_NOTE_KEPT_DAYS` (default 7, optional). Notes are never saved as memory.
 
+## How many draft learnings wait, and for how long
+
+A session's coding agent sends what the session learned as draft learnings, which wait, private to their member, until
+the member confirms each as personal memory or declines it. A member has at most
+`SHARED_MEMORY_DRAFT_LEARNING_MOST` (default 3, optional) waiting in a project, and one is dropped after
+`SHARED_MEMORY_DRAFT_LEARNING_DAYS` (default 7, optional).
+
 ## The console
 
 The console is served at the domain by the same Caddy that fronts the server, so it needs no hosting of its own. Signing in to it uses GitHub ([ADR-0007](./adr/0007-the-console-signs-in-with-github.md)).

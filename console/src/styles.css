@@ -3357,12 +3357,12 @@ div.dotted {
   font-family: var(--sans);
   font-size: 0.9375rem;
 }
-/* Answering from the Sessions page: a reply or a gate's answer sits under its line; the alerts line under the meta. */
+/* Answering from the Sessions page: a reply or a gate's answer sits under its line; the notify line under the meta. */
 .talk-answer {
   margin-top: 8px;
   max-width: 68ch;
 }
-.talk-alerts {
+.talk-notify {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

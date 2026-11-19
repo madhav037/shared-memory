@@ -141,6 +141,24 @@ def test_saves_into_the_same_project_memory_still_take_turns(
     assert took >= SLOW_TURN * len(sessions), f"{len(sessions)} promotions into one project took only {took:.1f} s"
 
 
+def test_tie_takes_the_areas_turn(
+    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
+) -> None:
+    (session,) = members(team, project, 1, prefix="tie")
+    tying = session.call("remember", **note("Tax rounding"))["path"]
+    slow_turns()
+
+    results, took = all_at_once(
+        [
+            (session, "tie", {"path": tying, "tied_files": ["billing-api:src/tax/**"]}),
+            (elsewhere(session), "remember", note("Fee rounding")),
+        ]
+    )
+
+    assert results[0]["tied_files"] == ["billing-api:src/tax/**"]
+    assert took >= SLOW_TURN * 2, f"a tie and a save into one member's personal memory took only {took:.1f} s"
+
+
 def test_a_save_that_loses_the_race_to_move_main_builds_on_the_new_main_and_both_land(
     team: Team, owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
 ) -> None:

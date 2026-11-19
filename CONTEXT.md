@@ -52,6 +52,10 @@ _Avoid_: ACL, allowlist, permissions
 The secret that proves which member a session belongs to; issued once per member.
 _Avoid_: API key, password, project token
 
+**Time zone**:
+The zone a member's times are shown in: the one they chose, or else the one detected for them, from their browser when they sign in to the console or from their session until then.
+_Avoid_: Timezone, locale, region
+
 ### Memory
 
 **Memory**:
@@ -108,14 +112,14 @@ _Avoid_: Flagged, quarantined, unsafe
 
 **Tied file**:
 A file, or a folder glob, in one of a project's repositories that a memory is about, written as repository:path; editing it brings the memory up.
-_Avoid_: Linked file, attached file
+_Avoid_: Linked file, attached file, related file
 
 **In doubt**:
 Said of a memory with at least one open challenge naming a reason; recall ranks it lower and marks it so.
 _Avoid_: Flagged, disputed
 
 **Popular memory**:
-A personal memory other members have recalled at least ten times, at least two of them distinct, within thirty days; its author is prompted to promote it.
+A personal memory that enough other members' sessions have read within the window, each member counting once however often they read it; its author is prompted to promote it.
 _Avoid_: Trending, hot, top memory
 
 **Draft learning**:
@@ -214,8 +218,12 @@ _Avoid_: Star, favorite
 Memories added to a prompt automatically because they match it. A session is given each memory once, and again only if the memory has changed.
 _Avoid_: Injection, auto-search
 
+**Told record**:
+Everything a session was told by Shared Memory, in order and with when: its briefing, each recall, and the memories added before an edit. It never holds what the member typed. Its member, the project's leads and the team's admins can read it, for thirty days.
+_Avoid_: Session log, briefing history, transcript
+
 **Question**:
-What a member asks a memory's author about that memory; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read.
+What a member asks a memory's author about that memory, from a session or the console; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read. A question unanswered for seven days, or whose author has left, goes to the memory's project leads (the admins, for team memory) as well; the author may still answer it.
 _Avoid_: Memory comment, discussion
 
 **Hook**:
@@ -249,7 +257,7 @@ How a member signs in to a hosted server's console: the platform signs them in w
 _Avoid_: SSO token, login token, auth ticket
 
 **Audit log**:
-The record of who changed members, roles, access, tokens, memory, cards or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
+The record of who changed members, roles, access, tokens, memory, cards, questions and answers, or a project's never-lock patterns, and when. It is not the memory's git history, which holds what memory said.
 _Avoid_: History, activity, trail
 
 **Landing page**:
@@ -388,3 +396,7 @@ _Avoid_: Handover, baton, recap
 **Standby**:
 A session's coding agent waiting for news, in the background or in a held tool call, without its member typing: started when the session awaits an answer, and ended by any news for it, the project's wait, a newer standby, or the member's next prompt.
 _Avoid_: Watch, park, wake-up
+
+**Warning**:
+What a gate or standby tells the member themselves, word for word, rather than their coding agent: that a wait on their work or their teammate's has started or ended, who it waits for, how long is left in their time zone, and what they can reply.
+_Avoid_: Alert, banner, callout, popup

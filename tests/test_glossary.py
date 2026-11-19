@@ -157,6 +157,11 @@ ALLOWED: tuple[Allow, ...] = (
         (SERVER + "handoff.py",),
     ),
     Allow(
+        "activity",
+        "what a member a warning names is working on, the glossary's Activity; avoided only for the audit log",
+        (SERVER + "warning.py",),
+    ),
+    Allow(
         "collision",
         "the recent work a handoff note's session collides with, the glossary's Collision; not a contradiction",
         (SERVER + "handoff.py",),
