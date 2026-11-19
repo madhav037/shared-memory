@@ -37,17 +37,18 @@ from idle, as the collision is; `gate_waits` only when its later session does.
 
 What other modules stand on, all of it on `Gates`:
 
-- `before_edit(caller, session, paths)`: why the before-edit hook refuses an edit of these files, or None. A gate's
+- `before_edit(caller, session, paths, zone)`: why the before-edit hook refuses an edit of these files, or None. A gate's
   refusal opens with a warning for the member (see `warning`), whose reply words include different work, and its
   lines for the agent open with different work too, since a wrong collision now stops real work. The earlier
-  session's notice that a gate waits on its work carries a warning as well.
+  session's notice that a gate waits on its work carries a warning as well. `zone` is the reader's time zone
+  (`time_zone.used`), which a warning's clock times are given in; with none they stay relative.
 - `different_work(caller, session)`: lift this session's gate at once; the names of the members it was waiting for.
 - `answer(caller, session, member_id, answer, text)`: the earlier member agrees to or refuses the gates a member's
   sessions have on this session's work; the names of the members answered. `answerable(session, member_id)` says
   whether one would be taken now, for the console, which picks the member's sessions it answers from.
 - `in_project(caller, project_id)`: each session gated now and whom it waits for, answers included: what the console
   shows. A wait it finds passed is kept as timed out, as every read of a gate does.
-- `waiting_notices(caller, session)`: what a session is told once: as an earlier session, that a gate waits on its work and how
+- `waiting_notices(caller, session, zone)`: what a session is told once: as an earlier session, that a gate waits on its work and how
   each one ended; as a later session, each answer to its gate and each gate lifted at the project's wait or by its
   earlier session ending or going idle, so a session standing by hears it (ADR-0027).
 - `edit_went_ahead(session)`: this session's edit went ahead, which shows its gate gone: how it lifted need not be
@@ -66,7 +67,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 
 from shared_memory import fence, warning
@@ -577,15 +578,22 @@ class Gates:
         self._audited(by, caller, later.project_id, earlier.member_id, "earlier", collision, actor)
         return True
 
-    def before_edit(self, caller: Caller, session: Session, paths: Sequence[str]) -> str | None:
+    def before_edit(
+        self, caller: Caller, session: Session, paths: Sequence[str], zone: tzinfo | None = None
+    ) -> str | None:
         """Why the before-edit hook refuses this session's edit of these files, or None to let the gate pass it. A
-        tool that names no file is not an edit, and is never gated."""
+        tool that names no file is not an edit, and is never gated. `zone` is the reader's time zone, which the
+        warning's clock times are given in."""
         if not paths:
             return None
         waiting = self.waiting(caller, session)
         urgents = self._urgents(session)
         now = self._clock()
-        held = [warning.shown([warning.held_by_gate(_held_rows(waiting))], refusal(waiting, now), now)] if waiting else []
+        held = (
+            [warning.shown([warning.held_by_gate(_held_rows(waiting))], refusal(waiting, now), now, zone)]
+            if waiting
+            else []
+        )
         reasons = [*held, *([urgent_refusal(urgents, now)] if urgents else [])]
         return "\n\n".join(reasons) or None
 
@@ -850,12 +858,12 @@ class Gates:
 
     # News
 
-    def waiting_notices(self, caller: Caller, session: Session) -> list[str]:
+    def waiting_notices(self, caller: Caller, session: Session, zone: tzinfo | None = None) -> list[str]:
         """What a session is told once. As an earlier session: that a later session's gate waits on its work, and how
         each gate on its work ended, a wait it finds passed kept as timed out now, so it hears of it though the later
         session stays quiet. As a later session: each answer to its gate, each gate on an earlier session lifted at the
         project's wait, a wait it finds passed kept as timed out now, and each lifted by its earlier session ending or
-        going idle. Asking marks them told."""
+        going idle. Asking marks them told. `zone` is the reader's time zone, which warnings give clock times in."""
         self._time_out_on_work(caller, session)
         waiting, passed = self._work_out(session)
         self._keep_timed_out(caller, session, passed)
@@ -876,7 +884,7 @@ class Gates:
                 " RETURNING earlier_session_id",
                 (session.id,),
             ).fetchall()
-        notices = [*self._starts(session), *(_earlier_gone(name) for name in gone)]
+        notices = [*self._starts(session, zone), *(_earlier_gone(name) for name in gone)]
         if ends or answers or lifted:
             others = {each.session.id: each.session for each in self._activities.in_project(session.project_id)}
             minutes = self.wait(session.project_id)
@@ -937,7 +945,7 @@ class Gates:
             if now >= each.collision.found_at + wait:
                 self._end(caller, each.later, session, each.collision, Ending.TIMED_OUT)
 
-    def _starts(self, session: Session) -> list[str]:
+    def _starts(self, session: Session, zone: tzinfo | None) -> list[str]:
         """That each later session's gate waits on this session's work, for each this session has not been told of and
         whose member has not answered, while the wait runs."""
         now = self._clock()
@@ -958,5 +966,5 @@ class Gates:
                 ).fetchone()
             if fresh is not None:
                 asked = warning.asked_by_gate(warning.Row(each.later.member_name, each.activity, until))
-                told.append(warning.shown([asked], _started(each.later, until), now))
+                told.append(warning.shown([asked], _started(each.later, until), now, zone))
         return told

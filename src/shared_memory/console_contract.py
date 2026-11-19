@@ -597,6 +597,32 @@ class IssuedToken(BaseModel):
     server_url: str
 
 
+class YourTimeZone(BaseModel):
+    """The signed-in member's time zone: the one they chose, and the one detected from their browser. Times are shown
+    in the chosen one, else the detected one. Each is an IANA name, or None until set."""
+
+    chosen: str | None
+    detected: str | None
+
+
+class YourTimeZoneChoices(YourTimeZone):
+    """The signed-in member's time zone, and every time zone they can choose from."""
+
+    time_zones: list[str]
+
+
+class ChosenTimeZone(BaseModel):
+    """The time zone a member chooses, or None to have it detected from their browser."""
+
+    time_zone: str | None
+
+
+class DetectedTimeZone(BaseModel):
+    """The time zone the member's browser is set to."""
+
+    time_zone: str
+
+
 Column = Literal["to_do", "doing", "blocked", "done"]
 Priority = Literal["high", "normal", "low"]
 
@@ -1446,6 +1472,31 @@ DECLARATIONS: tuple[Declaration, ...] = (
         summary="Issue a new personal token for the signed-in member, revoking the one they had.",
         answers=IssuedToken,
         changes=True,
+    ),
+    Declaration(
+        path="/my-time-zone",
+        method="GET",
+        operation_id="my_time_zone",
+        summary="The signed-in member's time zone, and every time zone they can choose from.",
+        answers=YourTimeZoneChoices,
+    ),
+    Declaration(
+        path="/my-time-zone",
+        method="POST",
+        operation_id="choose_my_time_zone",
+        summary="Choose the signed-in member's time zone, or none to have it detected from their browser.",
+        answers=YourTimeZone,
+        changes=True,
+        accepts=ChosenTimeZone,
+    ),
+    Declaration(
+        path="/my-time-zone/detected",
+        method="POST",
+        operation_id="report_my_time_zone",
+        summary="Report the time zone the signed-in member's browser is set to, kept while they have chosen none.",
+        answers=YourTimeZone,
+        changes=True,
+        accepts=DetectedTimeZone,
     ),
     Declaration(
         path="/members/{member_id}/token",

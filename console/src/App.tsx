@@ -6,6 +6,7 @@ import {
   IconLogout,
   IconMenu2,
   IconSearch,
+  IconSettings,
 } from "@tabler/icons-react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useState } from "react";
@@ -16,6 +17,7 @@ import {
   fetchLicense,
   fetchStatus,
   onRateLimited,
+  reportMyTimeZone,
   signOut,
   type LicenseState,
   type SignedInMember,
@@ -26,6 +28,7 @@ import { ContentsTree } from "./components/Contents";
 import { PlatformLinks } from "./components/PlatformLinks";
 import { ContentsProvider } from "./lib/contents";
 import { folderUrl, memoryUrl } from "./lib/format";
+import { browserTimeZone } from "./lib/timeZone";
 import { AuditLog } from "./pages/AuditLog";
 import { BoardPage } from "./pages/BoardPage";
 import { ConnectAgent } from "./pages/ConnectAgent";
@@ -39,6 +42,7 @@ import { ProjectSettings } from "./pages/ProjectSettings";
 import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { SignIn } from "./pages/SignIn";
+import { YourSettings } from "./pages/YourSettings";
 import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
@@ -63,6 +67,14 @@ export function App() {
       });
     return () => attempt.abort();
   }, []);
+
+  // Once signed in, report the time zone this browser is set to: the server keeps it as the detected one while the
+  // member has chosen none, so the times in their warnings are their own.
+  const signedInAs = connection.state === "reached" ? (connection.status.member?.member_id ?? null) : null;
+  useEffect(() => {
+    const zone = browserTimeZone();
+    if (signedInAs && zone) reportMyTimeZone(zone).catch(() => undefined);
+  }, [signedInAs]);
 
   const leave = useCallback(async () => {
     const status = await signOut();
@@ -263,6 +275,7 @@ function SignedIn({
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
+            <Route path="/settings" element={<YourSettings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
@@ -361,8 +374,8 @@ function MemberMenu({
           data-testid="member-menu"
           aria-label={
             small
-              ? `${member.name}: the console's pages, your token, appearance and signing out${waiting ? `. ${waitingWords}` : ""}`
-              : `${member.name}: your token, appearance and signing out`
+              ? `${member.name}: the console's pages, your token, your settings, appearance and signing out${waiting ? `. ${waitingWords}` : ""}`
+              : `${member.name}: your token, your settings, appearance and signing out`
           }
           style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9375rem", fontWeight: 600 }}
         >
@@ -404,6 +417,13 @@ function MemberMenu({
         </div>
         <Menu.Item leftSection={<IconKey size={15} stroke={1.6} />} onClick={() => goTo("/connect")} data-testid="to-connect">
           Connect your agent
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconSettings size={15} stroke={1.6} />}
+          onClick={() => goTo("/settings")}
+          data-testid="to-settings"
+        >
+          Your settings
         </Menu.Item>
         <Menu.Divider />
         <Menu.Label>Appearance</Menu.Label>

@@ -48,6 +48,8 @@ export type SessionHandoffNote = components["schemas"]["SessionHandoffNote"];
 export type RateLimits = components["schemas"]["RateLimits"];
 export type LicenseState = components["schemas"]["LicenseState"];
 export type RateLimitChange = components["schemas"]["RateLimitChange"];
+export type YourTimeZone = components["schemas"]["YourTimeZone"];
+export type YourTimeZoneChoices = components["schemas"]["YourTimeZoneChoices"];
 // What the console sends about a card. The server fills in whatever is left out, so only what must be said is required.
 type Asked<T, Required extends keyof T> = Pick<T, Required> & Partial<T>;
 export type NewCard = Asked<components["schemas"]["NewCard"], "title">;
@@ -204,6 +206,21 @@ export function decideChallenge(challengeId: number, decision: "accept" | "rejec
 /** Issue a new personal token for the signed-in member; the one they had stops working. */
 export function reissueMyToken(): Promise<IssuedToken> {
   return ask<IssuedToken>("/api/my-token", { method: "POST", headers: fromConsole });
+}
+
+/** The signed-in member's time zone, and every time zone they can choose from. */
+export function fetchMyTimeZone(signal?: AbortSignal): Promise<YourTimeZoneChoices> {
+  return ask<YourTimeZoneChoices>("/api/my-time-zone", { signal });
+}
+
+/** Choose the signed-in member's time zone, or null to have it detected from the browser. */
+export function chooseMyTimeZone(timeZone: string | null): Promise<YourTimeZone> {
+  return change<YourTimeZone>("/api/my-time-zone", { time_zone: timeZone });
+}
+
+/** Report the time zone this browser is set to; kept as the detected one while the member has chosen none. */
+export function reportMyTimeZone(timeZone: string): Promise<YourTimeZone> {
+  return change<YourTimeZone>("/api/my-time-zone/detected", { time_zone: timeZone });
 }
 
 function change<T>(path: string, body?: unknown): Promise<T> {

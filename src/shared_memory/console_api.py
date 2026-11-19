@@ -77,7 +77,7 @@ from shared_memory.console_contract import (
     Restriction, Retired, SearchHit, SearchResults, SignedInMember, Status, description,
     AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
-    SessionMessage,
+    SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -91,6 +91,8 @@ from shared_memory.memory import Memory, locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
+from shared_memory import time_zone
+from shared_memory.time_zone import MemberTimeZone, NotATimeZone
 from shared_memory.uses import Uses
 
 CONSOLE_HEADER = "x-shared-memory-console"
@@ -456,6 +458,9 @@ class ConsoleApi:
             "set_admin": self._set_admin,
             "hand_over_ownership": self._hand_over_ownership,
             "reissue_my_token": self._reissue_my_token,
+            "my_time_zone": self._my_time_zone,
+            "choose_my_time_zone": self._choose_my_time_zone,
+            "report_my_time_zone": self._report_my_time_zone,
             "reissue_token": self._reissue_token,
             "sign_out": self._sign_out,
         }
@@ -1430,6 +1435,35 @@ class ConsoleApi:
         token = self._identity.reissue_own_token(member)
         self._audit.record(TOKEN_ISSUED, member=member, target=member.member_id, detail={"for": "themselves"})
         return self._issued(request, member.member_id, token)
+
+    # A member's time zone is a member setting, not a memory write (ADR-0009). Each call acts on the signed-in member
+    # alone: none names a member, so no member can change another's.
+
+    def _my_time_zone(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        kept = self._identity.time_zone(member.pk)
+        choices = YourTimeZoneChoices(chosen=kept.chosen, detected=kept.detected, time_zones=list(time_zone.names()))
+        return JSONResponse(choices.model_dump(mode="json"))
+
+    def _choose_my_time_zone(self, request: Request) -> Response:
+        asked: ChosenTimeZone = request.state.asked
+        return self._on_own_time_zone(request, lambda member: self._identity.choose_time_zone(member, asked.time_zone))
+
+    def _report_my_time_zone(self, request: Request) -> Response:
+        asked: DetectedTimeZone = request.state.asked
+        return self._on_own_time_zone(request, lambda member: self._identity.detect_time_zone(member, asked.time_zone))
+
+    def _on_own_time_zone(self, request: Request, change: Callable[[Member], MemberTimeZone]) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            kept = change(member)
+        except NotATimeZone as refused:
+            return JSONResponse({"message": str(refused)}, status_code=422)
+        return JSONResponse(YourTimeZone(chosen=kept.chosen, detected=kept.detected).model_dump(mode="json"))
 
     def _reissue_token(self, request: Request) -> Response:
         member = self._member(request)
