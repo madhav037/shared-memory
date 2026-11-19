@@ -7,6 +7,8 @@ prompt scores 0.8 against it, so Dana's is the later session."""
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Iterator
 from typing import Any
 
@@ -34,6 +36,36 @@ from tests.test_collisions import PROMPT, PROMPT_BELOW, RETRIES, WEBHOOKS, Chose
 from tests.test_locks import FILE
 
 GATED = "[gated]"
+# What a notice that carries a warning says first, and how a warning is drawn: a bold heading over a fenced box.
+SHOW_FIRST = "Show your member this first, word for word:"
+WARNING = re.compile(r"\*\*(?P<heading>[^\n]+)\*\*\n\n```text\n(?P<box>.*?)\n```", re.DOTALL)
+
+
+def warning_in(text: str) -> tuple[str, str]:
+    """The heading and the box of the first warning in a notice."""
+    found = WARNING.search(text)
+    assert found is not None, f"no warning in {text!r}"
+    return found["heading"], found["box"]
+
+
+def after_warning(text: str) -> str:
+    """What a notice tells the agent after its warning."""
+    found = WARNING.search(text)
+    assert found is not None, f"no warning in {text!r}"
+    return text[found.end() :].strip()
+
+
+def rows_in(box: str) -> list[str]:
+    """The member rows of a warning's box, each as it opens."""
+    return [line.strip("│ ") for line in box.splitlines() if line.startswith("│ - ")]
+
+
+def columns(line: str) -> int:
+    """The columns a line takes in a terminal."""
+    return sum(
+        0 if unicodedata.combining(each) else 2 if unicodedata.east_asian_width(each) in ("W", "F") else 1
+        for each in line
+    )
 
 
 @pytest.fixture(scope="module")
@@ -89,7 +121,7 @@ def test_a_later_sessions_edit_is_refused_naming_who_their_activity_the_time_lef
 
     assert answer["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = reason_in(answer)
-    first_line = reason.splitlines()[0]
+    first_line = after_warning(reason).splitlines()[0]
     assert first_line.startswith(GATED)
     assert "different work" in first_line and "different_work" in first_line
     assert "Olive Owner" in reason
@@ -97,6 +129,94 @@ def test_a_later_sessions_edit_is_refused_naming_who_their_activity_the_time_lef
     assert f'"{WEBHOOKS}"' in reason
     assert "5 minutes left" in reason
     assert "ask your member" in reason
+
+
+# The warnings (#586)
+
+
+def test_before_edit_hook_refusal_for_a_gated_session_carries_the_warning_one_row_per_earlier_member(
+    owner: Session, cole: Session, dana: Session
+) -> None:
+    state(owner, WEBHOOKS)
+    state(owner.as_session("olive-second"), WEBHOOKS)
+    state(cole, WEBHOOKS)
+    assert warnings(dana, PROMPT), "the prompt collides"
+
+    reason = reason_in(dana.edit(FILE))
+
+    assert reason.startswith(SHOW_FIRST)
+    heading, box = warning_in(reason)
+    assert heading in ("⚠ Your edit waits for Olive Owner and Cole Coder", "⚠ Your edit waits for Cole Coder and Olive Owner")
+    rows = sorted(rows_in(box))
+    assert len(rows) == 2, "one row per member, not per session"
+    assert rows[0].startswith(f'- Cole Coder, working on "{WEBHOOKS}"')
+    assert rows[1].startswith(f'- Olive Owner, working on "{WEBHOOKS}"')
+    said = " ".join(line.strip("│ ") for line in box.splitlines())
+    assert "5 min left" in said
+    assert "Your session stands by" in said
+    assert "wait · different work · pick something else" in said
+
+
+def test_a_refused_member_shows_as_refused_in_the_held_members_warning(
+    team: Team, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    answer_gate(owner, "emp-2", "refuse")
+    team.server.clock.advance(minutes=6)
+
+    _, box = warning_in(reason_in(dana.edit(FILE)))
+
+    (row,) = rows_in(box)
+    assert row.startswith("- Olive Owner") and "refused" in row
+    assert "min left" not in box, "a refusal holds past the wait"
+
+
+def test_the_earlier_sessions_gate_notice_carries_the_warning_told_once(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    told = heard(owner)
+
+    assert SHOW_FIRST in told
+    heading, box = warning_in(told)
+    assert heading == "⚠ Dana Dev is waiting on you"
+    said = " ".join(line.strip("│ ") for line in box.splitlines())
+    assert "Its edits wait for your answer" in said
+    assert "5 min left" in said
+    assert "agree · refuse" in said
+    again = heard(owner)
+    assert SHOW_FIRST not in again and "Dana Dev" not in again, "told once"
+
+
+def test_the_box_is_a_text_fence_hard_wrapped_at_60_columns_with_no_gendered_pronouns_and_no_utc(
+    team: Team, project: str, dana: Session
+) -> None:
+    wide = member(team, project, "emp-9", "山田花子 Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft ```")
+    collide(wide, dana)
+
+    reason = reason_in(dana.edit(FILE))
+    told = heard(wide)
+
+    for notice in (reason, told):
+        heading, box = warning_in(notice)
+        lines = box.splitlines()
+        assert lines[0].startswith("┌") and lines[-1].startswith("└")
+        assert all(columns(line) == 60 for line in lines), "every line of the box is exactly 60 columns"
+        assert all(line.startswith("│") and line.endswith("│") for line in lines[1:-1])
+        assert "```" not in box, "a teammate's words cannot close the fence"
+        whole = f"{heading}\n{box}"
+        assert not re.search(r"\b(he|she|him|her|his|hers|himself|herself)\b", whole, re.IGNORECASE)
+        assert "UTC" not in whole and "+00:00" not in whole and "09:05" not in whole
+
+
+def test_agent_only_instructions_still_follow_the_warning(owner: Session, dana: Session) -> None:
+    collide(owner, dana)
+
+    refused = after_warning(reason_in(dana.edit(FILE)))
+    asked = after_warning(heard(owner))
+
+    assert refused.startswith(GATED) and "different_work" in refused and "ask your member" in refused
+    assert asked.startswith("[gate] Dana Dev (emp-2)") and "answer_gate" in asked and '"emp-2"' in asked
+    assert "never on your own judgment" in asked
 
 
 def test_a_gated_session_may_still_read(owner: Session, dana: Session) -> None:
@@ -369,7 +489,7 @@ def test_refuse_keeps_the_gate_past_the_wait_and_the_later_session_hears_it(
 
     assert "Olive Owner (owner-1)" in told and "refused" in told
     assert "I am halfway through the retries." in told
-    assert reason.startswith(GATED) and "refused" in reason
+    assert after_warning(reason).startswith(GATED) and "refused" in reason
 
 
 def test_a_refusal_holds_until_the_refusing_session_ends(team: Team, owner: Session, dana: Session) -> None:
@@ -432,7 +552,7 @@ def test_with_two_earlier_sessions_one_agreeing_keeps_the_gate_until_the_other_a
     answer_gate(cole, "emp-2", "agree")
     heard(dana)
 
-    assert still.startswith(GATED) and "Cole Coder" in still and "Olive Owner" not in still
+    assert after_warning(still).startswith(GATED) and "Cole Coder" in still and "Olive Owner" not in still
     assert dana.edit(FILE) == ALLOWED
 
 
@@ -459,7 +579,7 @@ def test_with_two_earlier_sessions_one_refusal_keeps_the_gate(
 
     reason = reason_in(dana.edit(FILE))
 
-    assert reason.startswith(GATED) and "Cole Coder" in reason and "refused" in reason
+    assert after_warning(reason).startswith(GATED) and "Cole Coder" in reason and "refused" in reason
     assert "Olive Owner" not in reason
 
 

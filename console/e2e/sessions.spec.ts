@@ -161,7 +161,7 @@ test("Olive refuses, then agrees to, a gate on her work and replies to a message
   const heard = async () => ((await (await page.request.get(`${teammates}/heard`)).json()) as { heard: string }).heard;
 
   await openSessions(page, "Billing");
-  await expect(page.getByTestId("alerts")).toContainText("This browser alerts you");
+  await expect(page.getByTestId("alerts")).toContainText("This browser notifies you");
   // The journey before this one left Mira's first session gated on Olive's first too (its activity is her card in
   // Doing, on the same webhook retries), so this one watches the wait on Olive's second session's work alone.
   const onMine = page

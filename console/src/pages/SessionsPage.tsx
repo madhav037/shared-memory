@@ -309,13 +309,13 @@ function AlertsChoice() {
     return (
       <p className="talk-alerts" data-testid="alerts">
         <IconBell size={14} stroke={1.6} aria-hidden />
-        This browser alerts you when a message or a gate for you arrives while the page is open.
+        This browser notifies you when a message or a gate for you arrives while the page is open.
       </p>
     );
   if (permission === "denied")
     return (
       <p className="talk-alerts" data-testid="alerts">
-        This browser blocks alerts from the console; allow them in its site settings to hear of messages and gates here.
+        This browser blocks notifications from the console; allow them in its site settings to hear of messages and gates here.
       </p>
     );
   return (
@@ -327,7 +327,7 @@ function AlertsChoice() {
         onClick={() => void Notification.requestPermission().then(setPermission)}
         data-testid="allow-alerts"
       >
-        Alert me in this browser
+        Notify me in this browser
       </Button>
       when a message or a gate for you arrives while the page is open.
     </p>

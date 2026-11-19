@@ -37,8 +37,10 @@ from idle, as the collision is; `gate_waits` only when its later session does.
 
 What other modules stand on, all of it on `Gates`:
 
-- `before_edit(caller, session, paths)`: why the before-edit hook refuses an edit of these files, or None. Its first
-  line always offers different work, since a wrong collision now stops real work.
+- `before_edit(caller, session, paths)`: why the before-edit hook refuses an edit of these files, or None. A gate's
+  refusal opens with a warning for the member (see `warning`), whose reply words include different work, and its
+  lines for the agent open with different work too, since a wrong collision now stops real work. The earlier
+  session's notice that a gate waits on its work carries a warning as well.
 - `different_work(caller, session)`: lift this session's gate at once; the names of the members it was waiting for.
 - `answer(caller, session, member_id, answer, text)`: the earlier member agrees to or refuses the gates a member's
   sessions have on this session's work; the names of the members answered. `answerable(session, member_id)` says
@@ -67,7 +69,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from shared_memory import fence
+from shared_memory import fence, warning
 from shared_memory.activity import Activities, SessionActivity
 from shared_memory.audit import (
     DIFFERENT_WORK,
@@ -218,6 +220,7 @@ class OnWork:
     collision: Collision
     ended: bool
     answer: Answer | None
+    activity: str | None = None
 
 
 def _left(now: datetime, until: datetime) -> str:
@@ -256,6 +259,27 @@ def refusal(waiting: Sequence[Waiting], now: datetime, first: str | None = None)
         "has agreed or the wait has passed with no answer, the edit goes ahead."
     )
     return "\n".join(lines)
+
+
+def _held_rows(waiting: Sequence[Waiting]) -> list[warning.Row]:
+    """The rows of a held member's warning: one per member the gate waits for, whatever number of their sessions,
+    refused if any of those refused, else until the last of their waits passes."""
+    members: dict[str, list[Waiting]] = {}
+    for each in waiting:
+        members.setdefault(each.earlier.member_id, []).append(each)
+    rows = []
+    for theirs in members.values():
+        activities = list(dict.fromkeys(each.activity for each in theirs if each.activity))
+        refused = any(each.refused for each in theirs)
+        rows.append(
+            warning.Row(
+                theirs[0].earlier.member_name,
+                "; ".join(activities) or None,
+                None if refused else max(each.until for each in theirs),
+                refused,
+            )
+        )
+    return rows
 
 
 def urgent_refusal(urgents: Sequence[Urgent], now: datetime) -> str:
@@ -561,7 +585,8 @@ class Gates:
         waiting = self.waiting(caller, session)
         urgents = self._urgents(session)
         now = self._clock()
-        reasons = [*([refusal(waiting, now)] if waiting else []), *([urgent_refusal(urgents, now)] if urgents else [])]
+        held = [warning.shown([warning.held_by_gate(_held_rows(waiting))], refusal(waiting, now), now)] if waiting else []
+        reasons = [*held, *([urgent_refusal(urgents, now)] if urgents else [])]
         return "\n\n".join(reasons) or None
 
     def edit_went_ahead(self, session: Session) -> None:
@@ -745,7 +770,13 @@ class Gates:
             answers = self._answers(conn, "earlier_session_id", session)
         ended = {row["later_session_id"] for row in rows}
         return [
-            OnWork(active[each.later_session_id].session, each, each.later_session_id in ended, answers.get(each.later_session_id))
+            OnWork(
+                active[each.later_session_id].session,
+                each,
+                each.later_session_id in ended,
+                answers.get(each.later_session_id),
+                active[each.later_session_id].activity,
+            )
             for each in theirs
             if each.later_session_id in active
         ]
@@ -926,5 +957,6 @@ class Gates:
                     (each.later.id, session.id),
                 ).fetchone()
             if fresh is not None:
-                told.append(_started(each.later, until))
+                asked = warning.asked_by_gate(warning.Row(each.later.member_name, each.activity, until))
+                told.append(warning.shown([asked], _started(each.later, until), now))
         return told

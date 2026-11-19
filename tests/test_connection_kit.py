@@ -791,6 +791,28 @@ STANDBY_HABITS = (
 )
 
 
+#: What the skill says of a warning (#586), one marker each: the lead-in it comes under, shown first, word for word, never
+#: paraphrased or left out, the fence kept, the lines after it the agent's, each gate's reply words, and a reply word
+#: being the member's decision.
+WARNING_HABITS = (
+    "Show your member this first, word for word:",
+    "Show the member the heading and the box first",
+    "never paraphrase it, shorten it or leave it out",
+    "keep the fence",
+    "The lines after the warning are for you alone",
+    "*wait* (stand by), *different work* and *pick something else*",
+    "*agree* and *refuse*",
+    "that is their decision",
+)
+
+
+def test_the_skill_tells_the_agent_to_show_a_warning_word_for_word_first_and_take_a_reply_word_as_the_members_decision() -> None:
+    said = " ".join(claude_code_skill().split())
+
+    for habit in WARNING_HABITS:
+        assert habit in said, habit
+
+
 def test_the_skill_tells_claude_code_when_to_stand_by_and_what_to_do_with_the_answer() -> None:
     said = " ".join(standing_by_section(claude_code_skill()).split())
 
