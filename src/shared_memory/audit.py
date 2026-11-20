@@ -228,6 +228,25 @@ class Audit:
             ).fetchone()
         return row is not None
 
+    def imports_in(self, team_pk: int, project_id: str) -> tuple[list[str], list[str]]:
+        """The sources of a project's imports: one per import promoted, and one per import still waiting on the
+        challenge its promotion raised, a challenge no decision has closed yet."""
+        with self._db.transaction() as conn:
+            promoted = conn.execute(
+                "SELECT detail->>'imported_from' AS source FROM audit_events WHERE team_id = %s AND project_id = %s"
+                " AND kind = %s AND detail ? 'imported_from'",
+                (team_pk, project_id, MEMORY_PROMOTED),
+            ).fetchall()
+            waiting = conn.execute(
+                "SELECT raised.detail->>'imported_from' AS source FROM audit_events raised"
+                " WHERE raised.team_id = %s AND raised.project_id = %s AND raised.kind = %s"
+                " AND raised.detail ? 'imported_from' AND NOT EXISTS (SELECT 1 FROM audit_events decided"
+                " WHERE decided.team_id = raised.team_id AND decided.kind = %s"
+                " AND decided.detail->>'challenge_id' = raised.detail->>'challenge_id')",
+                (team_pk, project_id, CHALLENGE_RAISED, CHALLENGE_DECIDED),
+            ).fetchall()
+        return [row["source"] for row in promoted], [row["source"] for row in waiting]
+
     def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: object) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
         these entries (ADR-0014)."""

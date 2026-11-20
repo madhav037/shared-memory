@@ -2,6 +2,8 @@
 
 Onboarding imports what this member, this project's repositories and their team already have written down into Shared Memory. You read the sources and cut them into memories; the member approves each one before it is saved, and again before it is promoted. Run the steps in order, and tell the member which step you are on. Everything runs here, in this session: nothing is sent anywhere but this team's Shared Memory server.
 
+Read the progress so far first: the section at the end of these steps lists each repository and kind of outside source an earlier run recorded, with its status. Tell the member what is already done and skip it unless they ask to run it again.
+
 ## 1. Choose this run's sources
 
 **Which repositories.** Ask the member which checkouts on this machine to onboard: this one, and any other repository of this project they name. One run can walk several checkouts and keeps one list of proposals for the project across them; give each its repository name as the project lists it.
@@ -85,6 +87,8 @@ Once a repository document's passages are all in a foundation, its file duplicat
 
 Leave a file alone when any of its passages is still waiting on a foundation challenge or was left out: the pointer would hide what is not yet in the foundation. **Done when** every file the member agreed to is replaced, and the rest are listed with the reason.
 
-## 8. Report
+## 8. Record progress and report
+
+Call `record_onboarding_progress` once for each repository and each kind of outside source (`wiki`, `ticket`, `pr-comment`, `interview`) this run read: `status` is `done` when every proposal from it is promoted, waiting on a challenge, dropped or left out, `partly_done` when some are not yet, and `left_out` is how many passages of it you left out. Record a repository with `repository`, an outside source with `outside_source`. The project's leads see it in project settings, and the next run reads it.
 
 Cover every repository and source this run read, one part each, and the outside sources you couldn't reach. Tell the member what was promoted to project and to team memory and to which foundation and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in any repository or in your local memory, except the pointers the member approved in step 7. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.

@@ -348,6 +348,10 @@ def seeded(
                 resolutions={one["path"]: "keep_both" for one in imported["similar"]},
             )
         assert imported["status"] == "promoted", imported
+        # Onboarding progress for the journey that shows it in project settings: Olive's run of billing-api, and
+        # Dana's run of the tickets, the only one she sees as a member who leads nothing.
+        in_project.call("record_onboarding_progress", status="done", repository="billing-api", left_out=2)
+        dana.call("record_onboarding_progress", status="partly_done", outside_source="ticket", left_out=1)
         # A challenge for the journey where a project lead decides: in a project Lena leads, against a memory of
         # Wes's, whom no journey signs in as. Olive raises it, so it isn't hers to decide as an admin, and the
         # journeys that check she has nothing waiting still find nothing.

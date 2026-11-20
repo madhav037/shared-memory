@@ -362,6 +362,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing. */
+        get: operations["onboarding_progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/sessions": {
         parameters: {
             query?: never;
@@ -1371,6 +1388,51 @@ export interface components {
             possibly_outdated: components["schemas"]["PossiblyOutdatedMemory"][];
             /** In Doubt */
             in_doubt: components["schemas"]["DoubtedMemory"][];
+        };
+        /**
+         * OnboardingEntry
+         * @description How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or
+         *     interview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a
+         *     session last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the
+         *     audit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it
+         *     left out.
+         */
+        OnboardingEntry: {
+            /** Repository */
+            repository: string | null;
+            /** Outside Source */
+            outside_source: string | null;
+            /** Status */
+            status: string;
+            /** Recorded By */
+            recorded_by: string;
+            /** Recorded By Name */
+            recorded_by_name: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Promoted */
+            promoted: number;
+            /** Waiting On Challenge */
+            waiting_on_challenge: number;
+            /** Left Out */
+            left_out: number;
+        };
+        /**
+         * OnboardingProgress
+         * @description A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its
+         *     leads and the team's admins see them, or only the ones the signed-in member recorded. Read-only: a session
+         *     records progress.
+         */
+        OnboardingProgress: {
+            /** Project Id */
+            project_id: string;
+            /** Everyone */
+            everyone: boolean;
+            /** Entries */
+            entries: components["schemas"]["OnboardingEntry"][];
         };
         /**
          * ActiveSession
@@ -3204,6 +3266,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectHealth"];
+                };
+            };
+        };
+    };
+    onboarding_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingProgress"];
                 };
             };
         };

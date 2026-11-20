@@ -722,6 +722,34 @@
         }
       }
     },
+    "/api/projects/{project_id}/onboarding": {
+      "get": {
+        "operationId": "onboarding_progress",
+        "summary": "A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingProgress"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/sessions": {
       "get": {
         "operationId": "project_sessions",
@@ -2907,6 +2935,102 @@
           "in_doubt"
         ],
         "title": "ProjectHealth",
+        "type": "object"
+      },
+      "OnboardingEntry": {
+        "description": "How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or\ninterview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a\nsession last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the\naudit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it\nleft out.",
+        "properties": {
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "outside_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outside Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "recorded_by": {
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "recorded_by_name": {
+            "title": "Recorded By Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "integer"
+          },
+          "waiting_on_challenge": {
+            "title": "Waiting On Challenge",
+            "type": "integer"
+          },
+          "left_out": {
+            "title": "Left Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repository",
+          "outside_source",
+          "status",
+          "recorded_by",
+          "recorded_by_name",
+          "recorded_at",
+          "promoted",
+          "waiting_on_challenge",
+          "left_out"
+        ],
+        "title": "OnboardingEntry",
+        "type": "object"
+      },
+      "OnboardingProgress": {
+        "description": "A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its\nleads and the team's admins see them, or only the ones the signed-in member recorded. Read-only: a session\nrecords progress.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "everyone": {
+            "title": "Everyone",
+            "type": "boolean"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/OnboardingEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "everyone",
+          "entries"
+        ],
+        "title": "OnboardingProgress",
         "type": "object"
       },
       "ActiveSession": {

@@ -945,6 +945,34 @@ class ProjectHealth(BaseModel):
     in_doubt: list[DoubtedMemory]
 
 
+class OnboardingEntry(BaseModel):
+    """How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or
+    interview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a
+    session last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the
+    audit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it
+    left out."""
+
+    repository: str | None
+    outside_source: str | None
+    status: str
+    recorded_by: str
+    recorded_by_name: str
+    recorded_at: datetime
+    promoted: int
+    waiting_on_challenge: int
+    left_out: int
+
+
+class OnboardingProgress(BaseModel):
+    """A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its
+    leads and the team's admins see them, or only the ones the signed-in member recorded. Read-only: a session
+    records progress."""
+
+    project_id: str
+    everyone: bool
+    entries: list[OnboardingEntry]
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
@@ -1178,6 +1206,17 @@ DECLARATIONS: tuple[Declaration, ...] = (
             "doubt, with each one's count and reasons. Changes nothing."
         ),
         answers=ProjectHealth,
+    ),
+    Declaration(
+        path="/projects/{project_id}/onboarding",
+        method="GET",
+        operation_id="onboarding_progress",
+        summary=(
+            "A project's onboarding progress per repository and outside source: status, who recorded it and when, and "
+            "how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; "
+            "any other member sees their own. Changes nothing."
+        ),
+        answers=OnboardingProgress,
     ),
     Declaration(
         path="/projects/{project_id}/sessions",
