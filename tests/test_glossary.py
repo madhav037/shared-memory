@@ -86,6 +86,7 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
     Allow("share", "the product's name; avoided only for promoting", text="shared memory"),
     Allow("share", "the shared folders of the memory repository, not promoting", (SERVER + "store.py",)),
+    Allow("share", "the folder project memory lives in, not promoting", (PAGES + "FolderPage.tsx",), "/shared"),
     Allow(
         "activity",
         "a session's Activity, the glossary's own term; avoided only for the audit log",
