@@ -423,7 +423,7 @@ def added_context(hook_output: dict[str, Any]) -> str:
 
 
 @dataclass
-class Team:
+class Company:
     server: RunningServer
     code: str
     owner_token: str
@@ -432,17 +432,17 @@ class Team:
         return Session(self.server, self.owner_token)
 
 
-def new_team(server: RunningServer) -> Team:
-    code = f"team-{uuid.uuid4().hex[:8]}"
-    output = server.run_cli("setup", "--team", code, "--owner-member-id", "owner-1", "--owner-name", "Olive Owner")
+def new_company(server: RunningServer) -> Company:
+    code = f"company-{uuid.uuid4().hex[:8]}"
+    output = server.run_cli("setup", "--company", code, "--owner-member-id", "owner-1", "--owner-name", "Olive Owner")
     token = next(line.split(":", 1)[1].strip() for line in output.splitlines() if line.startswith("Owner personal token:"))
-    return Team(server, code, token)
+    return Company(server, code, token)
 
 
-def member(team: Team, project: str, member_id: str, name: str) -> Session:
-    """A session for a member added to the team, working in one project."""
-    added = team.owner().call("add_member", member_id=member_id, name=name)
-    return Session(team.server, added["personal_token"], project, "billing-api")
+def member(company: Company, project: str, member_id: str, name: str) -> Session:
+    """A session for a member added to the company, working in one project."""
+    added = company.owner().call("add_member", member_id=member_id, name=name)
+    return Session(company.server, added["personal_token"], project, "billing-api")
 
 
 # Two memories that contradict each other, so promoting the second finds the first similar.
@@ -472,7 +472,7 @@ def promote_keeping_both(session: Session, memory: dict[str, str], level: str = 
     """Promote a memory that reads as similar to others but contradicts none of them.
 
     Similarity is generous — two memories about entirely different things can sit above the threshold — so a
-    seed that adds a memory to a team which already has a few cannot assume nothing will come back.
+    seed that adds a memory to a company which already has a few cannot assume nothing will come back.
     """
     personal = session.call("remember", **memory)["path"]
     first = session.call("promote", path=personal, level=level)
@@ -736,9 +736,9 @@ class Console:
     def client(self) -> ConsoleClient:
         return ConsoleClient(self.server)
 
-    def a_team(self, github_login: str) -> tuple[str, str]:
-        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
-        return a_team_on(self.server, github_login)
+    def a_company(self, github_login: str) -> tuple[str, str]:
+        """A company whose owner signs in as this GitHub account; returns the company's code and the owner's token."""
+        return a_company_on(self.server, github_login)
 
 
 class StubEmbedder:
@@ -762,16 +762,16 @@ class HostedConsole:
     platform: FakePlatform
     clock: TestClock
 
-    def a_team(self, github_login: str) -> tuple[str, str]:
-        """A team whose owner signs in as this GitHub account; returns the team's code and the owner's token."""
-        return a_team_on(self.server, github_login)
+    def a_company(self, github_login: str) -> tuple[str, str]:
+        """A company whose owner signs in as this GitHub account; returns the company's code and the owner's token."""
+        return a_company_on(self.server, github_login)
 
 
-def a_team_on(server: RunningServer, github_login: str) -> tuple[str, str]:
-    """A team on this server whose owner signs in as this GitHub account; returns its code and the owner's token."""
-    code = f"team-{uuid.uuid4().hex[:8]}"
+def a_company_on(server: RunningServer, github_login: str) -> tuple[str, str]:
+    """A company on this server whose owner signs in as this GitHub account; returns its code and the owner's token."""
+    code = f"company-{uuid.uuid4().hex[:8]}"
     printed = server.run_cli(
-        "setup", "--team", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+        "setup", "--company", code, "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
         "--owner-github", github_login,
     )  # fmt: skip
     token = next(line.split(":", 1)[1].strip() for line in printed.splitlines() if line.startswith("Owner personal"))
@@ -787,8 +787,8 @@ def signed_in(console: Console, github: str, account: int) -> ConsoleClient:
 
 
 def signed_in_owner(console: Console, client: ConsoleClient, github: str, account: int) -> Session:
-    """A team whose owner is signed in to the console, and that owner's Claude session."""
-    _, owner_token = console.a_team(github)
+    """A company whose owner is signed in to the console, and that owner's Claude session."""
+    _, owner_token = console.a_company(github)
     console.github.as_(account, github)
     client.sign_in()
     return Session(console.server, owner_token)
@@ -803,7 +803,7 @@ def ask(client: ConsoleClient, url: str, **asked: Any) -> dict[str, Any]:
 
 
 def add(client: ConsoleClient, member_id: str, name: str, github: str | None = None) -> dict[str, Any]:
-    """Add a member to the team through the console."""
+    """Add a member to the company through the console."""
     response = client.post_json("/api/members", {"member_id": member_id, "name": name, "github": github})
     assert response.status_code == 200, response.text
     added: dict[str, Any] = response.json()

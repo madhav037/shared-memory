@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from shared_memory.locks import NEVER_LOCK, Locks
-from tests.support import Console, ConsoleClient, RunningServer, Session, Team, ToolRefused
+from tests.support import Console, ConsoleClient, RunningServer, Session, Company, ToolRefused
 from tests.test_restricted_projects import restricted
 
 FILE = "src/webhooks/retry.py"
@@ -37,9 +37,11 @@ def at(moment: str) -> datetime:
 # Taking a lock
 
 
-def test_a_session_takes_a_lock_and_taking_it_again_moves_when_it_was_last_used(team: Team, dana: Session) -> None:
+def test_a_session_takes_a_lock_and_taking_it_again_moves_when_it_was_last_used(
+    company: Company, dana: Session
+) -> None:
     first = take(dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     again = take(dana)
 
@@ -51,10 +53,10 @@ def test_a_session_takes_a_lock_and_taking_it_again_moves_when_it_was_last_used(
 
 
 def test_another_members_session_is_refused_and_told_who_holds_the_file(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     taken = take(dana.as_agent("claude-code"))
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     refusal = refused(cole)
 
@@ -89,8 +91,8 @@ def test_the_same_path_in_two_repositories_of_one_project_is_two_locks(
     assert "Dana Dev" in refused(cole), "billing-api's file is still Dana's"
 
 
-def test_the_same_path_in_two_projects_is_two_locks(team: Team, dana: Session, cole: Session) -> None:
-    checkout = team.owner().call("create_project", name="Checkout")["project_id"]
+def test_the_same_path_in_two_projects_is_two_locks(company: Company, dana: Session, cole: Session) -> None:
+    checkout = company.owner().call("create_project", name="Checkout")["project_id"]
     take(dana)
 
     elsewhere = take(cole.in_project(checkout, "billing-api"))
@@ -149,31 +151,31 @@ def test_after_the_holders_session_end_hook_another_session_takes_the_lock(dana:
 
 
 def test_after_the_idle_time_without_a_call_from_the_holder_another_session_takes_the_lock(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     take(dana)
 
-    team.server.clock.advance(minutes=29, seconds=59)
+    company.server.clock.advance(minutes=29, seconds=59)
     just_before = refused(cole)
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     assert "Dana Dev" in just_before
     assert take(cole)["locked"] is True
 
 
-def test_any_call_from_the_holders_session_keeps_its_locks(team: Team, dana: Session, cole: Session) -> None:
+def test_any_call_from_the_holders_session_keeps_its_locks(company: Company, dana: Session, cole: Session) -> None:
     take(dana)
 
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
     dana.prompt("write a haiku about cats")
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
 
     assert "Dana Dev" in refused(cole)
 
 
-def test_a_session_back_from_idle_gets_no_lock_back(team: Team, dana: Session, cole: Session) -> None:
+def test_a_session_back_from_idle_gets_no_lock_back(company: Company, dana: Session, cole: Session) -> None:
     take(dana)
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     dana.prompt("write a haiku about cats")
     for_cole = take(cole)
@@ -305,18 +307,18 @@ def test_the_guidance_for_taking_a_lock_says_to_release_the_file_when_the_work_o
 
 
 def test_a_projects_locks_and_who_holds_a_file_count_only_active_holders(
-    team: Team, project: str, dana: Session, cole: Session
+    company: Company, project: str, dana: Session, cole: Session
 ) -> None:
     """Asks the worker's locks module, read and never patched: it is the interface the hook and the console stand on,
     and the console's own server answers over HTTP in tests/test_console_sessions.py, not this module's server."""
-    locks: Locks = team.server.app.state.locks
+    locks: Locks = company.server.app.state.locks
     take(dana.as_agent("claude-code"))
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
     take(cole, "src/invoices.py", repository="billing-web")
 
     both = locks.held(project)
     mine = locks.of(project, "billing-api", FILE)
-    team.server.clock.advance(minutes=10)
+    company.server.clock.advance(minutes=10)
     later = locks.held(project)
 
     assert [(lock.holder.member_id, lock.repository, lock.path) for lock in both] == [

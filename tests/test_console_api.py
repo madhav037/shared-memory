@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from tests.support import REPO_ROOT, HostedConsole, RunningServer, Session, Team
+from tests.support import REPO_ROOT, HostedConsole, RunningServer, Session, Company
 
 
 def get(server: RunningServer, path: str) -> dict[str, Any]:
@@ -46,15 +46,15 @@ def test_the_console_is_told_whether_the_server_is_hosted_so_it_says_what_settin
 
 
 def test_the_console_is_told_the_address_agents_reach_the_server_at_the_one_the_repositorys_files_name(
-    team: Team,
+    company: Company,
 ) -> None:
-    owner = team.owner()
+    owner = company.owner()
     project = owner.call("create_project", name="Billing")
     named = {file["path"]: file["contents"] for file in project["files"]}
 
-    status = get(team.server, "/api/status")
+    status = get(company.server, "/api/status")
 
-    assert status["server_url"] == team.server.url
+    assert status["server_url"] == company.server.url
     assert f"{status['server_url']}/mcp" in named[".codex/config.toml"]
 
 
@@ -77,12 +77,12 @@ def test_the_api_describes_itself_so_the_console_can_generate_its_types(server: 
     assert document["paths"]["/api/sign-in/github"]["get"]["responses"].keys() == {"302"}
 
 
-def test_the_console_api_leaves_the_memory_tools_and_the_hooks_alone(team: Team) -> None:
-    owner = team.owner()
+def test_the_console_api_leaves_the_memory_tools_and_the_hooks_alone(company: Company) -> None:
+    owner = company.owner()
     project = owner.call("create_project", name="Billing")["project_id"]
-    session = Session(team.server, team.owner_token, project, "billing-api")
+    session = Session(company.server, company.owner_token, project, "billing-api")
 
-    get(team.server, "/api/status")
+    get(company.server, "/api/status")
 
     assert session.call("tree")["folders"] == []
     assert session.end() == {}

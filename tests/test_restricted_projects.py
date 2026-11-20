@@ -10,7 +10,7 @@ from tests.support import Console, ConsoleClient, Session, add, added_context, a
 
 @dataclass
 class ARestrictedProject:
-    """A team with one restricted project, its owner, and a member who is not on its access list."""
+    """A company with one restricted project, its owner, and a member who is not on its access list."""
 
     owner: Session
     billing: str
@@ -118,12 +118,12 @@ def test_unrestricting_keeps_the_access_list_for_next_time(console: Console, sig
     assert it.dana.in_project(it.billing, "billing-api").call("tree") == {"folders": []}
 
 
-def test_team_memory_stays_readable_by_the_whole_team(console: Console, signed_out: ConsoleClient) -> None:
+def test_company_memory_stays_readable_by_the_whole_company(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-seven", 808)
     payments = create(signed_out, "Payments")["project_id"]
     in_billing = it.owner.in_project(it.billing, "billing-api")
     saved = remembered(in_billing, "Every service logs as JSON", "Every service logs a single JSON object per line.")
-    in_billing.call("promote", path=saved["path"], level="team")
+    in_billing.call("promote", path=saved["path"], level="company")
 
     found = it.dana.in_project(payments, "payments-api").call("search", query="how do our services log")
 

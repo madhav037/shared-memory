@@ -184,7 +184,7 @@ def test_another_members_personal_memory_is_labelled_as_not_accepted(
     assert found["results"][0]["label"] == "personal memory of emp-2, not accepted by the company"
 
 
-def test_browsing_needs_a_signed_in_member_and_a_project_of_their_team(
+def test_browsing_needs_a_signed_in_member_and_a_project_of_their_company(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     signed_out_answer = signed_out.get("/api/projects")

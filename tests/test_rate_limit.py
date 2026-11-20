@@ -28,7 +28,7 @@ from tests.support import (
     RunningServer,
     TestClock,
     fresh_database,
-    new_team,
+    new_company,
     signed_in_owner,
 )
 
@@ -75,7 +75,7 @@ def another_worker(limited: RunningServer) -> Iterator[RunningServer]:
 def a_token(server: RunningServer) -> str:
     """A personal token no call has used yet."""
     server.clock.now = TestClock().now
-    return new_team(server).owner_token
+    return new_company(server).owner_token
 
 
 def prompt(server: RunningServer, token: str) -> httpx.Response:
@@ -208,14 +208,14 @@ def test_calls_are_allowed_again_once_the_wait_has_passed(limited: RunningServer
 
 
 def test_one_personal_token_being_limited_never_limits_another(limited: RunningServer) -> None:
-    busy, quiet = a_token(limited), new_team(limited).owner_token
+    busy, quiet = a_token(limited), new_company(limited).owner_token
     used_up(limited, busy)
 
     assert prompt(limited, quiet).status_code == 200
 
 
 def test_ordinary_use_stays_under_the_limit(limited: RunningServer) -> None:
-    owner = new_team(limited).owner()
+    owner = new_company(limited).owner()
 
     project = owner.call("create_project", name="Billing")["project_id"]
     in_project = owner.in_project(project, "billing-api")
@@ -363,7 +363,7 @@ def test_calls_with_a_wrong_personal_token_are_counted_with_the_address_and_cann
 
 def test_two_personal_tokens_behind_one_address_are_counted_separately(limited: RunningServer) -> None:
     limited.clock.now = TestClock().now
-    first, second = new_team(limited).owner_token, new_team(limited).owner_token
+    first, second = new_company(limited).owner_token, new_company(limited).owner_token
     office = from_address(limited, "203.0.113.30")
 
     for _ in range(BURST):

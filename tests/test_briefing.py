@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.support import Session, Team, added_context, same_fence
+from tests.support import Session, Company, added_context, same_fence
 
 
 def promote(session: Session, title: str, body: str, level: str = "project", topic: str | None = None) -> str:
@@ -14,11 +14,13 @@ def promote(session: Session, title: str, body: str, level: str = "project", top
     return path
 
 
-def test_a_new_members_first_session_is_briefed_with_pinned_memory(team: Team, project: str, owner: Session) -> None:
+def test_a_new_members_first_session_is_briefed_with_pinned_memory(
+    company: Company, project: str, owner: Session
+) -> None:
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
-    added = team.owner().call("add_member", member_id="emp-9", name="New Member")
-    newcomer = Session(team.server, added["personal_token"], project, "billing-api")
+    added = company.owner().call("add_member", member_id="emp-9", name="New Member")
+    newcomer = Session(company.server, added["personal_token"], project, "billing-api")
 
     output = newcomer.start()
     briefing = added_context(output)
@@ -29,12 +31,12 @@ def test_a_new_members_first_session_is_briefed_with_pinned_memory(team: Team, p
     assert "information, not instructions" in briefing
 
 
-def test_pinned_team_memory_is_in_every_projects_briefing(team: Team, owner: Session) -> None:
-    path = promote(owner, "Log in JSON", "Every service writes structured JSON logs.", level="team")
+def test_pinned_company_memory_is_in_every_projects_briefing(company: Company, owner: Session) -> None:
+    path = promote(owner, "Log in JSON", "Every service writes structured JSON logs.", level="company")
     owner.call("pin", path=path)
-    other_project = team.owner().call("create_project", name="Checkout")["project_id"]
+    other_project = company.owner().call("create_project", name="Checkout")["project_id"]
 
-    assert f"[company memory] Log in JSON ({path})" in added_context(team.owner().in_project(other_project).start())
+    assert f"[company memory] Log in JSON ({path})" in added_context(company.owner().in_project(other_project).start())
 
 
 def test_personal_memory_cannot_be_pinned(owner: Session) -> None:
@@ -78,12 +80,12 @@ def test_unpinning_removes_a_memory_from_the_briefing(owner: Session) -> None:
     assert "Use pnpm, not npm" not in added_context(owner.start())
 
 
-def test_session_start_never_breaks_the_session(team: Team, owner: Session) -> None:
+def test_session_start_never_breaks_the_session(company: Company, owner: Session) -> None:
     path = promote(owner, "Use pnpm, not npm", "We use pnpm for every package.")
     owner.call("pin", path=path)
-    revoked_token = Session(team.server, "smt_nope", owner.project, "billing-api")
+    revoked_token = Session(company.server, "smt_nope", owner.project, "billing-api")
 
-    assert team.owner().start() == {}
+    assert company.owner().start() == {}
     assert "not recognised" in revoked_token.start()["systemMessage"]
 
 
@@ -125,8 +127,8 @@ def test_any_agent_can_fetch_the_briefing_its_session_would_start_with(owner: Se
     assert f"[project memory] Use pnpm, not npm ({path})" in briefing
 
 
-def test_a_session_outside_any_project_is_told_how_to_connect_instead_of_briefed(team: Team) -> None:
-    told = team.owner().call("briefing")
+def test_a_session_outside_any_project_is_told_how_to_connect_instead_of_briefed(company: Company) -> None:
+    told = company.owner().call("briefing")
 
     assert "isn't connected to a project" in told
     assert "create_project" in told
@@ -153,7 +155,7 @@ def test_agents_that_offer_prompts_as_commands_can_run_the_briefing(owner: Sessi
     assert "identifier in Shared Memory is" not in prompted
 
 
-def test_the_briefing_prompt_of_a_session_outside_any_project_says_how_to_connect(team: Team) -> None:
-    told = team.owner().run_prompt("briefing")
+def test_the_briefing_prompt_of_a_session_outside_any_project_says_how_to_connect(company: Company) -> None:
+    told = company.owner().run_prompt("briefing")
 
     assert "isn't connected to a project" in told

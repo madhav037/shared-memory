@@ -1,6 +1,6 @@
 # Shared Memory console
 
-The team's web app: members browse memory, admins run the team. It is a React app in TypeScript, built to static files, talking to the JSON API in the Python server on the same origin (ADR-0008). The spec is issue #22.
+The company's web app: members browse memory, admins run the company. It is a React app in TypeScript, built to static files, talking to the JSON API in the Python server on the same origin (ADR-0008). The spec is issue #22.
 
 ## Working on it
 
@@ -35,4 +35,4 @@ A test in `tests/` fails if `openapi.json` falls behind the server, and `npm run
 
 ## Signing in while you work on it
 
-Sign-in needs a GitHub app. For local work, the browser journeys' server (`tests/console_e2e_server.py`) already runs with a fake GitHub and a seeded team, so `npm run e2e` needs nothing set up. To sign in by hand against a real GitHub app, run the server with `SHARED_MEMORY_GITHUB_CLIENT_ID`, `SHARED_MEMORY_GITHUB_CLIENT_SECRET` and `SHARED_MEMORY_CONSOLE_URL`, and register `<console URL>/api/sign-in/github/callback` as the app's callback.
+Sign-in needs a GitHub app. For local work, the browser journeys' server (`tests/console_e2e_server.py`) already runs with a fake GitHub and a seeded company, so `npm run e2e` needs nothing set up. To sign in by hand against a real GitHub app, run the server with `SHARED_MEMORY_GITHUB_CLIENT_ID`, `SHARED_MEMORY_GITHUB_CLIENT_SECRET` and `SHARED_MEMORY_CONSOLE_URL`, and register `<console URL>/api/sign-in/github/callback` as the app's callback.

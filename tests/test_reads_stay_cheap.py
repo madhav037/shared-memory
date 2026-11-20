@@ -1,5 +1,5 @@
 """The work a read does stays small as memory grows: under load, the server runs one thread of Python at a time, so
-per-call work that grows with the team's memory, or that repeats for every call, caps how many calls it can answer.
+per-call work that grows with the company's memory, or that repeats for every call, caps how many calls it can answer.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ import pytest
 
 from shared_memory import app as app_module
 from shared_memory import store as store_module
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
 @pytest.fixture
-def member(team: Team) -> Session:
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    return team.owner().in_project(project, "billing-api")
+def member(company: Company) -> Session:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    return company.owner().in_project(project, "billing-api")
 
 
 class Count:
@@ -35,9 +35,9 @@ def confinements(monkeypatch: pytest.MonkeyPatch) -> Iterator[Count]:
     counted = Count()
     confine = store_module.confine
 
-    def counting(root: Path, team: str, path: object) -> Path:
+    def counting(root: Path, company: str, path: object) -> Path:
         counted.count += 1
-        return confine(root, team, path)  # type: ignore[arg-type]
+        return confine(root, company, path)  # type: ignore[arg-type]
 
     monkeypatch.setattr(store_module, "confine", counting)
     yield counted

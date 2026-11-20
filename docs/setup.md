@@ -4,7 +4,7 @@ This guide covers the three people involved: the person running the server, the 
 
 ## 1. Run the server (the person running the server)
 
-To run it for your team on a server, with HTTPS and nightly backups, follow [`deployment.md`](./deployment.md). The steps below run it on your own machine to try it out.
+To run it for your company on a server, with HTTPS and nightly backups, follow [`deployment.md`](./deployment.md). The steps below run it on your own machine to try it out.
 
 Requirements: Docker with Compose.
 
@@ -26,10 +26,10 @@ Server settings, as environment variables on the `server` service:
 
 The first search downloads the embedding model (about 70 MB) into the model cache.
 
-### Create the team and its owner
+### Create the company and its owner
 
 ```bash
-docker compose exec server shared-memory setup --team acme --owner-member-id E1001 --owner-name "Olive Owner"
+docker compose exec server shared-memory setup --company acme --owner-member-id E1001 --owner-name "Olive Owner"
 ```
 
 The command prints the **owner**'s **personal token** once. Hand it to the owner privately.
@@ -52,7 +52,7 @@ In the console's **Members**, or from your own coding agent once it is connected
 
 ## 3. Connect a repository (any member, once per repository)
 
-Create a project for the repository: **New project** on the console's front page, or ask a coding agent that is already connected to call `create_project`. For another repository of the same product, reuse the existing project instead. Either way you get the files that connect the repository to its project, for every **coding agent** the team uses. The console shows them in the project's **Settings**, and one agent at a time on **Connect your agent**.
+Create a project for the repository: **New project** on the console's front page, or ask a coding agent that is already connected to call `create_project`. For another repository of the same product, reuse the existing project instead. Either way you get the files that connect the repository to its project, for every **coding agent** the company uses. The console shows them in the project's **Settings**, and one agent at a time on **Connect your agent**.
 
 | Coding agent | File the repository commits |
 |---|---|
@@ -65,7 +65,7 @@ Create a project for the repository: **New project** on the console's front page
 | Cline | the hook scripts in `.clinerules/hooks` (its MCP server is per machine, section 4) |
 | Every agent | a Shared Memory section in `AGENTS.md`, and the skill in `.agents/skills/shared-memory/SKILL.md` |
 
-Commit the files for the agents your team uses, merging each into any file already there. They name the project and the repository, never a personal token. Cline keeps its MCP servers on each machine rather than in the repository, so each member who uses Cline adds the project's entry once (section 4).
+Commit the files for the agents your company uses, merging each into any file already there. They name the project and the repository, never a personal token. Cline keeps its MCP servers on each machine rather than in the repository, so each member who uses Cline adds the project's entry once (section 4).
 
 For Claude Code, the settings look like this:
 
@@ -86,7 +86,7 @@ Several repositories can use the same project ID, each with its own repository n
 
 Whoever creates a project becomes its first **project lead**: they appoint other leads and look after its repositories. The project's **Settings** in the console show each repository with the files to commit into it. A project lead can also read the audit log for their own projects.
 
-A project is open to the whole team unless a lead or an admin **restricts** it. A restricted project can be reached only by the members on its **access list**, its leads and the team's admins: everyone else stops seeing it listed, its memory tools refuse, and a session started in one of its repositories is told why and gets no briefing or recall. Team memory stays readable by the whole team. Opening a project up again keeps its access list, so restricting it later lets the same members straight back in.
+A project is open to the whole company unless a lead or an admin **restricts** it. A restricted project can be reached only by the members on its **access list**, its leads and the company's admins: everyone else stops seeing it listed, its memory tools refuse, and a session started in one of its repositories is told why and gets no briefing or recall. Company memory stays readable by the whole company. Opening a project up again keeps its access list, so restricting it later lets the same members straight back in.
 
 ## 4. Join as a new member
 
@@ -129,11 +129,11 @@ A repository that already has a `CLAUDE.md`, an `AGENTS.md`, a `docs/` folder, A
 
 ## 5. Decide what every session is briefed with
 
-Open a project in the console and a memory shows whether it is **pinned**. Pinning a project or team memory — or a topic folder, which pins its index — puts it into the briefing every session in that project receives. The project page lists everything pinned in it with roughly how many tokens each one costs; when a pin would take the briefing over its cap, the console says so and shows what is already pinned, so you can choose what to unpin. The same thing can be done from a session with the `pin` and `unpin` tools.
+Open a project in the console and a memory shows whether it is **pinned**. Pinning a project or company memory — or a topic folder, which pins its index — puts it into the briefing every session in that project receives. The project page lists everything pinned in it with roughly how many tokens each one costs; when a pin would take the briefing over its cap, the console says so and shows what is already pinned, so you can choose what to unpin. The same thing can be done from a session with the `pin` and `unpin` tools.
 
-## 6. Decide what the team no longer believes
+## 6. Decide what the company no longer believes
 
-The console opens on the **challenges** waiting for your decision, with both memories side by side: what the memory says now, and what is offered in its place. Accepting one supersedes the memory; rejecting leaves it as it is and the challenger's memory stays personal memory. Several challenges against one memory are shown together, and accepting one closes the others, telling whoever raised them why. A challenge is decided by the challenged memory's author, by a lead of the project that memory is in, or by one of the team's admins; on team memory, by its author or an admin. A lead or an admin who raised the challenge can't decide it in that capacity. Each challenge says why it is yours to decide, and when someone other than the author decides, the author is told who did and in what capacity. Once the fallback period passes, or once the author has left the team, any member can decide.
+The console opens on the **challenges** waiting for your decision, with both memories side by side: what the memory says now, and what is offered in its place. Accepting one supersedes the memory; rejecting leaves it as it is and the challenger's memory stays personal memory. Several challenges against one memory are shown together, and accepting one closes the others, telling whoever raised them why. A challenge is decided by the challenged memory's author, by a lead of the project that memory is in, or by one of the company's admins; on company memory, by its author or an admin. A lead or an admin who raised the challenge can't decide it in that capacity. Each challenge says why it is yours to decide, and when someone other than the author decides, the author is told who did and in what capacity. Once the fallback period passes, or once the author has left the company, any member can decide.
 
 A memory that is no longer true and has nothing to replace it is **retired** from its own page. Retiring your own memory takes effect at once; retiring another member's raises a challenge, decided as any other is. The **Challenges** page also shows every challenge you raised and how each one ended.
 

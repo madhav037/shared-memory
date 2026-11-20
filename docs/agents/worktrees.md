@@ -147,7 +147,7 @@ Locks are `Locks` in `src/shared_memory/locks.py`, built once in `build_app` as 
   ID, `added_at`), oldest first; it doesn't check reach, which is the asker's. The built-in list is the constant
   `NEVER_LOCK`, which always applies. Only `locks.py` reads the `never_lock_patterns` table.
 - **The `never_lock` tool**: with nothing, any member of the project gets `built_in` and `project`; `add` or
-  `remove` (one pattern, one at a time) is for the project's leads and the team's admins, and each writes a
+  `remove` (one pattern, one at a time) is for the project's leads and the company's admins, and each writes a
   `never_lock_pattern_added` or `never_lock_pattern_removed` audit log entry whose target is the pattern. It takes
   no `session`, so it doesn't keep one active. Adding a pattern ends the locks held on files it matches, and each
   holder is told once, through `locks.waiting_notices`.

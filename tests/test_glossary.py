@@ -68,13 +68,15 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("archive", "the board's Archive of done cards; avoided only for retiring a memory", BOARD),
     Allow(
         "setup",
-        "setting a new server's first team up; avoided only for onboarding",
+        "setting a new server's first company up; avoided only for onboarding",
         (SERVER + "app.py", SERVER + "cli.py", SERVER + "identity.py"),
     ),
-    Allow("input", "what a tool call is given; avoided only for an import's source", (SERVER + "app.py",), "tool input"),
+    Allow(
+        "input", "what a tool call is given; avoided only for an import's source", (SERVER + "app.py",), "tool input"
+    ),
     Allow(
         "owner",
-        "the team's Owner; avoided only for an author, an assignee or a lock's holder",
+        "the company's Owner; avoided only for an author, an assignee or a lock's holder",
         (
             SERVER + "identity.py",
             "console/src/App.tsx",
@@ -83,7 +85,7 @@ ALLOWED: tuple[Allow, ...] = (
             PAGES + "Company.tsx",
         ),
     ),
-    Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
+    Allow("shared memory", "the product's name; avoided only for project memory and company memory"),
     Allow("share", "the product's name; avoided only for promoting", text="shared memory"),
     Allow("share", "the shared folders of the memory repository, not promoting", (SERVER + "store.py",)),
     Allow("share", "the folder project memory lives in, not promoting", (PAGES + "FolderPage.tsx",), "/shared"),
@@ -94,7 +96,7 @@ ALLOWED: tuple[Allow, ...] = (
     ),
     # Words with another technical meaning.
     Allow("status", "an HTTP status, the server's status or a memory's status; avoided only for a session's activity"),
-    Allow("root", "the root of a folder tree or of the page; avoided only for the team's owner"),
+    Allow("root", "the root of a folder tree or of the page; avoided only for the company's owner"),
     Allow(
         "lock", "a lock between threads; avoided only for claiming a card", (SERVER + "index.py", SERVER + "store.py")
     ),
@@ -180,7 +182,11 @@ ALLOWED: tuple[Allow, ...] = (
         "sessions' handoff notes on the console's Sessions page, the glossary's Handoff note; never memories",
         (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
     ),
-    Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
+    Allow(
+        "scope",
+        "an ASGI scope and a cancel scope; avoided only for a level or an area",
+        (SERVER + "app.py", SERVER + "ratelimit.py"),
+    ),
     Allow(
         "context",
         "MCP's request context and the context a hook adds to a prompt",
@@ -225,13 +231,16 @@ ALLOWED: tuple[Allow, ...] = (
         "what promote offers when it finds a similar memory; no challenge is raised",
         (SERVER + "app.py", SERVER + "known_issues.py", SERVER + "lifecycle.py"),
     ),
-    Allow("owner", "the team's Owner, as the README names the person who sets the team up", ("README.md",)),
+    Allow("owner", "the company's Owner, as the README names the person who sets the company up", ("README.md",)),
     Allow("password", "Postgres's own password, not a personal token", ("README.md",), "database password"),
     Allow("collision", "two sessions on the same work, the glossary's Collision", ("README.md",), "avoid collisions"),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
-    Allow("team", "the company's old name; the code, API, console and README are renamed in their own ticket (#600)"),
-    Allow("team memory", "company memory's old name; renamed with the code in its own ticket (#600)"),
+    Allow(
+        "team",
+        "the company's old name: the alias callers may still pass until the rename's contract step (#629), and stored names",
+    ),
+    Allow("team memory", "company memory's old name, which the one-off move out of `team/` describes (#625)"),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
 )
 

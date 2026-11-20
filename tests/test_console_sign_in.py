@@ -8,7 +8,7 @@ from tests.support import Console, ConsoleClient, RunningServer, Session, sign_i
 
 
 def test_a_member_signs_in_with_their_linked_github_account(console: Console, signed_out: ConsoleClient) -> None:
-    team, _ = console.a_team("olive-one")
+    company, _ = console.a_company("olive-one")
     console.github.as_(101, "olive-one")
 
     signed_out.sign_in()
@@ -20,8 +20,8 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
         "member": {
             "member_id": "E1001",
             "name": "Olive Owner",
-            "team": team,
-            "company": team,
+            "team": company,
+            "company": company,
             "role": "owner",
             "leads_a_project": False,
         },
@@ -31,7 +31,7 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
 
 
 def test_a_github_account_nobody_has_linked_is_refused(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-two")
+    console.a_company("olive-two")
     console.github.as_(102, "a-stranger")
 
     landed = signed_out.sign_in()
@@ -41,9 +41,9 @@ def test_a_github_account_nobody_has_linked_is_refused(console: Console, signed_
 
 
 def test_a_removed_member_can_no_longer_sign_in(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-three")
+    company, owner_token = console.a_company("olive-three")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-three")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-three")
     Session(console.server, owner_token).call("remove_member", member_id="emp-2")
     console.github.as_(103, "dana-three")
 
@@ -54,7 +54,7 @@ def test_a_removed_member_can_no_longer_sign_in(console: Console, signed_out: Co
 
 
 def test_a_renamed_github_account_still_signs_in(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-four")
+    console.a_company("olive-four")
     console.github.as_(104, "olive-four")
     signed_out.sign_in()
     signed_out.sign_out()
@@ -74,15 +74,15 @@ def test_the_fake_github_refuses_an_account_number_two_logins_share(console: Con
 
 
 def test_one_github_account_cannot_belong_to_two_members(console: Console) -> None:
-    team, owner_token = console.a_team("olive-five")
+    company, owner_token = console.a_company("olive-five")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
 
     with pytest.raises(RuntimeError, match="already linked to 'E1001'"):
-        console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "olive-five")
+        console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "olive-five")
 
 
 def test_signing_out_ends_the_session(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-six")
+    console.a_company("olive-six")
     console.github.as_(106, "olive-six")
     signed_out.sign_in()
 
@@ -92,7 +92,7 @@ def test_signing_out_ends_the_session(console: Console, signed_out: ConsoleClien
 
 
 def test_a_session_is_refused_without_the_consoles_own_header(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-seven")
+    console.a_company("olive-seven")
     console.github.as_(107, "olive-seven")
     signed_out.sign_in()
 
@@ -103,7 +103,7 @@ def test_a_session_is_refused_without_the_consoles_own_header(console: Console, 
 
 
 def test_a_session_expires_after_a_day_without_use(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-eight")
+    console.a_company("olive-eight")
     console.github.as_(108, "olive-eight")
     signed_out.sign_in()
 
@@ -113,9 +113,9 @@ def test_a_session_expires_after_a_day_without_use(console: Console, signed_out:
 
 
 def test_a_session_ends_when_the_member_is_removed(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-nine")
+    company, owner_token = console.a_company("olive-nine")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-nine")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-nine")
     console.github.as_(109, "dana-nine")
     signed_out.sign_in()
     assert signed_out.status()["signed_in"] is True

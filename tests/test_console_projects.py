@@ -22,7 +22,7 @@ def leads(project: dict[str, Any]) -> list[str]:
 def signed_in_member(
     console: Console, owner: ConsoleClient, member_id: str, github: str, account: int
 ) -> ConsoleClient:
-    """A second member of the team, added by the owner and signed in to their own console session."""
+    """A second member of the company, added by the owner and signed in to their own console session."""
     add(owner, member_id, f"Dana {member_id}", github)
     client = console.client()
     console.github.as_(account, github)
@@ -53,7 +53,7 @@ def test_creating_a_project_from_claude_makes_the_creator_its_lead(console: Cons
     dana.close()
 
 
-def test_every_project_in_the_team_is_listed_with_its_leads(console: Console, signed_out: ConsoleClient) -> None:
+def test_every_project_in_the_company_is_listed_with_its_leads(console: Console, signed_out: ConsoleClient) -> None:
     owner = signed_in_owner(console, signed_out, "olive-projects-three", 704)
     owner.call("create_project", name="Billing")
     create(signed_out, "Payments")
@@ -193,7 +193,7 @@ def test_every_change_to_a_project_is_in_the_audit_log(console: Console, signed_
     dana.close()
 
 
-def test_an_admin_sees_a_project_of_their_team_and_nothing_else(console: Console, signed_out: ConsoleClient) -> None:
+def test_an_admin_sees_a_project_of_their_company_and_nothing_else(console: Console, signed_out: ConsoleClient) -> None:
     signed_in_owner(console, signed_out, "olive-projects-eleven", 720)
 
     missing = signed_out.get("/api/projects/not-a-project")

@@ -22,7 +22,7 @@ TODAY = date(2026, 11, 6)
 
 
 def test_a_valid_key_says_who_it_is_for_how_many_and_until_when() -> None:
-    found = verify(a_key(team="Acme", member_cap=10, key_id="k-7"), TEST_PUBLIC_KEYS)
+    found = verify(a_key(company="Acme", member_cap=10, key_id="k-7"), TEST_PUBLIC_KEYS)
 
     assert found == License("Acme", 10, date(2026, 9, 1), date(2027, 9, 1), "k-7")
 

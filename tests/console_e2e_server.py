@@ -1,4 +1,4 @@
-"""The servers the browser journeys run against: a real server, a fake GitHub, and a team to sign in to; and a hosted
+"""The servers the browser journeys run against: a real server, a fake GitHub, and a company to sign in to; and a hosted
 server beside it, which signs members in by a sign-in a fake platform hands over (#471), and whose license key has
 lapsed, so it is read-only (#472)."""
 
@@ -227,7 +227,7 @@ def seeded(
         )
         running.callback(server.stop)
         printed = server.run_cli(
-            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--company", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
         token = next(
@@ -432,7 +432,7 @@ def seeded(
         # A doubt for the in-doubt journeys, in a project of its own that only Tess leads: a memory of Wes's that
         # Olive's session says contradicts the code, and Raj's joins as a +1 quoting a line of its own. Olive raised it,
         # so it isn't hers to decide as an admin, and the journeys that check she or Raj has nothing waiting still find
-        # nothing; Wes signs in to no journey. No member is added for it: the team is at the unlicensed member cap.
+        # nothing; Wes signs in to no journey. No member is added for it: the company is at the unlicensed member cap.
         payments = tess.call("create_project", name="Payments", repository="payments-api")["project_id"]
         refunds = promote_now(
             wes.in_project(payments, "payments-api"),
@@ -572,7 +572,7 @@ def seeded(
             teammates_port,
         )
         running.callback(teammates.stop)
-        # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
+        # The hosted server, for the journeys that sign in through the platform: the company acme, whose owner is
         # Olive's GitHub account. It saves and searches nothing, so it loads no model.
         hosted_memory = memory.parent / "hosted-memory"
         hosted_clock = TestClock()
@@ -598,7 +598,7 @@ def seeded(
         )
         running.callback(hosted.stop)
         hosted_printed = hosted.run_cli(
-            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--company", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
         hosted_token = next(
@@ -607,10 +607,10 @@ def seeded(
         hosted_owner = Session(hosted, hosted_token)
         # Raj, a member who isn't an admin, for the journey that shows members the read-only notice.
         hosted_owner.call("add_member", member_id="emp-dana", name="Raj Raiser", github="dana")
-        # The team stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
+        # The company stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
         # hosted server is read-only, and stops on 14 September. The platform installs keys as the vendor (#470).
         hosted.app.state.licenses.install_as_vendor(
-            a_key(team="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
+            a_key(company="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
         )
 
         yield Seeded(server, github, hosted, platform, project, teammates)
@@ -629,7 +629,9 @@ if __name__ == "__main__":
             teammates_port=TEAMMATES_PORT,
         ) as seed,
     ):
-        print(f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True)
+        print(
+            f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True
+        )
         print(f"hosted server on {seed.hosted.url}, fake platform on {seed.platform.url}", flush=True)
         try:
             seed.server.join()

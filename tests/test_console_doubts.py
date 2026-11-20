@@ -18,7 +18,9 @@ TAX_LINE = {"code_reference": "billing-api:src/tax.py:42", "quoted_line": "RATE 
 ROUNDING_LINE = {"code_reference": "billing-api:src/totals.py:7", "quoted_line": "return total.quantize(CENT)"}
 
 
-def a_doubted_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[str, Session, Session]:
+def a_doubted_company(
+    console: Console, client: ConsoleClient, github: str, account: int
+) -> tuple[str, Session, Session]:
     """The owner signed in to the console with a project memory of theirs, and two members whose sessions doubt it."""
     owner = signed_in_owner(console, client, github, account)
     project = owner.call("create_project", name="Billing")["project_id"]
@@ -28,9 +30,7 @@ def a_doubted_team(console: Console, client: ConsoleClient, github: str, account
     dana = Session(console.server, add(client, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
     )
-    ash = Session(console.server, add(client, "emp-3", "Ash Dev")["personal_token"]).in_project(
-        project, "billing-api"
-    )
+    ash = Session(console.server, add(client, "emp-3", "Ash Dev")["personal_token"]).in_project(project, "billing-api")
     return path, dana, ash
 
 
@@ -47,7 +47,7 @@ def waiting(client: ConsoleClient) -> list[dict[str, Any]]:
 def test_the_challenge_list_carries_a_doubts_reason_its_evidence_and_its_count(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-listed", 5401)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-listed", 5401)
     challenge_id = doubt(dana, path, "contradicts_code", reasoning="The code charges twenty percent.", **TAX_LINE)
     doubt(ash, path, "contradicts_code", **ROUNDING_LINE)
 
@@ -70,7 +70,7 @@ def test_the_challenge_list_carries_a_doubts_reason_its_evidence_and_its_count(
 
 
 def test_a_misled_doubt_carries_evidence_with_no_code_reference(console: Console, signed_out: ConsoleClient) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-misled", 5402)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-misled", 5402)
     doubt(dana, path, "misled", reasoning="Invoices came out wrong.")
 
     [listed] = waiting(signed_out)
@@ -85,7 +85,7 @@ def test_a_misled_doubt_carries_evidence_with_no_code_reference(console: Console
 def test_a_challenge_that_names_no_reason_has_no_evidence_and_no_count(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-none", 5403)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-none", 5403)
     # Retiring another author's memory from a session raises a retire challenge, which names no reason.
     dana.call("retire", path=path)
 
@@ -100,7 +100,7 @@ def test_a_challenge_that_names_no_reason_has_no_evidence_and_no_count(
 def test_a_memory_read_in_the_console_carries_its_in_doubt_count_and_reasons(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-read", 5405)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-read", 5405)
     doubt(dana, path, "misled")
     doubt(ash, path, "misled")
     doubt(ash, path, "contradicts_code", **TAX_LINE)
@@ -122,7 +122,7 @@ def test_a_memory_read_in_the_console_carries_its_in_doubt_count_and_reasons(
 def test_a_member_who_cannot_decide_a_doubt_reads_its_count_and_evidence_on_the_memory_but_is_not_asked_to_decide(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-onlooker", 5410)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-onlooker", 5410)
     add(signed_out, "emp-5", "Frank Fixer", github="frank-doubts-onlooker")
     challenge_id = doubt(dana, path, "misled", reasoning="Invoices came out wrong.")
     doubt(ash, path, "misled")
@@ -142,7 +142,7 @@ def test_a_member_who_cannot_decide_a_doubt_reads_its_count_and_evidence_on_the_
 
 
 def test_a_memory_no_one_doubts_is_not_in_doubt(console: Console, signed_out: ConsoleClient) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-sound", 5406)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-sound", 5406)
 
     memory = ask(signed_out, "/api/memory", path=path)
 
@@ -152,7 +152,7 @@ def test_a_memory_no_one_doubts_is_not_in_doubt(console: Console, signed_out: Co
 def test_rejecting_a_doubt_through_the_decide_route_clears_the_in_doubt_mark(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-rejected", 5407)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-rejected", 5407)
     challenge_id = doubt(dana, path, "misled")
     doubt(ash, path, "misled")
 
@@ -168,7 +168,7 @@ def test_rejecting_a_doubt_through_the_decide_route_clears_the_in_doubt_mark(
 def test_accepting_a_doubt_through_the_decide_route_retires_the_memory(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    path, dana, ash = a_doubted_team(console, signed_out, "olive-doubts-accepted", 5408)
+    path, dana, ash = a_doubted_company(console, signed_out, "olive-doubts-accepted", 5408)
     challenge_id = doubt(dana, path, "contradicts_code", **TAX_LINE)
 
     accepted = signed_out.post_json(f"/api/challenges/{challenge_id}/decide", {"decision": "accept"})
@@ -194,6 +194,4 @@ def test_a_doubt_a_member_raised_says_its_reason_in_their_raised_list(
 
     raised = ask(signed_out, "/api/challenges")["raised"]
 
-    assert [(one["challenge_id"], one["kind"], one["reason"]) for one in raised] == [
-        (challenge_id, "doubt", "misled")
-    ]
+    assert [(one["challenge_id"], one["kind"], one["reason"]) for one in raised] == [(challenge_id, "doubt", "misled")]

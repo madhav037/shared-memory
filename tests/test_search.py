@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
 def remember(session: Session, title: str, body: str, type: str = "convention", summary: str | None = None) -> str:
@@ -94,9 +94,11 @@ def test_search_can_be_filtered_by_type_and_level(owner: Session, knowledge: dic
     assert paths(project_level) == []
 
 
-def test_other_members_personal_memory_is_labeled_as_not_accepted(team: Team, project: str, owner: Session) -> None:
-    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
-    dana = Session(team.server, added["personal_token"], project, "billing-api")
+def test_other_members_personal_memory_is_labeled_as_not_accepted(
+    company: Company, project: str, owner: Session
+) -> None:
+    added = company.owner().call("add_member", member_id="emp-2", name="Dana Dev")
+    dana = Session(company.server, added["personal_token"], project, "billing-api")
     path = remember(dana, "Webhook signatures", "Verify the Stripe webhook signature before parsing.")
 
     first = owner.call("search", query="webhook signature")["results"][0]
@@ -104,17 +106,19 @@ def test_other_members_personal_memory_is_labeled_as_not_accepted(team: Team, pr
     assert (first["path"], first["label"]) == (path, "personal memory of emp-2, not accepted by the company")
 
 
-def test_search_stays_within_the_sessions_project(team: Team, owner: Session) -> None:
-    other_project = team.owner().call("create_project", name="Search")["project_id"]
-    elsewhere = team.owner().in_project(other_project)
+def test_search_stays_within_the_sessions_project(company: Company, owner: Session) -> None:
+    other_project = company.owner().call("create_project", name="Search")["project_id"]
+    elsewhere = company.owner().in_project(other_project)
     remember(elsewhere, "Index shards", "Search indexes are split into eight shards.")
 
     assert paths(owner.call("search", query="index shards")) == []
 
 
-def test_reindex_rebuilds_the_index_from_the_memory_files(team: Team, owner: Session, knowledge: dict[str, str]) -> None:
+def test_reindex_rebuilds_the_index_from_the_memory_files(
+    company: Company, owner: Session, knowledge: dict[str, str]
+) -> None:
     before = owner.call("search", query="how do we handle retries")
 
-    team.server.run_cli("reindex")
+    company.server.run_cli("reindex")
 
     assert owner.call("search", query="how do we handle retries") == before

@@ -103,8 +103,8 @@ def in_a_project(deep: Console, browser: ConsoleClient, github: str, account: in
 def on_disk(deep: Console, path: str) -> Path:
     """Where a memory's file is on disk, as an ordinary path."""
     root = memory_folder(deep.server.settings.memory_root)
-    (team,) = [folder.name for folder in root.iterdir() if folder.joinpath(*path.split("/")).is_file()]
-    return deep.server.settings.memory_root.joinpath(team, *path.split("/"))
+    (company,) = [folder.name for folder in root.iterdir() if folder.joinpath(*path.split("/")).is_file()]
+    return deep.server.settings.memory_root.joinpath(company, *path.split("/"))
 
 
 def test_a_memory_past_the_limit_is_saved_and_read_back(deep: Console, browser: ConsoleClient) -> None:

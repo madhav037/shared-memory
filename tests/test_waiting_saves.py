@@ -13,7 +13,7 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
 from shared_memory.store import MemoryStore
-from tests.support import RunningServer, added_context, new_team, promote_now
+from tests.support import RunningServer, added_context, new_company, promote_now
 
 # More saves than the server has worker threads (40), so saves that each held a thread while waiting would take them all.
 QUEUED_SAVES = 60
@@ -50,9 +50,9 @@ def slow_saving_server(
 
 
 def test_a_read_and_a_hook_answer_promptly_while_many_saves_wait(slow_saving_server: RunningServer) -> None:
-    team = new_team(slow_saving_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project, "billing-api")
+    company = new_company(slow_saving_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project, "billing-api")
     money = promote_now(owner, MONEY)
 
     saves = [
@@ -85,9 +85,9 @@ def test_a_read_and_a_hook_answer_promptly_while_many_saves_wait(slow_saving_ser
 
 
 def test_promote_finds_similar_memories_promptly_while_many_saves_wait(slow_saving_server: RunningServer) -> None:
-    team = new_team(slow_saving_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project, "billing-api")
+    company = new_company(slow_saving_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project, "billing-api")
     money = promote_now(owner, MONEY)
     cents = owner.call("remember", **{**MONEY, "title": "Money in cents"})["path"]
 

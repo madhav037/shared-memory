@@ -3,7 +3,7 @@ member is sent about their cards (ADR-0014)."""
 
 from __future__ import annotations
 
-from tests.support import Session, Team, added_context
+from tests.support import Session, Company, added_context
 from tests.test_board import card, column, numbers
 from tests.test_card_claims import led_by_dana, the_card
 
@@ -176,8 +176,8 @@ def test_the_assignee_reopens_their_done_card(owner: Session, dana: Session) -> 
     assert (reopened["column"], reopened["assignee"]) == ("doing", "emp-2")
 
 
-def test_a_lead_reopens_an_archived_card(team: Team, dana: Session) -> None:
-    lead, cole, _ = led_by_dana(team, dana)
+def test_a_lead_reopens_an_archived_card(company: Company, dana: Session) -> None:
+    lead, cole, _ = led_by_dana(company, dana)
     card(cole, "Retry failed webhooks")
     cole.call("claim_card", number=1)
     cole.call("update_card", number=1, column="done")
@@ -260,8 +260,8 @@ def test_your_card_moved_out_of_blocked_by_someone_else_is_in_your_next_briefing
     assert "unblocked your card 2" not in told
 
 
-def test_a_project_lead_is_told_when_a_members_cards_go_back_to_to_do(team: Team, dana: Session) -> None:
-    lead, cole, admin = led_by_dana(team, dana)
+def test_a_project_lead_is_told_when_a_members_cards_go_back_to_to_do(company: Company, dana: Session) -> None:
+    lead, cole, admin = led_by_dana(company, dana)
     card(cole, "Retry failed webhooks")
     card(cole, "Split the invoice module")
     cole.call("claim_card", number=1)
@@ -277,8 +277,8 @@ def test_a_project_lead_is_told_when_a_members_cards_go_back_to_to_do(team: Team
     assert "Cole Coder" not in briefing(lead)
 
 
-def test_a_notice_is_in_the_briefing_of_a_session_in_another_project(team: Team, owner: Session, dana: Session) -> None:
-    payments = team.owner().call("create_project", name="Payments")["project_id"]
+def test_a_notice_is_in_the_briefing_of_a_session_in_another_project(company: Company, owner: Session, dana: Session) -> None:
+    payments = company.owner().call("create_project", name="Payments")["project_id"]
     card(owner, "Retry failed webhooks")
     dana.call("claim_card", number=1)
 

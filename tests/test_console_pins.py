@@ -111,7 +111,7 @@ def test_a_pin_over_the_briefing_cap_is_refused_with_what_is_already_pinned(
     assert [one["path"] for one in pins(signed_out, project)["pins"]] == [first]
 
 
-def test_only_project_and_team_memory_can_be_pinned(console: Console, signed_out: ConsoleClient) -> None:
+def test_only_project_and_company_memory_can_be_pinned(console: Console, signed_out: ConsoleClient) -> None:
     _, project, in_project = a_project(console, signed_out, "olive-pins-five", 1005)
     personal = in_project.call(
         "remember", title="My own note", summary="Mine.", type="gotcha", body="Something I am still working out."

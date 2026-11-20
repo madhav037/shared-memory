@@ -33,11 +33,11 @@ def choose(client: ConsoleClient, time_zone: str | None) -> dict[str, Any]:
 
 
 def signed_in_as_owner(console: Console, client: ConsoleClient, github: str, account: int) -> str:
-    """Sign the owner of a new team in; returns the team's code."""
-    team, _ = console.a_team(github)
+    """Sign the owner of a new company in; returns the company's code."""
+    company, _ = console.a_company(github)
     console.github.as_(account, github)
     client.sign_in()
-    return team
+    return company
 
 
 def test_a_member_has_no_time_zone_until_one_is_detected_and_can_choose_from_every_zone(
@@ -126,9 +126,9 @@ def test_a_name_that_is_no_time_zone_is_refused_and_nothing_changes(
 
 
 def test_a_member_cannot_change_another_members_time_zone(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-zone-eight")
+    company, owner_token = console.a_company("olive-zone-eight")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-zone-eight")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-zone-eight")
     console.github.as_(5918, "olive-zone-eight")
     signed_out.sign_in()
     dana = console.client()

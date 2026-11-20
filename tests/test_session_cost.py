@@ -9,7 +9,7 @@ one minus `guide`, so it is covered."""
 from __future__ import annotations
 
 from shared_memory.briefing import estimate_tokens
-from tests.support import Session, Team, added_context, promote_keeping_both
+from tests.support import Session, Company, added_context, promote_keeping_both
 
 # The budgets, in tokens, each with the figure measured on 2026-10-18 once #303 to #309 had landed.
 BUDGETS = {
@@ -48,7 +48,7 @@ def start_cost(session: Session) -> int:
     return estimate_tokens(agent.tool_listing()) + estimate_tokens(instructions) + estimate_tokens(briefing)
 
 
-def test_a_session_starting_as_a_member_stays_within_its_budget(team: Team, dana: Session) -> None:
+def test_a_session_starting_as_a_member_stays_within_its_budget(company: Company, dana: Session) -> None:
     measured = start_cost(dana)
 
     within_budget("member start", measured)

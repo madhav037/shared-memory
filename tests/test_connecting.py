@@ -1,12 +1,12 @@
-"""What any coding agent is told when it connects, so it uses the team's memory well without a plugin."""
+"""What any coding agent is told when it connects, so it uses the company's memory well without a plugin."""
 
 from __future__ import annotations
 
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
-def test_an_agent_is_told_on_connecting_how_to_use_the_teams_memory(team: Team) -> None:
-    instructions, _ = team.owner().on_connecting()
+def test_an_agent_is_told_on_connecting_how_to_use_the_companys_memory(company: Company) -> None:
+    instructions, _ = company.owner().on_connecting()
 
     assert len(instructions.encode("utf-8")) < 2048
     opening = instructions[:512]
@@ -14,15 +14,15 @@ def test_an_agent_is_told_on_connecting_how_to_use_the_teams_memory(team: Team) 
         assert step in opening, step
 
 
-def test_an_agent_is_told_on_connecting_how_to_keep_the_board(team: Team) -> None:
-    instructions, _ = team.owner().on_connecting()
+def test_an_agent_is_told_on_connecting_how_to_keep_the_board(company: Company) -> None:
+    instructions, _ = company.owner().on_connecting()
 
     for habit in ("add_card", "claim_card", "highest priority", "Done", "save_known_issue"):
         assert habit in instructions, habit
 
 
-def test_an_agent_is_told_on_connecting_its_session_habits(team: Team) -> None:
-    instructions, _ = team.owner().on_connecting()
+def test_an_agent_is_told_on_connecting_its_session_habits(company: Company) -> None:
+    instructions, _ = company.owner().on_connecting()
 
     for habit in (
         "Pass session",
@@ -48,24 +48,24 @@ def test_guidance_an_agent_must_not_miss_is_in_the_tools_themselves(owner: Sessi
     assert "take the next card" in tools["claim_card"]
 
 
-def test_a_session_without_a_token_is_told_how_to_give_one_in_any_agent(team: Team) -> None:
-    refusal = Session(team.server, None).refusal("search", query="how do we deploy")
+def test_a_session_without_a_token_is_told_how_to_give_one_in_any_agent(company: Company) -> None:
+    refusal = Session(company.server, None).refusal("search", query="how do we deploy")
 
     assert "SHARED_MEMORY_TOKEN" in refusal
     assert "plugin" not in refusal
 
 
-def test_a_session_with_an_unknown_token_is_told_where_to_check_it_in_any_agent(team: Team) -> None:
-    refusal = Session(team.server, "not-a-real-token").refusal("search", query="how do we deploy")
+def test_a_session_with_an_unknown_token_is_told_where_to_check_it_in_any_agent(company: Company) -> None:
+    refusal = Session(company.server, "not-a-real-token").refusal("search", query="how do we deploy")
 
     assert "not recognised" in refusal
     assert "SHARED_MEMORY_TOKEN" in refusal
     assert "plugin" not in refusal
 
 
-def test_a_saved_memory_tells_the_agent_how_to_make_it_the_teams(team: Team) -> None:
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    session = team.owner().in_project(project, "billing-api")
+def test_a_saved_memory_tells_the_agent_how_to_make_it_the_companys(company: Company) -> None:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    session = company.owner().in_project(project, "billing-api")
 
     saved = session.call(
         "remember",

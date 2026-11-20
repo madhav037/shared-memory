@@ -20,11 +20,11 @@ from tests.support import (
     RunningServer,
     Session,
     StubEmbedder,
-    Team,
+    Company,
     TestClock,
     fresh_database,
     member,
-    new_team,
+    new_company,
 )
 
 
@@ -70,9 +70,9 @@ def elsewhere(request: pytest.FixtureRequest) -> Callable[[Session], Session]:
 
 
 @pytest.fixture
-def team(server: RunningServer) -> Team:
+def company(server: RunningServer) -> Company:
     server.clock.now = TestClock().now
-    return new_team(server)
+    return new_company(server)
 
 
 @pytest.fixture(scope="module")
@@ -135,21 +135,21 @@ def signed_out(console: Console) -> Iterator[ConsoleClient]:
 
 
 @pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
+def project(company: Company) -> str:
+    project_id: str = company.owner().call("create_project", name="Billing")["project_id"]
     return project_id
 
 
 @pytest.fixture
-def owner(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, "billing-api")
+def owner(company: Company, project: str) -> Session:
+    return company.owner().in_project(project, "billing-api")
 
 
 @pytest.fixture
-def dana(team: Team, project: str) -> Session:
-    return member(team, project, "emp-2", "Dana Dev")
+def dana(company: Company, project: str) -> Session:
+    return member(company, project, "emp-2", "Dana Dev")
 
 
 @pytest.fixture
-def cole(team: Team, project: str) -> Session:
-    return member(team, project, "emp-3", "Cole Coder")
+def cole(company: Company, project: str) -> Session:
+    return member(company, project, "emp-3", "Cole Coder")

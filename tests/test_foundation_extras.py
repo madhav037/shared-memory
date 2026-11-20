@@ -12,7 +12,7 @@ from tests.support import (
     ConsoleClient,
     Crew,
     Session,
-    Team,
+    Company,
     create,
     keepers,
     promote,
@@ -77,9 +77,11 @@ def test_only_a_project_lead_adds_a_foundation_from_a_session(dana: Session) -> 
     assert "Only this project's leads" in dana.refusal("add_foundation", name=SECURITY)
 
 
-def test_each_project_has_its_own_extras(team: Team, owner: Session) -> None:
+def test_each_project_has_its_own_extras(company: Company, owner: Session) -> None:
     owner.call("add_foundation", name=SECURITY)
-    other = team.owner().in_project(team.owner().call("create_project", name="Checkout")["project_id"], "checkout")
+    other = company.owner().in_project(
+        company.owner().call("create_project", name="Checkout")["project_id"], "checkout"
+    )
 
     refused = other.refusal("promote", path=remember(other, CENTS), level="project", foundation="security-model")
 

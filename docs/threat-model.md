@@ -4,7 +4,7 @@ A one-page STRIDE pass over Shared Memory's three entry points, built from the t
 [`architecture.html`](architecture.html#trust) (crossings B1 to B9). Each threat names the check that stops it, with
 the code that does it, or the issue that tracks the missing check. Written 2026-11-05 for #377 (part of #375).
 
-**Assumed:** a member is trusted to read all of their team's memory except restricted projects they aren't on; TLS ends
+**Assumed:** a member is trusted to read all of their company's memory except restricted projects they aren't on; TLS ends
 at Caddy; the server publishes no port in production (`deploy/compose.yaml`), so only Caddy reaches it. Paths below are
 relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 
@@ -19,10 +19,10 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 | | Threat | Check | Where |
 | --- | --- | --- | --- |
 | **S** | Calling as another member, or with a revoked token | Every call authenticates again: the token's SHA-256 is looked up; an unknown or revoked token, or a removed member, is refused. Tokens are 256-bit. | `sm/identity.py:160-196`, `:90`, `:153`; `sm/app.py:303-312` |
-| **T** | Writing outside the team's folder, or into a restricted project | Paths refuse `..`, absolute paths and links; any path argument is checked against the projects the member can't reach. | `sm/store.py:302`; `sm/identity.py:61` |
+| **T** | Writing outside the company's folder, or into a restricted project | Paths refuse `..`, absolute paths and links; any path argument is checked against the projects the member can't reach. | `sm/store.py:302`; `sm/identity.py:61` |
 | **T** | Changing another author's memory | Only through a challenge, decided by the author, a lead or keeper, or an admin. | `sm/challenges.py:291` |
 | **R** | A member denies a change | Every memory change goes to the audit log with member, project, path and coding agent; each commit carries the member as its author. | `sm/audit.py:170`; `sm/store.py:163` |
-| **I** | Reading a restricted project, or another team | The project header must be a project in the member's team, and a restricted one needs the access list. | `sm/identity.py:476`, `:501` |
+| **I** | Reading a restricted project, or another company | The project header must be a project in the member's company, and a restricted one needs the access list. | `sm/identity.py:476`, `:501` |
 | **I** | Secrets leaking through memory, or token theft from the database | Text that looks like a secret is refused on save; Postgres holds only token hashes. | `sm/validation.py:60`; `sm/identity.py:90` |
 | **I** | Listing tools without a token | Accepted: listing is presentation only, the schemas are public in the repository, and calling a tool needs a token. | `sm/listing.py` |
 | **D** | Huge bodies | Caddy refuses bodies over 1 MB; a hook authenticates before reading its body, then reads at most the limit. | `deploy/Caddyfile:15-17`; `sm/app.py:388`, `:184`, `:400` |
@@ -35,12 +35,12 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 
 | | Threat | Check | Where |
 | --- | --- | --- | --- |
-| **S** | Forged or replayed GitHub sign-in | A one-time state, stored as a hash, spent once within 10 minutes; the code is exchanged server-side; the account id must match a member of exactly one team. | `sm/console_sessions.py:67-75`, `:101-109`; `sm/identity.py:345` |
+| **S** | Forged or replayed GitHub sign-in | A one-time state, stored as a hash, spent once within 10 minutes; the code is exchanged server-side; the account id must match a member of exactly one company. | `sm/console_sessions.py:67-75`, `:101-109`; `sm/identity.py:345` |
 | **S** | Stolen or stale session | Cookie is HttpOnly, Secure on HTTPS, SameSite=Lax; every call checks the session isn't ended, idle 24 h, older than 7 days, or a removed member's. | `sm/console_api.py:294-301`; `sm/console_sessions.py:162-182`; `sm/config.py:36-37` |
 | **T** | Cross-site request changing something | A changing call without `X-Shared-Memory-Console` gets 403; there are no CORS headers, so another site can't send it. | `sm/console_api.py:259-260` |
 | **T** | The console writing memory | Never: it pins, unpins, decides challenges and retires (ADR-0009). Saving, editing and promoting exist only as MCP tools. | `sm/console_api.py:79` |
 | **R** | A member denies a governance change | Sign-ins, refused sign-ins, project, lead, repository, access, member, admin and token changes are all audited. | `sm/console_sessions.py:95`, `:98`; `sm/console_api.py:321-433`, `:904-975` |
-| **I** | Reading another team's or a restricted project's data | The same identity checks as MCP run beneath every call. | `sm/identity.py:604`, `:476` |
+| **I** | Reading another company's or a restricted project's data | The same identity checks as MCP run beneath every call. | `sm/identity.py:604`, `:476` |
 | **D** | Floods of calls | Mitigated by the same rate limit: a member's console calls are counted apart from their coding agents', and calls with no session per address. | `sm/ratelimit.py`; #387, #405 |
 | **E** | A member managing members, tokens or ownership | Admin and owner checks. | `sm/identity.py:212`, `:216` |
 

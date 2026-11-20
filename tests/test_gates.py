@@ -29,7 +29,7 @@ from tests.support import (
     WORKING_FOLDER,
     RunningServer,
     Session,
-    Team,
+    Company,
     TestClock,
     added_context,
     fresh_database,
@@ -188,11 +188,11 @@ def test_before_edit_hook_refusal_for_a_gated_session_carries_the_warning_one_ro
 
 
 def test_a_refused_member_shows_as_refused_in_the_held_members_warning(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "refuse")
-    team.server.clock.advance(minutes=6)
+    company.server.clock.advance(minutes=6)
 
     _, box = warning_in(reason_in(dana.edit(FILE)))
 
@@ -218,9 +218,9 @@ def test_the_earlier_sessions_gate_notice_carries_the_warning_told_once(owner: S
 
 
 def test_the_box_is_a_text_fence_hard_wrapped_at_60_columns_with_no_gendered_pronouns_and_no_utc(
-    team: Team, project: str, dana: Session
+    company: Company, project: str, dana: Session
 ) -> None:
-    wide = member(team, project, "emp-9", "山田花子 Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft ```")
+    wide = member(company, project, "emp-9", "山田花子 Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft ```")
     collide(wide, dana)
 
     reason = reason_in(dana.edit(FILE))
@@ -245,7 +245,7 @@ def test_the_box_is_a_text_fence_hard_wrapped_at_60_columns_with_no_gendered_pro
 
 def in_time_zone(
     signing_in: Console,
-    team: Team,
+    company: Company,
     member_id: str,
     github: str,
     account: int,
@@ -253,7 +253,7 @@ def in_time_zone(
     chosen: str | None = None,
 ) -> None:
     """A member signs in to the console, whose browser reports `detected`, and chooses `chosen`."""
-    team.server.run_cli("link-github", "--team", team.code, "--member-id", member_id, "--github", github)
+    company.server.run_cli("link-github", "--company", company.code, "--member-id", member_id, "--github", github)
     signing_in.github.as_(account, github)
     client: ConsoleClient = signing_in.client()
     try:
@@ -273,9 +273,9 @@ def warning_says(notice: str) -> str:
 
 
 def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_they_chose(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-chosen", 5921, detected="America/New_York", chosen="Asia/Kolkata")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-chosen", 5921, detected="America/New_York", chosen="Asia/Kolkata")
     collide(owner, dana)
 
     said = warning_says(reason_in(dana.edit(FILE)))
@@ -284,9 +284,9 @@ def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_they_chose
 
 
 def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_detected_for_them(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-detected", 5922, detected="America/New_York")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-detected", 5922, detected="America/New_York")
     collide(owner, dana)
 
     said = warning_says(reason_in(dana.edit(FILE)))
@@ -295,10 +295,10 @@ def test_a_held_members_warning_gives_the_clock_time_in_the_time_zone_detected_f
 
 
 def test_the_asked_members_warning_gives_the_clock_time_in_their_own_time_zone(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "owner-1", "olive-zone-asked", 5923, chosen="Europe/Berlin")
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-asked", 5924, chosen="Asia/Kolkata")
+    in_time_zone(signing_in, company, "owner-1", "olive-zone-asked", 5923, chosen="Europe/Berlin")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-asked", 5924, chosen="Asia/Kolkata")
     collide(owner, dana)
 
     said = warning_says(heard(owner))
@@ -341,9 +341,9 @@ def test_a_utc_offset_as_powershell_gives_it_counts_too(owner: Session, dana: Se
 
 
 def test_the_members_own_time_zone_comes_before_the_utc_offset_its_session_started_with(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-over-offset", 5928, chosen="Europe/Berlin")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-over-offset", 5928, chosen="Europe/Berlin")
     dana.start(utc_offset="+0530")
     collide(owner, dana)
 
@@ -377,9 +377,9 @@ def test_a_session_start_hook_without_a_utc_offset_still_briefs_and_keeps_the_on
 
 
 def test_a_standby_that_hears_nothing_gives_the_clock_time_in_its_members_time_zone(
-    signing_in: Console, team: Team, dana: Session
+    signing_in: Console, company: Company, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-standby", 5925, chosen="Asia/Kolkata")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-standby", 5925, chosen="Asia/Kolkata")
     dana.start()
 
     answer = dana.call("stand_by", session=dana.identifier, seconds=0)
@@ -390,10 +390,10 @@ def test_a_standby_that_hears_nothing_gives_the_clock_time_in_its_members_time_z
 
 
 def test_a_standbys_news_gives_the_clock_time_in_the_time_zone_of_the_member_standing_by(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "owner-1", "olive-zone-standby", 5926, chosen="Europe/Berlin")
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-standby-news", 5927, chosen="Asia/Kolkata")
+    in_time_zone(signing_in, company, "owner-1", "olive-zone-standby", 5926, chosen="Europe/Berlin")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-standby-news", 5927, chosen="Asia/Kolkata")
     collide(owner, dana)
 
     answer = owner.call("stand_by", session=owner.identifier, seconds=0)
@@ -551,9 +551,11 @@ def test_quoted_words_are_escaped_and_cut_at_8_lines_with_the_full_text_after_th
     assert words in agent, "the full text follows outside the box, as their words"
 
 
-def test_the_wait_passing_with_no_answer_carries_the_passed_warning(team: Team, owner: Session, dana: Session) -> None:
+def test_the_wait_passing_with_no_answer_carries_the_passed_warning(
+    company: Company, owner: Session, dana: Session
+) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     told = heard(dana)
 
@@ -588,11 +590,11 @@ def test_the_earlier_member_is_warned_when_the_gated_teammate_says_it_is_differe
 
 
 def test_the_earlier_member_is_warned_when_the_gated_teammate_goes_ahead_on_the_wait(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     heard(owner)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     told = heard(owner)
 
@@ -650,9 +652,9 @@ def test_a_gated_edit_takes_no_lock(owner: Session, dana: Session, cole: Session
     assert cole.edit(FILE) == ALLOWED, "the refused edit left the file free"
 
 
-def test_the_time_left_counts_down(team: Team, owner: Session, dana: Session) -> None:
+def test_the_time_left_counts_down(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=3)
+    company.server.clock.advance(minutes=3)
 
     assert "2 minutes left" in reason_in(dana.edit(FILE))
 
@@ -673,17 +675,19 @@ def test_a_prompt_that_does_not_collide_gates_nothing(owner: Session, dana: Sess
 # Lifted
 
 
-def test_once_the_wait_has_passed_the_edit_goes_ahead(team: Team, owner: Session, dana: Session) -> None:
+def test_once_the_wait_has_passed_the_edit_goes_ahead(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=4, seconds=59)
+    company.server.clock.advance(minutes=4, seconds=59)
     assert GATED in reason_in(dana.edit(FILE))
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     assert dana.edit(FILE) == ALLOWED
 
 
-def test_a_gated_edit_carries_no_tied_memory_and_leaves_it_untold(team: Team, owner: Session, dana: Session) -> None:
+def test_a_gated_edit_carries_no_tied_memory_and_leaves_it_untold(
+    company: Company, owner: Session, dana: Session
+) -> None:
     path = dana.call(
         "remember",
         title="Invoice numbers are never reused",
@@ -695,7 +699,7 @@ def test_a_gated_edit_carries_no_tied_memory_and_leaves_it_untold(team: Team, ow
     collide(owner, dana)
 
     reason = reason_in(dana.edit(FILE))
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
     allowed = dana.edit(FILE)
 
     assert GATED in reason and path not in reason and "<memory-" not in reason
@@ -721,9 +725,9 @@ def test_the_earlier_session_is_told_of_different_work_once_on_its_next_prompt(o
     assert "different work" not in added_context(owner.prompt("write a haiku about cats")), "told once"
 
 
-def test_the_earlier_session_is_told_when_the_wait_ran_out(team: Team, owner: Session, dana: Session) -> None:
+def test_the_earlier_session_is_told_when_the_wait_ran_out(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
     dana.edit(FILE)
 
     told = added_context(owner.prompt("write a haiku about cats"))
@@ -743,13 +747,13 @@ def test_a_gate_ends_when_its_earlier_session_ends(owner: Session, dana: Session
     assert dana.edit(FILE) == ALLOWED
 
 
-def test_a_gate_ends_when_its_earlier_session_goes_idle(team: Team, owner: Session, dana: Session) -> None:
+def test_a_gate_ends_when_its_earlier_session_goes_idle(company: Company, owner: Session, dana: Session) -> None:
     owner.call("project_wait", minutes=60)
     collide(owner, dana)
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
     assert GATED in reason_in(dana.edit(FILE)), "Dana's session stays active"
 
-    team.server.clock.advance(minutes=11)
+    company.server.clock.advance(minutes=11)
 
     assert dana.edit(FILE) == ALLOWED, "Olive's session made no call for 31 minutes"
 
@@ -768,38 +772,38 @@ def test_a_members_own_sessions_warn_each_other_but_never_gate(owner: Session) -
 # The project's wait
 
 
-def payments(team: Team, dana: Session) -> tuple[Session, Session, Session]:
-    """A project Dana created, so she leads it, with Cole working in it and the team's owner, an admin who doesn't
+def payments(company: Company, dana: Session) -> tuple[Session, Session, Session]:
+    """A project Dana created, so she leads it, with Cole working in it and the company's owner, an admin who doesn't
     lead it."""
     project = dana.call("create_project", name="Payments")["project_id"]
-    cole = member(team, project, "emp-3", "Cole Coder").in_project(project, "payments-api")
-    return dana.in_project(project, "payments-api"), cole, team.owner().in_project(project, "payments-api")
+    cole = member(company, project, "emp-3", "Cole Coder").in_project(project, "payments-api")
+    return dana.in_project(project, "payments-api"), cole, company.owner().in_project(project, "payments-api")
 
 
 def test_the_wait_is_five_minutes_unless_the_project_says_otherwise(owner: Session) -> None:
     assert owner.call("project_wait") == {"minutes": 5}
 
 
-def test_a_lead_sets_the_projects_wait_and_it_holds_the_gate_that_long(team: Team, dana: Session) -> None:
-    lead, cole, admin = payments(team, dana)
+def test_a_lead_sets_the_projects_wait_and_it_holds_the_gate_that_long(company: Company, dana: Session) -> None:
+    lead, cole, admin = payments(company, dana)
 
     changed = lead.call("project_wait", minutes=12)
     collide(admin, cole)
-    team.server.clock.advance(minutes=10)
+    company.server.clock.advance(minutes=10)
 
     assert changed == {"minutes": 12}
     assert cole.call("project_wait") == {"minutes": 12}, "any member reads it"
     assert "2 minutes left" in reason_in(cole.edit(FILE))
 
 
-def test_an_admin_sets_the_wait_too(team: Team, dana: Session) -> None:
-    _, _, admin = payments(team, dana)
+def test_an_admin_sets_the_wait_too(company: Company, dana: Session) -> None:
+    _, _, admin = payments(company, dana)
 
     assert admin.call("project_wait", minutes=2) == {"minutes": 2}
 
 
-def test_a_member_who_is_not_a_lead_cannot_set_the_wait(team: Team, dana: Session) -> None:
-    lead, cole, _ = payments(team, dana)
+def test_a_member_who_is_not_a_lead_cannot_set_the_wait(company: Company, dana: Session) -> None:
+    lead, cole, _ = payments(company, dana)
 
     refused = cole.refusal("project_wait", minutes=1)
 
@@ -827,16 +831,16 @@ def gate_entries(server: RunningServer, project: str) -> list[tuple[str, str, di
 
 
 def test_different_work_and_a_timeout_are_in_the_audit_log_with_the_score_and_no_prompt(
-    team: Team, owner: Session, dana: Session, cole: Session
+    company: Company, owner: Session, dana: Session, cole: Session
 ) -> None:
     collide(owner, dana)
     warnings(cole, PROMPT)
     different_work(dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
     cole.edit(FILE)
     cole.edit(FILE)
 
-    entries = gate_entries(team.server, owner.project or "")
+    entries = gate_entries(company.server, owner.project or "")
 
     assert entries == [
         ("different_work", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
@@ -845,12 +849,12 @@ def test_different_work_and_a_timeout_are_in_the_audit_log_with_the_score_and_no
     assert PROMPT not in str(entries)
 
 
-def test_a_change_to_the_wait_is_in_the_audit_log(team: Team, dana: Session) -> None:
-    lead, _, _ = payments(team, dana)
+def test_a_change_to_the_wait_is_in_the_audit_log(company: Company, dana: Session) -> None:
+    lead, _, _ = payments(company, dana)
 
     lead.call("project_wait", minutes=12)
 
-    assert gate_entries(team.server, lead.project or "") == [("project_wait_changed", "emp-2", {"minutes": 12})]
+    assert gate_entries(company.server, lead.project or "") == [("project_wait_changed", "emp-2", {"minutes": 12})]
 
 
 # The earlier member's answer (#512)
@@ -896,13 +900,13 @@ def test_agree_lifts_the_gate_and_the_later_session_hears_it(owner: Session, dan
 
 
 def test_refuse_keeps_the_gate_past_the_wait_and_the_later_session_hears_it(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
 
     answer_gate(owner, "emp-2", "refuse", "I am halfway through the retries.")
     told = heard(dana)
-    team.server.clock.advance(minutes=6)
+    company.server.clock.advance(minutes=6)
     reason = reason_in(dana.edit(FILE))
 
     assert "Olive Owner (owner-1)" in told and "refused" in told
@@ -910,10 +914,10 @@ def test_refuse_keeps_the_gate_past_the_wait_and_the_later_session_hears_it(
     assert after_warning(reason).startswith(GATED) and "refused" in reason
 
 
-def test_a_refusal_holds_until_the_refusing_session_ends(team: Team, owner: Session, dana: Session) -> None:
+def test_a_refusal_holds_until_the_refusing_session_ends(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "refuse")
-    team.server.clock.advance(minutes=10)
+    company.server.clock.advance(minutes=10)
     assert GATED in reason_in(dana.edit(FILE))
 
     owner.end()
@@ -921,13 +925,13 @@ def test_a_refusal_holds_until_the_refusing_session_ends(team: Team, owner: Sess
     assert not denied(dana.edit(FILE))
 
 
-def test_a_refusal_holds_until_the_refusing_session_goes_idle(team: Team, owner: Session, dana: Session) -> None:
+def test_a_refusal_holds_until_the_refusing_session_goes_idle(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "refuse")
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
     assert GATED in reason_in(dana.edit(FILE)), "Dana's session stays active"
 
-    team.server.clock.advance(minutes=11)
+    company.server.clock.advance(minutes=11)
 
     assert not denied(dana.edit(FILE)), "Olive's session made no call for 31 minutes"
 
@@ -975,25 +979,25 @@ def test_with_two_earlier_sessions_one_agreeing_keeps_the_gate_until_the_other_a
 
 
 def test_with_two_earlier_sessions_one_agreeing_and_the_other_silent_lifts_once_the_wait_passes(
-    team: Team, owner: Session, cole: Session, dana: Session
+    company: Company, owner: Session, cole: Session, dana: Session
 ) -> None:
     two_earlier(owner, cole, dana)
     answer_gate(owner, "emp-2", "agree")
-    team.server.clock.advance(minutes=4)
+    company.server.clock.advance(minutes=4)
     assert GATED in reason_in(dana.edit(FILE)), "Cole has not answered and the wait runs"
 
-    team.server.clock.advance(minutes=1)
+    company.server.clock.advance(minutes=1)
 
     assert not denied(dana.edit(FILE))
 
 
 def test_with_two_earlier_sessions_one_refusal_keeps_the_gate(
-    team: Team, owner: Session, cole: Session, dana: Session
+    company: Company, owner: Session, cole: Session, dana: Session
 ) -> None:
     two_earlier(owner, cole, dana)
     answer_gate(owner, "emp-2", "agree")
     answer_gate(cole, "emp-2", "refuse")
-    team.server.clock.advance(minutes=6)
+    company.server.clock.advance(minutes=6)
 
     reason = reason_in(dana.edit(FILE))
 
@@ -1011,9 +1015,9 @@ def test_only_the_earlier_sessions_own_member_can_answer(owner: Session, dana: S
     assert GATED in reason_in(dana.edit(FILE)), "still gated"
 
 
-def test_an_answer_after_the_wait_has_passed_is_refused(team: Team, owner: Session, dana: Session) -> None:
+def test_an_answer_after_the_wait_has_passed_is_refused(company: Company, owner: Session, dana: Session) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     refused = owner.refusal("answer_gate", session=owner.identifier, member="emp-2", answer="refuse")
 
@@ -1041,13 +1045,13 @@ def answer_entries(server: RunningServer, project: str) -> list[tuple[str, str, 
 
 
 def test_agree_and_refuse_are_in_the_audit_log_with_the_score_and_no_text(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     answer_gate(owner, "emp-2", "refuse", "Not yet, please.")
     answer_gate(owner, "emp-2", "agree", "Fine, go ahead.")
 
-    entries = answer_entries(team.server, owner.project or "")
+    entries = answer_entries(company.server, owner.project or "")
 
     assert entries == [
         ("gate_refused", "owner-1", "emp-2", {"later": "emp-2", "score": 0.8, "cause": "prompt"}),
@@ -1099,14 +1103,16 @@ def test_an_answer_to_the_gate_answers_the_urgent_message_too(owner: Session, da
     assert not denied(owner.edit("src/other.py"))
 
 
-def test_without_an_answer_the_wait_lifts_an_urgent_messages_gate(team: Team, owner: Session, dana: Session) -> None:
+def test_without_an_answer_the_wait_lifts_an_urgent_messages_gate(
+    company: Company, owner: Session, dana: Session
+) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=2)
+    company.server.clock.advance(minutes=2)
     send_urgent(dana, "owner-1")
-    team.server.clock.advance(minutes=4, seconds=59)
+    company.server.clock.advance(minutes=4, seconds=59)
     assert GATED in reason_in(owner.edit("src/other.py")), "the wait runs from the urgent message"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     assert not denied(owner.edit("src/other.py"))
 
@@ -1162,11 +1168,13 @@ def test_an_urgent_messages_gate_ends_when_its_later_session_ends(owner: Session
     assert not denied(owner.edit("src/other.py"))
 
 
-def test_each_urgent_message_is_in_the_audit_log_without_its_text(team: Team, owner: Session, dana: Session) -> None:
+def test_each_urgent_message_is_in_the_audit_log_without_its_text(
+    company: Company, owner: Session, dana: Session
+) -> None:
     collide(owner, dana)
     send_urgent(dana, "owner-1")
 
-    with psycopg.connect(team.server.settings.database_url, autocommit=True) as conn:
+    with psycopg.connect(company.server.settings.database_url, autocommit=True) as conn:
         rows = conn.execute(
             "SELECT kind, actor, target, detail FROM audit_events WHERE project_id = %s AND kind = 'urgent_message'",
             (owner.project or "",),
@@ -1296,10 +1304,10 @@ def test_claude_code_carries_the_headline_with_the_urgent_refusal_only_on_the_fi
 
 
 def test_urgent_warnings_give_the_clock_time_in_the_recipients_own_time_zone(
-    signing_in: Console, team: Team, owner: Session, dana: Session
+    signing_in: Console, company: Company, owner: Session, dana: Session
 ) -> None:
-    in_time_zone(signing_in, team, "owner-1", "olive-zone-urgent", 5891, chosen="Europe/Berlin")
-    in_time_zone(signing_in, team, "emp-2", "dana-zone-urgent", 5892, chosen="Asia/Kolkata")
+    in_time_zone(signing_in, company, "owner-1", "olive-zone-urgent", 5891, chosen="Europe/Berlin")
+    in_time_zone(signing_in, company, "emp-2", "dana-zone-urgent", 5892, chosen="Asia/Kolkata")
     collide(owner, dana)
     heard(owner)
     send_urgent(dana, "owner-1")
@@ -1405,22 +1413,24 @@ def test_the_earlier_session_no_hook_reaches_is_told_in_its_next_tool_result_tha
 
 
 def test_a_timeout_is_kept_and_told_when_the_earlier_session_hears_it_though_the_later_one_stays_quiet(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     heard(owner)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     told = heard(owner)
 
     assert "Dana Dev's session" in told and "with no answer and goes ahead" in told
-    assert gate_entries(team.server, owner.project or "") == [
+    assert gate_entries(company.server, owner.project or "") == [
         ("gate_timed_out", "emp-2", {"earlier": "owner-1", "score": 0.8, "cause": "prompt"}),
     ], "recorded once, as the later member's"
     assert "with no answer" not in heard(owner), "told once"
 
 
-def test_a_refused_edit_names_the_earlier_sessions_branch_and_the_files_it_touched(owner: Session, dana: Session) -> None:
+def test_a_refused_edit_names_the_earlier_sessions_branch_and_the_files_it_touched(
+    owner: Session, dana: Session
+) -> None:
     owner.use(read_tool(f"{WORKING_FOLDER}/src/webhooks/retry.py"), branch="webhook-retries")
     collide(owner, dana)
 

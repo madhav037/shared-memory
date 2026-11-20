@@ -32,12 +32,12 @@ from tests.support import (
     WORKING_FOLDER,
     RunningServer,
     Session,
-    Team,
+    Company,
     TestClock,
     edit_tool,
     fresh_database,
     member,
-    new_team,
+    new_company,
     read_tool,
     search_tool,
 )
@@ -76,11 +76,11 @@ def test_an_edit_of_a_free_file_is_allowed_and_its_session_then_holds_the_lock(d
     assert dana.edit(FILE) == ALLOWED, "its holder goes on editing it"
 
 
-def test_an_edit_keeps_the_lock_in_use(team: Team, dana: Session, cole: Session) -> None:
+def test_an_edit_keeps_the_lock_in_use(company: Company, dana: Session, cole: Session) -> None:
     dana.edit(FILE)
-    team.server.clock.advance(minutes=10)
+    company.server.clock.advance(minutes=10)
     dana.edit(FILE)
-    team.server.clock.advance(minutes=2)
+    company.server.clock.advance(minutes=2)
 
     assert "2 minutes ago" in refused(cole)
 
@@ -89,10 +89,10 @@ def test_an_edit_keeps_the_lock_in_use(team: Team, dana: Session, cole: Session)
 
 
 def test_an_edit_of_a_file_another_session_holds_is_blocked_in_claude_codes_format(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     taken = take(dana.as_agent("claude-code"))
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     answer = cole.edit(FILE)
 
@@ -392,12 +392,12 @@ def test_a_codex_patch_of_several_files_takes_each_lock_and_is_blocked_when_one_
 
 
 def test_a_blocked_patch_of_several_files_leaves_its_session_holding_none_it_took_for_it(
-    team: Team, dana: Session, cole: Session, owner: Session
+    company: Company, dana: Session, cole: Session, owner: Session
 ) -> None:
     """Nothing was edited, so the files named before the held one stay free; what the session held already stays its."""
     dana.edit("docs/retries.md")
     cole.edit("CHANGELOG.md")
-    team.server.clock.advance(minutes=1)
+    company.server.clock.advance(minutes=1)
 
     answer = cole.hook_payload("before-edit", codex_edit(cole, "CHANGELOG.md", "README.md", "docs/retries.md", FILE))
 
@@ -491,12 +491,12 @@ def test_a_tool_that_changes_no_file_takes_no_lock_in_any_agent(dana: Session, c
     assert take(cole)["locked"] is True, "nobody holds a file that was only read"
 
 
-def test_a_tool_call_that_is_no_edit_keeps_its_session_active(team: Team, dana: Session) -> None:
+def test_a_tool_call_that_is_no_edit_keeps_its_session_active(company: Company, dana: Session) -> None:
     dana.start()
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     dana.use(search_tool("retries"))
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     assert active(dana) == [("emp-2", "test-session")]
 
@@ -535,9 +535,9 @@ def test_only_the_latest_touched_files_are_kept(dana: Session) -> None:
     assert touched[0] == "src/file24.py" and touched[-1] == "src/file5.py"
 
 
-def test_a_session_back_from_idle_starts_its_branch_and_touched_files_over(team: Team, dana: Session) -> None:
+def test_a_session_back_from_idle_starts_its_branch_and_touched_files_over(company: Company, dana: Session) -> None:
     dana.use(read_tool(f"{WORKING_FOLDER}/README.md"), branch="main")
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     dana.use(search_tool("retries"))
 
@@ -712,18 +712,18 @@ def test_a_payload_the_server_cannot_read_is_allowed(dana: Session, cole: Sessio
     assert edit_of(cole, f"{WORKING_FOLDER}/{FILE}", cwd=None) == ALLOWED, "a payload naming no working folder"
 
 
-def test_an_unknown_personal_token_is_allowed(team: Team, dana: Session) -> None:
+def test_an_unknown_personal_token_is_allowed(company: Company, dana: Session) -> None:
     dana.edit(FILE)
-    unknown = Session(team.server, "smt_nope", dana.project, "billing-api")
+    unknown = Session(company.server, "smt_nope", dana.project, "billing-api")
 
     for format in BLOCKED:
         assert unknown.edit(FILE, format=format) == ALLOWED, format
-    assert team.owner().edit(FILE) == ALLOWED, "a session outside any project"
+    assert company.owner().edit(FILE) == ALLOWED, "a session outside any project"
 
 
-def test_a_session_whose_connection_names_no_repository_is_allowed(team: Team, dana: Session) -> None:
+def test_a_session_whose_connection_names_no_repository_is_allowed(company: Company, dana: Session) -> None:
     dana.edit(FILE)
-    nowhere = Session(team.server, dana.token, dana.project, None, identifier="no-repository")
+    nowhere = Session(company.server, dana.token, dana.project, None, identifier="no-repository")
 
     assert nowhere.edit(FILE) == ALLOWED
 
@@ -742,10 +742,10 @@ def test_a_server_error_is_allowed(tmp_path_factory: pytest.TempPathFactory) -> 
             build_app(settings, clock=clock, embedder=LazyEmbedder(settings.model_cache)), settings, clock, portal
         )
         try:
-            team = new_team(server)
-            project: str = team.owner().call("create_project", name="Billing")["project_id"]
-            dana = member(team, project, "emp-2", "Dana Dev")
-            cole = member(team, project, "emp-3", "Cole Coder")
+            company = new_company(server)
+            project: str = company.owner().call("create_project", name="Billing")["project_id"]
+            dana = member(company, project, "emp-2", "Dana Dev")
+            cole = member(company, project, "emp-3", "Cole Coder")
             dana.edit(FILE)
             with psycopg.connect(settings.database_url, autocommit=True) as conn:
                 conn.execute("DROP TABLE locks CASCADE")
@@ -758,28 +758,28 @@ def test_a_server_error_is_allowed(tmp_path_factory: pytest.TempPathFactory) -> 
 # The session
 
 
-def test_an_edit_keeps_its_session_active(team: Team, dana: Session) -> None:
+def test_an_edit_keeps_its_session_active(company: Company, dana: Session) -> None:
     dana.start()
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     dana.edit(FILE)
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     assert active(dana) == [("emp-2", "test-session")]
 
 
 def test_a_blocked_edit_and_an_edit_of_a_file_that_never_locks_keep_their_sessions_active(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     dana.start()
     cole.start()
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     dana.edit(FILE)
     cole.edit(FILE)
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
     cole.edit("uv.lock")
-    team.server.clock.advance(minutes=20)
+    company.server.clock.advance(minutes=20)
 
     assert active(cole) == [("emp-3", "test-session")]
 
@@ -937,10 +937,10 @@ def test_claude_codes_plugin_asks_git_for_the_repositorys_root_within_the_same_c
 @needs_a_shell
 @needs_git
 def test_claude_code_started_in_a_subfolder_names_its_locks_from_the_repositorys_root(
-    team: Team, dana: Session, cole: Session, subfolder: Path
+    company: Company, dana: Session, cole: Session, subfolder: Path
 ) -> None:
-    inside = run_plugin(team.server.url, dana, dana.token, str(subfolder), str(subfolder / "src" / "App.tsx"))
-    above = run_plugin(team.server.url, dana, dana.token, str(subfolder), str(subfolder.parent / "README.md"))
+    inside = run_plugin(company.server.url, dana, dana.token, str(subfolder), str(subfolder / "src" / "App.tsx"))
+    above = run_plugin(company.server.url, dana, dana.token, str(subfolder), str(subfolder.parent / "README.md"))
 
     assert json.loads(inside.stdout) == ALLOWED, inside.stderr
     assert json.loads(above.stdout) == ALLOWED, above.stderr
@@ -962,9 +962,9 @@ def test_claude_codes_plugin_names_the_branch_git_says_the_session_is_on(dana: S
 
 @needs_a_shell
 def test_claude_code_started_outside_a_repository_names_its_locks_from_where_it_was_started(
-    team: Team, dana: Session, cole: Session, tmp_path: Path
+    company: Company, dana: Session, cole: Session, tmp_path: Path
 ) -> None:
-    ran = run_plugin(team.server.url, dana, dana.token, str(tmp_path), str(tmp_path / "src" / "App.tsx"))
+    ran = run_plugin(company.server.url, dana, dana.token, str(tmp_path), str(tmp_path / "src" / "App.tsx"))
 
     assert json.loads(ran.stdout) == ALLOWED, ran.stderr
     assert "Dana Dev" in refused(cole, "src/App.tsx")
@@ -972,9 +972,9 @@ def test_claude_code_started_outside_a_repository_names_its_locks_from_where_it_
 
 @needs_a_shell
 def test_a_plugin_hook_given_no_folder_leaves_the_root_to_the_payloads_working_folder(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
-    ran = run_plugin(team.server.url, dana, dana.token, started_in=None)
+    ran = run_plugin(company.server.url, dana, dana.token, started_in=None)
 
     assert json.loads(ran.stdout) == ALLOWED, ran.stderr
     assert "Dana Dev" in refused(cole, "webhooks/retry.py"), "from the payload's cwd, /work/app/src"
@@ -1140,11 +1140,11 @@ def test_clines_windows_script_started_in_a_subfolder_names_its_locks_from_the_r
 
 @needs_a_shell
 def test_claude_codes_plugin_takes_the_lock_and_hands_claude_code_the_block(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
-    allowed = run_plugin(team.server.url, dana, dana.token)
+    allowed = run_plugin(company.server.url, dana, dana.token)
 
-    blocked = run_plugin(team.server.url, cole, cole.token)
+    blocked = run_plugin(company.server.url, cole, cole.token)
 
     assert (allowed.returncode, json.loads(allowed.stdout)) == (0, ALLOWED), allowed.stderr
     assert blocked.returncode == 0, blocked.stderr

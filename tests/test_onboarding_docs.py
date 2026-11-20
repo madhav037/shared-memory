@@ -1,4 +1,4 @@
-"""The docs page on onboarding a brownfield project (#623, spec #614) covers what a team plans with."""
+"""The docs page on onboarding a brownfield project (#623, spec #614) covers what a company plans with."""
 
 from __future__ import annotations
 

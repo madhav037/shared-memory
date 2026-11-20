@@ -180,16 +180,16 @@ def progress_so_far(entries: list[Entry]) -> str:
 
 
 OFFER = (
-    "[onboarding] This project has no project memory yet: `onboard` imports what the team already has. Offer it once; "
+    "[onboarding] This project has no project memory yet: `onboard` imports what the company already has. Offer it once; "
     "start it only if the member asks."
 )
 
 
-def has_project_memory(store: MemoryStore, team: str, project_id: str) -> bool:
+def has_project_memory(store: MemoryStore, company: str, project_id: str) -> bool:
     """Whether the project holds any active project memory beyond its foundations."""
     project_memory = PurePosixPath("projects", project_id, "shared")
     foundations = project_memory / FOUNDATIONS_FOLDER
-    for folder, memories in store.walk(team, project_memory):
+    for folder, memories in store.walk(company, project_memory):
         if folder == foundations or foundations in folder.parents:
             continue
         if any(memory.status == "active" for _, memory in memories):

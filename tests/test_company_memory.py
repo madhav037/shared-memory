@@ -1,6 +1,6 @@
 """The expand step of the team -> company rename (ADR-0031, #625).
 
-The top level of memory is company memory, kept under `company/` in each team's folder. A session may still say
+The top level of memory is company memory, kept under `company/` in each company's folder. A session may still say
 `team` where it says a level, and is answered with `company`; the console's JSON API names the company beside the
 team. A server that still holds memory under `team/` moves it to `company/` once, as it sets up, keeping every
 memory's history, pins and challenges.
@@ -16,7 +16,7 @@ from typing import Any
 import psycopg
 
 from shared_memory.app import setup
-from tests.support import Console, ConsoleClient, Session, Team
+from tests.support import Console, ConsoleClient, Session, Company
 
 GATEWAY = {
     "title": "Gateway timeouts",
@@ -69,23 +69,23 @@ def test_the_tree_of_company_or_team_is_company_memory(owner: Session) -> None:
     assert [folder["folder"] for folder in by_company["folders"]] == ["company/gotchas"]
 
 
-def test_a_pinned_company_memory_reaches_every_briefing(team: Team, owner: Session) -> None:
+def test_a_pinned_company_memory_reaches_every_briefing(company: Company, owner: Session) -> None:
     path = promoted(owner, GATEWAY, "company")["path"]
-    other = team.owner().call("create_project", name="Payments")["project_id"]
+    other = company.owner().call("create_project", name="Payments")["project_id"]
 
     owner.call("pin", path=path)
 
-    assert "ERR_TIMEOUT after 30 seconds" in team.owner().in_project(other).call("briefing")
+    assert "ERR_TIMEOUT after 30 seconds" in company.owner().in_project(other).call("briefing")
 
 
-def test_adding_a_member_names_the_company_beside_the_team(team: Team, project: str) -> None:
-    added = team.owner().call("add_member", member_id="emp-9", name="Ira Ito")
+def test_adding_a_member_names_the_company_beside_the_team(company: Company, project: str) -> None:
+    added = company.owner().call("add_member", member_id="emp-9", name="Ira Ito")
 
-    assert added["company"] == added["team"] == team.code
+    assert added["company"] == added["team"] == company.code
 
 
 def test_the_console_names_the_company_beside_the_team(console: Console, signed_out: ConsoleClient) -> None:
-    code, _ = console.a_team("olive-company")
+    code, _ = console.a_company("olive-company")
     console.github.as_(6250, "olive-company")
     signed_out.sign_in()
 
@@ -123,7 +123,7 @@ def _memory(title: str, body: str, **header: str) -> str:
 def test_team_memory_moves_to_company_memory_with_its_history_pins_and_exceptions(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    code, token = console.a_team("olive-moving")
+    code, token = console.a_company("olive-moving")
     console.github.as_(6251, "olive-moving")
     signed_out.sign_in()
     owner = Session(console.server, token)
@@ -163,7 +163,7 @@ def test_team_memory_moves_to_company_memory_with_its_history_pins_and_exception
 
 
 def test_setting_up_again_moves_nothing(console: Console, signed_out: ConsoleClient) -> None:
-    code, token = console.a_team("olive-moved")
+    code, token = console.a_company("olive-moved")
     owner = Session(console.server, token)
     owner.call("create_project", name="Billing")
     root = console.server.settings.memory_root

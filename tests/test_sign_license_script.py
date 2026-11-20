@@ -60,7 +60,7 @@ def test_generate_writes_a_private_key_once_and_prints_only_the_public_half(tmp_
     assert public_of(TEST_PRIVATE).hex() not in first.stdout
 
 
-def test_signing_without_a_team_or_cap_is_refused(tmp_path: Path) -> None:
+def test_signing_without_a_company_or_cap_is_refused(tmp_path: Path) -> None:
     private = tmp_path / "test-only.key"
     private.write_text(TEST_SEED.hex())
 

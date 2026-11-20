@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from shared_memory.board import Board
-from tests.support import Session, Team, added_context
+from tests.support import Session, Company, added_context
 
 FLAKY_UPLOADS = {
     "title": "Large uploads time out behind the proxy",
@@ -63,18 +63,18 @@ def test_a_known_issue_goes_straight_into_project_memory(owner: Session, project
     assert memory["title"] == FLAKY_UPLOADS["title"]
 
 
-def test_saving_a_known_issue_is_one_commit(team: Team, owner: Session) -> None:
+def test_saving_a_known_issue_is_one_commit(company: Company, owner: Session) -> None:
     path = owner.call("save_known_issue", **FLAKY_UPLOADS)["path"]
 
     changed = subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), "show", "--name-status", "--format=%s", "HEAD"],
+        ["git", "-C", str(company.server.settings.memory_root), "show", "--name-status", "--format=%s", "HEAD"],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
 
     assert changed.startswith(f"Known issue: {FLAKY_UPLOADS['title']}")
-    assert f"{team.code}/{path}" in changed
+    assert f"{company.code}/{path}" in changed
 
 
 def test_a_known_issue_without_a_workaround_line_is_refused(owner: Session) -> None:
