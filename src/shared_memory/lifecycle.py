@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 from typing import Any
 
+from shared_memory import sources
 from shared_memory.audit import (
     CHALLENGE_DECIDED,
     FOUNDATION_ADDED,
@@ -20,7 +21,7 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import NAME_PATTERN, Caller, Identity, Project, unknown_foundation
+from shared_memory.identity import Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
@@ -61,7 +62,6 @@ CREATE TABLE IF NOT EXISTS imports (
 """
 
 RESOLUTIONS = ("supersede", "keep_both", "cancel")
-SOURCE_LIMIT = 300
 
 
 @dataclass(frozen=True)
@@ -288,17 +288,13 @@ class Lifecycle:
         if author is None or imported_from is None:
             raise Refused(
                 "An imported memory is promoted with both author, the member who wrote the passage it was cut from, "
-                "and imported_from, the file it came from. Pass both, or neither to stay its author yourself."
+                "and imported_from, the source it came from. Pass both, or neither to stay its author yourself."
             )
         if location.member_id != caller.member_id:
             raise Refused("Only a memory you imported yourself can be promoted in its writer's name.")
         source = imported_from.strip()
-        repository, _, file = source.partition(":")
-        if not NAME_PATTERN.match(repository) or not file.strip() or "\n" in source or len(source) > SOURCE_LIMIT:
-            raise Refused(
-                f"imported_from {imported_from!r} must be one file written as repository:path, for example "
-                "billing-api:CLAUDE.md."
-            )
+        if not sources.well_formed(source):
+            raise Refused(f"imported_from {imported_from!r} must be one source written as {sources.FORMS}.")
         refuse_secret(source, "imported_from")
         named = author.strip()
         if named.startswith("@"):

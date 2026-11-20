@@ -1280,10 +1280,13 @@ def build_app(
         keep_both or cancel. Pass reasoning for why any memory resolved as supersede should give way to this one,
         so whoever decides the resulting challenge hears your reasoning.
 
-        author and imported_from are for a memory imported during onboarding, on the first call only: when git blame
-        shows one member wrote the passage it was cut from, pass author (their member ID, or their GitHub username
-        written @username) and imported_from (the file, as repository:path). That member becomes the author and is
-        told; you are recorded as its importer. Leave both out everywhere else.
+        author and imported_from are for a memory imported during onboarding, on the first call only: when git blame,
+        or the source itself, shows one member wrote the passage it was cut from, pass author (their member ID, or
+        their GitHub username written @username) and imported_from, the source it came from: repository:path for a
+        file in a repository, commit:repository@revision for a commit, wiki:page for a wiki or doc export page,
+        ticket:reference for a ticket, pr-comment:reference for a pull request review comment, or interview:reference
+        for an interview. That member becomes the author and is told; you are recorded as its importer. Leave both
+        out everywhere else.
 
         foundation puts a project memory into one of the project's foundations (architecture, product, glossary or
         decisions, or an extra one a project lead added), the places holding its sources of truth; an architecture or decision memory goes into its own

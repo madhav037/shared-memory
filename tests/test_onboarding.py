@@ -137,6 +137,66 @@ def test_an_author_is_named_only_with_the_source_and_never_oneself(owner: Sessio
     )
 
 
+OUTSIDE_SOURCES = (
+    "wiki:Payments/Refund rules",
+    "ticket:PAY-412",
+    "pr-comment:billing-api#88",
+    "commit:billing-api@3f9c2ab",
+    "interview:Billing with emp-2",
+)
+
+
+def test_promote_accepts_an_outside_source_a_commit_or_an_interview_as_where_an_import_came_from(
+    owner: Session, dana: Session
+) -> None:
+    for number, source in enumerate(OUTSIDE_SOURCES):
+        memory = {**CENTS, "title": f"Money amounts {number}", "body": f"{CENTS['body']} Rule {number}."}
+        result = owner.call(
+            "promote", path=imported(owner, memory), level="project", author="emp-2", imported_from=source
+        )
+        assert result["status"] == "promoted", (source, result)
+
+        promoted = owner.call("read", path=result["path"])
+        assert (promoted["author"], promoted["imported_by"], promoted["imported_from"]) == (
+            "emp-2",
+            "owner-1",
+            source,
+        ), source
+
+
+def test_the_audit_log_shows_the_importer_and_an_outside_source(console: Console, signed_out: ConsoleClient) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-onboards-wiki", 7805)
+    project = owner.call("create_project", name="Billing")["project_id"]
+    owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    in_project = owner.in_project(project, "billing-api")
+
+    result = in_project.call(
+        "promote", path=imported(in_project), level="project", author="emp-2", imported_from="ticket:PAY-412"
+    )
+    assert result["status"] == "promoted", result
+
+    (event,) = signed_out.get(f"/api/audit?project={project}&kind=memory_promoted").json()["events"]
+    detail: dict[str, Any] = event["detail"]
+    assert (detail["author"], detail["imported_by"], detail["imported_from"]) == ("emp-2", "E1001", "ticket:PAY-412")
+
+
+def test_a_malformed_source_is_refused_naming_the_accepted_forms(owner: Session, dana: Session) -> None:
+    personal = imported(owner)
+
+    for malformed in ("CLAUDE.md", "ticket:", "wiki:   ", "commit:billing-api", "commit:@3f9c2ab", "notes/x.md"):
+        refusal = owner.refusal("promote", path=personal, level="project", author="emp-2", imported_from=malformed)
+        for form in ("repository:path", "wiki:", "ticket:", "pr-comment:", "commit:repository@", "interview:"):
+            assert form in refusal, (malformed, form)
+    assert owner.call("read", path=personal)["level"] == "personal"
+
+
+def test_the_promote_tool_names_every_form_of_source(team: Team) -> None:
+    _, tools = team.owner().on_connecting()
+
+    for form in ("repository:path", "wiki:", "ticket:", "pr-comment:", "commit:", "interview:"):
+        assert form in tools["promote"], form
+
+
 def test_the_author_is_told_in_their_next_briefing(owner: Session, dana: Session) -> None:
     path = promoted_for(owner, "emp-2")
 
