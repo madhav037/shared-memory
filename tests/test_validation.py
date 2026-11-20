@@ -4,13 +4,13 @@ import subprocess
 
 import pytest
 
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
 @pytest.fixture
-def member(team: Team) -> Session:
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    return team.owner().in_project(project, "billing-api")
+def member(company: Company) -> Session:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    return company.owner().in_project(project, "billing-api")
 
 
 def remember(session: Session, **overrides: object) -> dict[str, str]:
@@ -96,8 +96,8 @@ def test_a_memory_with_a_bad_header_is_refused(member: Session, overrides: dict[
 
 
 @pytest.mark.parametrize("tool", ["read", "edit_memory", "delete_memory"])
-def test_a_path_outside_the_team_folder_is_refused(member: Session, tool: str) -> None:
-    arguments: dict[str, object] = {"path": "../other-team/team/conventions/secret.md"}
+def test_a_path_outside_the_company_folder_is_refused(member: Session, tool: str) -> None:
+    arguments: dict[str, object] = {"path": "../other-company/company/conventions/secret.md"}
     if tool == "edit_memory":
         arguments["body"] = "changed"
 
@@ -137,22 +137,22 @@ def test_an_author_deletes_their_personal_memory(member: Session) -> None:
     assert "no memory" in member.refusal("read", path=saved["path"])
 
 
-def test_members_cannot_edit_or_delete_someone_elses_memory(team: Team, member: Session) -> None:
+def test_members_cannot_edit_or_delete_someone_elses_memory(company: Company, member: Session) -> None:
     saved = remember(member)
-    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
-    other = Session(team.server, added["personal_token"], member.project, "billing-api")
+    added = company.owner().call("add_member", member_id="emp-2", name="Dana Dev")
+    other = Session(company.server, added["personal_token"], member.project, "billing-api")
 
     assert "only edit" in other.refusal("edit_memory", path=saved["path"], body="mine now")
     assert "only delete" in other.refusal("delete_memory", path=saved["path"])
 
 
-def test_edits_and_deletes_are_committed_and_credited_to_the_member(team: Team, member: Session) -> None:
+def test_edits_and_deletes_are_committed_and_credited_to_the_member(company: Company, member: Session) -> None:
     saved = remember(member)
     member.call("edit_memory", path=saved["path"], body="Retry twice, then stop.")
     member.call("delete_memory", path=saved["path"])
 
     log = subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), "log", "-2", "--format=%an|%s"],
+        ["git", "-C", str(company.server.settings.memory_root), "log", "-2", "--format=%an|%s"],
         capture_output=True,
         text=True,
         check=True,

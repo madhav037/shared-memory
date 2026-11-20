@@ -1,5 +1,5 @@
 """Onboarding progress (#617, spec #614): a session records how far onboarding has got for one repository or outside
-source, and the project's leads and the team's admins read it in project settings. Promoted and waiting-on-challenge
+source, and the project's leads and the company's admins read it in project settings. Promoted and waiting-on-challenge
 counts come from the audit log's imports; the session gives the left-out count."""
 
 from __future__ import annotations

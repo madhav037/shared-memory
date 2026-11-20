@@ -1,6 +1,6 @@
 # Deploying Shared Memory
 
-For the person running the server. This covers running it for the team on one Linux host over HTTPS, the nightly backup, and restoring from that backup. Words in **bold** are defined in [`CONTEXT.md`](../CONTEXT.md). To try the server on your own machine instead, see [`setup.md`](./setup.md).
+For the person running the server. This covers running it for the company on one Linux host over HTTPS, the nightly backup, and restoring from that backup. Words in **bold** are defined in [`CONTEXT.md`](../CONTEXT.md). To try the server on your own machine instead, see [`setup.md`](./setup.md).
 
 Everything lives in [`deploy/`](../deploy): a Compose file that runs the server behind Caddy (automatic HTTPS), Postgres with pgvector, and a backup container.
 
@@ -45,10 +45,10 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
    docker compose up -d --build
    ```
 
-6. Create the team and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
+6. Create the company and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
 
    ```bash
-   docker compose exec server shared-memory setup --team acme --owner-member-id E1001 --owner-name "Olive Owner" --owner-github olive
+   docker compose exec server shared-memory setup --company acme --owner-member-id E1001 --owner-name "Olive Owner" --owner-github olive
    ```
 
 7. Check HTTPS works. This should print `200`:
@@ -226,8 +226,8 @@ or above the server's own. This needs the console image's Caddy, which is built 
 [caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
 has the equivalent `limit_req`.
 
-The numbers above are the defaults. The team's owner and its admins see and change them, or switch the limit off, on
-the console's Team page (every other member sees them read-only); a change is kept in the database, so it holds across
+The numbers above are the defaults. The company's owner and its admins see and change them, or switch the limit off, on
+the console's Company page (every other member sees them read-only); a change is kept in the database, so it holds across
 restarts and replaces the `.env` numbers until it is changed again. Every change is in the audit log with who made it,
 and so is the first time in an hour that a personal token is limited, naming its member, which is how a leaked token or
 a runaway coding agent shows up.
@@ -243,13 +243,13 @@ counter can't be read or written, the call is allowed and the failure is logged.
 A server can limit how many members it has at once. Set `SHARED_MEMORY_MEMBER_CAP` in `.env` to a whole number; unset
 means no cap. Adding a member past it, from a coding agent or from the console, is refused with an answer naming the
 cap. Removed members hold no place, so removing one frees it. Memory, MCP tools and hooks are never affected. The
-Team page shows how many places are used.
+Company page shows how many places are used.
 
 ## License keys
 
-A self-hosted team runs under a license key: a small document signed with Ed25519 that names the team, its member
+A self-hosted company runs under a license key: a small document signed with Ed25519 that names the company, its member
 cap, when it was issued and when it expires. Set it as `SHARED_MEMORY_LICENSE_KEY` in `.env`, or paste it into the
-console's Team page (owner and admins; the install is in the audit log, and a key installed there replaces the one in
+console's Company page (owner and admins; the install is in the audit log, and a key installed there replaces the one in
 `.env`). A valid key sets the member cap, so `SHARED_MEMORY_MEMBER_CAP` is then ignored.
 
 The server checks the key against a public key built into it and makes no network call to do so. With no key, an
@@ -260,7 +260,7 @@ affected, and an unlicensed server works fully for evaluation.
 A hosted server's key says so (`"hosted": true`; a key without it is a self-hosted server's). A server knows it is
 hosted from `SHARED_MEMORY_SIGN_IN=platform` ([Signing in on a hosted server](#signing-in-on-a-hosted-server)), and
 takes only a key of its own kind: a hosted server refuses a self-hosted server's key, and a self-hosted server a
-hosted server's, from the Team page and `install-license` alike. Once a hosted server's key lapses, the server is
+hosted server's, from the Company page and `install-license` alike. Once a hosted server's key lapses, the server is
 read-only ([ADR-0022](./adr/0022-a-lapsed-hosted-server-turns-read-only.md)): every change
 to memory from a coding agent (saving, editing, deleting, promoting, retiring, deciding a challenge, pinning, creating a
 project or a foundation), adding a member and adding a card is refused with an answer naming the date the key lapsed
@@ -269,7 +269,7 @@ agent over it. Removing members, reissuing personal tokens, locks and the board'
 Installing a renewed key ends it at once.
 
 The platform renews a hosted server's key from the host, with no restart; a running server picks it up within five
-seconds. A key that can't be trusted, or is for the other kind of server, is refused with the Team page's answer on
+seconds. A key that can't be trusted, or is for the other kind of server, is refused with the Company page's answer on
 standard error, exiting 1, and changes nothing; the audit log records an install as the vendor's:
 
 ```
@@ -280,12 +280,12 @@ The command reads the key from standard input when given `-`, or no key with sta
 never appears in the host's or the container's process list. Passing the key as the argument
 (`shared-memory install-license <license key>`) still works, but puts it in the process list while it installs.
 
-Before moving a hosted team to a smaller plan, the platform asks the server how many **members** the team has. It
+Before moving a hosted company to a smaller plan, the platform asks the server how many **members** the company has. It
 prints the count alone on one line, counted as the **member cap** counts them (a removed member holds no place), and
-exits 0; a team the server doesn't have is a plain error on stderr with a non-zero exit:
+exits 0; a company the server doesn't have is a plain error on stderr with a non-zero exit:
 
 ```
-docker compose exec server shared-memory count-members --team acme
+docker compose exec server shared-memory count-members --company acme
 ```
 
 ### Generating the production key pair (the developer, once)
@@ -308,7 +308,7 @@ uv run python scripts/sign-license.py --private-key-file ~/secrets/shared-memory
     --team "Acme" --member-cap 10 --expires 2027-11-06
 ```
 
-Add `--hosted` for a hosted server's key. It prints the key to send to the admin. Renewing or upgrading is another key for the same team; installing it replaces
+Add `--hosted` for a hosted server's key. It prints the key to send to the admin. Renewing or upgrading is another key for the same company; installing it replaces
 the old one.
 
 ## How alike two activities must be for a collision warning
@@ -324,7 +324,7 @@ doing the same work were not warned.
 ## How alike a memory must be for a save to name it
 
 A save always lands. Its answer then names up to three memories in the saving member's reach (their own personal
-memory in the project, and the project and team memory they can read) whose embeddings score at or above
+memory in the project, and the project and company memory they can read) whose embeddings score at or above
 `SHARED_MEMORY_SAVE_SIMILAR_THRESHOLD` (default 0.62, the same bar as promote's check; optional in `.env`; from 0 to
 1). Raise it if saves name memories that aren't near-copies; lower it if near-copies go unnamed.
 
@@ -339,7 +339,7 @@ Lower it if doubted memories still crowd out sound ones; raise it toward 1 if th
 When a session's prompt or activity collides with another member's active session, the later session's file edits are
 refused until each earlier session's member agrees, or the project's wait has passed with no answer, or its member
 says it is different work; an earlier member's refusal holds past the wait, until their session ends or goes idle
-([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the team's admins set its
+([ADR-0024](./adr/0024-a-later-session-is-gated-not-only-warned.md)). A project's leads and the company's admins set its
 wait with the `project_wait` tool; a project that hasn't waits `SHARED_MEMORY_GATE_WAIT_MINUTES` (default 5, optional
 in `.env`). The same wait bounds an urgent message: the later session may send one per collision, and the earlier
 session's edits wait until its member answers or the wait has passed since it was sent. Each agree, refuse, timeout,
@@ -389,7 +389,7 @@ The console is served at the domain by the same Caddy that fronts the server, so
 3. Link each member's GitHub account, so they can sign in. The owner's was linked by `setup --owner-github`:
 
    ```bash
-   docker compose exec server shared-memory link-github --team acme --member-id E1042 --github dana
+   docker compose exec server shared-memory link-github --company acme --member-id E1042 --github dana
    ```
 
 A member who signs in sees who they are; what else the console does arrives with the rest of issue #22. Until the GitHub app is configured, the console opens and says that signing in isn't set up on this server.
@@ -443,7 +443,7 @@ platform signs with it.
 
 ### Search engines
 
-Every answer from the server carries `X-Robots-Tag: noindex`, so a team's server and its console stay out of search results. The landing page lives on the platform, not on any server; to let search engines index a server anyway, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
+Every answer from the server carries `X-Robots-Tag: noindex`, so a company's server and its console stay out of search results. The landing page lives on the platform, not on any server; to let search engines index a server anyway, set `SHARED_MEMORY_ROBOTS_TAG=all` in `.env` and run `docker compose up -d`. Either way `robots.txt` keeps crawlers off `/api/`, `/mcp` and `/hooks/`.
 
 ## Behind a CDN
 
@@ -455,7 +455,7 @@ The server can sit behind a CDN such as Cloudflare or CloudFront, for DDoS prote
    - an **origin certificate** from the CDN (Cloudflare's Origin CA, valid only between Cloudflare and the host): mount it into the Caddy container and use `tls /certs/origin.pem /certs/origin.key`.
 3. **Refuse bodies over 1 MB at the CDN too.** Caddy refuses anything bigger (`request_body` in `deploy/Caddyfile`), and no request the server needs comes near it. Matching the limit at the edge stops the oversized ones before they reach the host: on Cloudflare, a WAF custom rule blocking `http.request.body.size gt 1048576`; on CloudFront, an AWS WAF size constraint.
 4. **Never cache `/api/*`, `/mcp*` or `/hooks/*`.** Every answer on those paths is one member's: their memory, their briefing, their console. The server marks each of them `Cache-Control: no-store`, but set the CDN to bypass its cache for them as well, so a rule set elsewhere can't override it: a Cloudflare cache rule set to **Bypass cache**, or CloudFront behaviours for those paths using the `CachingDisabled` policy with every method allowed. Everything else is the console's own files, which can be cached.
-5. **Wait longer for the origin than the slowest save can take.** Saves take their turn one at a time, so a busy team's save can wait for tens of seconds before it answers; under heavy load in testing, a queued save took around 25 seconds. Keep the CDN's origin timeout well above that, at 60 seconds or more. Cloudflare's default of 100 seconds is enough; CloudFront's default of 30 is not, so raise its origin response timeout.
+5. **Wait longer for the origin than the slowest save can take.** Saves take their turn one at a time, so a busy company's save can wait for tens of seconds before it answers; under heavy load in testing, a queued save took around 25 seconds. Keep the CDN's origin timeout well above that, at 60 seconds or more. Cloudflare's default of 100 seconds is enough; CloudFront's default of 30 is not, so raise its origin response timeout.
 
 Then run step 7 of [Deploy](#deploy) against the domain again: it now goes through the CDN.
 

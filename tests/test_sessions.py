@@ -19,7 +19,7 @@ from tests.support import (
     ConsoleClient,
     RunningServer,
     Session,
-    Team,
+    Company,
     add,
     added_context,
     create,
@@ -45,43 +45,43 @@ def test_a_session_is_active_from_its_start_until_its_end(owner: Session) -> Non
     assert active(owner) == []
 
 
-def test_a_session_with_no_call_for_the_idle_time_is_no_longer_active(team: Team, owner: Session) -> None:
+def test_a_session_with_no_call_for_the_idle_time_is_no_longer_active(company: Company, owner: Session) -> None:
     owner.start()
 
-    team.server.clock.advance(minutes=29, seconds=59)
+    company.server.clock.advance(minutes=29, seconds=59)
     just_before = active(owner)
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     assert just_before == [("owner-1", "test-session")]
     assert active(owner) == []
 
 
-def test_a_prompt_keeps_a_session_active(team: Team, owner: Session) -> None:
+def test_a_prompt_keeps_a_session_active(company: Company, owner: Session) -> None:
     owner.start()
 
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
     owner.prompt("write a haiku about cats")
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
 
     assert active(owner) == [("owner-1", "test-session")]
 
 
-def test_a_tool_call_that_names_the_session_keeps_it_active(team: Team, owner: Session) -> None:
+def test_a_tool_call_that_names_the_session_keeps_it_active(company: Company, owner: Session) -> None:
     owner.start()
 
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
     owner.call("briefing", session=owner.identifier)
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
 
     assert active(owner) == [("owner-1", "test-session")]
 
 
-def test_a_tool_call_that_names_no_session_does_not_keep_one_active(team: Team, owner: Session) -> None:
+def test_a_tool_call_that_names_no_session_does_not_keep_one_active(company: Company, owner: Session) -> None:
     owner.start()
 
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
     owner.call("tree")
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
 
     assert active(owner) == []
 
@@ -105,16 +105,16 @@ def test_two_members_sessions_under_one_identifier_are_two_sessions(owner: Sessi
     assert active(owner) == [("owner-1", "test-session")]
 
 
-def test_a_session_is_known_with_its_member_repository_and_start(team: Team, dana: Session) -> None:
+def test_a_session_is_known_with_its_member_repository_and_start(company: Company, dana: Session) -> None:
     dana.start()
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
     dana.prompt("write a haiku about cats")
 
     (known,) = dana.active_sessions()
 
     assert (known.member_id, known.member_name) == ("emp-2", "Dana Dev")
     assert (known.project_id, known.repository) == (dana.project, "billing-api")
-    assert known.last_seen_at == team.server.clock.now
+    assert known.last_seen_at == company.server.clock.now
     assert (known.last_seen_at - known.started_at).total_seconds() == 300
 
 
@@ -209,10 +209,10 @@ def test_a_session_identifier_too_long_to_keep_is_refused_by_the_tool_and_ignore
 
 
 def test_a_session_back_from_idle_is_active_and_told_once_that_its_activity_and_locks_ended(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     owner.start()
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     first = added_context(owner.prompt("write a haiku about cats"))
     second = owner.prompt("write a haiku about cats")
@@ -222,29 +222,29 @@ def test_a_session_back_from_idle_is_active_and_told_once_that_its_activity_and_
     assert active(owner) == [("owner-1", "test-session")]
 
 
-def test_a_session_back_from_idle_through_a_tool_is_told_on_its_next_prompt(team: Team, owner: Session) -> None:
+def test_a_session_back_from_idle_through_a_tool_is_told_on_its_next_prompt(company: Company, owner: Session) -> None:
     owner.start()
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     owner.call("briefing", session=owner.identifier)
 
     assert ENDED in added_context(owner.prompt("write a haiku about cats"))
 
 
-def test_a_session_that_never_went_idle_is_told_nothing(team: Team, owner: Session) -> None:
+def test_a_session_that_never_went_idle_is_told_nothing(company: Company, owner: Session) -> None:
     owner.start()
-    team.server.clock.advance(minutes=29)
+    company.server.clock.advance(minutes=29)
 
     assert owner.prompt("write a haiku about cats") == {}
 
 
 def test_a_session_that_starts_again_after_its_end_is_active_and_told_once_that_its_activity_and_locks_ended(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     """Claude Code resuming a session it had ended."""
     owner.start()
     owner.end()
-    team.server.clock.advance(minutes=45)
+    company.server.clock.advance(minutes=45)
 
     owner.start()
     first = added_context(owner.prompt("write a haiku about cats"))
@@ -303,13 +303,13 @@ def test_the_session_end_hook_answers_every_family_emptily(owner: Session, forma
     assert active(owner) == []
 
 
-def test_the_session_end_hook_never_fails_a_session(team: Team, owner: Session) -> None:
-    unknown = Session(team.server, "smt_nope", owner.project, "billing-api")
+def test_the_session_end_hook_never_fails_a_session(company: Company, owner: Session) -> None:
+    unknown = Session(company.server, "smt_nope", owner.project, "billing-api")
     never_started = owner.as_session("never-started")
     unreadable = httpx.post(f"{owner.server.url}/hooks/session-end", content=b"not json", headers=owner.headers())
 
     assert unknown.end() == {}
-    assert team.owner().end() == {}, "a session outside any project"
+    assert company.owner().end() == {}, "a session outside any project"
     assert never_started.end() == {}
     assert owner.hook_payload("session-end", {"hook_event_name": "SessionEnd"}) == {}, "a payload naming no session"
     assert (unreadable.status_code, unreadable.json()) == (200, {})
@@ -336,7 +336,7 @@ def test_claude_codes_plugin_posts_its_session_end_to_the_session_end_hook() -> 
     shutil.which("sh") is None or shutil.which("curl") is None,
     reason="Claude Code runs the plugin's hooks with curl in a POSIX shell, which aren't both here",
 )
-def test_claude_codes_plugin_ends_the_session_when_claude_code_does(team: Team, owner: Session) -> None:
+def test_claude_codes_plugin_ends_the_session_when_claude_code_does(company: Company, owner: Session) -> None:
     owner.start()
     assert owner.project is not None and owner.repository is not None
 
@@ -348,8 +348,8 @@ def test_claude_codes_plugin_ends_the_session_when_claude_code_does(team: Team, 
         timeout=60,
         env={
             **os.environ,
-            "CLAUDE_PLUGIN_OPTION_SERVER_URL": team.server.url,
-            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": team.owner_token,
+            "CLAUDE_PLUGIN_OPTION_SERVER_URL": company.server.url,
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": company.owner_token,
             "SHARED_MEMORY_PROJECT": owner.project,
             "SHARED_MEMORY_REPOSITORY": owner.repository,
         },
@@ -359,11 +359,11 @@ def test_claude_codes_plugin_ends_the_session_when_claude_code_does(team: Team, 
     assert active(owner) == []
 
 
-def test_a_member_removed_from_the_team_has_their_sessions_ended(team: Team, owner: Session, dana: Session) -> None:
+def test_a_member_removed_from_the_company_has_their_sessions_ended(company: Company, owner: Session, dana: Session) -> None:
     owner.start()
     dana.start()
 
-    team.owner().call("remove_member", member_id="emp-2")
+    company.owner().call("remove_member", member_id="emp-2")
 
     assert active(owner) == [("owner-1", "test-session")]
 
@@ -400,23 +400,23 @@ def test_a_session_started_through_one_worker_is_active_when_read_through_anothe
 
 
 def test_a_session_idle_by_one_workers_reading_is_idle_by_anothers(
-    team: Team, owner: Session, second_server: RunningServer
+    company: Company, owner: Session, second_server: RunningServer
 ) -> None:
     other = dataclasses.replace(owner, server=second_server)
     owner.start()
 
-    team.server.clock.advance(minutes=30)
+    company.server.clock.advance(minutes=30)
 
     assert active(owner) == active(other) == []
     assert ENDED in added_context(other.prompt("write a haiku about cats"))
 
 
 def test_whatever_ends_with_a_session_is_told_when_it_ends_and_when_it_is_back_from_idle(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     """What the modules that keep something per session (its activity, its locks) stand on. `on_gone` is an
     in-process listener with no HTTP surface, so this reads the worker's sessions module and patches nothing."""
-    sessions: Sessions = team.server.app.state.sessions
+    sessions: Sessions = company.server.app.state.sessions
     gone: list[int] = []
     sessions.on_gone(lambda conn, ids: gone.extend(ids))
     owner.start()
@@ -424,7 +424,7 @@ def test_whatever_ends_with_a_session_is_told_when_it_ends_and_when_it_is_back_f
 
     owner.prompt("write a haiku about cats")
     while_active = list(gone)
-    team.server.clock.advance(minutes=30)
+    company.server.clock.advance(minutes=30)
     while_idle = sessions.still_active([known.id])
     owner.prompt("write a haiku about cats")
     back = list(gone)

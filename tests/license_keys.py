@@ -30,7 +30,7 @@ TEST_PUBLIC_KEYS = {1: public_of(TEST_PRIVATE), 2: public_of(OTHER_PRIVATE)}
 
 
 def a_key(
-    team: str = "Acme",
+    company: str = "Acme",
     member_cap: int = 5,
     issued: date = date(2026, 9, 1),
     expires: date = date(2027, 9, 1),
@@ -39,7 +39,7 @@ def a_key(
     hosted: bool = False,
 ) -> str:
     private = OTHER_PRIVATE if version == 2 else TEST_PRIVATE
-    return sign(private, version, License(team, member_cap, issued, expires, key_id, hosted))
+    return sign(private, version, License(company, member_cap, issued, expires, key_id, hosted))
 
 
 def a_key_saying(payload: dict[str, object], version: int = 1) -> str:

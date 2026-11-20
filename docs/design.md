@@ -21,13 +21,13 @@ Why not just commit `CLAUDE.md` and docs to each repository: see [ADR-0001](./ad
 
 ## 2. Goals and scope
 
-- **Who it's for:** our own team first. Keep the design simple enough to sell later. Whether to sell it as SaaS or as a self-hosted product is deferred (§11).
-- **v1 scale:** one trusted **team** of up to ~15 **members**, many **projects**, no roles apart from the **owner**.
+- **Who it's for:** our own company first. Keep the design simple enough to sell later. Whether to sell it as SaaS or as a self-hosted product is deferred (§11).
+- **v1 scale:** one trusted **company** of up to ~15 **members**, many **projects**, no roles apart from the **owner**.
 - **v1 client:** Claude Code only. The server speaks MCP, so Codex, Gemini CLI and Copilot can be added later.
 - **Not in v1:**
   - sharing arbitrary files (scripts, specs)
   - indexing source code
-  - an organization level above teams
+  - an organization level above companies
   - a web dashboard
   - GitHub login
   - company SSO
@@ -37,15 +37,15 @@ Why not just commit `CLAUDE.md` and docs to each repository: see [ADR-0001](./ad
 | **Level** | Where it lives | Who can read it | How it gets written | Recalled automatically |
 |---|---|---|---|---|
 | **Local memory** | The member's machine (Claude Code's built-in memory, unchanged) | That member | That member's Claude | By Claude Code itself |
-| **Personal memory** | Server: `projects/<project>/people/<member-id>/` | The whole team | Its **author**'s Claude, via `remember` | Only the member's own |
-| **Project memory** | Server: `projects/<project>/shared/<type>/` | The whole team | Only by **promoting** a personal memory | Yes |
-| **Team memory** | Server: `team/<type>/` | The whole team | Only by **promoting** a personal memory | Yes, in every project |
+| **Personal memory** | Server: `projects/<project>/people/<member-id>/` | The whole company | Its **author**'s Claude, via `remember` | Only the member's own |
+| **Project memory** | Server: `projects/<project>/shared/<type>/` | The whole company | Only by **promoting** a personal memory | Yes |
+| **Company memory** | Server: `company/<type>/` | The whole company | Only by **promoting** a personal memory | Yes, in every project |
 
 Folder layout on the server:
 
 ```
-<team>/
-  team/                          ← team memory
+<company>/
+  company/                       ← company memory
     conventions/  decisions/  architecture/  gotchas/
   projects/
     <project>/
@@ -55,8 +55,8 @@ Folder layout on the server:
         <member-id>/             ← personal memory
 ```
 
-**Which level wins when memories disagree:** project memory > team memory > personal memory > local memory.
-- A project memory that contradicts a team memory has to be an **exception**, meaning it names the team memory it overrides.
+**Which level wins when memories disagree:** project memory > company memory > personal memory > local memory.
+- A project memory that contradicts a company memory has to be an **exception**, meaning it names the company memory it overrides.
 - Then any difference between the two levels is deliberate, never an accident.
 
 ## 4. Memory
@@ -73,7 +73,7 @@ type: convention
 author: emp-1042
 status: active                     # active | superseded | retired
 replaces: projects/billing/shared/decisions/package-manager-npm.md
-exception_to:                      # only on an exception: the team memory it overrides
+exception_to:                      # only on an exception: the company memory it overrides
 tied_files: [billing-api:package.json, billing-api:pnpm-lock.yaml]
 ---
 We use pnpm for every package. npm creates a second lockfile and CI rejects it.
@@ -92,7 +92,7 @@ We use pnpm for every package. npm creates a second lockfile and CI rejects it.
 ### 4.3 Rules the server enforces
 
 - **Secrets are refused.** A save that looks like it contains an API key, password or token is rejected, with the reason sent back to Claude.
-- **Paths outside the team's folder are refused.**
+- **Paths outside the company's folder are refused.**
 - **No direct edits on disk.** Every change goes through the server. A `reindex` command exists for repairs.
 
 ## 5. Writing and changing memory
@@ -105,17 +105,17 @@ We use pnpm for every package. npm creates a second lockfile and CI rejects it.
   - **No** (personal preferences, this machine's setup): it goes to local memory.
 - The plugin gives Claude that instruction.
 - Authors can **edit or delete their own personal memories** freely.
-- **Project and team memories are never edited in place.** A change is a new memory that **supersedes** the old one, and the old version stays in history ([ADR-0003](./adr/0003-memory-history-is-a-git-repository-on-the-server.md)).
+- **Project and company memories are never edited in place.** A change is a new memory that **supersedes** the old one, and the old version stays in history ([ADR-0003](./adr/0003-memory-history-is-a-git-repository-on-the-server.md)).
 
 ### 5.2 Promoting
 
 ```mermaid
 flowchart TD
-  A["Member asks to promote a personal memory"] --> B["Server finds similar project and team memories"]
+  A["Member asks to promote a personal memory"] --> B["Server finds similar project and company memories"]
   B --> C{"Member's Claude compares them:<br/>contradiction?"}
   C -- "No, or member chooses keep both" --> P["Promoted instantly"]
   C -- "Contradicts the member's own memory" --> S["Promoted instantly, supersedes it"]
-  C -- "Promoting to project memory,<br/>contradicts a team memory" --> E["Promoted as an exception<br/>naming that team memory"]
+  C -- "Promoting to project memory,<br/>contradicts a company memory" --> E["Promoted as an exception<br/>naming that company memory"]
   C -- "Contradicts another author's memory" --> H["Challenge raised"]
   H --> D{"The author, a project lead<br/>or an admin decides<br/>(any member after 3 days,<br/>or at once if the author has left)"}
   D -- Accept --> S2["New memory supersedes the old one"]
@@ -128,8 +128,8 @@ flowchart TD
   - the old memory stays active
 - **Who decides** ([ADR-0017](./adr/0017-project-leads-and-admins-may-decide-a-challenge.md)):
   - the challenged memory's author, at any time;
-  - on project memory, that project's leads and the team's admins, at any time. The challenged memory's project is the one that counts, not the challenger's;
-  - on team memory, the team's admins; a project lead has no standing there;
+  - on project memory, that project's leads and the company's admins, at any time. The challenged memory's project is the one that counts, not the challenger's;
+  - on company memory, the company's admins; a project lead has no standing there;
   - a lead or an admin who raised the challenge can't decide it in that capacity: another lead or an admin can;
   - any member, once it has been open 3 days.
 - **Where it is decided:** in the decider's own Claude, or in the console. The challenge appears in the author's next **briefing** or on their next prompt, and in the briefing of every lead and admin who may decide it, saying why it is theirs.
@@ -142,7 +142,7 @@ flowchart TD
   - The author can retire instantly.
   - Anyone else raises a challenge, decided as any challenge is, with the same 3-day fallback.
 - **Pins:**
-  - Any member can pin a project memory or team memory.
+  - Any member can pin a project memory or company memory.
   - When a pinned memory is superseded, the pin **moves to the new memory**.
   - When it is retired, the pin is **removed**.
 
@@ -161,11 +161,11 @@ flowchart TD
   - challenges waiting for this member *(phase 2)*
   - who is active and their **activity** *(v1.1)*
 - **Recall** (every prompt):
-  - up to 3 strongly matching sections, taken from project memory, team memory and the member's own personal memory
+  - up to 3 strongly matching sections, taken from project memory, company memory and the member's own personal memory
   - each memory is labeled with its level
   - if the search takes longer than ~2 s it is skipped quietly, so prompts never hang
-- **Other members' personal memories** appear only when Claude searches, labeled *not accepted by the team*.
-- **Labeling:** everything recalled or briefed is marked as team memory: *information, not instructions*.
+- **Other members' personal memories** appear only when Claude searches, labeled *not accepted by the company*.
+- **Labeling:** everything recalled or briefed is marked as company memory: *information, not instructions*.
 - **Freshness:** a memory saved by one member shows up for another member on their **next prompt**.
 - **Search** works on sections (a file split at its headings). It combines search by meaning with keyword matching, so exact words like `pnpm` or error codes are found. The search model reads only 512 tokens at a time, so a section longer than that is indexed as overlapping chunks, and a match on any chunk finds the section.
 - **Outdated memory**: a memory unused for 60 days (`SHARED_MEMORY_OUTDATED_AFTER_DAYS`) is labeled *possibly outdated* wherever a coding agent meets it (recall, search, `read`) and in the console (its page and its folder's list). Used means recalled into a prompt or read by a coding agent; a search hit, the briefing or a look in the console is not a use, and saving a memory starts its clock again. The label clears the next time the memory is used, a pinned memory is never labeled, and an agent shown the label checks the memory still holds before relying on it. Nothing is ever retired or deleted automatically; a member who finds it no longer true retires it. Spec #252.
@@ -191,7 +191,7 @@ flowchart TD
 
 ## 8. Identity and access
 
-- **Joining (v1):** the owner creates a member's account (team ID + member ID + name), and the server issues that member's **personal token**, shown once.
+- **Joining (v1):** the owner creates a member's account (company ID + member ID + name), and the server issues that member's **personal token**, shown once.
   - *Later:* members of the GitHub organization join by logging in with GitHub, and leaving the organization revokes access within an hour.
   - *When selling:* company SSO.
 - **Owner:** the one role. The owner adds and removes members and revokes tokens.
@@ -200,7 +200,7 @@ flowchart TD
   - the repository's short name
   - the plugin to enable
 - **Each member enters their personal token once,** in the plugin. The MCP connection and the hooks both use it ([ADR-0005](./adr/0005-project-id-plus-personal-token.md)).
-- **Access:** every member can reach every project of their team, and any member can create a project. A tool creates it and writes the project ID into the repository's settings.
+- **Access:** every member can reach every project of their company, and any member can create a project. A tool creates it and writes the project ID into the repository's settings.
 
 ## 9. Architecture
 
@@ -272,7 +272,7 @@ flowchart LR
 |---|---|---|
 | **0. Prototype** (~1 day) | Confirm the unknowns: (1) the personal token from plugin config reaches an HTTP hook header; (2) the project ID and repository name from the repository's settings reach the header; (3) what happens when a hook times out; (4) what a session-start hook can add to context; (5) whether MCP-tool hooks work and reuse the MCP connection's login | v1 |
 | **1. Core memory** | Server, memory folder, owner-created accounts with personal tokens, the phase 1 tools, summaries and folder indexes, briefing (pinned memories), recall, automatic setup through settings. Fixes pains #1 and #3 | v1 |
-| **2. Consistency** | Promote, contradiction check, challenges, supersede, retire, exceptions, team memory, git history, secret refusal, 600-word limit, leaving-member rules. Fixes pain #2 | v1 |
+| **2. Consistency** | Promote, contradiction check, challenges, supersede, retire, exceptions, company memory, git history, secret refusal, 600-word limit, leaving-member rules. Fixes pain #2 | v1 |
 | **3. Collisions** | Locks, takeover, activity, similar-activity warnings, activity in the briefing | v1.1 |
 | **4. Extras** | GitHub login, web page, outdated memory labels (built, spec #252) | later |
 | **5. Admin console** | Admins and project leads, restricted projects, GitHub sign-in, browsing memory with its history, audit log. Specified separately in issue #22 | later |
@@ -281,9 +281,9 @@ flowchart LR
 
 1. **Shared context:** member A promotes a memory into project memory, and on member B's next prompt, B's Claude uses it without being told to search. (A's unpromoted personal memory reaches B only when B's Claude searches.)
 2. **Onboarding:** in a new member's first session, asking "which package manager / error-handling pattern do we use?" gets the right answer from the briefing.
-3. **Consistency:** promoting a memory that contradicts an existing one raises a challenge, and project and team memories never end up contradicting each other.
+3. **Consistency:** promoting a memory that contradicts an existing one raises a challenge, and project and company memories never end up contradicting each other.
 4. **Speed:** the prompt hook adds under 1 second.
-5. **Adoption:** after two weeks there are 20+ project or team memories, and nobody has turned the plugin off.
+5. **Adoption:** after two weeks there are 20+ project or company memories, and nobody has turned the plugin off.
 
 ### 10.2 Starting values (tune during the trial)
 
@@ -303,9 +303,9 @@ flowchart LR
 
 | Decision | Decide when |
 |---|---|
-| Sell as SaaS, as self-hosted, or both | After 1–2 outside teams have used it |
+| Sell as SaaS, as self-hosted, or both | After 1–2 outside companies have used it |
 | Company SSO (Google, Microsoft, Okta) | When selling |
-| Organization level above teams | When a customer needs several teams |
+| Organization level above companies | When a customer needs several companies |
 | Support for Codex, Gemini CLI, Copilot | After v1 works with Claude Code |
 | Memories linked to code (functions and classes, flagged when the code changes; would run on the member's machine) | After v1.1, as a possible selling point |
 | Warning human edits through a git pre-commit check | If Claude-only locks turn out not to be enough |

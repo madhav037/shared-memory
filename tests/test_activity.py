@@ -11,7 +11,7 @@ from tests.support import (
     ConsoleClient,
     RunningServer,
     Session,
-    Team,
+    Company,
     add,
     added_context,
     create,
@@ -98,15 +98,15 @@ def test_an_activity_holding_a_secret_is_refused(dana: Session) -> None:
 
 
 def test_a_session_that_stated_no_activity_shows_its_members_most_recently_claimed_card_in_doing(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     card(owner, "Retry failed webhooks")
     card(owner, "Split the invoice module")
     card(owner, "Upgrade the queue client")
     dana.call("claim_card", number=2)
-    team.server.clock.advance(minutes=1)
+    company.server.clock.advance(minutes=1)
     dana.call("claim_card", number=1)
-    team.server.clock.advance(minutes=1)
+    company.server.clock.advance(minutes=1)
     dana.call("claim_card", number=3)
     dana.call("update_card", number=3, column="blocked", blocked_reason="Waiting on the provider's sandbox.")
     dana.start()
@@ -177,11 +177,11 @@ def test_a_session_that_ended_is_not_listed_and_its_activity_is_gone_when_it_com
 
 
 def test_a_session_gone_idle_is_not_listed_and_its_activity_is_gone_when_it_comes_back(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     state(dana, "Retrying failed webhooks")
 
-    team.server.clock.advance(minutes=30)
+    company.server.clock.advance(minutes=30)
     while_idle = others(owner)
     dana.prompt("write a haiku about cats")
 

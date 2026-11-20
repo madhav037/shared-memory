@@ -19,7 +19,7 @@ from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import FastEmbedEmbedder
 from smoke.claude import claude_executable
-from tests.support import REPO_ROOT, RunningServer, Team, TestClock, fresh_database, new_team
+from tests.support import REPO_ROOT, RunningServer, Company, TestClock, fresh_database, new_company
 
 Scope = dict[str, Any]
 
@@ -81,7 +81,7 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SmokeServer]:
         running = SmokeServer(log, settings, clock, portal)
         running.log = log
         # A real server has long since loaded its search model; don't count that against the first hook.
-        warm = new_team(running).owner()
+        warm = new_company(running).owner()
         warm.in_project(warm.call("create_project", name="Warm-up")["project_id"]).call("search", query="warm up")
         try:
             yield running
@@ -108,5 +108,5 @@ def unreachable_server_url() -> str:
 
 
 @pytest.fixture
-def team(server: SmokeServer) -> Team:
-    return new_team(server)
+def company(server: SmokeServer) -> Company:
+    return new_company(server)

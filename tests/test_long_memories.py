@@ -11,7 +11,7 @@ from anyio.from_thread import BlockingPortal, start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import FastEmbedEmbedder
-from tests.support import REPO_ROOT, RunningServer, Session, TestClock, added_context, fresh_database, new_team
+from tests.support import REPO_ROOT, RunningServer, Session, TestClock, added_context, fresh_database, new_company
 
 FILLER = (
     "The billing service retries failed invoice webhooks with jittered exponential backoff and records each attempt. "
@@ -121,9 +121,9 @@ def test_an_index_built_before_chunks_is_brought_up_to_date_at_start(upgrading: 
     with start_blocking_portal() as portal:
         before = serving(upgrading, portal)
         try:
-            team = new_team(before)
-            project = team.owner().call("create_project", name="Billing")["project_id"]
-            path = remember_long(team.owner().in_project(project))
+            company = new_company(before)
+            project = company.owner().call("create_project", name="Billing")["project_id"]
+            path = remember_long(company.owner().in_project(project))
         finally:
             before.stop()
         with psycopg.connect(upgrading.database_url, autocommit=True) as conn:
@@ -131,7 +131,7 @@ def test_an_index_built_before_chunks_is_brought_up_to_date_at_start(upgrading: 
 
         after = serving(upgrading, portal)
         try:
-            context = added_context(Session(after, team.owner_token, project).prompt(prompt))
+            context = added_context(Session(after, company.owner_token, project).prompt(prompt))
         finally:
             after.stop()
 

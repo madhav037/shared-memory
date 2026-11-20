@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from shared_memory.config import Settings
-from tests.support import Session, Team, added_context, search_tool
+from tests.support import Session, Company, added_context, search_tool
 
 HEADING = "[message]"
 ASKED = "Are you on the webhook retries? I can take the docs instead."
@@ -117,8 +117,8 @@ def test_the_message_text_is_kept_from_forging_the_servers_own_blocks(owner: Ses
 # Refused
 
 
-def test_a_message_to_a_session_in_another_project_is_refused(team: Team, owner: Session, dana: Session) -> None:
-    checkout: str = team.owner().call("create_project", name="Checkout")["project_id"]
+def test_a_message_to_a_session_in_another_project_is_refused(company: Company, owner: Session, dana: Session) -> None:
+    checkout: str = company.owner().call("create_project", name="Checkout")["project_id"]
     owner.start()
     dana.in_project(checkout, "billing-api").start()
 
@@ -128,11 +128,11 @@ def test_a_message_to_a_session_in_another_project_is_refused(team: Team, owner:
 
 
 def test_a_message_to_a_session_that_ended_over_a_day_ago_is_refused(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     dana.start()
     dana.end()
-    team.server.clock.advance(hours=24, minutes=1)
+    company.server.clock.advance(hours=24, minutes=1)
     owner.start()
 
     assert "emp-2" in refused_send(owner, "emp-2", ASKED)
@@ -171,11 +171,11 @@ def test_an_empty_message_is_refused(owner: Session, dana: Session) -> None:
 
 
 def test_a_message_to_a_recently_ended_session_arrives_at_its_members_next_session(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     dana.start()
     dana.end()
-    team.server.clock.advance(hours=3)
+    company.server.clock.advance(hours=3)
     owner.start()
 
     sent = send(owner, "emp-2", ASKED)
@@ -187,9 +187,9 @@ def test_a_message_to_a_recently_ended_session_arrives_at_its_members_next_sessi
     assert ASKED not in heard_on_prompt(dana), "delivered once, to one session"
 
 
-def test_a_message_to_a_session_gone_idle_arrives_when_it_is_back(team: Team, owner: Session, dana: Session) -> None:
+def test_a_message_to_a_session_gone_idle_arrives_when_it_is_back(company: Company, owner: Session, dana: Session) -> None:
     dana.start()
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
     owner.start()
 
     send(owner, "emp-2", ASKED)
@@ -211,13 +211,13 @@ def test_a_message_waiting_for_a_session_that_ends_goes_to_its_members_next_sess
     assert ASKED in heard_on_prompt(later)
 
 
-def test_a_message_is_gone_after_seven_days(team: Team, owner: Session, dana: Session) -> None:
+def test_a_message_is_gone_after_seven_days(company: Company, owner: Session, dana: Session) -> None:
     dana.start()
     dana.end()
     owner.start()
     send(owner, "emp-2", ASKED)
 
-    team.server.clock.advance(days=7, minutes=1)
+    company.server.clock.advance(days=7, minutes=1)
     later = dana.as_session("dana-next-week")
     later.start()
 

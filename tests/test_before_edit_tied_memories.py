@@ -19,10 +19,10 @@ from tests.support import (
     WORKING_FOLDER,
     RunningServer,
     Session,
-    Team,
+    Company,
     added_context,
     member,
-    new_team,
+    new_company,
     read_tool,
 )
 from tests.test_before_edit import ALLOWED, AGENTS_OWN, own_edit, reason_in
@@ -157,8 +157,8 @@ def test_before_edit_never_gives_another_members_personal_memory(owner: Session,
     assert dana.edit(FILE) == ALLOWED
 
 
-def test_before_edit_never_gives_another_projects_memory(team: Team, owner: Session, dana: Session) -> None:
-    payments = team.owner().call("create_project", name="Payments")["project_id"]
+def test_before_edit_never_gives_another_projects_memory(company: Company, owner: Session, dana: Session) -> None:
+    payments = company.owner().call("create_project", name="Payments")["project_id"]
     elsewhere = promoted(
         owner.in_project(payments, "billing-api"), title="Webhook retries back off", body=BODY, tied_files=[TIED_FILE]
     )
@@ -255,10 +255,10 @@ def slow_server(server: RunningServer, tmp_path_factory: pytest.TempPathFactory)
 def test_before_edit_drops_tied_memories_past_the_recall_budget(
     slow_server: RunningServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    team = new_team(slow_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    dana = member(team, project, "emp-2", "Dana Dev")
-    cole = member(team, project, "emp-3", "Cole Coder")
+    company = new_company(slow_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    dana = member(company, project, "emp-2", "Dana Dev")
+    cole = member(company, project, "emp-3", "Cole Coder")
     tied_memory(dana)
     looked_up = TiedFiles.tied_to
 
@@ -279,9 +279,9 @@ def test_before_edit_drops_tied_memories_past_the_recall_budget(
 def test_a_tied_memory_dropped_past_the_recall_budget_is_given_on_the_next_edit(
     slow_server: RunningServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    team = new_team(slow_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    dana = member(team, project, "emp-2", "Dana Dev")
+    company = new_company(slow_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    dana = member(company, project, "emp-2", "Dana Dev")
     path = tied_memory(dana)
     looked_up = TiedFiles.tied_to
     finished = threading.Event()

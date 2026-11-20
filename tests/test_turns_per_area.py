@@ -22,7 +22,7 @@ import pytest
 import shared_memory.store as store_module
 from shared_memory.memory import Area, Memory
 from shared_memory.store import Committer, MemoryStore
-from tests.support import Session, Team, member, promote_now
+from tests.support import Session, Company, member, promote_now
 from tests.test_failed_saves import fail_committing_the_index, git, head, indexed, uncommitted, word
 
 __all__ = ["fail_committing_the_index"]  # a fixture these tests use
@@ -59,10 +59,10 @@ def note(title: str, body: str | None = None, type: str = "gotcha") -> dict[str,
 NAMES: dict[str, str] = {}
 
 
-def members(team: Team, project: str, count: int, prefix: str = "m") -> list[Session]:
+def members(company: Company, project: str, count: int, prefix: str = "m") -> list[Session]:
     sessions = []
     for number in range(count):
-        session = member(team, project, f"{prefix}{number}", f"Member {prefix}{number}")
+        session = member(company, project, f"{prefix}{number}", f"Member {prefix}{number}")
         NAMES[session.token or ""] = f"Member {prefix}{number}"
         sessions.append(session)
     return sessions
@@ -84,9 +84,9 @@ def all_at_once(calls: list[tuple[Session, str, dict[str, Any]]]) -> tuple[list[
 
 
 def test_saves_by_different_members_into_their_personal_memory_overlap(
-    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
+    company: Company, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    sessions = split(members(team, project, 5), elsewhere)
+    sessions = split(members(company, project, 5), elsewhere)
     for session in sessions:
         session.call("remember", **note("Warm-up"))  # each member's folder exists before the timing starts
     slow_turns()
@@ -98,9 +98,9 @@ def test_saves_by_different_members_into_their_personal_memory_overlap(
 
 
 def test_saves_in_different_projects_overlap(
-    team: Team, slow_turns: Callable[[], None], elsewhere: Elsewhere
+    company: Company, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    owner = team.owner()
+    owner = company.owner()
     projects = [owner.call("create_project", name=f"Overlap {n}")["project_id"] for n in range(5)]
     sessions = split([owner.in_project(project) for project in projects], elsewhere)
     for session in sessions:
@@ -123,9 +123,9 @@ def test_saves_in_different_projects_overlap(
 
 
 def test_saves_into_the_same_project_memory_still_take_turns(
-    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
+    company: Company, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    sessions = split(members(team, project, 3), elsewhere)
+    sessions = split(members(company, project, 3), elsewhere)
     subjects = ["Kafka topic naming", "Terraform state locking", "Pixel density of icons"]
     personal = [
         session.call("remember", **note(subject, f"{subject} is settled: {word()}.", type="convention"))
@@ -142,9 +142,9 @@ def test_saves_into_the_same_project_memory_still_take_turns(
 
 
 def test_tie_takes_the_areas_turn(
-    team: Team, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
+    company: Company, project: str, slow_turns: Callable[[], None], elsewhere: Elsewhere
 ) -> None:
-    (session,) = members(team, project, 1, prefix="tie")
+    (session,) = members(company, project, 1, prefix="tie")
     tying = session.call("remember", **note("Tax rounding"))["path"]
     slow_turns()
 
@@ -160,7 +160,7 @@ def test_tie_takes_the_areas_turn(
 
 
 def test_a_save_that_loses_the_race_to_move_main_builds_on_the_new_main_and_both_land(
-    team: Team, owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
+    company: Company, owner: Session, dana: Session, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
 ) -> None:
     dana = elsewhere(dana)
     owner.call("remember", **note("Owner's folder"))
@@ -181,16 +181,16 @@ def test_a_save_that_loses_the_race_to_move_main_builds_on_the_new_main_and_both
     lost = owner.call("remember", **losing)
 
     assert len(attempts) == 2
-    log = git(team, "log", "-2", "--format=%an|%s").splitlines()
+    log = git(company, "log", "-2", "--format=%an|%s").splitlines()
     assert log == [f"Olive Owner|Remember: {losing['title']}", f"Dana Dev|Remember: {winning['title']}"]
     assert owner.call("read", path=lost["path"])["title"] == losing["title"]
-    people = git(team, "show", f"HEAD:{team.code}/{PurePosixPath(lost['path']).parents[2]}/index.md")
+    people = git(company, "show", f"HEAD:{company.code}/{PurePosixPath(lost['path']).parents[2]}/index.md")
     assert "[emp-2/]" in people and "[owner-1/]" in people
-    assert uncommitted(team) == []
+    assert uncommitted(company) == []
 
 
 def test_two_areas_creating_folders_under_one_parent_both_appear_in_its_index(
-    team: Team, project: str, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
+    company: Company, project: str, monkeypatch: pytest.MonkeyPatch, elsewhere: Elsewhere
 ) -> None:
     original = store_module.write_whole
     order: dict[str, list[Path]] = {"memories": [], "listings": []}
@@ -208,22 +208,22 @@ def test_two_areas_creating_folders_under_one_parent_both_appear_in_its_index(
         original(file, text)
     monkeypatch.setattr(store_module, "write_whole", late_listing)
     for trial in range(2):
-        sessions = split(members(team, project, 3, prefix=f"new{trial}-"), elsewhere)
+        sessions = split(members(company, project, 3, prefix=f"new{trial}-"), elsewhere)
         order["memories"].clear()
         order["listings"].clear()
 
         all_at_once([(session, "remember", note("First memory")) for session in sessions])
 
-        people = f"{team.code}/projects/{project}/people/index.md"
-        listed = git(team, "show", f"HEAD:{people}")
-        on_disk = (team.server.settings.memory_root / people).read_text(encoding="utf-8")
+        people = f"{company.code}/projects/{project}/people/index.md"
+        listed = git(company, "show", f"HEAD:{people}")
+        on_disk = (company.server.settings.memory_root / people).read_text(encoding="utf-8")
         for number in range(3):
             assert f"[new{trial}-{number}/]" in listed
         assert on_disk == listed
-    assert uncommitted(team) == []
+    assert uncommitted(company) == []
 
 def test_a_failed_save_never_undoes_another_areas_save_that_landed_meanwhile(
-    team: Team,
+    company: Company,
     owner: Session,
     dana: Session,
     fail_committing_the_index: Callable[[str], None],
@@ -249,37 +249,37 @@ def test_a_failed_save_never_undoes_another_areas_save_that_landed_meanwhile(
     assert "not saved" in refusal
     saved = landed[0]["path"]
     assert dana.call("read", path=saved)["title"] == landing["title"]
-    assert indexed(team, landing["body"].split()[-1].rstrip(".")) == [saved]
-    assert f"{team.code}/{saved}" in git(team, "ls-tree", "-r", "--name-only", "HEAD")
-    people = git(team, "show", f"HEAD:{team.code}/{PurePosixPath(saved).parents[2]}/index.md")
+    assert indexed(company, landing["body"].split()[-1].rstrip(".")) == [saved]
+    assert f"{company.code}/{saved}" in git(company, "ls-tree", "-r", "--name-only", "HEAD")
+    people = git(company, "show", f"HEAD:{company.code}/{PurePosixPath(saved).parents[2]}/index.md")
     assert "[emp-2/]" in people
-    assert git(team, "log", "-1", "--format=%s").startswith("Revert ")
-    assert uncommitted(team) == []
+    assert git(company, "log", "-1", "--format=%s").startswith("Revert ")
+    assert uncommitted(company) == []
 
 
 def test_many_members_saving_at_once_leave_one_commit_each_authored_by_them(
-    team: Team, project: str, elsewhere: Elsewhere
+    company: Company, project: str, elsewhere: Elsewhere
 ) -> None:
-    other = team.owner().call("create_project", name="Second project")["project_id"]
-    sessions = split(members(team, project, 6) + members(team, other, 4, prefix="o"), elsewhere)
-    before = int(git(team, "rev-list", "--count", "HEAD")) if head(team) else 0
+    other = company.owner().call("create_project", name="Second project")["project_id"]
+    sessions = split(members(company, project, 6) + members(company, other, 4, prefix="o"), elsewhere)
+    before = int(git(company, "rev-list", "--count", "HEAD")) if head(company) else 0
     saves = [(session, "remember", note("Parallel note")) for session in sessions for _ in range(3)]
 
     results, _ = all_at_once(saves)
 
-    assert int(git(team, "rev-list", "--count", "HEAD")) == before + len(saves)
+    assert int(git(company, "rev-list", "--count", "HEAD")) == before + len(saves)
     authors = {f"Remember: {arguments['title']}": NAMES[session.token or ""] for session, _, arguments in saves}
-    commits = [line.split("|", 1) for line in git(team, "log", f"-{len(saves)}", "--format=%an|%s").splitlines()]
+    commits = [line.split("|", 1) for line in git(company, "log", f"-{len(saves)}", "--format=%an|%s").splitlines()]
     assert sorted(subject for _, subject in commits) == sorted(authors)
     assert all(author == authors[subject] for author, subject in commits)
     for (session, _, arguments), result in zip(saves, results, strict=True):
         assert session.call("read", path=result["path"])["title"] == arguments["title"]
-        assert indexed(team, arguments["body"].split()[-1].rstrip(".")) == [result["path"]]
+        assert indexed(company, arguments["body"].split()[-1].rstrip(".")) == [result["path"]]
     for folder in (f"projects/{project}/people", f"projects/{other}/people", "projects"):
-        listed = git(team, "show", f"HEAD:{team.code}/{folder}/index.md")
-        below = (team.server.settings.memory_root / team.code / folder).iterdir()
+        listed = git(company, "show", f"HEAD:{company.code}/{folder}/index.md")
+        below = (company.server.settings.memory_root / company.code / folder).iterdir()
         assert all(f"[{sub.name}/]" in listed for sub in below if sub.is_dir())
-    assert uncommitted(team) == []
+    assert uncommitted(company) == []
 
 def test_a_save_writing_outside_the_areas_it_declared_fails_loudly(tmp_path: Any) -> None:
     store = MemoryStore(tmp_path / "memory")

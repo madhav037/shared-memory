@@ -6,14 +6,14 @@ from pathlib import Path
 
 from smoke.conftest import SmokeServer
 from smoke.support import REPOSITORY, ask, member
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
 def test_the_hooks_and_the_mcp_connection_carry_the_members_identity(
-    server: SmokeServer, team: Team, tmp_path: Path
+    server: SmokeServer, company: Company, tmp_path: Path
 ) -> None:
-    project = team.owner().call("create_project", name="Wiring")["project_id"]
-    dana = member(team, project, "emp-2", "Dana Dev")
+    project = company.owner().call("create_project", name="Wiring")["project_id"]
+    dana = member(company, project, "emp-2", "Dana Dev")
     before = len(server.log.requests)
 
     run = ask(dana, tmp_path, "Reply with just the word OK.")

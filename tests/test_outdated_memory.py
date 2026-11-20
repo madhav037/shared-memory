@@ -18,12 +18,12 @@ from tests.support import (
     ConsoleClient,
     RunningServer,
     Session,
-    Team,
+    Company,
     TestClock,
     added_context,
     ask,
     fresh_database,
-    new_team,
+    new_company,
     promote_keeping_both,
     signed_in_owner,
 )
@@ -42,12 +42,12 @@ def labelled(session: Session, path: str) -> bool:
     return bool(read["possibly_outdated"])
 
 
-def test_a_memory_unread_for_longer_than_the_setting_is_labelled_on_read(team: Team, owner: Session) -> None:
+def test_a_memory_unread_for_longer_than_the_setting_is_labelled_on_read(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
 
-    team.server.clock.advance(days=59)
+    company.server.clock.advance(days=59)
     in_use = owner.call("read", path=path)
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
     unused = owner.call("read", path=path)
 
     assert in_use["possibly_outdated"] is False
@@ -58,95 +58,95 @@ def test_a_memory_unread_for_longer_than_the_setting_is_labelled_on_read(team: T
     assert "retire" in unused["check"]
 
 
-def test_the_read_that_shows_the_label_clears_it(team: Team, owner: Session) -> None:
+def test_the_read_that_shows_the_label_clears_it(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
 
     assert labelled(owner, path)
     assert not labelled(owner, path)
 
 
-def test_recall_is_a_use(team: Team, owner: Session) -> None:
+def test_recall_is_a_use(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     owner.prompt("which package manager do we use?")
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     assert not labelled(owner, path)
 
 
-def test_a_search_hit_is_no_use(team: Team, owner: Session) -> None:
+def test_a_search_hit_is_no_use(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     found = owner.call("search", query="which package manager do we use?")
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     assert path in [result["path"] for result in found["results"]]
     assert labelled(owner, path)
 
 
-def test_a_pinned_memory_is_never_labelled_until_it_is_unpinned(team: Team, owner: Session) -> None:
+def test_a_pinned_memory_is_never_labelled_until_it_is_unpinned(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
     owner.call("pin", path=path)
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
 
     owner.call("briefing")
     pinned = owner.call("read", path=path)
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
     owner.call("unpin", path=path)
 
     assert pinned["possibly_outdated"] is False
     assert labelled(owner, path)
 
 
-def test_a_memory_in_a_pinned_topic_is_never_labelled(team: Team, owner: Session) -> None:
+def test_a_memory_in_a_pinned_topic_is_never_labelled(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, {**PNPM, "topic": "packages"})
     topic = path.rsplit("/", 1)[0]
     owner.call("pin", path=topic)
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
 
     pinned = owner.call("read", path=path)
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
     owner.call("unpin", path=topic)
 
     assert pinned["possibly_outdated"] is False
     assert labelled(owner, path)
 
 
-def test_a_briefing_is_no_use(team: Team, owner: Session) -> None:
+def test_a_briefing_is_no_use(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     owner.call("briefing")
     owner.prompt("write a haiku about cats")  # recalls nothing
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     assert labelled(owner, path)
 
 
-def test_a_retired_memory_is_never_labelled(team: Team, owner: Session) -> None:
+def test_a_retired_memory_is_never_labelled(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
     owner.call("retire", path=path)
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
 
     assert not labelled(owner, path)
 
 
-def test_saving_a_memory_starts_its_clock_and_editing_it_restarts_it(team: Team, owner: Session) -> None:
-    team.server.clock.advance(days=90)
+def test_saving_a_memory_starts_its_clock_and_editing_it_restarts_it(company: Company, owner: Session) -> None:
+    company.server.clock.advance(days=90)
     path = owner.call("remember", **PNPM)["path"]
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
     owner.call("edit_memory", path=path, summary="Every package in every repository is managed with pnpm.")
-    team.server.clock.advance(days=40)
+    company.server.clock.advance(days=40)
 
     assert not labelled(owner, path)
 
 
-def test_a_promoted_memory_starts_unlabelled(team: Team, owner: Session) -> None:
+def test_a_promoted_memory_starts_unlabelled(company: Company, owner: Session) -> None:
     personal = owner.call("remember", **PNPM)["path"]
-    team.server.clock.advance(days=90)
+    company.server.clock.advance(days=90)
 
     promoted = owner.call("promote", path=personal, level="project")
 
@@ -154,9 +154,9 @@ def test_a_promoted_memory_starts_unlabelled(team: Team, owner: Session) -> None
     assert not labelled(owner, promoted["path"])
 
 
-def test_recall_labels_a_possibly_outdated_memory_once(team: Team, owner: Session) -> None:
+def test_recall_labels_a_possibly_outdated_memory_once(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
 
     first = added_context(owner.prompt("which package manager do we use?"))
     # A session is told a memory once (#303), so the second telling is to another session.
@@ -168,9 +168,9 @@ def test_recall_labels_a_possibly_outdated_memory_once(team: Team, owner: Sessio
     assert "possibly outdated" not in second
 
 
-def test_search_marks_a_possibly_outdated_memory_and_says_what_to_do(team: Team, owner: Session) -> None:
+def test_search_marks_a_possibly_outdated_memory_and_says_what_to_do(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
     fresh = promote_keeping_both(owner, {**PNPM, "title": "Lockfiles are committed", "summary": "Commit pnpm-lock.yaml."})
 
     found = owner.call("search", query="pnpm package manager lockfile")
@@ -182,10 +182,10 @@ def test_search_marks_a_possibly_outdated_memory_and_says_what_to_do(team: Team,
     assert "60 days or more" in found["check"]
 
 
-def test_search_finding_only_memory_in_use_says_nothing_more(team: Team, owner: Session) -> None:
+def test_search_finding_only_memory_in_use_says_nothing_more(company: Company, owner: Session) -> None:
     path = promote_keeping_both(owner, PNPM)
     owner.call("pin", path=path)
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
 
     found = owner.call("search", query="which package manager do we use?")
 
@@ -218,9 +218,9 @@ def second_fortnight(server: RunningServer, tmp_path_factory: pytest.TempPathFac
 
 
 def test_a_shorter_setting_labels_sooner(second_fortnight: RunningServer) -> None:
-    team = new_team(second_fortnight)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project, "billing-api")
+    company = new_company(second_fortnight)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project, "billing-api")
     path = promote_keeping_both(owner, PNPM)
 
     second_fortnight.clock.advance(days=15)
@@ -239,9 +239,9 @@ def test_memory_that_exists_before_last_use_is_kept_counts_as_used_that_day(
     clock = TestClock()
     with start_blocking_portal() as portal:
         before = RunningServer(build_app(settings, clock=clock, embedder=FastEmbedEmbedder(settings.model_cache)), settings, clock, portal)
-        team = new_team(before)
-        project = team.owner().call("create_project", name="Billing")["project_id"]
-        path = promote_keeping_both(team.owner().in_project(project, "billing-api"), PNPM)
+        company = new_company(before)
+        project = company.owner().call("create_project", name="Billing")["project_id"]
+        path = promote_keeping_both(company.owner().in_project(project, "billing-api"), PNPM)
         before.stop()
         # The server as it was before it kept last use: no table, and the memory written long ago.
         with psycopg.connect(settings.database_url, autocommit=True) as conn:
@@ -249,7 +249,7 @@ def test_memory_that_exists_before_last_use_is_kept_counts_as_used_that_day(
         clock.advance(days=300)
         shipped = RunningServer(build_app(settings, clock=clock, embedder=FastEmbedEmbedder(settings.model_cache)), settings, clock, portal)
         try:
-            owner = dataclasses.replace(team.owner(), server=shipped).in_project(project, "billing-api")
+            owner = dataclasses.replace(company.owner(), server=shipped).in_project(project, "billing-api")
             first_day = owner.call("read", path=path)
             clock.advance(days=61)
             two_months_on = owner.call("read", path=path)
@@ -274,12 +274,12 @@ def test_looking_at_a_memory_in_the_console_is_no_use(console: Console, signed_o
     assert labelled(in_project, path)
 
 
-def test_a_pointer_is_labelled_possibly_outdated_and_counts_as_used(team: Team, owner: Session) -> None:
+def test_a_pointer_is_labelled_possibly_outdated_and_counts_as_used(company: Company, owner: Session) -> None:
     paths = [
         promote_keeping_both(owner, {**PNPM, "title": f"Package rule {number}", "summary": f"Package rule {number}."})
         for number in range(3)
     ]
-    team.server.clock.advance(days=61)
+    company.server.clock.advance(days=61)
 
     context = added_context(owner.prompt("which package manager do we use?"))
 

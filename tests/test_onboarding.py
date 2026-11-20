@@ -12,7 +12,7 @@ from tests.support import (
     Console,
     ConsoleClient,
     Session,
-    Team,
+    Company,
     added_context,
     promote_now,
     signed_in_owner,
@@ -51,20 +51,20 @@ def test_the_onboarding_steps_are_served_as_a_tool_and_as_a_prompt(owner: Sessio
         assert needed in steps, needed
 
 
-def test_onboarding_needs_a_connected_repository(team: Team) -> None:
-    assert "isn't connected to a project" in team.owner().refusal("onboard")
-    assert "isn't connected to a project" in team.owner().run_prompt("onboard")
+def test_onboarding_needs_a_connected_repository(company: Company) -> None:
+    assert "isn't connected to a project" in company.owner().refusal("onboard")
+    assert "isn't connected to a project" in company.owner().run_prompt("onboard")
 
 
-def test_an_agent_learns_on_connecting_that_onboarding_starts_only_when_the_member_asks(team: Team) -> None:
-    instructions, tools = team.owner().on_connecting()
+def test_an_agent_learns_on_connecting_that_onboarding_starts_only_when_the_member_asks(company: Company) -> None:
+    instructions, tools = company.owner().on_connecting()
 
     assert "onboard" in instructions
     assert "only when the member asks" in tools["onboard"]
 
 
-def test_the_skills_point_at_the_served_steps_instead_of_repeating_them(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_the_skills_point_at_the_served_steps_instead_of_repeating_them(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     every_agents = next(f for f in created["files"] if f["path"] == ".agents/skills/shared-memory/SKILL.md")
     claude_codes = (REPO_ROOT / "plugin" / "skills" / "onboard" / "SKILL.md").read_text(encoding="utf-8")
 
@@ -110,17 +110,17 @@ def test_a_member_named_as_author_becomes_the_author_and_the_importer_and_source
     assert (memory["imported_by"], memory["imported_from"]) == ("owner-1", SOURCE)
 
 
-def test_the_author_can_be_named_by_their_github_username(team: Team, owner: Session) -> None:
-    team.owner().call("add_member", member_id="emp-7", name="Gita Hub", github="Gita-Hub")
+def test_the_author_can_be_named_by_their_github_username(company: Company, owner: Session) -> None:
+    company.owner().call("add_member", member_id="emp-7", name="Gita Hub", github="Gita-Hub")
 
-    memory = owner.call("read", path=promoted_for(owner, "@gita-hub", level="team"))
+    memory = owner.call("read", path=promoted_for(owner, "@gita-hub", level="company"))
 
     assert (memory["level"], memory["author"], memory["imported_by"]) == ("company", "emp-7", "owner-1")
 
 
-def test_someone_who_is_not_a_member_cannot_be_named_as_author(team: Team, owner: Session, dana: Session) -> None:
+def test_someone_who_is_not_a_member_cannot_be_named_as_author(company: Company, owner: Session, dana: Session) -> None:
     personal = imported(owner)
-    team.owner().call("remove_member", member_id="emp-2")
+    company.owner().call("remove_member", member_id="emp-2")
 
     unknown = owner.refusal("promote", path=personal, level="project", author="emp-99", imported_from=SOURCE)
     no_account = owner.refusal("promote", path=personal, level="project", author="@nobody", imported_from=SOURCE)
@@ -142,7 +142,7 @@ def test_a_member_outside_a_restricted_project_cannot_be_named_as_author(
     assert closed.status_code == 200, closed.text
     in_project = owner.in_project(project, "billing-api")
 
-    for level in ("project", "team"):
+    for level in ("project", "company"):
         refusal = in_project.refusal(
             "promote", path=imported(in_project), level=level, author="emp-2", imported_from=SOURCE
         )
@@ -219,8 +219,8 @@ def test_a_malformed_source_is_refused_naming_the_accepted_forms(owner: Session,
     assert owner.call("read", path=personal)["level"] == "personal"
 
 
-def test_the_promote_tool_names_every_form_of_source(team: Team) -> None:
-    _, tools = team.owner().on_connecting()
+def test_the_promote_tool_names_every_form_of_source(company: Company) -> None:
+    _, tools = company.owner().on_connecting()
 
     for form in ("repository:path", "wiki:", "ticket:", "pr-comment:", "commit:", "interview:"):
         assert form in tools["promote"], form
@@ -350,7 +350,7 @@ def test_the_steps_map_documents_onto_foundations_and_ask_before_replacing_a_fil
     assert steps.index("Promote what the member approved") < steps.index("Replace imported files with pointers")
 
 
-# The steps cover what a brownfield team has (#619)
+# The steps cover what a brownfield company has (#619)
 
 
 def test_the_steps_have_the_member_choose_this_runs_sources_at_the_start_and_say_what_it_costs(owner: Session) -> None:

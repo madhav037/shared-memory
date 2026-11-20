@@ -1,4 +1,4 @@
-"""Project health (#553, spec #504): a read-only page for a project's leads and the team's admins, listing the
+"""Project health (#553, spec #504): a read-only page for a project's leads and the company's admins, listing the
 project's possibly outdated memory and its memory in doubt. Driven through the console's JSON API.
 
 Nothing on it changes anything (ADR-0009): pinning, unpinning, deciding and retiring stay on their own screens."""

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-from tests.support import Session, Team, added_context
+from tests.support import Session, Company, added_context
 
 # Where each agent family reads the context out of an answer, and so the shape the server owes it. None is the format
 # an agent that asks for none gets: Claude Code's, which is what these endpoints have always answered.
@@ -133,16 +133,16 @@ def test_a_format_this_server_does_not_know_is_answered_as_claude_code_is(owner:
     assert "Use pnpm, not npm" in added_context(output)
 
 
-def test_a_refused_session_is_told_nothing_in_a_format_with_nowhere_to_say_it(team: Team, owner: Session) -> None:
-    revoked = Session(team.server, "smt_nope", owner.project, "billing-api")
+def test_a_refused_session_is_told_nothing_in_a_format_with_nowhere_to_say_it(company: Company, owner: Session) -> None:
+    revoked = Session(company.server, "smt_nope", owner.project, "billing-api")
 
     assert "not recognised" in revoked.start()["systemMessage"]
     assert revoked.start(format="cursor") == {}
     assert revoked.start(format="copilot-cli") == {}
 
 
-def test_a_refused_session_is_never_cancelled_in_clines_format(team: Team, owner: Session) -> None:
-    revoked = Session(team.server, "smt_nope", owner.project, "billing-api")
+def test_a_refused_session_is_never_cancelled_in_clines_format(company: Company, owner: Session) -> None:
+    revoked = Session(company.server, "smt_nope", owner.project, "billing-api")
 
     assert revoked.start(format="cline") == {}
     assert revoked.prompt("store the refund amount", format="cline") == {}
@@ -212,8 +212,8 @@ def posted_raw(session: Session, event: str, framing: dict[str, str], body: byte
 
 
 @pytest.mark.parametrize("event", ["session-start", "prompt-submitted"])
-def test_an_anonymous_hook_is_answered_without_its_body_being_read(team: Team, event: str) -> None:
-    anonymous = Session(team.server, None)
+def test_an_anonymous_hook_is_answered_without_its_body_being_read(company: Company, event: str) -> None:
+    anonymous = Session(company.server, None)
 
     answer = posted_raw(anonymous, event, {"Content-Length": str(500_000)}, b'{"prompt": "')
 
@@ -221,9 +221,9 @@ def test_an_anonymous_hook_is_answered_without_its_body_being_read(team: Team, e
 
 
 def test_a_hook_with_an_unknown_personal_token_is_answered_without_its_body_being_read(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
-    unknown = Session(team.server, "smt_nope", owner.project, "billing-api")
+    unknown = Session(company.server, "smt_nope", owner.project, "billing-api")
 
     answer = posted_raw(unknown, "prompt-submitted", {"Content-Length": str(500_000)}, b'{"prompt": "')
 

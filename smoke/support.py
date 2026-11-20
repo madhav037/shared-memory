@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from smoke.claude import ClaudeRun, run_claude
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 REPOSITORY = "smoke-app"
 
 
-def member(team: Team, project: str, member_id: str, name: str) -> Session:
-    added = team.owner().call("add_member", member_id=member_id, name=name)
-    return Session(team.server, added["personal_token"], project, REPOSITORY)
+def member(company: Company, project: str, member_id: str, name: str) -> Session:
+    added = company.owner().call("add_member", member_id=member_id, name=name)
+    return Session(company.server, added["personal_token"], project, REPOSITORY)
 
 
 def promote(session: Session, title: str, summary: str, body: str, type: str = "convention") -> str:

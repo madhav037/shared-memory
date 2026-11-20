@@ -1,10 +1,10 @@
 # The stress test
 
-The stress test in `smoke/stress.py` puts a whole team's coding agents on one server at once: many **members**, each running several subagents, over MCP and the **hooks**. Rerun it before and after a change to the server and compare the reports. It is slow and its numbers depend on the machine, so it runs only by hand: never in CI, and never with `uv run pytest`.
+The stress test in `smoke/stress.py` puts a whole company's coding agents on one server at once: many **members**, each running several subagents, over MCP and the **hooks**. Rerun it before and after a change to the server and compare the reports. It is slow and its numbers depend on the machine, so it runs only by hand: never in CI, and never with `uv run pytest`.
 
 ## What a run does
 
-1. Adds a fresh team with its own owner, members and project, so runs against one stack don't disturb each other.
+1. Adds a fresh company with its own owner, members and project, so runs against one stack don't disturb each other.
 2. Runs every member's subagents for the chosen time. Each subagent is a **session** of its own: one MCP connection and a session-start hook, then a mix of what a coding agent does with **memory**, with a pause between calls:
 
    | Share | Calls |
@@ -21,7 +21,7 @@ The stress test in `smoke/stress.py` puts a whole team's coding agents on one se
    | 1% | a resumed session's session-start hook |
 
 3. With `--races`, races one member's subagents on the same memory: two edits of different fields, an edit against a delete, three promotes of one memory, and eight saves of one title.
-4. Checks that the team's memory files, git and search index agree.
+4. Checks that the company's memory files, git and search index agree.
 
 ## The report
 
@@ -47,7 +47,7 @@ uv run python -m smoke.stress down                    # stop it and delete its d
 
 | Option of `run` | Default | |
 |---|---|---|
-| `--members` | 20 | Members in the run's team |
+| `--members` | 20 | Members in the run's company |
 | `--subagents` | 3 | Subagents per member, each its own session |
 | `--duration` | 60 | Seconds of load |
 | `--pace` | `0.05-0.4` | Seconds a subagent pauses between calls, drawn uniformly |

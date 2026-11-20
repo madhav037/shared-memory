@@ -1,6 +1,6 @@
 ---
 name: Shared Memory
-description: The team's memory published as a modern public register, in white paper, near-black ink and one signal green.
+description: The company's memory published as a modern public register, in white paper, near-black ink and one signal green.
 colors:
   paper: "#ffffff"
   paper-2: "#f6f7f7"
@@ -210,7 +210,7 @@ components:
 
 **Creative North Star: "The Consolidated Code, as a Modern Public Register"**
 
-The console publishes the team's memory the way a government publishes its consolidated law online: a contents of everything a member can reach, each memory set as a citable section, and its standing, author and history in a ruled right margin. It is a modern public register rather than an antique book. Crisp white paper and near-black ink carry nearly everything; one signal green marks what is in force, the current place and the action to take. Red, amber and highlighter yellow appear only where they carry state. Dark is the same register at night, with no tint of its own.
+The console publishes the company's memory the way a government publishes its consolidated law online: a contents of everything a member can reach, each memory set as a citable section, and its standing, author and history in a ruled right margin. It is a modern public register rather than an antique book. Crisp white paper and near-black ink carry nearly everything; one signal green marks what is in force, the current place and the action to take. Red, amber and highlighter yellow appear only where they carry state. Dark is the same register at night, with no tint of its own.
 
 The density is that of a reference site, not a dashboard. A dark masthead band with the signal green along its foot, a contents column on a barely grey panel, and a reading column held to a book measure with the margin beside it. Weight is carried by typographic rank (bold against regular, upright against italic, whole against struck through) and by rules, never by colour fields, cards or badges. Hairline rules, heavier ink rules at the head of a list, dot leaders and version numbers hanging in the gutter do the structural work that boxes and shadows do elsewhere.
 
@@ -308,7 +308,7 @@ A three-part frame. A sticky 60px masthead band (plus its 4px green foot); below
 
 A memory's page is a two-column reading grid: the text column at the 68ch measure and a 256px margin, 56px apart. The head (trail, title, summary, currency line, status box), the text and the history run down the left; the margin (standing, type, author, relations, cite as, actions) is sticky on the right, ruled off by a hairline on its left. At 1181px and wider, version numbers hang in the gutter to the left of the text column.
 
-Pages share two measures, so the right edge holds from page to page: every single-column page (contents, folders, search, sessions, the team, settings, forms and refusals) is 760px; registers (Challenges, the board, the audit log) take up to 1000px.
+Pages share two measures, so the right edge holds from page to page: every single-column page (contents, folders, search, sessions, the company, settings, forms and refusals) is 760px; registers (Challenges, the board, the audit log) take up to 1000px.
 
 Spacing rhythm: 52px above a section heading, 64px above the history, 72px above the colophon; 16 to 24px between items within a section; list rows padded 9 to 17px.
 
@@ -356,7 +356,7 @@ Solid, square and standing on an edge, as GOV.UK draws them.
 - **Checkbox:** 2px ink border, filled green with white tick when checked. **Switch:** field-edge track, green when on.
 
 ### Navigation
-- **Masthead:** the near-black band, 60px, with a 4px Band Green foot; in dark a 1px rule beneath the foot sets the page off from the band. Wordmark (green square, "Shared Memory" 700, the team after a divider), then nav links in second band ink at 0.9375rem/500. Hover draws a 4px band-2 underline; the current page is white, bold italic, with a 4px Band Green underline. Focus fills the item yellow with an ink underline.
+- **Masthead:** the near-black band, 60px, with a 4px Band Green foot; in dark a 1px rule beneath the foot sets the page off from the band. Wordmark (green square, "Shared Memory" 700, the company after a divider), then nav links in second band ink at 0.9375rem/500. Hover draws a 4px band-2 underline; the current page is white, bold italic, with a 4px Band Green underline. Focus fills the item yellow with an ink underline.
 - **Contents tree:** 32px rows on the panel, indenting 14px per level, chevrons turning 90 degrees (180ms). Folders carry tallies in third ink; memory leaves are in Charis SIL; personal leaves in third ink; cancelled leaves struck through. The current row takes the signal wash, bold italic. Keyboard focus fills a row yellow with a 3px ink bar.
 - **Trail:** 0.875rem links underlined in the rule colour, separated by "›".
 - **View switch and filters:** plain text tabs; the selected one is ink, bold, over a 3px ink underline (tabs) or a 3px green underline (filters).

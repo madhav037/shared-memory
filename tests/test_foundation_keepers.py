@@ -88,7 +88,9 @@ def test_a_keeper_of_one_foundation_challenges_another_like_anyone(console: Cons
     assert promote(crew.rae, CENTS)["status"] == "promoted"
 
 
-def test_removing_a_keeper_from_the_team_drops_their_assignments(console: Console, signed_out: ConsoleClient) -> None:
+def test_removing_a_keeper_from_the_company_drops_their_assignments(
+    console: Console, signed_out: ConsoleClient
+) -> None:
     crew = Crew(console, signed_out, 1806)
     crew.assign("emp-kit")
     crew.assign("emp-kit", "decisions")
@@ -134,7 +136,9 @@ def test_only_a_member_who_can_reach_a_restricted_project_is_made_a_keeper(
     assert "can't reach" in refused.json()["message"]
 
 
-def test_leads_and_admins_assign_and_remove_keepers_and_nobody_else(console: Console, signed_out: ConsoleClient) -> None:
+def test_leads_and_admins_assign_and_remove_keepers_and_nobody_else(
+    console: Console, signed_out: ConsoleClient
+) -> None:
     signed_in_owner(console, signed_out, "olive-keepers-1809", 1809)
     lead = signed_in_member(console, signed_out, "emp-2", "lead-keepers-1809", 1810)
     plain = signed_in_member(console, signed_out, "emp-3", "plain-keepers-1809", 1811)
@@ -161,7 +165,12 @@ def test_the_project_lists_each_foundation_with_its_keepers(console: Console, si
     crew = Crew(console, signed_out, 1812)
     assigned = crew.assign("emp-kit", "decisions")
 
-    assert [one["slug"] for one in assigned.json()["foundations"]] == ["architecture", "product", "glossary", "decisions"]
+    assert [one["slug"] for one in assigned.json()["foundations"]] == [
+        "architecture",
+        "product",
+        "glossary",
+        "decisions",
+    ]
     assert keepers(assigned.json(), "decisions") == ["emp-kit"]
     assert keepers(fetch_project(signed_out, crew.project), "architecture") == []
     unknown = signed_out.post_json(f"/api/projects/{crew.project}/foundations/nope/keepers", {"member_id": "emp-kit"})

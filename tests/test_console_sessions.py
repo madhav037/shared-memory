@@ -169,7 +169,7 @@ def test_a_restricted_projects_sessions_stay_inside_its_access_list(
     dana.close()
 
 
-def test_a_member_of_another_team_is_refused_a_projects_sessions(console: Console, signed_out: ConsoleClient) -> None:
+def test_a_member_of_another_company_is_refused_a_projects_sessions(console: Console, signed_out: ConsoleClient) -> None:
     project, olive = a_project(console, signed_out, "olive-sessions-six", 1407)
     state(olive, "Retrying failed webhooks")
     outsider = console.client()
@@ -447,9 +447,7 @@ def test_a_reply_from_the_console_reaches_the_other_session_on_its_next_hook(
     assert "Yes, take the back end." not in heard(dana), "heard once"
 
 
-def test_a_reply_needs_a_session_of_the_members_own_in_the_project(
-    console: Console, signed_out: ConsoleClient
-) -> None:
+def test_a_reply_needs_a_session_of_the_members_own_in_the_project(console: Console, signed_out: ConsoleClient) -> None:
     project, _ = a_project(console, signed_out, "olive-console-no-session", 1442)
     dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
     dana.start()
@@ -547,7 +545,6 @@ def test_an_answer_is_agree_or_refuse_and_a_gate_that_has_ended_takes_none(
     assert dana.edit(RETRY) == {}
 
 
-
 # A reply or an answer from the console is the same operation as the session tool's (ADR-0026), and what the member
 # did there reaches their own session on its next hook (story 38).
 
@@ -625,7 +622,9 @@ def test_what_a_member_did_in_the_console_reaches_their_own_session_once(
     assert "[console]" not in heard(olive), "told once"
 
 
-def test_a_gate_whose_wait_passed_is_recorded_when_the_page_reads_it(console: Console, signed_out: ConsoleClient) -> None:
+def test_a_gate_whose_wait_passed_is_recorded_when_the_page_reads_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
     project, olive = a_project(console, signed_out, "olive-console-timeout", 1454)
     dana = member_session(signed_out, console, project, "emp-2", "Dana Dev")
     state(olive, WEBHOOKS)
@@ -641,7 +640,9 @@ def test_a_gate_whose_wait_passed_is_recorded_when_the_page_reads_it(console: Co
     assert [(event["actor"], event["target"]) for event in timed_out] == [("emp-2", "E1001")]
 
 
-def test_the_handoff_notes_of_sessions_gone_lately_show_on_the_page(console: Console, signed_out: ConsoleClient) -> None:
+def test_the_handoff_notes_of_sessions_gone_lately_show_on_the_page(
+    console: Console, signed_out: ConsoleClient
+) -> None:
     project, olive = a_project(console, signed_out, "olive-console-handoff", 1455)
     dana = member_session(signed_out, console, project, "emp-2", "Dana Dev").as_agent("claude-code")
     state(dana, WEBHOOKS)

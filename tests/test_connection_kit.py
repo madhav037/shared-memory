@@ -31,7 +31,7 @@ from shared_memory.connection import (
 )
 from shared_memory.hooks import AGENTS, CLAUDE_CODE, GEMINI_CLI
 from shared_memory.standby import STAND_BY_SECONDS
-from tests.support import REPO_ROOT, Session, Team, edit_tool, member
+from tests.support import REPO_ROOT, Session, Company, edit_tool, member
 
 
 def by_path(files: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -43,8 +43,8 @@ def test_the_name_each_agents_hooks_send_is_known_as_that_agent(agent: Any) -> N
     assert agent_named(agent.header) == agent.name
 
 
-def test_connecting_a_repository_gives_each_agent_the_files_it_commits(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_connecting_a_repository_gives_each_agent_the_files_it_commits(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     project = created["project_id"]
     files = by_path(created["files"])
 
@@ -54,13 +54,13 @@ def test_connecting_a_repository_gives_each_agent_the_files_it_commits(team: Tea
     assert files[".claude/settings.json"]["agent"] == "Claude Code"
     assert claude["env"] == {"SHARED_MEMORY_PROJECT": project, "SHARED_MEMORY_REPOSITORY": "billing-api"}
     assert files[".codex/config.toml"]["agent"] == "Codex"
-    assert codex["url"] == f"{team.server.url}/mcp"
+    assert codex["url"] == f"{company.server.url}/mcp"
     assert codex["bearer_token_env_var"] == "SHARED_MEMORY_TOKEN"
     assert codex["http_headers"] == {"X-Shared-Memory-Project": project, "X-Shared-Memory-Repository": "billing-api"}
 
 
-def test_every_agent_is_told_in_agents_md_how_to_use_the_projects_memory(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_every_agent_is_told_in_agents_md_how_to_use_the_projects_memory(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
 
     section = by_path(created["files"])["AGENTS.md"]
 
@@ -78,8 +78,8 @@ SYNC = (
 )
 
 
-def test_the_skill_every_agent_reads_is_the_one_claude_code_ships(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_the_skill_every_agent_reads_is_the_one_claude_code_ships(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
 
     skill = by_path(created["files"])[".agents/skills/shared-memory/SKILL.md"]
 
@@ -88,11 +88,11 @@ def test_the_skill_every_agent_reads_is_the_one_claude_code_ships(team: Team) ->
     assert skill["action"] == "create"
 
 
-def test_no_connection_file_carries_a_personal_token(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_no_connection_file_carries_a_personal_token(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
 
     for file in created["files"]:
-        assert team.owner_token not in file["contents"], file["path"]
+        assert company.owner_token not in file["contents"], file["path"]
         assert "smt_" not in file["contents"], file["path"]
 
 
@@ -101,8 +101,8 @@ def mcp_server(file: dict[str, Any], section: str = "mcpServers", name: str = "s
     return server
 
 
-def test_every_agent_with_a_repository_file_is_pointed_at_the_project(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_every_agent_with_a_repository_file_is_pointed_at_the_project(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     project = created["project_id"]
     files = by_path(created["files"])
     expected = {"X-Shared-Memory-Project": project, "X-Shared-Memory-Repository": "billing-api"}
@@ -114,7 +114,7 @@ def test_every_agent_with_a_repository_file_is_pointed_at_the_project(team: Team
     devin = mcp_server(files[".devin/mcp_config.json"])
 
     for server in (vscode, copilot_cli, gemini["mcpServers"]["shared-memory"], cursor, devin):
-        assert server["url"] == f"{team.server.url}/mcp"
+        assert server["url"] == f"{company.server.url}/mcp"
         assert {name: value for name, value in server["headers"].items() if name != "Authorization"} == expected
     assert vscode["headers"]["Authorization"] == "Bearer ${input:shared-memory-token}"
     assert copilot_cli["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
@@ -127,8 +127,8 @@ def test_every_agent_with_a_repository_file_is_pointed_at_the_project(team: Team
     }
 
 
-def test_cline_is_set_up_once_per_project_on_each_members_machine_for_every_repository(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_cline_is_set_up_once_per_project_on_each_members_machine_for_every_repository(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     project = created["project_id"]
 
     cline = next(file for file in created["files"] if file["agent"] == "Cline")
@@ -140,8 +140,8 @@ def test_cline_is_set_up_once_per_project_on_each_members_machine_for_every_repo
     assert all(file["kept_in"] == "repository" for file in created["files"] if file["agent"] != "Cline")
 
 
-def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_runs_on(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_runs_on(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     hooks = tomllib.loads(by_path(created["files"])[".codex/config.toml"]["contents"])["hooks"]
 
     briefing = hooks["SessionStart"][0]["hooks"][0]
@@ -159,9 +159,9 @@ def test_codex_is_briefed_and_recalls_through_the_shell_of_whichever_machine_it_
         (end, "session-end"),
     ):
         assert hook["type"] == "command"
-        assert f"{team.server.url}/hooks/{event}" in hook["command"], event
+        assert f"{company.server.url}/hooks/{event}" in hook["command"], event
         assert "$SHARED_MEMORY_TOKEN" in hook["command"], event
-        assert f"{team.server.url}/hooks/{event}" in hook["command_windows"], event
+        assert f"{company.server.url}/hooks/{event}" in hook["command_windows"], event
         assert "$env:SHARED_MEMORY_TOKEN" in hook["command_windows"], event
     assert "git rev-parse --show-cdup" in before_edit["command_windows"]
 
@@ -172,7 +172,7 @@ POWERSHELLS = [shell for shell in ("pwsh", "powershell") if shutil.which(shell)]
 
 
 def codex_windows_hook(
-    team: Team, files: list[dict[str, Any]], event: str, payload: dict[str, Any], shell: str, cwd: Path
+    company: Company, files: list[dict[str, Any]], event: str, payload: dict[str, Any], shell: str, cwd: Path
 ) -> subprocess.CompletedProcess[str]:
     """Run one of Codex's generated Windows hook commands the way Codex runs it."""
     hooks = tomllib.loads(by_path(files)[".codex/config.toml"]["contents"])["hooks"]
@@ -184,18 +184,18 @@ def codex_windows_hook(
         text=True,
         timeout=60,
         cwd=cwd,
-        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+        env={**os.environ, "SHARED_MEMORY_TOKEN": company.owner_token},
     )
 
 
 @pytest.mark.skipif(not POWERSHELLS, reason="Codex runs its Windows hooks in PowerShell, which isn't here")
 @pytest.mark.parametrize("shell", POWERSHELLS)
-def test_codexs_windows_hooks_brief_a_session_in_powershell(team: Team, tmp_path: Path, shell: str) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
-    pinned(team.owner().in_project(created["project_id"], "billing-api"), "Use pnpm, not npm", "We use pnpm for every package.")
+def test_codexs_windows_hooks_brief_a_session_in_powershell(company: Company, tmp_path: Path, shell: str) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
+    pinned(company.owner().in_project(created["project_id"], "billing-api"), "Use pnpm, not npm", "We use pnpm for every package.")
     payload = {"session_id": "codex-1", "cwd": str(tmp_path), "hook_event_name": "SessionStart", "source": "startup"}
 
-    ran = codex_windows_hook(team, created["files"], "SessionStart", payload, shell, tmp_path)
+    ran = codex_windows_hook(company, created["files"], "SessionStart", payload, shell, tmp_path)
 
     assert ran.returncode == 0, ran.stderr
     assert "Use pnpm, not npm" in json.loads(ran.stdout)["hookSpecificOutput"]["additionalContext"]
@@ -205,9 +205,9 @@ def test_codexs_windows_hooks_brief_a_session_in_powershell(team: Team, tmp_path
 @pytest.mark.skipif(shutil.which("git") is None, reason="the root is git's answer")
 @pytest.mark.parametrize("shell", POWERSHELLS)
 def test_codexs_windows_before_edit_hook_started_in_a_subfolder_locks_from_the_repositorys_root(
-    team: Team, tmp_path: Path, shell: str
+    company: Company, tmp_path: Path, shell: str
 ) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     project = created["project_id"]
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     (tmp_path / "src").mkdir()
@@ -219,20 +219,27 @@ def test_codexs_windows_before_edit_hook_started_in_a_subfolder_locks_from_the_r
         "tool_input": {"command": "*** Begin Patch\n*** Update File: sub.py\n@@\n-a\n+b\n*** End Patch"},
     }
 
-    ran = codex_windows_hook(team, created["files"], "PreToolUse", payload, shell, tmp_path / "src")
+    ran = codex_windows_hook(company, created["files"], "PreToolUse", payload, shell, tmp_path / "src")
 
     assert ran.returncode == 0, ran.stderr
-    dana = member(team, project, "emp-2", "Dana Dev")
+    dana = member(company, project, "emp-2", "Dana Dev")
     held = dana.hook_payload(
         "before-edit",
-        {"session_id": "dana-1", "cwd": str(tmp_path), "hook_event_name": "PreToolUse", **edit_tool(str(tmp_path / "src" / "sub.py"))},
+        {
+            "session_id": "dana-1",
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            **edit_tool(str(tmp_path / "src" / "sub.py")),
+        },
     )
     assert held["hookSpecificOutput"]["permissionDecision"] == "deny", "Codex's lock is named src/sub.py"
 
 
 @pytest.mark.skipif(not POWERSHELLS, reason="Codex runs its Windows hooks in PowerShell, which isn't here")
 @pytest.mark.parametrize("shell", POWERSHELLS)
-def test_codexs_windows_hooks_leave_the_session_alone_when_the_server_is_down(team: Team, tmp_path: Path, shell: str) -> None:
+def test_codexs_windows_hooks_leave_the_session_alone_when_the_server_is_down(
+    company: Company, tmp_path: Path, shell: str
+) -> None:
     with socket.socket() as closed:
         closed.bind(("127.0.0.1", 0))
         down = f"http://127.0.0.1:{closed.getsockname()[1]}"
@@ -241,14 +248,14 @@ def test_codexs_windows_hooks_leave_the_session_alone_when_the_server_is_down(te
     )
     payload = {"session_id": "codex-1", "cwd": str(tmp_path), "hook_event_name": "UserPromptSubmit", "prompt": "hi"}
 
-    ran = codex_windows_hook(team, files, "UserPromptSubmit", payload, shell, tmp_path)
+    ran = codex_windows_hook(company, files, "UserPromptSubmit", payload, shell, tmp_path)
 
     assert ran.returncode == 0, ran.stderr
     assert ran.stdout.strip() == ""
 
 
-def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
     hooks = json.loads(files[".gemini/settings.json"]["contents"])["hooks"]
     script = files[".gemini/hooks/shared-memory.mjs"]
@@ -263,11 +270,11 @@ def test_gemini_runs_both_its_hooks_through_one_script_that_suits_every_machine(
     assert "GEMINI_PROJECT_DIR" in script["contents"]
     assert (script["agent"], script["action"]) == ("Gemini CLI", "create")
     assert "process.env.SHARED_MEMORY_TOKEN" in script["contents"]
-    assert f"{team.server.url}/hooks" in script["contents"]
+    assert f"{company.server.url}/hooks" in script["contents"]
 
 
-def test_copilot_cli_is_briefed_by_the_server_itself_with_no_shell_command(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_copilot_cli_is_briefed_by_the_server_itself_with_no_shell_command(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     file = by_path(created["files"])[".github/hooks/shared-memory.json"]
     hooks = json.loads(file["contents"])["hooks"]
 
@@ -275,31 +282,31 @@ def test_copilot_cli_is_briefed_by_the_server_itself_with_no_shell_command(team:
 
     assert file["agent"] == "GitHub Copilot"
     assert briefing["type"] == "http"
-    assert briefing["url"] == f"{team.server.url}/hooks/session-start?format=copilot-cli"
+    assert briefing["url"] == f"{company.server.url}/hooks/session-start?format=copilot-cli"
     assert briefing["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
     assert briefing["allowedEnvVars"] == ["SHARED_MEMORY_TOKEN"]
     assert "userPromptSubmitted" not in hooks
 
 
-def test_copilot_cli_asks_the_server_before_its_edit_tools_and_as_a_session_ends(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_copilot_cli_asks_the_server_before_its_edit_tools_and_as_a_session_ends(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     hooks = json.loads(by_path(created["files"])[".github/hooks/shared-memory.json"]["contents"])["hooks"]
 
     (before_edit,), (after,), (end,) = hooks["preToolUse"], hooks["postToolUse"], hooks["sessionEnd"]
 
     assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
-    assert after["url"] == f"{team.server.url}/hooks/after-tool?format=copilot-cli"
+    assert after["url"] == f"{company.server.url}/hooks/after-tool?format=copilot-cli"
     assert (before_edit["type"], end["type"]) == ("http", "http"), "a hook that posts lets the edit through on failure"
-    assert before_edit["url"] == f"{team.server.url}/hooks/before-edit?format=copilot-cli"
+    assert before_edit["url"] == f"{company.server.url}/hooks/before-edit?format=copilot-cli"
     assert before_edit["timeoutSec"] == 3
-    assert end["url"] == f"{team.server.url}/hooks/session-end?format=copilot-cli"
+    assert end["url"] == f"{company.server.url}/hooks/session-end?format=copilot-cli"
     for hook in (before_edit, end):
         assert hook["headers"]["Authorization"] == "Bearer ${SHARED_MEMORY_TOKEN}"
         assert hook["headers"]["X-Shared-Memory-Repository"] == "billing-api"
 
 
-def test_an_agent_that_reads_claude_codes_settings_runs_each_hook_once(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_an_agent_that_reads_claude_codes_settings_runs_each_hook_once(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
     devin = json.loads(files[".devin/hooks.v1.json"]["contents"])
     cursor = json.loads(files[".cursor/hooks.json"]["contents"])["hooks"]
@@ -326,8 +333,8 @@ BEFORE_EDIT_HOOKS = {
 }
 
 
-def test_every_agent_that_can_refuse_an_edit_has_the_before_edit_hook_in_its_own_file(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_every_agent_that_can_refuse_an_edit_has_the_before_edit_hook_in_its_own_file(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for agent, (path, gives_up) in BEFORE_EDIT_HOOKS.items():
@@ -335,12 +342,12 @@ def test_every_agent_that_can_refuse_an_edit_has_the_before_edit_hook_in_its_own
         hooked = files[path]["contents"] + files[".gemini/settings.json"]["contents"] * (agent == "Gemini CLI")
         assert "before-edit" in hooked, agent
         assert gives_up in files[path]["contents"], agent
-        assert team.owner_token not in files[path]["contents"], agent
+        assert company.owner_token not in files[path]["contents"], agent
     assert "-TimeoutSec 3 " in files[".clinerules/hooks/PreToolUse.ps1"]["contents"]
 
 
-def test_an_agent_with_no_before_edit_hook_is_told_its_locks_are_guidance_only(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_an_agent_with_no_before_edit_hook_is_told_its_locks_are_guidance_only(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     assert "before-edit" not in files[".vscode/mcp.json"]["contents"]
@@ -348,8 +355,10 @@ def test_an_agent_with_no_before_edit_hook_is_told_its_locks_are_guidance_only(t
     assert "locks are guidance only" in files[".cursor/hooks.json"]["how"], "on Windows, where Cursor's hooks don't run"
 
 
-def test_the_member_connecting_an_agent_with_no_hooks_is_told_sessions_that_talk_are_limited_there(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_the_member_connecting_an_agent_with_no_hooks_is_told_sessions_that_talk_are_limited_there(
+    company: Company,
+) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for path, agent in ((".vscode/mcp.json", "Copilot in VS Code"), (".cursor/hooks.json", "Cursor on Windows")):
@@ -359,8 +368,8 @@ def test_the_member_connecting_an_agent_with_no_hooks_is_told_sessions_that_talk
     assert "Sessions that talk" not in files[".github/hooks/shared-memory.json"]["how"], "Copilot CLI has hooks"
 
 
-def test_an_agent_with_no_hooks_is_told_to_respect_a_gate_itself(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_an_agent_with_no_hooks_is_told_to_respect_a_gate_itself(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
@@ -371,8 +380,8 @@ def test_an_agent_with_no_hooks_is_told_to_respect_a_gate_itself(team: Team) -> 
         assert "`notices`" in said, path
 
 
-def test_only_an_agent_with_no_before_edit_hook_is_told_to_take_a_lock_before_every_edit(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_only_an_agent_with_no_before_edit_hook_is_told_to_take_a_lock_before_every_edit(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
     hooked = "Claude Code, Codex, Copilot CLI, Gemini CLI, Cursor on macOS and Linux, Devin Desktop and Cline"
     unhooked = "In any other coding agent (Copilot in VS Code, Cursor on Windows), call `take_lock`"
@@ -384,18 +393,18 @@ def test_only_an_agent_with_no_before_edit_hook_is_told_to_take_a_lock_before_ev
         assert said.count("before you edit") == 1, path
 
 
-def test_cursor_asks_the_server_before_its_write_tool_and_as_a_session_ends(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_cursor_asks_the_server_before_its_write_tool_and_as_a_session_ends(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     hooks = json.loads(by_path(created["files"])[".cursor/hooks.json"]["contents"])["hooks"]
 
     (before_edit,), (after,), (end,) = hooks["preToolUse"], hooks["postToolUse"], hooks["sessionEnd"]
 
     assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
-    assert f"{team.server.url}/hooks/after-tool?format=cursor" in after["command"]
-    assert f"{team.server.url}/hooks/before-edit?format=cursor" in before_edit["command"]
+    assert f"{company.server.url}/hooks/after-tool?format=cursor" in after["command"]
+    assert f"{company.server.url}/hooks/before-edit?format=cursor" in before_edit["command"]
     assert before_edit["command"].endswith("|| echo '{}'"), "Cursor blocks a tool whose hook answers nothing readable"
     assert before_edit["timeout"] == 4
-    assert f"{team.server.url}/hooks/session-end?format=cursor" in end["command"]
+    assert f"{company.server.url}/hooks/session-end?format=cursor" in end["command"]
 
 
 def pinned(session: Session, title: str, body: str) -> str:
@@ -404,16 +413,18 @@ def pinned(session: Session, title: str, body: str) -> str:
     result = session.call("promote", path=personal, level="project")
     if result["status"] == "similar_memories":
         keep = {similar["path"]: "keep_both" for similar in result["similar"]}
-        result = session.call("promote", path=personal, level="project", reference=result["reference"], resolutions=keep)
+        result = session.call(
+            "promote", path=personal, level="project", reference=result["reference"], resolutions=keep
+        )
     path: str = result["path"]
     session.call("pin", path=path)
     return path
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
-def test_the_script_geminis_hooks_run_brings_back_the_briefing(team: Team, tmp_path: Path) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
-    session = team.owner().in_project(created["project_id"], "billing-api")
+def test_the_script_geminis_hooks_run_brings_back_the_briefing(company: Company, tmp_path: Path) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
+    session = company.owner().in_project(created["project_id"], "billing-api")
     pinned(session, "Use pnpm, not npm", "We use pnpm for every package.")
     script = tmp_path / "shared-memory.mjs"
     script.write_text(by_path(created["files"])[".gemini/hooks/shared-memory.mjs"]["contents"], encoding="utf-8")
@@ -424,7 +435,7 @@ def test_the_script_geminis_hooks_run_brings_back_the_briefing(team: Team, tmp_p
         capture_output=True,
         text=True,
         timeout=60,
-        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+        env={**os.environ, "SHARED_MEMORY_TOKEN": company.owner_token},
     )
 
     assert ran.returncode == 0, ran.stderr
@@ -432,11 +443,13 @@ def test_the_script_geminis_hooks_run_brings_back_the_briefing(team: Team, tmp_p
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Gemini CLI's hooks run on node, which isn't installed here")
-def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_server(team: Team, tmp_path: Path) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_server(
+    company: Company, tmp_path: Path
+) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     script = tmp_path / "shared-memory.mjs"
     contents = by_path(created["files"])[".gemini/hooks/shared-memory.mjs"]["contents"]
-    script.write_text(contents.replace(team.server.url, "http://127.0.0.1:1"), encoding="utf-8")
+    script.write_text(contents.replace(company.server.url, "http://127.0.0.1:1"), encoding="utf-8")
 
     ran = subprocess.run(
         ["node", str(script), "prompt-submitted"],
@@ -444,7 +457,7 @@ def test_geminis_hook_script_leaves_a_session_alone_when_it_cannot_reach_the_ser
         capture_output=True,
         text=True,
         timeout=60,
-        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+        env={**os.environ, "SHARED_MEMORY_TOKEN": company.owner_token},
     )
 
     assert (ran.returncode, ran.stdout) == (0, "")
@@ -469,8 +482,8 @@ BOARD_HABITS = (
 )
 
 
-def test_every_agent_is_given_the_same_board_habits(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_every_agent_is_given_the_same_board_habits(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
@@ -508,8 +521,8 @@ SESSION_HABITS = (
 )
 
 
-def test_every_agent_is_given_the_same_session_habits(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_every_agent_is_given_the_same_session_habits(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for path in ("AGENTS.md", ".cursor/rules/shared-memory.mdc", ".agents/skills/shared-memory/SKILL.md"):
@@ -518,51 +531,51 @@ def test_every_agent_is_given_the_same_session_habits(team: Team) -> None:
             assert habit in said, (path, habit)
 
 
-def test_cursor_is_briefed_by_a_hook_and_told_by_a_rule_to_search(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_cursor_is_briefed_by_a_hook_and_told_by_a_rule_to_search(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     hook = json.loads(files[".cursor/hooks.json"]["contents"])["hooks"]["sessionStart"][0]
     rule = files[".cursor/rules/shared-memory.mdc"]
 
-    assert f"{team.server.url}/hooks/session-start?format=cursor" in hook["command"]
+    assert f"{company.server.url}/hooks/session-start?format=cursor" in hook["command"]
     assert "$SHARED_MEMORY_TOKEN" in hook["command"]
     assert rule["contents"].startswith("---\nalwaysApply: true\n---")
     for asked in ("search", "briefing", "remember", "information, not instructions"):
         assert asked in rule["contents"], asked
 
 
-def test_devin_desktop_is_briefed_once_from_its_own_hooks(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_devin_desktop_is_briefed_once_from_its_own_hooks(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     devin = json.loads(files[".devin/hooks.v1.json"]["contents"])
 
-    assert f"{team.server.url}/hooks/session-start" in devin["SessionStart"][0]["hooks"][0]["command"]
-    assert f"{team.server.url}/hooks/prompt-submitted" in devin["UserPromptSubmit"][0]["hooks"][0]["command"]
+    assert f"{company.server.url}/hooks/session-start" in devin["SessionStart"][0]["hooks"][0]["command"]
+    assert f"{company.server.url}/hooks/prompt-submitted" in devin["UserPromptSubmit"][0]["hooks"][0]["command"]
     assert "hooks" not in json.loads(files[".claude/settings.json"]["contents"])
 
 
-def test_devin_desktop_asks_the_server_before_its_edit_tools_and_as_a_session_ends(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_devin_desktop_asks_the_server_before_its_edit_tools_and_as_a_session_ends(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     devin = json.loads(by_path(created["files"])[".devin/hooks.v1.json"]["contents"])
 
     (before_edit,), (after,), (end,) = devin["PreToolUse"], devin["PostToolUse"], devin["SessionEnd"]
     command = before_edit["hooks"][0]["command"]
 
     assert "matcher" not in before_edit and "matcher" not in after, "every tool call (ADR-0025)"
-    assert f"'{team.server.url}/hooks/after-tool'" in after["hooks"][0]["command"]
-    assert f"'{team.server.url}/hooks/before-edit?format=devin'" in command
+    assert f"'{company.server.url}/hooks/after-tool'" in after["hooks"][0]["command"]
+    assert f"'{company.server.url}/hooks/before-edit?format=devin'" in command
     assert f'-H "X-Shared-Memory-Root: {repository_root("DEVIN_PROJECT_DIR")}"' in command, (
         "Devin's payload names no working folder, and the folder it was started in may be below the repository's root"
     )
     assert 'git -C "$DEVIN_PROJECT_DIR" rev-parse --show-cdup' in command
     assert before_edit["hooks"][0]["timeout"] == 4
-    assert f"{team.server.url}/hooks/session-end" in end["hooks"][0]["command"]
+    assert f"{company.server.url}/hooks/session-end" in end["hooks"][0]["command"]
 
 
-def test_cline_gets_a_hook_script_for_each_shell_it_runs_them_in(team: Team) -> None:
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
+def test_cline_gets_a_hook_script_for_each_shell_it_runs_them_in(company: Company) -> None:
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
     files = by_path(created["files"])
 
     for event, endpoint in (
@@ -576,16 +589,16 @@ def test_cline_gets_a_hook_script_for_each_shell_it_runs_them_in(team: Team) -> 
         windows = files[f".clinerules/hooks/{event}.ps1"]
 
         assert posix["contents"].startswith("#!/bin/sh"), event
-        assert f"{team.server.url}/hooks/{endpoint}?format=cline" in posix["contents"], event
+        assert f"{company.server.url}/hooks/{endpoint}?format=cline" in posix["contents"], event
         assert "$SHARED_MEMORY_TOKEN" in posix["contents"], event
-        assert f"{team.server.url}/hooks/{endpoint}?format=cline" in windows["contents"], event
+        assert f"{company.server.url}/hooks/{endpoint}?format=cline" in windows["contents"], event
         assert "$env:SHARED_MEMORY_TOKEN" in windows["contents"], event
 
 
-def cline_hook_answer(team: Team, tmp_path: Path, shell: list[str], name: str) -> dict[str, Any]:
+def cline_hook_answer(company: Company, tmp_path: Path, shell: list[str], name: str) -> dict[str, Any]:
     """Run one of Cline's generated hook scripts the way Cline runs it, and return what it printed."""
-    created = team.owner().call("create_project", name="Billing", repository="billing-api")
-    session = team.owner().in_project(created["project_id"], "billing-api")
+    created = company.owner().call("create_project", name="Billing", repository="billing-api")
+    session = company.owner().in_project(created["project_id"], "billing-api")
     pinned(session, "Use pnpm, not npm", "We use pnpm for every package.")
     script = tmp_path / name
     script.write_text(by_path(created["files"])[f".clinerules/hooks/{name}"]["contents"], encoding="utf-8")
@@ -596,7 +609,7 @@ def cline_hook_answer(team: Team, tmp_path: Path, shell: list[str], name: str) -
         capture_output=True,
         text=True,
         timeout=60,
-        env={**os.environ, "SHARED_MEMORY_TOKEN": team.owner_token},
+        env={**os.environ, "SHARED_MEMORY_TOKEN": company.owner_token},
     )
 
     assert ran.returncode == 0, ran.stderr
@@ -605,16 +618,16 @@ def cline_hook_answer(team: Team, tmp_path: Path, shell: list[str], name: str) -
 
 
 @pytest.mark.skipif(shutil.which("sh") is None, reason="Cline runs these hooks in a POSIX shell, which isn't here")
-def test_clines_hook_script_briefs_a_task_without_cancelling_it(team: Team, tmp_path: Path) -> None:
-    answer = cline_hook_answer(team, tmp_path, ["sh"], "TaskStart")
+def test_clines_hook_script_briefs_a_task_without_cancelling_it(company: Company, tmp_path: Path) -> None:
+    answer = cline_hook_answer(company, tmp_path, ["sh"], "TaskStart")
 
     assert answer["cancel"] is False
     assert "Use pnpm, not npm" in answer["contextModification"]
 
 
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="Cline runs its Windows hooks in PowerShell, which isn't here")
-def test_clines_windows_hook_script_briefs_a_task_without_cancelling_it(team: Team, tmp_path: Path) -> None:
-    answer = cline_hook_answer(team, tmp_path, ["pwsh", "-NoProfile", "-File"], "TaskStart.ps1")
+def test_clines_windows_hook_script_briefs_a_task_without_cancelling_it(company: Company, tmp_path: Path) -> None:
+    answer = cline_hook_answer(company, tmp_path, ["pwsh", "-NoProfile", "-File"], "TaskStart.ps1")
 
     assert answer["cancel"] is False
     assert "Use pnpm, not npm" in answer["contextModification"]
@@ -830,7 +843,11 @@ def recording_server() -> Iterator[tuple[str, list[dict[str, str]]]]:
 def kit_files_for(server_url: str) -> dict[str, str]:
     """The connection kit's files by path, for a server at this address."""
     files = connection_kit(
-        server_url=server_url, marketplace="m", project_id="billing-3f2a", project_name="Billing", repository="billing-api"
+        server_url=server_url,
+        marketplace="m",
+        project_id="billing-3f2a",
+        project_name="Billing",
+        repository="billing-api",
     )
     return {file["path"]: file["contents"] for file in files}
 
@@ -987,7 +1004,9 @@ WARNING_HABITS = (
 )
 
 
-def test_the_skill_tells_the_agent_to_show_a_warning_word_for_word_first_and_take_a_reply_word_as_the_members_decision() -> None:
+def test_the_skill_tells_the_agent_to_show_a_warning_word_for_word_first_and_take_a_reply_word_as_the_members_decision() -> (
+    None
+):
     said = " ".join(claude_code_skill().split())
 
     for habit in WARNING_HABITS:
@@ -1055,7 +1074,7 @@ def claude_code_session_start_hook() -> str:
 
 
 #: A token and an address with the characters a shell treats specially, which must come back exactly.
-AWKWARD_TOKEN = "smt_it's \"odd\" $HOME `id` \\ ; | & * ? \t end"
+AWKWARD_TOKEN = 'smt_it\'s "odd" $HOME `id` \\ ; | & * ? \t end'
 AWKWARD_SERVER_URL = "http://127.0.0.1:1/a b'c$d"
 SESSION_START = json.dumps({"session_id": "test-session", "hook_event_name": "SessionStart", "source": "startup"})
 
@@ -1065,7 +1084,9 @@ def recording_curl(folder: Path) -> dict[str, str]:
     shims = folder / "bin"
     shims.mkdir()
     curl = shims / "curl"
-    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > /dev/null\necho \'{}\'\n', encoding="utf-8")
+    curl.write_text(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$SEEN/arguments\"\ncat > /dev/null\necho '{}'\n", encoding="utf-8"
+    )
     curl.chmod(0o755)
     return {"PATH": f"{shims}{os.pathsep}{os.environ['PATH']}", "SEEN": str(folder)}
 
@@ -1173,7 +1194,9 @@ def kit_how() -> dict[str, str]:
 
 
 @pytest.mark.parametrize("agent", list(STANDS_BY_IN_THE_BACKGROUND))
-def test_the_connect_output_of_an_agent_that_may_be_woken_names_the_background_command_then_the_tool(agent: str) -> None:
+def test_the_connect_output_of_an_agent_that_may_be_woken_names_the_background_command_then_the_tool(
+    agent: str,
+) -> None:
     how = kit_how()[STANDS_BY_IN_THE_BACKGROUND[agent]]
 
     assert f"{agent} stands by with the background command" in how
@@ -1182,7 +1205,9 @@ def test_the_connect_output_of_an_agent_that_may_be_woken_names_the_background_c
 
 
 @pytest.mark.parametrize("agent", list(STANDS_BY_WITH_THE_TOOL))
-def test_the_connect_output_of_a_tool_agent_names_the_stand_by_tool_and_the_length_its_timeout_allows(agent: str) -> None:
+def test_the_connect_output_of_a_tool_agent_names_the_stand_by_tool_and_the_length_its_timeout_allows(
+    agent: str,
+) -> None:
     path, seconds = STANDS_BY_WITH_THE_TOOL[agent]
 
     how = kit_how()[path]

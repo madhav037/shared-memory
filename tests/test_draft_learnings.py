@@ -20,7 +20,7 @@ from shared_memory.config import DRAFT_LEARNING_DAYS, DRAFT_LEARNING_MOST, Setti
 from shared_memory.embeddings import FastEmbedEmbedder
 from shared_memory.fence import escape
 from tests.support import (
-    REPO_ROOT, Console, ConsoleClient, RunningServer, Session, Team, ToolRefused, member, new_team, signed_in_owner,
+    REPO_ROOT, Console, ConsoleClient, RunningServer, Session, Company, ToolRefused, member, new_company, signed_in_owner,
 )  # fmt: skip
 from tests.test_card_claims import led_by_dana
 from tests.test_console_board import a_board
@@ -169,9 +169,9 @@ def test_a_confirmed_draft_learning_cannot_be_confirmed_again(dana: Session) -> 
     refused = dana.refusal("confirm_draft_learning", id=draft_learning)
 
     assert "already confirmed" in refused and saved in refused
-    assert [each["path"] for each in dana.call("search", query="tax rounded per line", level="personal")["results"]] == [
-        saved
-    ], "saved once"
+    assert [
+        each["path"] for each in dana.call("search", query="tax rounded per line", level="personal")["results"]
+    ] == [saved], "saved once"
     assert "already confirmed" in dana.refusal("decline_draft_learning", id=draft_learning)
 
 
@@ -238,8 +238,8 @@ def few(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -> Iter
 
 
 def test_draft_learning_limits_come_from_settings(few: RunningServer) -> None:
-    team = new_team(few)
-    dana = member(team, team.owner().call("create_project", name="Billing")["project_id"], "emp-2", "Dana Dev")
+    company = new_company(few)
+    dana = member(company, company.owner().call("create_project", name="Billing")["project_id"], "emp-2", "Dana Dev")
     assert Settings.from_env({}).draft_learning_most == DRAFT_LEARNING_MOST
     assert Settings.from_env({}).draft_learning_days == DRAFT_LEARNING_DAYS
     assert Settings.from_env({"SHARED_MEMORY_DRAFT_LEARNING_MOST": "5"}).draft_learning_most == 5
@@ -333,8 +333,10 @@ def test_a_draft_learning_for_a_card_this_project_doesnt_have_is_refused(dana: S
     ), "the refused one kept nothing"
 
 
-def test_a_lead_moving_another_members_card_to_done_is_not_asked(team: Team, dana: Session, owner: Session) -> None:
-    led, cole, _ = led_by_dana(team, dana)
+def test_a_lead_moving_another_members_card_to_done_is_not_asked(
+    company: Company, dana: Session, owner: Session
+) -> None:
+    led, cole, _ = led_by_dana(company, dana)
     number = cole.call("add_card", title="Retry failed webhooks")["number"]
     cole.call("claim_card", number=number)
     dana.call("claim_card", number=dana.call("add_card", title="Split the invoice module")["number"])

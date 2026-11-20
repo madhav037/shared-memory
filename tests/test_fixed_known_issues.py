@@ -10,7 +10,7 @@ import pytest
 
 from shared_memory.errors import Refused
 from shared_memory.lifecycle import Lifecycle
-from tests.support import Session, Team, added_context
+from tests.support import Session, Company, added_context
 from tests.test_card_claims import led_by_dana, the_card
 from tests.test_known_issues import FLAKY_UPLOADS
 
@@ -29,13 +29,13 @@ def fixed(session: Session, issue: dict[str, str]) -> tuple[str, int]:
     return result["path"], result["card"]
 
 
-def test_moving_the_card_to_done_retires_your_own_known_issue_in_one_commit(team: Team, owner: Session) -> None:
+def test_moving_the_card_to_done_retires_your_own_known_issue_in_one_commit(company: Company, owner: Session) -> None:
     path, number = fixed(owner, FLAKY_UPLOADS)
 
     moved = owner.call("update_card", number=number, column="done")
 
     subject = subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), "log", "-1", "--format=%s"],
+        ["git", "-C", str(company.server.settings.memory_root), "log", "-1", "--format=%s"],
         capture_output=True,
         text=True,
         check=True,
@@ -186,8 +186,8 @@ def test_a_card_moved_anywhere_but_done_retires_nothing(owner: Session) -> None:
     assert owner.call("read", path=path)["status"] == "active"
 
 
-def test_deleting_a_linked_card_leaves_the_known_issue_and_tells_the_projects_leads(team: Team, dana: Session) -> None:
-    lead, cole, _ = led_by_dana(team, dana)
+def test_deleting_a_linked_card_leaves_the_known_issue_and_tells_the_projects_leads(company: Company, dana: Session) -> None:
+    lead, cole, _ = led_by_dana(company, dana)
     path, number = fixed(cole, FLAKY_UPLOADS)
     added_context(lead.start())
 
@@ -202,8 +202,8 @@ def test_deleting_a_linked_card_leaves_the_known_issue_and_tells_the_projects_le
     assert "deleted card" not in added_context(cole.start())
 
 
-def test_deleting_a_card_with_no_known_issues_tells_no_one(team: Team, dana: Session) -> None:
-    lead, cole, _ = led_by_dana(team, dana)
+def test_deleting_a_card_with_no_known_issues_tells_no_one(company: Company, dana: Session) -> None:
+    lead, cole, _ = led_by_dana(company, dana)
     number = cole.call("add_card", title="Split the invoice module")["number"]
     added_context(lead.start())
 

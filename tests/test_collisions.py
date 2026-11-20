@@ -23,7 +23,7 @@ from tests.support import (
     WORKING_FOLDER,
     RunningServer,
     Session,
-    Team,
+    Company,
     TestClock,
     added_context,
     fresh_database,
@@ -208,10 +208,10 @@ def test_a_refused_take_leaves_the_warning_waiting(owner: Session, dana: Session
 
 
 def test_a_session_back_from_idle_with_no_prompt_hook_is_told_in_the_result_of_its_next_tool_call(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     state(owner, WEBHOOKS)
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     back = take(owner)
 
@@ -296,10 +296,10 @@ def test_a_session_that_has_ended_warns_nobody(owner: Session, dana: Session) ->
 
 
 def test_a_session_gone_idle_warns_nobody_and_is_not_warned_when_it_comes_back(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     state(dana, RETRIES)
-    team.server.clock.advance(minutes=30)
+    company.server.clock.advance(minutes=30)
     state(owner, WEBHOOKS)
 
     while_idle = warnings(owner)

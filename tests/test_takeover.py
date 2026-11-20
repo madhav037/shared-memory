@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tests.support import Session, Team, ToolRefused, added_context, member
+from tests.support import Session, Company, ToolRefused, added_context, member
 from tests.test_locks import FILE, refused, release, take
 
 OTHER_FILE = "src/invoices.py"
@@ -15,8 +15,8 @@ HAIKU = "write a haiku about cats"
 
 
 @pytest.fixture
-def erin(team: Team, project: str) -> Session:
-    return member(team, project, "emp-4", "Erin Eng")
+def erin(company: Company, project: str) -> Session:
+    return member(company, project, "emp-4", "Erin Eng")
 
 
 def take_over(session: Session, path: str = FILE, **more: Any) -> dict[str, Any]:
@@ -43,11 +43,11 @@ def test_a_takeover_of_a_file_another_session_holds_makes_the_caller_its_holder(
 
 
 def test_the_old_holders_next_take_of_the_file_is_refused_with_the_new_holders_details(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     take(dana)
     take_over(cole.as_agent("claude-code"))
-    team.server.clock.advance(minutes=3)
+    company.server.clock.advance(minutes=3)
 
     refusal = refused(dana)
 
@@ -185,10 +185,10 @@ def test_a_takeover_of_a_free_file_just_takes_the_lock_and_tells_nobody(dana: Se
 
 
 def test_a_takeover_of_a_file_the_session_already_holds_keeps_the_lock_and_tells_nobody(
-    team: Team, dana: Session, cole: Session
+    company: Company, dana: Session, cole: Session
 ) -> None:
     first = take(dana)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     kept = take_over(dana)
 
@@ -199,9 +199,9 @@ def test_a_takeover_of_a_file_the_session_already_holds_keeps_the_lock_and_tells
     assert "Dana Dev" in refused(cole)
 
 
-def test_a_takeover_of_a_file_whose_holder_went_idle_tells_nobody(team: Team, dana: Session, cole: Session) -> None:
+def test_a_takeover_of_a_file_whose_holder_went_idle_tells_nobody(company: Company, dana: Session, cole: Session) -> None:
     take(dana)
-    team.server.clock.advance(minutes=31)
+    company.server.clock.advance(minutes=31)
 
     taken = take_over(cole)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from tests.support import NPM, PNPM, Session, Team
+from tests.support import NPM, PNPM, Session, Company
 
 
 CENTS = {
@@ -38,11 +38,11 @@ def test_a_memory_with_nothing_similar_is_promoted_into_project_memory_at_once(o
     assert "no memory" in owner.refusal("read", path=personal)
 
 
-def test_team_memory_is_visible_from_every_project(team: Team, owner: Session) -> None:
-    path = promoted(owner, CENTS, level="team")
-    other_project = team.owner().call("create_project", name="Payments")["project_id"]
+def test_company_memory_is_visible_from_every_project(company: Company, owner: Session) -> None:
+    path = promoted(owner, CENTS, level="company")
+    other_project = company.owner().call("create_project", name="Payments")["project_id"]
 
-    results = team.owner().in_project(other_project).call("search", query="how are money amounts stored")["results"]
+    results = company.owner().in_project(other_project).call("search", query="how are money amounts stored")["results"]
 
     assert path.startswith("company/conventions/")
     assert (results[0]["path"], results[0]["level"]) == (path, "company")
@@ -121,12 +121,12 @@ def test_promoting_another_members_personal_memory_is_refused(owner: Session, da
     assert "your own personal memory" in owner.refusal("promote", path=danas, level="project")
 
 
-def test_promotion_keeps_the_topic_and_is_one_commit(team: Team, owner: Session) -> None:
+def test_promotion_keeps_the_topic_and_is_one_commit(company: Company, owner: Session) -> None:
     personal = remember(owner, CENTS, topic="Money")
     result = owner.call("promote", path=personal, level="project")
 
     changed = subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), "show", "--name-status", "--format=%s", "HEAD"],
+        ["git", "-C", str(company.server.settings.memory_root), "show", "--name-status", "--format=%s", "HEAD"],
         capture_output=True,
         text=True,
         check=True,
@@ -134,8 +134,8 @@ def test_promotion_keeps_the_topic_and_is_one_commit(team: Team, owner: Session)
 
     assert result["path"].endswith("/shared/conventions/money/money-amounts.md")
     assert changed.startswith("Promote: Money amounts")
-    assert f"{team.code}/{personal}" in changed
-    assert f"{team.code}/{result['path']}" in changed
+    assert f"{company.code}/{personal}" in changed
+    assert f"{company.code}/{result['path']}" in changed
 
 
 def test_promoted_memory_can_no_longer_be_edited_or_deleted(owner: Session) -> None:

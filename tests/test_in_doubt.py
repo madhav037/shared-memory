@@ -27,7 +27,7 @@ from tests.support import (
     added_context,
     fresh_database,
     member,
-    new_team,
+    new_company,
     promote_keeping_both,
 )
 
@@ -94,15 +94,15 @@ def doubt_server(server: RunningServer, tmp_path_factory: pytest.TempPathFactory
 
 
 class Billing:
-    """A team with a Billing project, its owner and three members, each with a session in Billing."""
+    """A company with a Billing project, its owner and three members, each with a session in Billing."""
 
     def __init__(self, server: RunningServer) -> None:
-        team = new_team(server)
-        self.project = team.owner().call("create_project", name="Billing")["project_id"]
-        self.owner = team.owner().in_project(self.project, "billing-api")
-        self.dana = member(team, self.project, "emp-2", "Dana Dev")
-        self.cole = member(team, self.project, "emp-3", "Cole Coder")
-        self.frank = member(team, self.project, "emp-5", "Frank Fixer")
+        company = new_company(server)
+        self.project = company.owner().call("create_project", name="Billing")["project_id"]
+        self.owner = company.owner().in_project(self.project, "billing-api")
+        self.dana = member(company, self.project, "emp-2", "Dana Dev")
+        self.cole = member(company, self.project, "emp-3", "Cole Coder")
+        self.frank = member(company, self.project, "emp-5", "Frank Fixer")
 
     def doubt(self, path: str) -> int:
         """Three members say the memory misled them, and its author says it contradicts the code."""

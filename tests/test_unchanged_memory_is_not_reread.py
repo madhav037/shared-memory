@@ -13,13 +13,13 @@ import pytest
 
 from shared_memory.memory import Memory
 from shared_memory.store import MemoryStore
-from tests.support import NPM, Session, Team, promote_now
+from tests.support import NPM, Session, Company, promote_now
 
 
 @pytest.fixture
-def member(team: Team) -> Session:
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    return team.owner().in_project(project, "billing-api")
+def member(company: Company) -> Session:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    return company.owner().in_project(project, "billing-api")
 
 
 class Parses:
@@ -122,11 +122,11 @@ def test_a_retired_memory_reads_as_retired_straight_away(member: Session) -> Non
     assert listed[path] == "retired"
 
 
-def test_an_edit_that_fails_and_is_undone_reads_as_it_was(team: Team, member: Session) -> None:
+def test_an_edit_that_fails_and_is_undone_reads_as_it_was(company: Company, member: Session) -> None:
     path = remember(member, "Edited and undone", "As first saved.")
     assert member.call("read", path=path)["summary"] == "As first saved."
     # main held by a process that died holding it, so the edit fails once its file is written.
-    lock = team.server.settings.memory_root / ".git" / "refs" / "heads" / "main.lock"
+    lock = company.server.settings.memory_root / ".git" / "refs" / "heads" / "main.lock"
     lock.write_text("")
     try:
         refusal = member.refusal("edit_memory", path=path, summary="Never landed.")
@@ -138,10 +138,10 @@ def test_an_edit_that_fails_and_is_undone_reads_as_it_was(team: Team, member: Se
     assert summaries(member)[path] == "As first saved."
 
 
-def test_a_file_changed_on_disk_outside_the_server_is_noticed(team: Team, member: Session) -> None:
+def test_a_file_changed_on_disk_outside_the_server_is_noticed(company: Company, member: Session) -> None:
     path = remember(member, "Edited by hand", "As the server saved it.")
     assert summaries(member)[path] == "As the server saved it."
-    file = Path(team.server.settings.memory_root, team.code, *PurePosixPath(path).parts)
+    file = Path(company.server.settings.memory_root, company.code, *PurePosixPath(path).parts)
 
     # Edited in place, the way a text editor saves, rather than written beside it and renamed in.
     with file.open("r+", encoding="utf-8", newline="\n") as edited:
@@ -156,8 +156,8 @@ def test_a_file_changed_on_disk_outside_the_server_is_noticed(team: Team, member
 
 def test_a_memory_read_back_can_be_changed_without_changing_what_the_next_read_returns(tmp_path: Path) -> None:
     store = MemoryStore(tmp_path)
-    path = PurePosixPath("team", "conventions", "kept.md")
-    (tmp_path / "t" / "team" / "conventions").mkdir(parents=True)
+    path = PurePosixPath("company", "conventions", "kept.md")
+    (tmp_path / "t" / "company" / "conventions").mkdir(parents=True)
     (tmp_path / "t" / path).write_text(Memory("Kept", "S.", "convention", "a", "b").to_text(), encoding="utf-8")
 
     first = store.read("t", path)
@@ -174,12 +174,12 @@ def test_a_save_ending_mid_read_only_stops_its_own_files_being_kept(
     """Saves in other areas end many times a second; one ending while a file is parsed must not throw that parse away
     unless the save changed that file."""
     store = MemoryStore(tmp_path)
-    folder = tmp_path / "t" / "team" / "conventions"
+    folder = tmp_path / "t" / "company" / "conventions"
     folder.mkdir(parents=True)
     paths = {}
     for name in ("read", "saved"):
         (folder / f"{name}.md").write_text(Memory(name, "S.", "convention", "a", "b").to_text(), encoding="utf-8")
-        paths[name] = PurePosixPath("team", "conventions", f"{name}.md")
+        paths[name] = PurePosixPath("company", "conventions", f"{name}.md")
     counting = Memory.from_text.__func__  # type: ignore[attr-defined]
 
     def a_save_ends_meanwhile(changed: str) -> None:
@@ -212,12 +212,12 @@ def test_a_save_ending_mid_read_only_stops_its_own_files_being_kept(
 def test_parsed_memories_are_kept_within_a_bound(tmp_path: Path, parses: Parses) -> None:
     body = "x" * 4000
     store = MemoryStore(tmp_path, parsed_characters=10_000)
-    folder = tmp_path / "t" / "team" / "conventions"
+    folder = tmp_path / "t" / "company" / "conventions"
     folder.mkdir(parents=True)
     paths = []
     for n in range(4):
         (folder / f"m{n}.md").write_text(Memory(f"M{n}", "S.", "convention", "a", body).to_text(), encoding="utf-8")
-        paths.append(PurePosixPath("team", "conventions", f"m{n}.md"))
+        paths.append(PurePosixPath("company", "conventions", f"m{n}.md"))
 
     for path in paths:
         store.read("t", path)

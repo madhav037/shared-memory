@@ -13,7 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from tests.support import Session, Team, ToolRefused
+from tests.support import Session, Company, ToolRefused
 
 TRIALS = 8
 
@@ -71,10 +71,12 @@ def test_an_edit_racing_a_delete_never_brings_the_memory_back(owner: Session, el
         assert "no memory" in owner.refusal("read", path=path)
 
 
-def test_a_memory_promoted_by_several_sessions_at_once_is_promoted_once(team: Team, elsewhere: Elsewhere) -> None:
+def test_a_memory_promoted_by_several_sessions_at_once_is_promoted_once(company: Company, elsewhere: Elsewhere) -> None:
     for trial in range(TRIALS // 2):
         # A project of its own each time, so the memory promoted last time isn't a similar memory this time.
-        owner = team.owner().in_project(team.owner().call("create_project", name=f"Promoting {trial}")["project_id"])
+        owner = company.owner().in_project(
+            company.owner().call("create_project", name=f"Promoting {trial}")["project_id"]
+        )
         path = remember(owner, "Promoted at once", type="architecture")
 
         sessions = [owner, elsewhere(owner), owner]

@@ -17,7 +17,7 @@ def issue(client: ConsoleClient, path: str = "/api/my-token") -> dict[str, Any]:
 def test_a_member_issues_their_own_token_and_the_old_one_stops_working(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    _, owner_token = console.a_team("olive-token-one")
+    _, owner_token = console.a_company("olive-token-one")
     console.github.as_(401, "olive-token-one")
     signed_out.sign_in()
 
@@ -35,7 +35,7 @@ def test_a_member_issues_their_own_token_and_the_old_one_stops_working(
 
 
 def test_the_token_is_not_shown_again_afterwards(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-token-two")
+    console.a_company("olive-token-two")
     console.github.as_(402, "olive-token-two")
     signed_out.sign_in()
     issued = issue(signed_out)
@@ -46,7 +46,7 @@ def test_the_token_is_not_shown_again_afterwards(console: Console, signed_out: C
 
 
 def test_the_owner_issues_a_token_for_another_member(console: Console, signed_out: ConsoleClient) -> None:
-    _, owner_token = console.a_team("olive-token-three")
+    _, owner_token = console.a_company("olive-token-three")
     dana = Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
     console.github.as_(403, "olive-token-three")
     signed_out.sign_in()
@@ -63,9 +63,9 @@ def test_the_owner_issues_a_token_for_another_member(console: Console, signed_ou
 
 
 def test_a_member_cannot_issue_a_token_for_someone_else(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-token-four")
+    company, owner_token = console.a_company("olive-token-four")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-token-four")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-token-four")
     console.github.as_(404, "dana-token-four")
     signed_out.sign_in()
 
@@ -76,7 +76,7 @@ def test_a_member_cannot_issue_a_token_for_someone_else(console: Console, signed
 
 
 def test_issuing_a_token_is_recorded_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-token-five")
+    console.a_company("olive-token-five")
     console.github.as_(405, "olive-token-five")
     signed_out.sign_in()
 
@@ -88,7 +88,7 @@ def test_issuing_a_token_is_recorded_in_the_audit_log(console: Console, signed_o
 
 
 def test_issuing_a_token_needs_the_consoles_own_header(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-token-six")
+    console.a_company("olive-token-six")
     console.github.as_(406, "olive-token-six")
     signed_out.sign_in()
 
