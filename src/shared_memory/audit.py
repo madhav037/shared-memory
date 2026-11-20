@@ -162,6 +162,16 @@ class Event:
 
 
 @dataclass(frozen=True)
+class Interviewed:
+    """A memory promoted from an interview: where it went, the member who ran the interview, when, and the source."""
+
+    path: str
+    interviewer: str
+    at: datetime
+    source: str
+
+
+@dataclass(frozen=True)
 class Page:
     events: list[Event]
     next: int | None
@@ -246,6 +256,18 @@ class Audit:
                 (company_pk, project_id, CHALLENGE_RAISED, CHALLENGE_DECIDED),
             ).fetchall()
         return [row["source"] for row in promoted], [row["source"] for row in waiting]
+
+    def interviews_of(self, member: Member) -> list[Interviewed]:
+        """Each promotion that named this member as author with an interview as its source, newest first: what was
+        written from their interview, by whom and when (ADR-0029)."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT target, actor, at, detail->>'imported_from' AS source FROM audit_events"
+                " WHERE team_id = %s AND kind = %s AND detail->>'author' = %s"
+                " AND detail->>'imported_from' LIKE 'interview:%%' ORDER BY id DESC",
+                (member.team_pk, MEMORY_PROMOTED, member.member_id),
+            ).fetchall()
+        return [Interviewed(row["target"], row["actor"], row["at"], row["source"]) for row in rows]
 
     def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: object) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but

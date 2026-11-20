@@ -1303,6 +1303,24 @@
         }
       }
     },
+    "/api/interviewed": {
+      "get": {
+        "operationId": "interviewed",
+        "summary": "The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing.",
+        "responses": {
+          "200": {
+            "description": "The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewMemories"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/memory": {
       "get": {
         "operationId": "memory_at",
@@ -4841,6 +4859,73 @@
           "inside"
         ],
         "title": "Folder",
+        "type": "object"
+      },
+      "InterviewMemory": {
+        "description": "A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says\nin brief, its level, the interview it came from (source), and who ran the interview and when its memory was\npromoted.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "interviewer": {
+            "title": "Interviewer",
+            "type": "string"
+          },
+          "interviewer_name": {
+            "title": "Interviewer Name",
+            "type": "string"
+          },
+          "interviewed_at": {
+            "format": "date-time",
+            "title": "Interviewed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "level",
+          "source",
+          "interviewer",
+          "interviewer_name",
+          "interviewed_at"
+        ],
+        "title": "InterviewMemory",
+        "type": "object"
+      },
+      "InterviewMemories": {
+        "description": "Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They\nmay retire any of it, with the same retire as any memory they author; nothing here edits one.",
+        "properties": {
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/InterviewMemory"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "InterviewMemories",
         "type": "object"
       },
       "DoubtEvidence": {

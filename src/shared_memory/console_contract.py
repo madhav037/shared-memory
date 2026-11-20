@@ -983,6 +983,28 @@ class OnboardingProgress(BaseModel):
     entries: list[OnboardingEntry]
 
 
+class InterviewMemory(BaseModel):
+    """A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says
+    in brief, its level, the interview it came from (source), and who ran the interview and when its memory was
+    promoted."""
+
+    path: str
+    title: str
+    summary: str
+    level: str
+    source: str
+    interviewer: str
+    interviewer_name: str
+    interviewed_at: datetime
+
+
+class InterviewMemories(BaseModel):
+    """Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They
+    may retire any of it, with the same retire as any memory they author; nothing here edits one."""
+
+    memories: list[InterviewMemory]
+
+
 class ProjectSessions(BaseModel):
     """A project's active sessions, the oldest first, each with the files it holds a lock on. A session that has ended
     or gone idle is not among them. With them, what every member who can reach the project sees: its collisions and its
@@ -1352,6 +1374,16 @@ DECLARATIONS: tuple[Declaration, ...] = (
         summary="One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
         answers=Folder,
         query=("folder", "deep"),
+    ),
+    Declaration(
+        path="/interviewed",
+        method="GET",
+        operation_id="interviewed",
+        summary=(
+            "The memories written from the signed-in member's interviews, which they author: each with the interview, "
+            "who ran it and when. Changes nothing."
+        ),
+        answers=InterviewMemories,
     ),
     Declaration(
         path="/memory",

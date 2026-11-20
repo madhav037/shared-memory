@@ -93,6 +93,19 @@ class ConsoleMemory:
                 continue
         return found
 
+    def still_authored(self, team: str, paths: Iterable[str], author: str) -> dict[str, Memory]:
+        """The memories among these that are still active and still this member's, by path; one that moved, went,
+        was retired or superseded, or changed hands is left out."""
+        found: dict[str, Memory] = {}
+        for path in set(paths):
+            try:
+                memory = self._store.read(team, PurePosixPath(path))
+            except Refused:
+                continue
+            if memory.status == "active" and memory.author == author:
+                found[path] = memory
+        return found
+
     def explore(self, caller: Caller, folder: str, deep: bool = False) -> dict[str, Any]:
         """One folder of the company's memory for the console's explorer.
 
