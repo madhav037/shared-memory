@@ -73,6 +73,31 @@ def test_the_skills_point_at_the_served_steps_instead_of_repeating_them(team: Te
         assert "git blame" not in skill
 
 
+# Where a member meets onboarding: the briefing of a project with no project memory
+
+
+def test_the_briefing_in_an_empty_project_with_no_imports_offers_onboarding(owner: Session) -> None:
+    told = added_context(owner.start())
+
+    assert "[onboarding]" in told
+    assert "only if the member asks" in told
+
+
+def test_the_onboarding_line_goes_once_the_project_has_memory(owner: Session) -> None:
+    promote_now(owner, PNPM)
+
+    assert "[onboarding]" not in added_context(owner.start())
+
+
+def test_the_onboarding_line_goes_once_the_member_has_imported_from_the_repository(
+    owner: Session, dana: Session
+) -> None:
+    path = promoted_for(owner, "emp-2")
+    dana.call("retire", path=path)
+
+    assert "[onboarding]" not in added_context(owner.start())
+
+
 # Promote naming the author of an imported memory
 
 

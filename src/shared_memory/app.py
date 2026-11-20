@@ -384,10 +384,9 @@ def build_app(
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
         a project and a repository."""
-        project, repository = current.project, current.repository
+        project = current.project
         return ProjectState(
             has_cards=project is not None and board.has_cards(project.project_id),
-            has_imported=repository is not None and audit.has_imported_from(current, repository),
         )
 
     class CallerListingServer(MCPServer):
@@ -845,6 +844,7 @@ def build_app(
         return briefing.for_session(
             current,
             extra=[
+                *onboarding.offer(current, store, audit),
                 *lifecycle.foundation_lines(current),
                 *challenges.briefing_notices(current),
                 *(handoff_notes.for_briefing(current, session) if with_sessions else []),

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 from importlib import resources
+from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory import sources
@@ -17,6 +18,8 @@ from shared_memory.clock import Clock
 from shared_memory.db import Database
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity
+from shared_memory.memory import FOUNDATIONS_FOLDER
+from shared_memory.store import MemoryStore
 
 
 def steps() -> str:
@@ -168,3 +171,35 @@ def progress_so_far(entries: list[Entry]) -> str:
             f"{one.promoted} promoted, {one.waiting_on_challenge} waiting on a challenge, {one.left_out} left out"
         )
     return "\n".join(lines) + "\n"
+
+
+OFFER = (
+    "[onboarding] This project has no project memory yet. Onboarding imports what the team already has written down "
+    "(repository documents, rule files, git history, wikis, tickets). Mention it once; call `onboard` only if the "
+    "member asks."
+)
+
+
+def has_project_memory(store: MemoryStore, team: str, project_id: str) -> bool:
+    """Whether the project holds any active project memory beyond its foundations."""
+    shared = PurePosixPath("projects", project_id, "shared")
+    foundations = shared / FOUNDATIONS_FOLDER
+    for folder, memories in store.walk(team, shared):
+        if folder == foundations or foundations in folder.parents:
+            continue
+        if any(memory.status == "active" for _, memory in memories):
+            return True
+    return False
+
+
+def offer(caller: Caller, store: MemoryStore, audit: Audit) -> list[str]:
+    """The briefing's onboarding line: for a session whose project has no project memory and whose member has
+    imported nothing from its repository. It goes once either changes."""
+    project, repository = caller.project, caller.repository
+    if project is None or project.project_id in caller.unreachable:
+        return []
+    if repository is not None and audit.has_imported_from(caller, repository):
+        return []
+    if has_project_memory(store, caller.team, project.project_id):
+        return []
+    return [OFFER]

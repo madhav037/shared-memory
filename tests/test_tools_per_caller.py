@@ -121,20 +121,12 @@ def test_a_member_who_has_not_imported_from_the_repository_is_listed_onboard(own
     assert "onboard" in prompts_of(owner)
 
 
-def test_onboard_is_not_listed_once_the_member_has_imported_from_the_repository(owner: Session, dana: Session) -> None:
+def test_onboard_is_still_listed_after_the_members_first_import_from_the_repository(owner: Session, dana: Session) -> None:
+    # Outside sources and the project's other repositories remain to onboard after the first import (#618).
     imported_from(owner, "billing-api")
 
-    assert "onboard" not in listed(owner)
-    assert "onboard" not in prompts_of(owner)
-    assert "onboard" in listed(dana)  # another member has still to import
-
-
-def test_onboard_is_listed_again_in_another_repository_of_the_project(owner: Session, dana: Session, project: str) -> None:
-    imported_from(owner, "billing-api")
-
-    elsewhere = owner.in_project(project, "billing-web")
-    assert "onboard" in listed(elsewhere)
-    assert "onboard" in prompts_of(elsewhere)
+    assert "onboard" in listed(owner)
+    assert "onboard" in prompts_of(owner)
 
 
 def test_a_prompt_listing_without_a_personal_token_is_answered_as_it_always_was(server: RunningServer) -> None:

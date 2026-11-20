@@ -3,7 +3,7 @@ import { IconPin, IconPinnedOff } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
+import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type Folder, type SignedInMember } from "../api/client";
 import {
   ChallengedMark,
   OutdatedMark,
@@ -40,6 +40,40 @@ const TEACHING: Record<string, string> = {
   people: "Personal memory is what each member’s coding agent has saved in this project. Nobody has saved anything here yet.",
 };
 
+/** Whether a project's page lists any project memory beyond its foundations. */
+function holdsProjectMemory(projectId: string, folder: Folder): boolean {
+  const shared = `projects/${projectId}/shared`;
+  const foundations = `${shared}/foundations`;
+  const isProjectMemory = (path: string) =>
+    (path === shared || path.startsWith(`${shared}/`)) && path !== foundations && !path.startsWith(`${foundations}/`);
+  if (folder.kind === "shared" && folder.memories.length > 0) return true;
+  return folder.inside.some((section) => isProjectMemory(section.path) && section.memories.length > 0);
+}
+
+/** The words a member pastes into their coding agent to start onboarding. */
+const ONBOARDING_LINE = "Onboard this repository into Shared Memory.";
+
+/** An empty project's offer: fill it from what the team already has, through the member's own coding agent. */
+function OnboardingOffer() {
+  return (
+    <section aria-labelledby="onboarding-offer-heading" data-testid="onboarding-offer" style={{ marginTop: 28 }}>
+      <h2 className="section-heading" id="onboarding-offer-heading">
+        Bring what you already have
+      </h2>
+      <p>
+        This project has no project memory yet. Onboarding fills it from what your team already has written down: the
+        repository’s documents and rule files, its git history, and wiki pages, tickets and review comments your coding
+        agent can reach. Your agent proposes each memory; you approve every one before it is saved, and nothing in your
+        repository changes without your yes.
+      </p>
+      <p>Paste this into your coding agent, in one of the project’s repositories:</p>
+      <p>
+        <code data-testid="onboarding-line">{ONBOARDING_LINE}</code>
+      </p>
+    </section>
+  );
+}
+
 /** One folder, set out as a part of the contents: every folder beneath it, and every memory in each. */
 export function FolderPage({ member }: { member: SignedInMember }) {
   const [asked] = useSearchParams();
@@ -64,6 +98,10 @@ export function FolderPage({ member }: { member: SignedInMember }) {
   const holding =
     (folder.memories.length > 0 ? 1 : 0) + folder.inside.filter((section) => section.memories.length > 0).length;
   const meaning = MEANING[folder.kind === "type" ? folder.name : folder.kind];
+  const offersOnboarding =
+    projectId !== undefined &&
+    (folder.kind === "project" || folder.kind === "shared") &&
+    !holdsProjectMemory(projectId, folder);
 
   const pinTopic = async (pin: boolean) => {
     try {
@@ -118,6 +156,8 @@ export function FolderPage({ member }: { member: SignedInMember }) {
       )}
 
       {folder.kind === "project" && projectId && <Briefing projectId={projectId} />}
+
+      {offersOnboarding && <OnboardingOffer />}
 
       {total === 0 ? (
         <>

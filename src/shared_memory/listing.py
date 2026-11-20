@@ -20,8 +20,6 @@ class ProjectState:
     """What the caller's project and repository hold that decides what is listed to them."""
 
     has_cards: bool = False
-    # The member has promoted an import from the repository their session works in.
-    has_imported: bool = False
 
 
 def is_listed_to(name: str, caller: Caller, state: ProjectState) -> bool:
@@ -30,8 +28,6 @@ def is_listed_to(name: str, caller: Caller, state: ProjectState) -> bool:
         return caller.member.is_owner or caller.member.is_admin
     if name in CARD_TOOLS:
         return state.has_cards
-    if name == "onboard":
-        return not state.has_imported
     if name == "guide":
         # Claude Code has the skill itself. An agent that reports no name, or one we don't know, may not, so it is
         # listed.
