@@ -18,7 +18,7 @@ test("a member signs in with GitHub, sees who they are, and signs out", async ({
 test("a visitor who isn't signed in lands on the sign-in at any address, with no landing page or plans", async ({
   page,
 }) => {
-  for (const address of ["/", "/team", "/search?q=retries", "/terms", "/coming-soon", "/no-such-page"]) {
+  for (const address of ["/", "/company", "/search?q=retries", "/terms", "/coming-soon", "/no-such-page"]) {
     await page.goto(address);
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sign in");

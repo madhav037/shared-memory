@@ -11,26 +11,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, Field
 
 from shared_memory.audit import Kind
 from shared_memory.challenges import DecidesAs, Reason
-from shared_memory.memory import COMPANY_LEVEL, OLD_LEVEL
 from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
-
-
-def _as_the_console_reads(level: str) -> str:
-    return OLD_LEVEL if level == COMPANY_LEVEL else level
-
-
-# A memory's level, or a folder's kind, where the console still reads company memory's as `team` until it reads
-# `company` (#627); the rename's contract step (#629) takes this out.
-ConsoleLevel = Annotated[str, PlainSerializer(_as_the_console_reads, return_type=str)]
 
 
 class SignedInMember(BaseModel):
@@ -279,7 +269,7 @@ class Pin(BaseModel):
 
     path: str
     kind: str
-    level: ConsoleLevel
+    level: str
     title: str
     tokens: int
     pinned_by: str
@@ -332,7 +322,7 @@ class ChallengedMemory(BaseModel):
     title: str
     summary: str
     body: str
-    level: ConsoleLevel
+    level: str
     type: str
     author: str
     status: str
@@ -427,7 +417,7 @@ class MemoryDetail(BaseModel):
     """One memory in full, as its author wrote it."""
 
     path: str
-    level: ConsoleLevel
+    level: str
     project_id: str | None
     title: str
     summary: str
@@ -464,7 +454,7 @@ class SearchHit(BaseModel):
     project_id: str | None
     title: str
     heading: str
-    level: ConsoleLevel
+    level: str
     type: str
     author: str
     summary: str
@@ -484,7 +474,7 @@ class FolderEntry(BaseModel):
 
     path: str
     name: str
-    kind: ConsoleLevel
+    kind: str
     memories: int
     changed: datetime | None
 
@@ -496,7 +486,7 @@ class FileEntry(BaseModel):
     title: str
     summary: str
     type: str
-    level: ConsoleLevel
+    level: str
     status: str
     author: str
     author_name: str
@@ -513,7 +503,7 @@ class FolderSection(BaseModel):
 
     path: str
     name: str
-    kind: ConsoleLevel
+    kind: str
     depth: int
     count: int
     changed: datetime | None
@@ -532,7 +522,7 @@ class Folder(BaseModel):
 
     folder: str
     name: str
-    kind: ConsoleLevel
+    kind: str
     pinnable: bool
     pinned: bool
     trail: list[Crumb]

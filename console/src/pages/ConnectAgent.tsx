@@ -11,7 +11,7 @@ import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
 
 /** What a member does in each coding agent, and what else to know about its hooks; which hooks it has, and what it
- * does with the team's memory by itself, is in lib/agentHooks. In AGENT_NAMES's order. */
+ * does with the company's memory by itself, is in lib/agentHooks. In AGENT_NAMES's order. */
 const AGENTS: { name: AgentName; steps: ReactNode[]; automatic: ReactNode }[] = [
   {
     name: "Claude Code",
@@ -149,7 +149,7 @@ export function ConnectAgent({ serverUrl }: { serverUrl: string }) {
     <div className="narrow">
       <h1 className="page-title">Connect your agent</h1>
       <p className="standfirst">
-        Every coding agent your team uses reads and writes the same memory. Connect yours with your personal token and
+        Every coding agent your company uses reads and writes the same memory. Connect yours with your personal token and
         a few small files the repository commits.
       </p>
 

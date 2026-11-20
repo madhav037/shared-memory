@@ -203,7 +203,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
 
   const challenged = memory.open_challenges.length > 0;
   const doubts = memory.open_challenges.filter((challenge) => challenge.reason !== null);
-  const deciders = `${memory.author_name}${memory.level === "team" ? "" : ", a project lead"} or an admin`;
+  const deciders = `${memory.author_name}${memory.level === "company" ? "" : ", a project lead"} or an admin`;
   const personal = memory.level === "personal";
   const project = projects.get(projectIn(memory.path) ?? "")?.name;
   return (
@@ -255,15 +255,15 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         )}
         {personal ? (
           <p data-testid="personal-banner">
-            <b>Personal memory of {memory.author_name}.</b> The team can read it, but hasn’t accepted it: it becomes
-            project or team memory only when its author promotes it from their coding agent.
+            <b>Personal memory of {memory.author_name}.</b> The whole company can read it, but hasn’t accepted it: it becomes
+            project or company memory only when its author promotes it from their coding agent.
           </p>
         ) : (
           !challenged && (
             <p data-testid="in-force">
               <b>In force.</b>{" "}
-              {memory.level === "team"
-                ? "It holds for every project: coding agents anywhere in the team recall it."
+              {memory.level === "company"
+                ? "It holds for every project: coding agents anywhere in the company recall it."
                 : `It holds for everyone on ${project ?? "this project"}: their coding agents recall it.`}
               {memory.pinned && " It is pinned, so sessions start with it in their briefing."}
             </p>
@@ -400,7 +400,7 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
           <>
             <dt>Exception to</dt>
             <dd>
-              <Link to={memoryUrl(memory.exception_to)}>a team memory</Link>, for this project only
+              <Link to={memoryUrl(memory.exception_to)}>a company memory</Link>, for this project only
             </dd>
           </>
         )}

@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import { signInAs, signOut } from "./helpers";
 
-test("an admin changes the rate limits on the Team page, a member sees them read-only, and the audit log shows the change", async ({
+test("an admin changes the rate limits on the Company page, a member sees them read-only, and the audit log shows the change", async ({
   page,
 }) => {
   await signInAs(page, 1, "olive");
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
 
   const section = page.getByTestId("rate-limits");
   await expect(section.getByTestId("limit-token")).toHaveText("120 calls a minute");
@@ -30,7 +30,7 @@ test("an admin changes the rate limits on the Team page, a member sees them read
   // Raj is a plain member: he sees the numbers, with nothing to change them by.
   await signOut(page);
   await signInAs(page, 2, "dana");
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await expect(page.getByTestId("limit-token")).toHaveText("90 calls a minute");
   await expect(page.getByTestId("rate-limit-token")).toHaveCount(0);
   await expect(page.getByTestId("save-rate-limits")).toHaveCount(0);

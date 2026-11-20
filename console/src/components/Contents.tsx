@@ -6,7 +6,7 @@ import { type FileEntry } from "../api/client";
 import { currentPath, useContents } from "../lib/contents";
 import { folderName, folderUrl, memoryUrl } from "../lib/format";
 
-/** The contents column: team memory, then every project, each opening onto its folders and memories. */
+/** The contents column: company memory, then every project, each opening onto its folders and memories. */
 export function ContentsTree({ onOpen, heading = true }: { onOpen?: () => void; heading?: boolean }) {
   const { folders, load } = useContents();
   const root = folders.get("");

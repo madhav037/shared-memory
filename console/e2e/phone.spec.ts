@@ -71,7 +71,7 @@ test("on a phone the registers set each row out as an entry the width of the pag
   await page.goto("/audit");
   await expectStacked(page, "audit-table");
 
-  await page.goto("/team");
+  await page.goto("/company");
   await expectStacked(page, "members");
 
   await page.goto("/challenges");

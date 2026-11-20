@@ -15,7 +15,7 @@ export function SignIn({ status, refused }: { status: Status; refused: string | 
     <main className="title-page sign-in-page" id="page" data-testid="sign-in-page">
       <div className="title-page-inner">
         <h1>Sign in</h1>
-        <p className="sign-in-lede">Read, search and govern your team’s memory.</p>
+        <p className="sign-in-lede">Read, search and govern your company’s memory.</p>
         {refused && (
           <Refusal testid="sign-in-error">
             <b>That sign-in didn’t work.</b> {refused}

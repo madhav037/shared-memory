@@ -1,5 +1,5 @@
 /**
- * What each coding agent does with the team's memory by itself, through the hooks its plugin or connection kit
+ * What each coding agent does with the company's memory by itself, through the hooks its plugin or connection kit
  * gives it, and what its guidance asks it to do instead where it has no hook.
  *
  * Each entry is named as `BEFORE_EDIT_HOOK` and `GUIDANCE_ONLY` name it in src/shared_memory/connection.py, where an
@@ -56,7 +56,7 @@ export function whatHappens(hooks: AgentHooks): { topic: string; hooked: boolean
       hooked: hooks.recall,
       said: hooks.recall
         ? "Memory that matches each prompt is recalled into it."
-        : "The agent is asked to call search itself before answering how the codebase or team works.",
+        : "The agent is asked to call search itself before answering how the codebase or company works.",
     },
     {
       topic: "Locks",

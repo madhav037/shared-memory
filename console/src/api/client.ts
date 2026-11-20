@@ -137,7 +137,7 @@ export function fetchProject(projectId: string, signal?: AbortSignal): Promise<P
 
 export type SearchAsked = { query: string; level?: string; type?: string; limit?: number };
 
-/** One folder of the team's memory: its folders, with what they hold, and its memories. "" is the top. */
+/** One folder of the company's memory: its folders, with what they hold, and its memories. "" is the top. */
 export function fetchFolder(folder: string, signal?: AbortSignal, deep = false): Promise<Folder> {
   return ask<Folder>(withQuery("/api/files", { folder, deep: deep ? "1" : undefined }), { signal });
 }
@@ -155,7 +155,7 @@ export function fetchVersionAt(path: string, commit: string, signal?: AbortSigna
   return ask<MemoryAtVersion>(withQuery("/api/memory/version", { path, commit }), { signal });
 }
 
-/** Pin a project or team memory, or a topic folder, by its path. */
+/** Pin a project or company memory, or a topic folder, by its path. */
 export function pinAt(path: string): Promise<PinState> {
   return change<PinState>("/api/memory/pin", { path });
 }
@@ -174,23 +174,23 @@ export function retireAt(path: string): Promise<Retired> {
   return change<Retired>("/api/memory/retire", { path });
 }
 
-/** Memories that match, across team memory and every project this member can reach. */
+/** Memories that match, across company memory and every project this member can reach. */
 export function searchEverywhere(asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery("/api/search", asked), { signal });
 }
 
-/** Issue a new personal token for a member of the team; theirs stops working. */
+/** Issue a new personal token for a member of the company; theirs stops working. */
 export function reissueToken(memberId: string): Promise<IssuedToken> {
   return change<IssuedToken>(`/api/members/${encodeURIComponent(memberId)}/token`);
 }
 
-/** A project's onboarding progress: every entry for its leads and the team's admins, the member's own otherwise. */
+/** A project's onboarding progress: every entry for its leads and the company's admins, the member's own otherwise. */
 export function fetchOnboarding(projectId: string, signal?: AbortSignal): Promise<OnboardingProgress> {
   return ask<OnboardingProgress>(`/api/projects/${encodeURIComponent(projectId)}/onboarding`, { signal });
 }
 
 /** Everything pinned that this project's sessions are briefed with. */
-/** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt. */
+/** A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt. */
 export function fetchHealth(projectId: string, signal?: AbortSignal): Promise<ProjectHealth> {
   return ask<ProjectHealth>(`/api/projects/${encodeURIComponent(projectId)}/health`, { signal });
 }
@@ -254,7 +254,7 @@ export function changeRateLimits(asked: RateLimitChange): Promise<RateLimits> {
   return change<RateLimits>("/api/rate-limits", asked);
 }
 
-/** The server's license key: its status, team, member cap and expiry. */
+/** The server's license key: its status, company, member cap and expiry. */
 export function fetchLicense(signal?: AbortSignal): Promise<LicenseState> {
   return ask<LicenseState>("/api/license", { signal });
 }
@@ -264,7 +264,7 @@ export function installLicense(key: string): Promise<LicenseState> {
   return change<LicenseState>("/api/license", { key });
 }
 
-/** Everyone in the team, with their role and GitHub account. */
+/** Everyone in the company, with their role and GitHub account. */
 export function fetchMembers(signal?: AbortSignal): Promise<Members> {
   return ask<Members>("/api/members", { signal });
 }
@@ -327,7 +327,7 @@ export function removeKeeper(projectId: string, foundation: string, memberId: st
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
-/** Close a project to its access list, or open it to the whole team again. */
+/** Close a project to its access list, or open it to the whole company again. */
 export function restrictProject(projectId: string, restricted: boolean): Promise<ProjectDetail> {
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/restrict`, { restricted });
 }

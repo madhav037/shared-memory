@@ -12,22 +12,22 @@ const KEY = signLicense({
   key_id: "acme-journey",
 });
 
-test("an admin sees the unlicensed banner, installs a key and sees the team, cap and expiry; a member can't", async ({
+test("an admin sees the unlicensed banner, installs a key and sees the company, cap and expiry; a member can't", async ({
   page,
 }) => {
   await signInAs(page, 1, "olive");
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await expect(page.getByTestId("license-banner")).toBeVisible();
 
   // Anything that isn't a trustworthy key is refused, and nothing is installed.
   await page.getByTestId("license-key").fill("sm1.not.a-key");
   await page.getByTestId("install-license").click();
-  await expect(page.getByTestId("team-refused")).toBeVisible();
+  await expect(page.getByTestId("company-refused")).toBeVisible();
 
   await page.getByTestId("license-key").fill(KEY);
   await page.getByTestId("install-license").click();
 
-  await expect(page.getByTestId("license-team")).toHaveText("Acme Billing");
+  await expect(page.getByTestId("license-company")).toHaveText("Acme Billing");
   await expect(page.getByTestId("license-cap")).toHaveText("12");
   await expect(page.getByTestId("license-expires")).toHaveText("2026-09-15");
   await expect(page.getByTestId("license-banner")).toContainText("expires on 2026-09-15");
@@ -36,8 +36,8 @@ test("an admin sees the unlicensed banner, installs a key and sees the team, cap
   // A member who isn't an admin sees the license but has nothing to install it with, and the server refuses him anyway.
   await signOut(page);
   await signInAs(page, 2, "dana");
-  await page.getByTestId("to-team").click();
-  await expect(page.getByTestId("license-team")).toHaveText("Acme Billing");
+  await page.getByTestId("to-company").click();
+  await expect(page.getByTestId("license-company")).toHaveText("Acme Billing");
   await expect(page.getByTestId("license-key")).toHaveCount(0);
   await expect(page.getByTestId("license-banner")).toHaveCount(0);
   const refused = await page.request.post("/api/license", {
