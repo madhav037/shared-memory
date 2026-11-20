@@ -122,7 +122,7 @@ def test_adding_a_member_names_the_company_alone(company: Company, project: str)
 def test_add_member_takes_no_team_argument(company: Company, project: str) -> None:
     [add_member] = [tool for tool in json.loads(company.owner().tool_listing()) if tool["name"] == "add_member"]
 
-    assert "team" not in add_member["inputSchema"]["properties"]
+    assert "team" not in add_member["input_schema"]["properties"]
 
 
 def test_the_console_names_the_company_alone(console: Console, signed_out: ConsoleClient) -> None:
@@ -138,7 +138,7 @@ def test_the_console_names_the_company_alone(console: Console, signed_out: Conso
 
 def test_the_console_refuses_a_search_of_team_naming_company(console: Console, signed_out: ConsoleClient) -> None:
     console.a_company("olive-company-search")
-    console.github.as_(6251, "olive-company-search")
+    console.github.as_(6252, "olive-company-search")
     signed_out.sign_in()
 
     found = signed_out.get("/api/search?query=gateway&level=team")
