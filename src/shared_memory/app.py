@@ -355,6 +355,7 @@ def build_app(
     store.subscribe(uses)
     service = MemoryService(settings, identity, store, history, index, challenges, audit, uses, tied)
     lifecycle = Lifecycle(settings, db, store, index, identity, challenges, audit, clock)
+    progress = onboarding.Progress(db, identity, audit, clock)
     # A card moved to Done on a read-only server stays moved; its known issues stay active and say why.
     board = Board(settings, db, identity, audit, clock, challenges.tell, unless_read_only(lifecycle.retire_fixed))
     identity.on_access_lost(board.return_cards)
@@ -925,7 +926,7 @@ def build_app(
 
     def onboarding_steps(current: Caller) -> str:
         current.require_project()
-        return onboarding.steps()
+        return onboarding.steps() + "\n" + onboarding.progress_so_far(progress.of_project(current))
 
     @server.tool(
         description=(
@@ -948,6 +949,17 @@ def build_app(
         wikis, tickets and review comments) into Shared Memory, then follow them in order. Call it only when the member asks to onboard or to import their existing setup; the
         member approves every memory before it is saved and before it is promoted."""
         return onboarding_steps(caller(ctx))
+
+    @server.tool()
+    @_refusals_as_tool_errors
+    @unless_read_only
+    def record_onboarding_progress(
+        status: str, ctx: Context, repository: str | None = None, outside_source: str | None = None, left_out: int = 0
+    ) -> dict[str, Any]:
+        """Record how far onboarding has got for one repository or one kind of outside source (wiki, ticket,
+        pr-comment or interview), as the onboarding steps say: status not_started, partly_done or done, and left_out,
+        how many passages you left out. It replaces what was recorded for that entry before."""
+        return progress.record(caller(ctx), status, repository, outside_source, left_out)
 
     @server.prompt(name="onboard", description="Import what you already have written down into Shared Memory.")
     def onboard_prompt(ctx: Context) -> str:
@@ -1746,6 +1758,7 @@ def build_app(
             TeamExport(settings, identity, board, audit),
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
             ProjectHealth(identity, store, uses, challenges),
+            progress,
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

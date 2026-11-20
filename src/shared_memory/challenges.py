@@ -311,7 +311,10 @@ class Challenges:
         promoted_by: str | None = None,
         reasoning: str | None = None,
         foundation: str | None = None,
+        imported_from: str | None = None,
     ) -> int:
+        """Open a challenge. imported_from is the source of an import whose promotion raised it, kept in the audit log
+        so onboarding progress counts the import as waiting on a challenge."""
         with self._db.transaction() as conn:
             row = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, challenger_path, level, raised_by,"
@@ -325,6 +328,8 @@ class Challenges:
         assert row is not None
         challenge_id: int = row["id"]
         about = {} if foundation is None else {"foundation": foundation}
+        if imported_from is not None:
+            about["imported_from"] = imported_from
         self._audit.memory(
             caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author,
             **about,

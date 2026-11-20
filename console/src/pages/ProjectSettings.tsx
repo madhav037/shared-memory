@@ -9,6 +9,7 @@ import {
   appointLead,
   assignKeeper,
   fetchMembers,
+  fetchOnboarding,
   fetchProject,
   grantAccess,
   removeFoundation,
@@ -19,6 +20,7 @@ import {
   restrictProject,
   revokeAccess,
   type MemberSummary,
+  type OnboardingEntry,
   type ProjectDetail,
   type SignedInMember,
 } from "../api/client";
@@ -27,7 +29,7 @@ import { AgentSelect, useChosenAgent } from "../components/AgentChoice";
 import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
-import { healthUrl } from "../lib/format";
+import { day, healthUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Who looks after a project, who can reach it, and the repositories that belong to it. */
@@ -329,7 +331,62 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           />
         )}
       </section>
+
+      <Onboarding projectId={project.project_id} />
     </div>
+  );
+}
+
+const STATUS_WORDS: Record<string, string> = { not_started: "Not started", partly_done: "Partly done", done: "Done" };
+
+/** How far onboarding has got per repository and outside source. Sessions record it; this only reads it. */
+function Onboarding({ projectId }: { projectId: string }) {
+  const { answer: progress } = useAsked((signal) => fetchOnboarding(projectId, signal), [projectId]);
+  if (!progress) return null;
+  const what = (entry: OnboardingEntry) => entry.repository ?? `${entry.outside_source} (outside source)`;
+  return (
+    <section aria-labelledby="onboarding-heading">
+      <h2 className="section-heading" id="onboarding-heading">
+        Onboarding
+      </h2>
+      <p className="section-lede">
+        {progress.everyone
+          ? "How far onboarding has got for each repository and outside source, as members’ coding agents recorded it."
+          : "How far the onboarding runs you recorded have got. The project’s leads and the team’s admins see every run."}
+      </p>
+      {progress.entries.length === 0 ? (
+        <p className="empty" data-testid="onboarding-empty">
+          No onboarding recorded yet. Ask your coding agent to onboard to import what this project already has.
+        </p>
+      ) : (
+        <table className="register" data-testid="onboarding">
+          <thead>
+            <tr>
+              <th scope="col">Repository or source</th>
+              <th scope="col">Status</th>
+              <th scope="col">Recorded</th>
+              <th scope="col">Promoted</th>
+              <th scope="col">Waiting on a challenge</th>
+              <th scope="col">Left out</th>
+            </tr>
+          </thead>
+          <tbody>
+            {progress.entries.map((entry) => (
+              <tr key={what(entry)} data-testid={`onboarding-${entry.repository ?? entry.outside_source}`}>
+                <td>{what(entry)}</td>
+                <td>{STATUS_WORDS[entry.status] ?? entry.status}</td>
+                <td>
+                  {entry.recorded_by_name}, {day(entry.recorded_at)}
+                </td>
+                <td>{entry.promoted}</td>
+                <td>{entry.waiting_on_challenge}</td>
+                <td>{entry.left_out}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

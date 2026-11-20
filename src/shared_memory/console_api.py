@@ -25,6 +25,7 @@ from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
 from shared_memory import health
+from shared_memory import onboarding
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
@@ -78,6 +79,7 @@ from shared_memory.console_contract import (
     AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
+    OnboardingEntry, OnboardingProgress,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import TeamExport
@@ -378,7 +380,9 @@ class ConsoleApi:
         export: TeamExport,
         talk: SessionTalk,
         project_health: health.ProjectHealth,
+        progress: onboarding.Progress,
     ) -> None:
+        self._progress = progress
         self._export_of = export
         self._health = project_health
         self._talk = talk
@@ -423,6 +427,7 @@ class ConsoleApi:
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
             "project_health": self._project_health,
+            "onboarding_progress": self._onboarding_progress,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
             "card": self._card,
@@ -817,6 +822,33 @@ class ConsoleApi:
                 in_doubt=[
                     DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
                     for one in found.in_doubt
+                ],
+            )
+
+        return self._browse(request, read)
+
+    # --- a project's onboarding progress, read: recording it is a session's (ADR-0009) ---
+
+    def _onboarding_progress(self, request: Request) -> Response:
+        def read(caller: Caller) -> OnboardingProgress:
+            everyone, entries = self._progress.entries(caller)
+            names = self._names(caller.member)
+            return OnboardingProgress(
+                project_id=caller.require_project().project_id,
+                everyone=everyone,
+                entries=[
+                    OnboardingEntry(
+                        repository=one.repository,
+                        outside_source=one.outside_source,
+                        status=one.status,
+                        recorded_by=one.recorded_by,
+                        recorded_by_name=names.get(one.recorded_by, one.recorded_by),
+                        recorded_at=one.recorded_at,
+                        promoted=one.promoted,
+                        waiting_on_challenge=one.waiting_on_challenge,
+                        left_out=one.left_out,
+                    )
+                    for one in entries
                 ],
             )
 

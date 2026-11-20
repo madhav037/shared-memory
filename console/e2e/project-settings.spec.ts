@@ -78,3 +78,23 @@ test("a lead assigns a keeper to a foundation in project settings, and the keepe
   await page.getByTestId("remove-keeper-architecture-emp-keeper").click();
   await expect(page.getByTestId("keepers-architecture")).toContainText("No keeper");
 });
+
+test("a lead sees onboarding progress for every repository and source in project settings", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("project-card").filter({ hasText: "Billing" }).getByRole("link", { name: "Settings" }).click();
+
+  const progress = page.getByTestId("onboarding");
+  await expect(progress.getByTestId("onboarding-billing-api")).toContainText("Done");
+  await expect(progress.getByTestId("onboarding-billing-api")).toContainText("Olive Owner");
+  await expect(progress.getByTestId("onboarding-ticket")).toContainText("Partly done");
+  await expect(progress.getByTestId("onboarding-ticket")).toContainText("Raj Raiser");
+});
+
+test("a member who leads nothing sees only the onboarding runs they recorded", async ({ page }) => {
+  await signInAs(page, 2, "dana");
+  await page.getByTestId("project-card").filter({ hasText: "Billing" }).getByRole("link", { name: "Settings" }).click();
+
+  const progress = page.getByTestId("onboarding");
+  await expect(progress.getByTestId("onboarding-ticket")).toContainText("Partly done");
+  await expect(progress.getByTestId("onboarding-billing-api")).toHaveCount(0);
+});

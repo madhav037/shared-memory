@@ -32,3 +32,13 @@ def well_formed(source: str) -> bool:
     if kind in OUTSIDE_KINDS:
         return bool(reference)
     return bool(NAME_PATTERN.match(kind)) and bool(reference)
+
+
+def of_repository(source: str, repository: str) -> bool:
+    """Whether a source is a file or a commit of this repository."""
+    return source.startswith(f"{repository}:") or source.startswith(f"{COMMIT}:{repository}@")
+
+
+def of_kind(source: str, kind: str) -> bool:
+    """Whether a source is an outside source of this kind."""
+    return source.startswith(f"{kind}:")

@@ -39,6 +39,8 @@ export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ProjectHealth = components["schemas"]["ProjectHealth"];
+export type OnboardingProgress = components["schemas"]["OnboardingProgress"];
+export type OnboardingEntry = components["schemas"]["OnboardingEntry"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
@@ -174,6 +176,11 @@ export function searchEverywhere(asked: SearchAsked, signal?: AbortSignal): Prom
 /** Issue a new personal token for a member of the team; theirs stops working. */
 export function reissueToken(memberId: string): Promise<IssuedToken> {
   return change<IssuedToken>(`/api/members/${encodeURIComponent(memberId)}/token`);
+}
+
+/** A project's onboarding progress: every entry for its leads and the team's admins, the member's own otherwise. */
+export function fetchOnboarding(projectId: string, signal?: AbortSignal): Promise<OnboardingProgress> {
+  return ask<OnboardingProgress>(`/api/projects/${encodeURIComponent(projectId)}/onboarding`, { signal });
 }
 
 /** Everything pinned that this project's sessions are briefed with. */
