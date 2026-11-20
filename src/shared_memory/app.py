@@ -944,7 +944,7 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def onboard(ctx: Context) -> str:
-        """Start onboarding: get the steps for importing what this member, this project's repositories and their team
+        """Start onboarding: get the steps for importing what this member, this project's repositories and their company
         already have (repository documents, local memory, other coding agents' rule files, git history, the code,
         wikis, tickets and review comments) into Shared Memory, then follow them in order. Call it only when the member asks to onboard or to import their existing setup; the
         member approves every memory before it is saved and before it is promoted."""

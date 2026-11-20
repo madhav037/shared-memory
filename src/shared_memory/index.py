@@ -117,11 +117,11 @@ class Reach:
         else:
             projects = "project_id = ANY(%(reach_projects)s)"
         condition = (
-            f"((level = 'company' AND %(reach_team)s) OR (level = 'project' AND {projects})"
+            f"((level = 'company' AND %(reach_company)s) OR (level = 'project' AND {projects})"
             " OR (level = 'personal' AND member_id = %(reach_member)s AND project_id = %(reach_personal_in)s))"
         )
         return condition, {
-            "reach_team": self.company_memory,
+            "reach_company": self.company_memory,
             "reach_projects": list(self.projects or ()),
             "reach_unreachable": sorted(self.unreachable),
             "reach_member": self.member_id,
@@ -375,8 +375,8 @@ class SearchIndex:
         for the query cache's counts.
         """
         projects = [project_id] if isinstance(project_id, str) else list(project_id)
-        conditions = ["team = %(team)s", "status = 'active'", "(level = 'company' OR project_id = ANY(%(projects)s))"]
-        params: dict[str, object] = {"team": company, "projects": projects, "text": query}
+        conditions = ["team = %(company)s", "status = 'active'", "(level = 'company' OR project_id = ANY(%(projects)s))"]
+        params: dict[str, object] = {"company": company, "projects": projects, "text": query}
         if member_id is not None:
             conditions.append("(level <> 'personal' OR member_id = %(member)s)")
             params["member"] = member_id
@@ -436,10 +436,10 @@ class SearchIndex:
                 " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
                 " AND (n.level = 'company' OR (n.level = 'project' AND n.project_id = %(project)s))"
                 f" ORDER BY n.embedding <=> s.embedding LIMIT {_SIMILAR_CANDIDATES}) c"
-                " WHERE s.team = %(team)s AND s.path = %(path)s"
+                " WHERE s.team = %(company)s AND s.path = %(path)s"
                 " GROUP BY c.path HAVING MAX(c.similarity) >= %(threshold)s"
                 f" ORDER BY similarity DESC LIMIT {_SIMILAR_LIMIT}",
-                {"team": company, "path": str(path), "project": project_id, "threshold": threshold},
+                {"company": company, "path": str(path), "project": project_id, "threshold": threshold},
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 
@@ -461,14 +461,14 @@ class SearchIndex:
         if missing:
             found.update(zip(missing, self._embedder.passages(list(missing.values())), strict=True))
         within, params = reach.where()
-        params = {**params, "team": company, "excluding": None if excluding is None else str(excluding)}
+        params = {**params, "company": company, "excluding": None if excluding is None else str(excluding)}
         best: dict[str, float] = {}
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             for vector in {digest: found[digest] for digest in hashes.values()}.values():
                 rows = conn.execute(
                     "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
-                    f" WHERE team = %(team)s AND status = 'active' AND {within}"
+                    f" WHERE team = %(company)s AND status = 'active' AND {within}"
                     " AND path IS DISTINCT FROM %(excluding)s"
                     f" ORDER BY embedding <=> %(vector)s LIMIT {_SIMILAR_CANDIDATES}",
                     {**params, "vector": Vector(vector)},

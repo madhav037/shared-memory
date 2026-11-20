@@ -215,9 +215,9 @@ class TiedFiles:
         within, params = reach.where()
         with self._db.transaction() as conn:
             rows = conn.execute(
-                f"SELECT path, glob FROM tied_files WHERE team = %(team)s AND repository = %(repository)s AND {within}"  # noqa: S608  # values are bound as parameters; only the reach's clause is spliced in
+                f"SELECT path, glob FROM tied_files WHERE team = %(company)s AND repository = %(repository)s AND {within}"  # noqa: S608  # values are bound as parameters; only the reach's clause is spliced in
                 " ORDER BY path, glob",
-                {**params, "team": company, "repository": repository},
+                {**params, "company": company, "repository": repository},
             ).fetchall()
         globs: dict[str, list[str]] = {}
         for row in rows:
