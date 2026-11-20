@@ -174,9 +174,8 @@ def progress_so_far(entries: list[Entry]) -> str:
 
 
 OFFER = (
-    "[onboarding] This project has no project memory yet. Onboarding imports what the team already has written down "
-    "(repository documents, rule files, git history, wikis, tickets). Mention it once; call `onboard` only if the "
-    "member asks."
+    "[onboarding] This project has no project memory yet: `onboard` imports what the team already has. Offer it once; "
+    "start it only if the member asks."
 )
 
 
