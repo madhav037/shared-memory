@@ -956,9 +956,7 @@ def build_app(
     def record_onboarding_progress(
         status: str, ctx: Context, repository: str | None = None, outside_source: str | None = None, left_out: int = 0
     ) -> dict[str, Any]:
-        """Record how far onboarding has got for one repository or one kind of outside source (wiki, ticket,
-        pr-comment or interview), as the onboarding steps say: status not_started, partly_done or done, and left_out,
-        how many passages you left out. It replaces what was recorded for that entry before."""
+        """Record onboarding progress for one repository or outside source, when the onboarding steps say to."""
         return progress.record(caller(ctx), status, repository, outside_source, left_out)
 
     @server.prompt(name="onboard", description="Import what you already have written down into Shared Memory.")
