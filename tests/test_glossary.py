@@ -236,11 +236,8 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("collision", "two sessions on the same work, the glossary's Collision", ("README.md",), "avoid collisions"),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
-    Allow(
-        "team",
-        "the company's old name: the alias callers may still pass until the rename's contract step (#629), and stored names",
-    ),
-    Allow("team memory", "company memory's old name, which the one-off move out of `team/` describes (#625)"),
+    Allow("team", "billing's plan names, the team plans a company pays for", (PAGES + "Company.tsx",), "team s plan"),
+    Allow("team", "billing's plan names: self-hosting is licensed per team plan", ("README.md",), "license for teams"),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
 )
 

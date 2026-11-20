@@ -31,7 +31,8 @@ def run(
 ) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
     commands = parser.add_subparsers(dest="command", required=True)
-    # `--team` is what `--company` was called before ADR-0031; it goes in the rename's contract step (#629).
+    # `--team` is what `--company` was called before ADR-0031. The rename's contract step (#629) keeps it: the vendor's
+    # platform still runs setup, link-github and count-members with `--team` on servers released before `--company`.
 
     setup = commands.add_parser("setup", help="Create the company and its owner, and print the owner's personal token.")
     setup.add_argument("--company", "--team", required=True, help="Company ID")

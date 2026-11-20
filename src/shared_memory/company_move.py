@@ -21,12 +21,14 @@ from pathlib import PurePosixPath
 from shared_memory import board, briefing, challenges, index, lifecycle, recall, tied, uses
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.memory import COMPANY_FOLDER, COMPANY_LEVEL, INDEX_NAME, OLD_LEVEL, Memory
+from shared_memory.memory import COMPANY_FOLDER, COMPANY_LEVEL, INDEX_NAME, Memory
 from shared_memory.store import MemoryStore
 
 log = logging.getLogger("shared_memory")
 
 OLD_FOLDER = "team"
+# The level company memory had in each table keeping one, before the rename's migrate step (#626).
+OLD_LEVEL = "team"
 # The header fields that name another memory by its path.
 _NAMING = ("exception_to", "replaces", "superseded_by")
 _MESSAGE = (

@@ -629,7 +629,8 @@ def test_a_key_issued_before_the_rename_still_validates_and_names_the_company(co
 
     assert installed.status_code == 200, installed.text
     found = license_of(client)
-    assert (found["status"], found["team"], found["company"], found["key_id"]) == ("licensed", "Acme", "Acme", "k-old")
+    assert (found["status"], found["company"], found["key_id"]) == ("licensed", "Acme", "k-old")
+    assert "team" not in found
 
 
 def test_a_key_naming_its_company_validates(console: Console) -> None:
@@ -641,4 +642,5 @@ def test_a_key_naming_its_company_validates(console: Console) -> None:
 
     assert installed.status_code == 200, installed.text
     found = license_of(client)
-    assert (found["status"], found["team"], found["company"], found["key_id"]) == ("licensed", "Acme", "Acme", "k-new")
+    assert (found["status"], found["company"], found["key_id"]) == ("licensed", "Acme", "k-new")
+    assert "team" not in found
