@@ -74,6 +74,17 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
       </p>
       <div className="page-meta">
         {project.restricted ? <span data-testid="restricted"><RestrictedMark /></span> : <span>Open to the whole company</span>}
+        <span data-testid="project-department">
+          {project.department ? (
+            <>
+              In the department <Link to="/departments">{project.department.name}</Link>
+            </>
+          ) : (
+            <>
+              In no <Link to="/departments">department</Link>
+            </>
+          )}
+        </span>
         {project.you_lead && (
           <span data-testid="you-lead">
             You lead this project
@@ -427,7 +438,7 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
 }
 
 /** Choose a member and send their member ID; sent with nobody chosen, it says so beside the field. */
-function Choosing({
+export function Choosing({
   members,
   missing,
   action,
@@ -474,7 +485,7 @@ function Choosing({
   );
 }
 
-function Adding({
+export function Adding({
   label,
   placeholder,
   missing,

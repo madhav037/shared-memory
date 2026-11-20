@@ -127,14 +127,22 @@ class ProjectMember(BaseModel):
     name: str
 
 
+class DepartmentRef(BaseModel):
+    """The department a project is in (ADR-0032)."""
+
+    department_id: str
+    name: str
+
+
 class ProjectSummary(BaseModel):
-    """A project the member can reach, and who looks after it."""
+    """A project the member can reach, who looks after it, and the department it is in, if any."""
 
     project_id: str
     name: str
     restricted: bool
     leads: list[ProjectMember]
     you_lead: bool
+    department: DepartmentRef | None
 
 
 class Projects(BaseModel):
@@ -180,6 +188,8 @@ class ProjectDetail(BaseModel):
     repositories: list[ProjectRepository]
     you_lead: bool
     you_may_change: bool
+    # The department the project is in, or None for a project in none (ADR-0032).
+    department: DepartmentRef | None
 
 
 class ProjectName(BaseModel):
@@ -222,6 +232,50 @@ class AccessChange(BaseModel):
     """The member being let into this project."""
 
     member_id: str
+
+
+class DepartmentProject(BaseModel):
+    """A project in a department."""
+
+    project_id: str
+    name: str
+
+
+class DepartmentSummary(BaseModel):
+    """A department (ADR-0032): its department leads, the projects in it this member can reach, and what they may
+    change."""
+
+    department_id: str
+    name: str
+    leads: list[ProjectMember]
+    projects: list[DepartmentProject]
+    you_lead: bool
+    you_may_change: bool
+
+
+class Departments(BaseModel):
+    """Every department of the company, by name, and whether this member may create one."""
+
+    departments: list[DepartmentSummary]
+    you_may_create: bool
+
+
+class DepartmentName(BaseModel):
+    """What a department is called."""
+
+    name: str
+
+
+class DepartmentAppointment(BaseModel):
+    """The member being made a lead of this department."""
+
+    member_id: str
+
+
+class ProjectMove(BaseModel):
+    """The project being moved into this department."""
+
+    project_id: str
 
 
 class PendingChallenge(BaseModel):
@@ -1156,6 +1210,73 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="remove_keeper",
         summary="Take a keeper off one of this project's foundations.",
         answers=ProjectDetail,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments",
+        method="GET",
+        operation_id="departments",
+        summary="Every department of the company, with its leads and the projects in it this member can reach.",
+        answers=Departments,
+    ),
+    Declaration(
+        path="/departments",
+        method="POST",
+        operation_id="create_department",
+        summary="Create a department with no leads and no projects. Only the company's admins can.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentName,
+    ),
+    Declaration(
+        path="/departments/{department_id}/rename",
+        method="POST",
+        operation_id="rename_department",
+        summary="Change a department's name. Its department ID stays as it is.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentName,
+    ),
+    Declaration(
+        path="/departments/{department_id}/remove",
+        method="POST",
+        operation_id="remove_department",
+        summary="Remove a department, leaving its projects in no department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/leads",
+        method="POST",
+        operation_id="appoint_department_lead",
+        summary="Make a member a lead of this department.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentAppointment,
+    ),
+    Declaration(
+        path="/departments/{department_id}/leads/{member_id}/remove",
+        method="POST",
+        operation_id="remove_department_lead",
+        summary="Take a lead off this department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/projects",
+        method="POST",
+        operation_id="move_project_in",
+        summary="Move a project in no department into this one.",
+        answers=Departments,
+        changes=True,
+        accepts=ProjectMove,
+    ),
+    Declaration(
+        path="/departments/{department_id}/projects/{project_id}/remove",
+        method="POST",
+        operation_id="move_project_out",
+        summary="Move a project out of this department, leaving it in no department.",
+        answers=Departments,
         changes=True,
     ),
     Declaration(

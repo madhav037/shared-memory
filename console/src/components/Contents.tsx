@@ -1,14 +1,16 @@
 import { IconChevronRight, IconLock, IconPin, IconKey, IconScale } from "@tabler/icons-react";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { type FileEntry } from "../api/client";
 import { currentPath, useContents } from "../lib/contents";
+import { grouped } from "../lib/departments";
 import { folderName, folderUrl, memoryUrl } from "../lib/format";
 
-/** The contents column: company memory, then every project, each opening onto its folders and memories. */
+/** The contents column: company memory, then every department's projects, then the projects in none, each opening
+ * onto its folders and memories. */
 export function ContentsTree({ onOpen, heading = true }: { onOpen?: () => void; heading?: boolean }) {
-  const { folders, load } = useContents();
+  const { folders, projects, load } = useContents();
   const root = folders.get("");
   const tree = useRef<HTMLUListElement>(null);
 
@@ -60,16 +62,26 @@ export function ContentsTree({ onOpen, heading = true }: { onOpen?: () => void; 
         Contents
       </div>
       <ul className="tree" role="tree" aria-labelledby="contents-heading" ref={tree} onKeyDown={move}>
-        {root.folders.map((folder, place) => (
-          <FolderNode
-            key={folder.path}
-            path={folder.path}
-            name={folder.name}
-            tally={folder.memories}
-            depth={0}
-            first={place === 0}
-            onOpen={onOpen}
-          />
+        {grouped(root.folders, projects).map((group) => (
+          <Fragment key={group.heading ?? group.folders[0]?.path ?? "none"}>
+            {/* A department's name heads its projects; it is neither a treeitem nor a list item, so role none. */}
+            {group.heading && (
+              <li role="none" className="tree-note tree-department" data-testid="tree-department">
+                {group.heading}
+              </li>
+            )}
+            {group.folders.map((folder) => (
+              <FolderNode
+                key={folder.path}
+                path={folder.path}
+                name={folder.name}
+                tally={folder.memories}
+                depth={0}
+                first={folder.path === root.folders[0]?.path}
+                onOpen={onOpen}
+              />
+            ))}
+          </Fragment>
         ))}
       </ul>
       {/* What a new member needs first, at the foot of what they can read. */}

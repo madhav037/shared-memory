@@ -53,6 +53,12 @@ from shared_memory.audit import (
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
     COMPANY_EXPORTED,
+    DEPARTMENT_CREATED,
+    DEPARTMENT_LEAD_APPOINTED,
+    DEPARTMENT_LEAD_REMOVED,
+    DEPARTMENT_REMOVED,
+    DEPARTMENT_RENAMED,
+    PROJECT_MOVED,
     TOKEN_ISSUED,
     Audit,
 )
@@ -81,7 +87,10 @@ from shared_memory.console_contract import (
     SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
     OnboardingEntry, OnboardingProgress,
     InterviewMemories, InterviewMemory,
+    DepartmentAppointment, DepartmentName, DepartmentProject, DepartmentRef, Departments, DepartmentSummary,
+    ProjectMember, ProjectMove,
 )
+from shared_memory.departments import Department, Departments as DepartmentStore
 from shared_memory.errors import Refused
 from shared_memory.export import CompanyExport
 from shared_memory.identity import Caller, Identity, Member
@@ -226,6 +235,10 @@ def _evidence(each: Evidence) -> DoubtEvidence:
         quoted_line=None if reference is None else reference.quoted_line,
         raised_at=each.raised_at,
     )
+
+
+def _department_ref(department: Department | None) -> DepartmentRef | None:
+    return None if department is None else DepartmentRef(department_id=department.department_id, name=department.name)
 
 
 def _sign_in_first() -> Response:
@@ -382,7 +395,9 @@ class ConsoleApi:
         talk: SessionTalk,
         project_health: health.ProjectHealth,
         progress: onboarding.Progress,
+        departments: DepartmentStore,
     ) -> None:
+        self._departments = departments
         self._progress = progress
         self._export_of = export
         self._health = project_health
@@ -469,6 +484,14 @@ class ConsoleApi:
             "choose_my_time_zone": self._choose_my_time_zone,
             "report_my_time_zone": self._report_my_time_zone,
             "reissue_token": self._reissue_token,
+            "departments": self._departments_listed,
+            "create_department": self._create_department,
+            "rename_department": self._rename_department,
+            "remove_department": self._remove_department,
+            "appoint_department_lead": self._appoint_department_lead,
+            "remove_department_lead": self._remove_department_lead,
+            "move_project_in": self._move_project_in,
+            "move_project_out": self._move_project_out,
             "sign_out": self._sign_out,
         }
         assert SAVING <= handlers.keys()
@@ -583,7 +606,13 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        answer = Projects(projects=[ProjectSummary(**one) for one in self._identity.project_summaries(member)])
+        summaries = self._identity.project_summaries(member)
+        found = self._departments.of_projects([one["project_id"] for one in summaries])
+        answer = Projects(
+            projects=[
+                ProjectSummary(**one, department=_department_ref(found.get(one["project_id"]))) for one in summaries
+            ]
+        )
         return JSONResponse(answer.model_dump(mode="json"))
 
     def _create_project(self, request: Request) -> Response:
@@ -730,8 +759,126 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         server_url = str(request.base_url).rstrip("/")
         repositories = [self._repository(server_url, project_id, found["name"], name) for name in found["repositories"]]
-        detail = ProjectDetail(**{**found, "repositories": repositories})
+        department = _department_ref(self._departments.of_project(project_id))
+        detail = ProjectDetail(**{**found, "repositories": repositories, "department": department})
         return JSONResponse(detail.model_dump(mode="json"))
+
+    # --- departments (ADR-0032) ---
+
+    def _departments_listed(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return self._departments_now(member)
+
+    def _create_department(self, request: Request) -> Response:
+        def create(member: Member, caller: Caller) -> None:
+            asked: DepartmentName = request.state.asked
+            made = self._departments.create(caller, asked.name)
+            self._audit.record(DEPARTMENT_CREATED, member=member, target=made.department_id, detail={"name": made.name})
+
+        return self._change_departments(request, create)
+
+    def _rename_department(self, request: Request) -> Response:
+        def rename(member: Member, caller: Caller) -> None:
+            asked: DepartmentName = request.state.asked
+            renamed = self._departments.rename(caller, request.path_params["department_id"], asked.name)
+            self._audit.record(
+                DEPARTMENT_RENAMED, member=member, target=renamed.department_id, detail={"name": renamed.name}
+            )
+
+        return self._change_departments(request, rename)
+
+    def _remove_department(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller) -> None:
+            removed, left = self._departments.remove(caller, request.path_params["department_id"])
+            self._audit.record(
+                DEPARTMENT_REMOVED,
+                member=member,
+                target=removed.department_id,
+                detail={"name": removed.name, "projects": left},
+            )
+
+        return self._change_departments(request, remove)
+
+    def _appoint_department_lead(self, request: Request) -> Response:
+        def appoint(member: Member, caller: Caller) -> None:
+            asked: DepartmentAppointment = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.appoint_lead(caller, department_id, asked.member_id)
+            self._audit.record(
+                DEPARTMENT_LEAD_APPOINTED, member=member, target=department_id, detail={"member_id": asked.member_id}
+            )
+
+        return self._change_departments(request, appoint)
+
+    def _remove_department_lead(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller) -> None:
+            department_id, member_id = request.path_params["department_id"], request.path_params["member_id"]
+            self._departments.remove_lead(caller, department_id, member_id)
+            self._audit.record(
+                DEPARTMENT_LEAD_REMOVED, member=member, target=department_id, detail={"member_id": member_id}
+            )
+
+        return self._change_departments(request, remove)
+
+    def _move_project_in(self, request: Request) -> Response:
+        def move(member: Member, caller: Caller) -> None:
+            asked: ProjectMove = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.move_in(caller, department_id, asked.project_id)
+            self._audit.record(
+                PROJECT_MOVED,
+                member=member,
+                project_id=asked.project_id,
+                target=department_id,
+                detail={"department_id": department_id, "from_department_id": None},
+            )
+
+        return self._change_departments(request, move)
+
+    def _move_project_out(self, request: Request) -> Response:
+        def move(member: Member, caller: Caller) -> None:
+            department_id, project_id = request.path_params["department_id"], request.path_params["project_id"]
+            self._departments.move_out(caller, department_id, project_id)
+            self._audit.record(
+                PROJECT_MOVED,
+                member=member,
+                project_id=project_id,
+                target=department_id,
+                detail={"department_id": None, "from_department_id": department_id},
+            )
+
+        return self._change_departments(request, move)
+
+    def _change_departments(self, request: Request, change: Callable[[Member, Caller], None]) -> Response:
+        """Everything an admin or a department lead does to a department: the same guard, and every department as
+        it now stands."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            change(member, self._identity.caller_in(member, None))
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return self._departments_now(member)
+
+    def _departments_now(self, member: Member) -> Response:
+        answer = Departments(
+            departments=[
+                DepartmentSummary(
+                    department_id=view.department.department_id,
+                    name=view.department.name,
+                    leads=[ProjectMember(member_id=lead.member_id, name=lead.name) for lead in view.leads],
+                    projects=[DepartmentProject(project_id=one.project_id, name=one.name) for one in view.projects],
+                    you_lead=view.you_lead,
+                    you_may_change=view.you_may_change,
+                )
+                for view in self._departments.listed(member)
+            ],
+            you_may_create=member.is_owner or member.is_admin,
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _repository(self, server_url: str, project_id: str, project_name: str, name: str) -> ProjectRepository:
         files = self._service.connection_files(server_url, project_id, project_name, name)

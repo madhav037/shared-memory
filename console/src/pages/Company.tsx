@@ -1,6 +1,7 @@
 import { Button, CopyButton, Menu, NumberInput, Switch, TextInput, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconCopy, IconDots, IconUserPlus } from "@tabler/icons-react";
 import { useState } from "react";
+import { Link } from "react-router";
 
 import {
   addMember,
@@ -73,7 +74,11 @@ export function Company({ me }: { me: SignedInMember }) {
         {admins.length > 0 ? `, with ${admins.map((one) => one.name).join(", ")} as admin${admins.length > 1 ? "s" : ""}` : ""}.{" "}
         {runs
           ? "Admins add and remove members and issue their tokens; only the owner decides who is an admin."
-          : "Ask them to add someone, change access or issue a token."}
+          : "Ask them to add someone, change access or issue a token."}{" "}
+        <Link to="/departments" data-testid="to-departments">
+          Departments
+        </Link>{" "}
+        group the company’s projects.
       </p>
 
       {refused && (

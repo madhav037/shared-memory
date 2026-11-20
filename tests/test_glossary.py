@@ -212,7 +212,7 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "take",
         "taking access or a role away from a member, not claiming a card",
-        (PAGES + "ProjectSettings.tsx", PAGES + "Company.tsx"),
+        (PAGES + "ProjectSettings.tsx", PAGES + "Company.tsx", PAGES + "Departments.tsx"),
     ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),

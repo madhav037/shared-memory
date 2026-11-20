@@ -68,6 +68,12 @@ const WORDS: Record<Kind, string> = {
   project_opened: "Project opened to the company",
   access_granted: "Access granted",
   access_revoked: "Access taken away",
+  department_created: "Department created",
+  department_renamed: "Department renamed",
+  department_removed: "Department removed",
+  department_lead_appointed: "Department lead appointed",
+  department_lead_removed: "Department lead taken off",
+  project_moved: "Project moved between departments",
 };
 
 /** In what capacity a challenge was decided, as the record names it. */
@@ -196,6 +202,9 @@ function Details({
   if (text("github")) said.push(`GitHub @${text("github")}`);
   if (text("for")) said.push(text("for") === "themselves" ? "Their own token" : `For ${nameOf(text("for")!)}`);
   if (text("reason")) said.push(text("reason"));
+  if (kind.startsWith("department_lead") && text("member_id")) said.push(nameOf(text("member_id")!));
+  if (kind === "project_moved")
+    said.push(text("department_id") ? `Into department ${text("department_id")}` : `Out of department ${text("from_department_id")}`);
   return <DetailLine said={said} />;
 }
 

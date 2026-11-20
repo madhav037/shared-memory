@@ -226,6 +226,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every department of the company, with its leads and the projects in it this member can reach. */
+        get: operations["departments"];
+        put?: never;
+        /** Create a department with no leads and no projects. Only the company's admins can. */
+        post: operations["create_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change a department's name. Its department ID stays as it is. */
+        post: operations["rename_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a department, leaving its projects in no department. */
+        post: operations["remove_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a member a lead of this department. */
+        post: operations["appoint_department_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/leads/{member_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a lead off this department. */
+        post: operations["remove_department_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a project in no department into this one. */
+        post: operations["move_project_in"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/projects/{project_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a project out of this department, leaving it in no department. */
+        post: operations["move_project_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/restrict": {
         parameters: {
             query?: never;
@@ -1037,6 +1157,16 @@ export interface components {
             platform_url: string | null;
         };
         /**
+         * DepartmentRef
+         * @description The department a project is in (ADR-0032).
+         */
+        DepartmentRef: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * ProjectMember
          * @description A member named on a project.
          */
@@ -1048,7 +1178,7 @@ export interface components {
         };
         /**
          * ProjectSummary
-         * @description A project the member can reach, and who looks after it.
+         * @description A project the member can reach, who looks after it, and the department it is in, if any.
          */
         ProjectSummary: {
             /** Project Id */
@@ -1061,6 +1191,7 @@ export interface components {
             leads: components["schemas"]["ProjectMember"][];
             /** You Lead */
             you_lead: boolean;
+            department: components["schemas"]["DepartmentRef"] | null;
         };
         /** Projects */
         Projects: {
@@ -1138,6 +1269,7 @@ export interface components {
             you_lead: boolean;
             /** You May Change */
             you_may_change: boolean;
+            department: components["schemas"]["DepartmentRef"] | null;
         };
         /**
          * ProjectName
@@ -1170,6 +1302,69 @@ export interface components {
         KeeperAssignment: {
             /** Member Id */
             member_id: string;
+        };
+        /**
+         * DepartmentProject
+         * @description A project in a department.
+         */
+        DepartmentProject: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentSummary
+         * @description A department (ADR-0032): its department leads, the projects in it this member can reach, and what they may
+         *     change.
+         */
+        DepartmentSummary: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+            /** Leads */
+            leads: components["schemas"]["ProjectMember"][];
+            /** Projects */
+            projects: components["schemas"]["DepartmentProject"][];
+            /** You Lead */
+            you_lead: boolean;
+            /** You May Change */
+            you_may_change: boolean;
+        };
+        /**
+         * Departments
+         * @description Every department of the company, by name, and whether this member may create one.
+         */
+        Departments: {
+            /** Departments */
+            departments: components["schemas"]["DepartmentSummary"][];
+            /** You May Create */
+            you_may_create: boolean;
+        };
+        /**
+         * DepartmentName
+         * @description What a department is called.
+         */
+        DepartmentName: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentAppointment
+         * @description The member being made a lead of this department.
+         */
+        DepartmentAppointment: {
+            /** Member Id */
+            member_id: string;
+        };
+        /**
+         * ProjectMove
+         * @description The project being moved into this department.
+         */
+        ProjectMove: {
+            /** Project Id */
+            project_id: string;
         };
         /**
          * Restriction
@@ -2039,7 +2234,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message" | "department_created" | "department_renamed" | "department_removed" | "department_lead_appointed" | "department_lead_removed" | "project_moved";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -3117,6 +3312,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    departments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every department of the company, with its leads and the projects in it this member can reach. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    create_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentName"];
+            };
+        };
+        responses: {
+            /** @description Create a department with no leads and no projects. Only the company's admins can. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    rename_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentName"];
+            };
+        };
+        responses: {
+            /** @description Change a department's name. Its department ID stays as it is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    remove_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove a department, leaving its projects in no department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    appoint_department_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentAppointment"];
+            };
+        };
+        responses: {
+            /** @description Make a member a lead of this department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    remove_department_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a lead off this department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    move_project_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMove"];
+            };
+        };
+        responses: {
+            /** @description Move a project in no department into this one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    move_project_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Move a project out of this department, leaving it in no department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
                 };
             };
         };
