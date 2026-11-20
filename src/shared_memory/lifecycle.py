@@ -206,7 +206,7 @@ class Lifecycle:
                 return self._ask_to_add(caller, location, promoted_by, into, reasoning)
         self._forget(reference)
         if challenged is not None:
-            kept = self._kept_import(caller.team, location.path)
+            kept = self._kept_import(caller.company, location.path)
             challenge_id = self._challenges.raise_challenge(
                 caller,
                 kind="supersede",

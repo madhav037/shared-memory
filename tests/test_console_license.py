@@ -527,7 +527,7 @@ def test_a_read_only_hosted_server_refuses_a_self_hosted_servers_key_and_stays_r
     assert refused.status_code == 403
     assert refused.json()["message"] == (
         "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed here. "
-        "A hosted server runs under its own license key, which the platform installs when your team's plan is paid."
+        "A hosted server runs under its own license key, which the platform installs when your company's plan is paid."
     )
     found = license_of(client)
     assert (found["status"], found["expires"]) == ("read-only", LAPSED_ON.isoformat())
@@ -545,8 +545,8 @@ def test_a_read_only_hosted_server_refuses_another_teams_hosted_key_and_stays_re
 
     assert refused.status_code == 403
     assert refused.json()["message"] == (
-        "That license key is for another team's hosted server (globex), and this is acme's, so it can't be installed "
-        "here. A hosted server runs under its own license key, which the platform installs when your team's plan is "
+        "That license key is for another company's hosted server (globex), and this is acme's, so it can't be installed "
+        "here. A hosted server runs under its own license key, which the platform installs when your company's plan is "
         "paid."
     )
     found = license_of(client)

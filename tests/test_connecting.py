@@ -78,5 +78,5 @@ def test_a_saved_memory_tells_the_agent_how_to_make_it_the_teams(team: Team) -> 
     assert saved["level"] == "personal"
     assert "promote" in saved["next"]
     assert saved["path"] in saved["next"]
-    for level in ("project", "team"):
+    for level in ("project", "company"):
         assert level in saved["next"], level

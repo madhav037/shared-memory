@@ -1423,7 +1423,7 @@ export interface components {
         /**
          * OnboardingProgress
          * @description A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its
-         *     leads and the team's admins see them, or only the ones the signed-in member recorded. Read-only: a session
+         *     leads and the company's admins see them, or only the ones the signed-in member recorded. Read-only: a session
          *     records progress.
          */
         OnboardingProgress: {

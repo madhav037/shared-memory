@@ -3007,7 +3007,7 @@
         "type": "object"
       },
       "OnboardingProgress": {
-        "description": "A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its\nleads and the team's admins see them, or only the ones the signed-in member recorded. Read-only: a session\nrecords progress.",
+        "description": "A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its\nleads and the company's admins see them, or only the ones the signed-in member recorded. Read-only: a session\nrecords progress.",
         "properties": {
           "project_id": {
             "title": "Project Id",
