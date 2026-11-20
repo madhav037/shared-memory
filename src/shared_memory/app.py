@@ -1158,15 +1158,16 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def tree(ctx: Context, level: str | None = None) -> dict[str, Any]:
-        """Show the memory folders of this project with each memory's title and summary, and the department the
-        project is in (null when it is in none).
+        """Show the memory folders of this project with each memory's title and summary, and its department.
 
         level is company, project or personal; leave it out to see everything in this project.
         """
         current = caller(ctx)
         shown = service.tree(current, level)
+        # A project in no department answers exactly as before departments (ADR-0032): no department key at all.
         found = departments.of_project(current.require_project().project_id)
-        shown["department"] = None if found is None else {"department_id": found.department_id, "name": found.name}
+        if found is not None:
+            shown["department"] = {"department_id": found.department_id, "name": found.name}
         token = new_token()
         for entry in shown["folders"]:
             for each in entry["memories"]:

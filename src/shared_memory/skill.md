@@ -65,7 +65,7 @@ Save when the member says "remember this", and also on your own when you learn s
 ## Finding memory
 
 - `search` finds memories by meaning and by exact words.
-- `list` shows one folder's memories with their summaries; `tree` shows every folder in this project, and the department the project is in, if any.
+- `list` shows one folder's memories with their summaries; `tree` shows every folder in this project.
 - `read` opens one memory in full.
 - In Claude Code, hand a broad or open-ended search to the `memory-search` subagent: it reads memory in its own context and returns one line per memory with its path, so you open only what you need.
 

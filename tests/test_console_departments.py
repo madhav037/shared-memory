@@ -227,7 +227,7 @@ def test_a_session_learns_its_projects_department(console: Console, signed_out: 
     in_ledger = owner.in_project(ledger).call("tree")
 
     assert in_billing["department"] == {"department_id": payments, "name": "Payments"}
-    assert in_ledger["department"] is None
+    assert "department" not in in_ledger
 
 
 def test_the_contract_describes_every_department_call(console: Console, signed_out: ConsoleClient) -> None:
