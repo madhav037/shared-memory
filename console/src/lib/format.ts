@@ -38,7 +38,7 @@ export function waitingFor(names: string[]): string {
 }
 
 /** Where a memory sits. The server's vocabulary, so anything naming levels is exhaustive against this. */
-export const LEVEL_KEYS = ["company", "project", "personal"] as const;
+export const LEVEL_KEYS = ["company", "department", "project", "personal"] as const;
 export type Level = (typeof LEVEL_KEYS)[number];
 
 /** What a memory is. The server's vocabulary, so anything naming types is exhaustive against this. */
@@ -47,6 +47,7 @@ export type MemoryType = (typeof TYPE_KEYS)[number];
 
 const LEVELS: Record<Level, string> = {
   company: "Company memory",
+  department: "Department memory",
   project: "Project memory",
   personal: "Personal memory",
 };
@@ -96,9 +97,11 @@ export function headerOf(source: string): Map<string, string> {
   return fields;
 }
 
-/** Which level a memory path sits at: company memory, a project's accepted memory, or a member's personal memory. */
+/** Which level a memory path sits at: company memory, a department's memory, a project's accepted memory, or a
+ * member's personal memory. */
 export function levelOf(path: string): string {
   if (path.startsWith("company/")) return "company";
+  if (path.startsWith("departments/")) return "department";
   return path.split("/")[2] === "people" ? "personal" : "project";
 }
 
@@ -124,6 +127,7 @@ export function sessionsUrl(projectId: string): string {
 export function isTopic(path: string): boolean {
   const parts = path.split("/").filter(Boolean);
   if (parts[0] === "company") return parts.length > 2;
+  if (parts[0] === "departments") return parts.length > 3;
   if (parts[0] !== "projects" || parts.length < 4) return false;
   return parts[2] === "shared" ? parts.length > 4 : parts.length > 5;
 }

@@ -1674,7 +1674,7 @@
     "/api/memory/pin": {
       "post": {
         "operationId": "pin_at",
-        "summary": "Pin a project or company memory, or a topic folder, into every briefing it belongs in.",
+        "summary": "Pin a project, department or company memory, or a topic folder, into every briefing it belongs in.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1687,7 +1687,7 @@
         },
         "responses": {
           "200": {
-            "description": "Pin a project or company memory, or a topic folder, into every briefing it belongs in.",
+            "description": "Pin a project, department or company memory, or a topic folder, into every briefing it belongs in.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1758,7 +1758,7 @@
     "/api/search": {
       "get": {
         "operationId": "search_everywhere",
-        "summary": "Memories that match, across company memory and every project this member can reach.",
+        "summary": "Memories that match, across company memory, department memory and every project this member can reach.",
         "parameters": [
           {
             "name": "query",
@@ -1795,7 +1795,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Memories that match, across company memory and every project this member can reach.",
+            "description": "Memories that match, across company memory, department memory and every project this member can reach.",
             "content": {
               "application/json": {
                 "schema": {

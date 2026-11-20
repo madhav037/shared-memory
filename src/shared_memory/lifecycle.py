@@ -20,13 +20,16 @@ from shared_memory.challenges import DOUBT, Challenge, Challenges, DecidesAs, pr
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
+from shared_memory.departments import Department, Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
+    DEPARTMENTS_FOLDER,
     FOUNDATION_TYPE,
     KNOWN_ISSUE,
+    LEVEL_ORDER,
     Area,
     Level,
     Location,
@@ -67,13 +70,14 @@ RESOLUTIONS = ("supersede", "keep_both", "cancel")
 @dataclass(frozen=True)
 class Promotable:
     """A promotion that can happen: where the memory is, its new level, who promotes it (when not its author), the
-    project, and the foundation it goes into, if any."""
+    project, the foundation it goes into, if any, and the project's department, if it is in one."""
 
     location: Location
     target: Level
     promoted_by: str | None
     project: Project
     foundation: str | None
+    department_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,8 +101,10 @@ class Lifecycle:
         challenges: Challenges,
         audit: Audit,
         clock: Clock,
+        departments: Departments,
     ) -> None:
         self._settings = settings
+        self._departments = departments
         self._db = db
         self._store = store
         self._index = index
@@ -126,15 +132,17 @@ class Lifecycle:
     ) -> dict[str, Any]:
         promotable = self._promotable(caller, path, level, foundation)
         location, target, promoted_by = promotable.location, promotable.target, promotable.promoted_by
-        project, into = promotable.project, promotable.foundation
+        project, into, department_id = promotable.project, promotable.foundation, promotable.department_id
         memory_type = self._store.read(caller.company, location.path).type
         self._keep_import(caller, location, project, author, imported_from, first_call=reference is None)
         if reference is None:
-            proposal = self._similar(caller, path, location, level, project)
+            proposal = self._similar(caller, path, location, level, project, department_id)
             if proposal is None:
                 if into is not None and not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project.project_id)):
                     return self._ask_to_add(caller, location, promoted_by, into, reasoning)
-                return self._move(caller, location, target, promoted_by=promoted_by, foundation=into)
+                return self._move(
+                    caller, location, target, promoted_by=promoted_by, foundation=into, department_id=department_id
+                )
             return proposal
 
         with self._db.transaction() as conn:
@@ -167,9 +175,10 @@ class Lifecycle:
             other = self._store.read(caller.company, similar_location.path)
             if other.status != "active":
                 raise Refused(f"{similar_path} is no longer active. Call promote again without a reference.")
-            if target == "project" and similar_location.level == "company":
+            if similar_location.level != "personal" and LEVEL_ORDER[similar_location.level] < LEVEL_ORDER[target]:
+                # A narrower memory superseding a broader one becomes an exception to it.
                 if exception_to is not None:
-                    raise Refused("A project memory can be an exception to only one company memory.")
+                    raise Refused(f"A {target} memory can be an exception to only one broader memory.")
                 exception_to = similar_path
             elif similar_location.foundation is not None and not self._changes_at_once(
                 caller, project.project_id, similar_location.foundation, leads
@@ -230,6 +239,7 @@ class Lifecycle:
             exception_to=exception_to,
             promoted_by=promoted_by,
             foundation=into,
+            department_id=department_id,
         )
         if supersede is not None:
             superseded = f"its author superseded it with {result['path']}."
@@ -254,7 +264,7 @@ class Lifecycle:
         promotable = self._promotable(caller, path, level, foundation)
         location, project = promotable.location, promotable.project
         self._keep_import(caller, location, project, author, imported_from, first_call=True)
-        return self._similar(caller, path, location, level, project)
+        return self._similar(caller, path, location, level, project, promotable.department_id)
 
     # Promoting an imported memory in its writer's name
 
@@ -344,8 +354,8 @@ class Lifecycle:
     ) -> Promotable:
         """Refuse a promotion that can't happen."""
         project = caller.require_project()
-        if level not in ("project", "company"):
-            raise Refused(f"Promote into 'project' or 'company' memory, not {level!r}.")
+        if level not in ("project", "department", "company"):
+            raise Refused(f"Promote into 'project', 'department' or 'company' memory, not {level!r}.")
         location = locate(path)
         memory = self._store.read(caller.company, location.path)  # refuses a memory that isn't there
         if location.level != "personal":
@@ -363,9 +373,28 @@ class Lifecycle:
         waiting = self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)])
         if waiting:
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
-        target: Level = "company" if level == "company" else "project"
+        target: Level = "company" if level == "company" else "department" if level == "department" else "project"
+        department = self._departments.of_project(project.project_id)
+        if target == "department":
+            self._require_department_lead(caller, project, department)
         into = self._foundation_for(memory, target, foundation, project.project_id)
-        return Promotable(location, target, promoted_by, project, into)
+        return Promotable(location, target, promoted_by, project, into, None if department is None else department.department_id)
+
+    def _require_department_lead(self, caller: Caller, project: Project, department: Department | None) -> None:
+        """Refuse a promotion into department memory from a project in no department, or by anyone but a lead of the
+        project's department (ADR-0033). Until a non-lead's promotion becomes a challenge to the leads (#632), it is
+        refused, and the memory stays personal."""
+        if department is None:
+            raise Refused(
+                f"Project {project.name!r} is in no department, so it has no department memory. Promote into "
+                "'project' or 'company' memory instead."
+            )
+        if not self._departments.leads(caller.member, department.department_id):
+            raise Refused(
+                f"Only a department lead promotes into department memory, and you don't lead {department.name!r}. "
+                "Ask one of its leads to promote it, or promote it into 'project' memory. It stays your personal "
+                "memory."
+            )
 
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
@@ -525,9 +554,12 @@ class Lifecycle:
         architecture memory belongs in Architecture and a decision memory in Decisions, named or not; any other type
         goes into a foundation only when it is named, and it names one of the project's, core or extra."""
         slug = None if named is None else named.strip().lower()
-        if target == "company":
+        if target in ("company", "department"):
             if slug is not None:
-                raise Refused("Company memory has no foundations: foundations are a project's. Promote into 'project' instead.")
+                raise Refused(
+                    f"{target.capitalize()} memory has no foundations: foundations are a project's. Promote into "
+                    "'project' instead."
+                )
             return None
         own = {"architecture": "architecture", "decision": "decisions"}.get(memory.type)
         if own is not None and slug not in (None, own):
@@ -549,10 +581,20 @@ class Lifecycle:
         return slug
 
     def _similar(
-        self, caller: Caller, path: str, location: Location, level: str, project: Project
+        self,
+        caller: Caller,
+        path: str,
+        location: Location,
+        level: str,
+        project: Project,
+        department_id: str | None = None,
     ) -> dict[str, Any] | None:
         similar = self._index.similar(
-            caller.company, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
+            caller.company,
+            location.path,
+            project_id=project.project_id,
+            department_id=department_id,
+            threshold=self._settings.similar_threshold,
         )
         if not similar:
             return None
@@ -589,8 +631,10 @@ class Lifecycle:
         promoted_by: str | None = None,
         reason: str = "Promote",
         foundation: str | None = None,
+        department_id: str | None = None,
     ) -> dict[str, Any]:
-        """Move a personal memory into project or company memory, reading it in the same save that moves it.
+        """Move a personal memory into project, department or company memory, reading it in the same save that moves
+        it. A move into department memory goes into `department_id`'s.
 
         A memory moved or deleted by a save that went first is refused here, so it is never promoted twice. An imported
         memory whose promotion named its writer moves in that member's name, with its importer and source recorded.
@@ -598,7 +642,11 @@ class Lifecycle:
         imported = self._kept_import(caller.company, location.path)
         # Every area the move touches, known before it takes a turn: where the memory is, where it goes, and the
         # memories it supersedes or is an exception to.
-        areas = {area_of(location.path), Area(target, location.project_id if target == "project" else None)}
+        if target == "department":
+            assert department_id is not None
+            areas = {area_of(location.path), Area("department", department_id=department_id)}
+        else:
+            areas = {area_of(location.path), Area(target, location.project_id if target == "project" else None)}
         areas |= {area_of(PurePosixPath(path)) for path in (supersede, exception_to) if path is not None}
         with self._store.change(caller.company, committer(caller), areas=[a for a in areas if a is not None]) as change:
             memory = change.read(location.path)
@@ -607,7 +655,7 @@ class Lifecycle:
                 assert location.project_id is not None
                 folder = foundation_folder(location.project_id, foundation)
             else:
-                folder = level_folder(target, memory.type, location.project_id)
+                folder = level_folder(target, memory.type, location.project_id, department_id=department_id)
                 if location.topic:
                     folder = folder / location.topic
             new_path = change.new_path(folder, location.path.stem)
@@ -704,6 +752,34 @@ class Lifecycle:
         by = "its author" if memory.author == caller.member_id else "a project lead"
         self._challenges.close_all_against(caller.company, str(location.path), caller.member_id, f"{by} retired it.")
         return {"status": "retired", "path": str(location.path)}
+
+    def retire_department_memory(self, caller: Caller, department_id: str) -> list[str]:
+        """Retire every active memory in a removed department's memory, keeping its history, and answer their paths.
+        Removing a department is the admins' to do (ADR-0032), and retiring is governing, so the console may (ADR-0009)."""
+        folder = PurePosixPath(DEPARTMENTS_FOLDER, department_id)
+        active = [
+            path
+            for _, memories in self._store.walk(caller.company, folder)
+            for path, memory in memories
+            if memory.status == "active"
+        ]
+        if not active:
+            return []
+        area = Area("department", department_id=department_id)
+        message = f"Retire: department {department_id} was removed"
+        with self._store.change(caller.company, committer(caller), message, areas=[area]) as change:
+            for path in active:
+                change.write(path, replace(change.read(path), status="retired"))
+            retired = [str(path) for path in active]
+
+            def audited() -> None:
+                for one in retired:
+                    self._audit.memory(caller, MEMORY_RETIRED, one, reason="department removed")
+
+            change.also(audited)
+        for one in retired:
+            self._challenges.close_all_against(caller.company, one, caller.member_id, "its department was removed.")
+        return retired
 
     def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
         """Retire a known issue whose card is done, as retire does: at once when the caller wrote it, as a challenge

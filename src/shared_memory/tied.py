@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS tied_files (
 );
 
 CREATE INDEX IF NOT EXISTS tied_files_by_repository ON tied_files (team, repository);
+-- Set on department memory alone (ADR-0032), so a lookup keeps it to the departments in reach.
+ALTER TABLE tied_files ADD COLUMN IF NOT EXISTS department_id TEXT;
 """
 
 
@@ -172,10 +174,19 @@ class TiedFiles:
             return
         location = locate(str(path))
         conn.cursor().executemany(
-            "INSERT INTO tied_files (team, path, repository, glob, level, project_id, member_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO tied_files (team, path, repository, glob, level, project_id, member_id, department_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             [
-                (company, str(path), each.repository, each.glob, location.level, location.project_id, location.member_id)
+                (
+                    company,
+                    str(path),
+                    each.repository,
+                    each.glob,
+                    location.level,
+                    location.project_id,
+                    location.member_id,
+                    location.department_id,
+                )
                 for each in sorted(tied)
             ],
         )

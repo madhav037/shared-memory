@@ -14,6 +14,7 @@ import { useAsked } from "../lib/useAsked";
 // until it is named here too.
 const LEVEL_FILTERS: Record<Level, string> = {
   project: "Project",
+  department: "Department",
   company: "Company",
   personal: "Personal",
 };
@@ -63,7 +64,7 @@ export function SearchPage() {
     <div className="column">
       <h1 className="page-title wide">Search</h1>
       <p className="standfirst">
-        By meaning as well as exact words, across company memory and every project you can reach. Retired and superseded
+        By meaning as well as exact words, across company memory, department memory and every project you can reach. Retired and superseded
         memory is left out, as it is for every coding agent.
       </p>
 
@@ -332,7 +333,7 @@ function Entries({ hits, query, testid }: { hits: SearchHit[]; query: string; te
             <Marked text={hit.summary} query={query} />
           </p>
           <Dotted className="entry-meta">
-            {hit.level !== "company" && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
+            {hit.project_id && <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{where(hit)}</span>}
             <Rank level={hit.level} />
             <span>{typeName(hit.type)}</span>
             <span>by {nameOf(hit.author)}</span>

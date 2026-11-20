@@ -798,7 +798,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pin a project or company memory, or a topic folder, into every briefing it belongs in. */
+        /** Pin a project, department or company memory, or a topic folder, into every briefing it belongs in. */
         post: operations["pin_at"];
         delete?: never;
         options?: never;
@@ -847,7 +847,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Memories that match, across company memory and every project this member can reach. */
+        /** Memories that match, across company memory, department memory and every project this member can reach. */
         get: operations["search_everywhere"];
         put?: never;
         post?: never;
@@ -4170,7 +4170,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pin a project or company memory, or a topic folder, into every briefing it belongs in. */
+            /** @description Pin a project, department or company memory, or a topic folder, into every briefing it belongs in. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4243,7 +4243,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Memories that match, across company memory and every project this member can reach. */
+            /** @description Memories that match, across company memory, department memory and every project this member can reach. */
             200: {
                 headers: {
                     [name: string]: unknown;
