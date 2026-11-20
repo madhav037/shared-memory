@@ -323,3 +323,62 @@ def test_the_steps_map_documents_onto_foundations_and_ask_before_replacing_a_fil
     assert "Ask the member first" in steps
     assert steps.index("Map repository documents onto foundations") < steps.index("Promote what the member approved")
     assert steps.index("Promote what the member approved") < steps.index("Replace imported files with pointers")
+
+
+# The steps cover what a brownfield team has (#619)
+
+
+def test_the_steps_have_the_member_choose_this_runs_sources_at_the_start_and_say_what_it_costs(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "Choose this run's sources" in steps
+    assert steps.index("Choose this run's sources") < steps.index("Cut each source into proposals")
+    assert "own tokens" in steps
+
+
+def test_the_steps_cover_git_history_a_code_scan_and_outside_sources_with_how_to_reach_them(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    for needed in ("**Git history**", "revert", "**A scan of the code**", "utilities", "**Outside sources**"):
+        assert needed in steps, needed
+    for reach in ("gh", "glab", "MCP server", "exported folder", "couldn't reach"):
+        assert reach in steps, reach
+    for form in ("commit:repository@revision", "wiki:<page>", "ticket:<reference>", "pr-comment:<reference>"):
+        assert form in steps, form
+
+
+def test_the_steps_walk_several_checkouts_into_one_list_of_proposals(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "several checkouts" in steps
+    assert "one list of proposals" in steps
+
+
+def test_the_steps_collapse_identical_rules_and_show_disagreeing_variants_side_by_side(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "becomes one proposal" in steps
+    assert "`team` level" in steps
+    assert "side by side" in steps
+
+
+def test_the_steps_let_the_member_approve_a_whole_source_and_still_promote_one_at_a_time(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "approve all of one source's proposals in one step" in steps
+    assert "change, drop or bring back" in steps
+    assert "one at a time" in steps
+
+
+def test_the_steps_leave_out_secrets_stale_claims_and_preferences_from_every_source(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "from every source" in steps
+    for needed in ("secret", "no longer holds", "preferences"):
+        assert needed in steps, needed
+
+
+def test_the_final_report_covers_every_repository_and_source(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert "every repository and source" in steps.split("Report")[-1]
