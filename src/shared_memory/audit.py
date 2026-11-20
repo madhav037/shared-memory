@@ -265,7 +265,7 @@ class Audit:
                 "SELECT target, actor, at, detail->>'imported_from' AS source FROM audit_events"
                 " WHERE team_id = %s AND kind = %s AND detail->>'author' = %s"
                 " AND detail->>'imported_from' LIKE 'interview:%%' ORDER BY id DESC",
-                (member.team_pk, MEMORY_PROMOTED, member.member_id),
+                (member.company_pk, MEMORY_PROMOTED, member.member_id),
             ).fetchall()
         return [Interviewed(row["target"], row["actor"], row["at"], row["source"]) for row in rows]
 

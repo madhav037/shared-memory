@@ -71,6 +71,7 @@ def test_an_interviewee_retires_one_and_it_leaves_briefings_and_recall(
     owner, dana = a_project_with_dana(console, signed_out, "olive-interview-retires", 8104)
     path = interview(owner, CENTS)
     owner.call("pin", path=path)
+    added_context(dana.start())  # Dana's session takes the one-time notice of her interview before she retires it.
     dana_console = signed_in(console, "dana-olive-interview-retires", 8105)
 
     retired = dana_console.post_json("/api/memory/retire", {"path": path})

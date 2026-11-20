@@ -1190,7 +1190,7 @@ class ConsoleApi:
         promoted = self._audit.interviews_of(member)
         reachable = {project.project_id for project in self._identity.projects(member)}
         theirs = self._explorer.still_authored(
-            member.team_code,
+            member.company_code,
             (one.path for one in promoted if _project_in(one.path) is None or _project_in(one.path) in reachable),
             member.member_id,
         )
