@@ -22,10 +22,16 @@ from shared_memory.memory import FOUNDATIONS_FOLDER
 from shared_memory.store import MemoryStore
 
 
-def steps() -> str:
+MODES = {"interactive": "onboarding.md", "headless": "onboarding_headless.md"}
+
+
+def steps(mode: str = "interactive") -> str:
     """The onboarding steps, the one text behind the `onboard` tool and the `onboard` prompt. The skills only point
-    at it, so every coding agent follows the same steps."""
-    return resources.files("shared_memory").joinpath("onboarding.md").read_text(encoding="utf-8")
+    at it, so every coding agent follows the same steps. Headless steps write a proposals file and save nothing
+    (ADR-0030)."""
+    if mode not in MODES:
+        raise Refused(f"mode {mode!r} is not one of {', '.join(MODES)}: interactive with a member, headless in CI.")
+    return resources.files("shared_memory").joinpath(MODES[mode]).read_text(encoding="utf-8")
 
 
 STATUSES = ("not_started", "partly_done", "done")

@@ -232,13 +232,13 @@ class Session:
             return structured
         return text
 
-    def run_prompt(self, name: str) -> str:
+    def run_prompt(self, name: str, **arguments: str) -> str:
         """Fetch an MCP prompt the way an agent offers it as a command; return its text."""
-        return self.server.portal.call(self._run_prompt, name)
+        return self.server.portal.call(self._run_prompt, name, arguments)
 
-    async def _run_prompt(self, name: str) -> str:
+    async def _run_prompt(self, name: str, arguments: dict[str, str]) -> str:
         async with self._connected() as client:
-            result = await client.get_prompt(name)
+            result = await client.get_prompt(name, arguments or None)
         return "\n".join(getattr(message.content, "text", "") for message in result.messages)
 
     def on_connecting(self) -> tuple[str, dict[str, str]]:

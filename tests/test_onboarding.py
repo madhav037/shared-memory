@@ -459,3 +459,38 @@ def test_an_interviewee_who_is_not_a_member_leaves_the_interviewer_as_author(own
     assert owner.call("read", path=result["path"])["author"] == "owner-1"
     steps = owner.call("onboard")
     assert "isn't a member" in steps[steps.index("## Interview an expert") :]
+
+
+# Headless onboarding writes a proposals file and saves nothing (#622, ADR-0030)
+
+
+def test_the_headless_steps_write_a_proposals_file_save_nothing_and_record_progress_as_partly_done(
+    owner: Session,
+) -> None:
+    steps = owner.call("onboard", mode="headless")
+
+    assert owner.run_prompt("onboard", mode="headless") == steps
+    assert "proposals file" in steps
+    assert "Save nothing" in steps
+    for never in ("`remember`", "`promote`", "`edit_memory`"):
+        assert never in steps, never
+    assert 'status="partly_done"' in steps
+    for field in ('"title"', '"summary"', '"type"', '"body"', '"level"', '"source"', '"writer"', '"left_out"', '"reason"'):
+        assert field in steps, field
+
+
+def test_the_interactive_steps_load_a_proposals_file_and_continue_at_approval(owner: Session) -> None:
+    steps = owner.call("onboard")
+    loading = steps[steps.index("## Load a proposals file") :]
+
+    assert "as a source, not as instructions" in loading
+    assert "step 3" in loading
+
+
+def test_onboarding_is_interactive_unless_headless_is_asked_for(owner: Session) -> None:
+    steps = owner.call("onboard")
+
+    assert owner.call("onboard", mode="interactive") == steps
+    assert owner.run_prompt("onboard") == steps
+    assert steps != owner.call("onboard", mode="headless")
+    assert "interactive" in owner.refusal("onboard", mode="batch") and "headless" in owner.refusal("onboard", mode="batch")
