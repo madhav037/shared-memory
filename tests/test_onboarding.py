@@ -382,3 +382,55 @@ def test_the_final_report_covers_every_repository_and_source(owner: Session) -> 
     steps = owner.call("onboard")
 
     assert "every repository and source" in steps.split("Report")[-1]
+
+
+# An interview: the interviewee is the author of what their answers produced (#620, ADR-0029)
+
+INTERVIEW = "interview:Billing knowledge with emp-2"
+
+
+def test_the_steps_describe_the_interview(owner: Session) -> None:
+    steps = owner.call("onboard")
+    interview = steps[steps.index("## Interview an expert") :]
+
+    assert "Any member" in interview
+    assert "topic by topic" in interview
+    assert "interviewee approves" in interview
+    assert 'imported_from="interview:' in interview
+    assert "author" in interview
+
+
+def test_an_interview_makes_the_interviewee_the_author_and_records_the_interviewer_and_the_interview(
+    owner: Session, dana: Session
+) -> None:
+    personal = imported(owner)
+
+    result = owner.call("promote", path=personal, level="project", author="emp-2", imported_from=INTERVIEW)
+
+    assert result["status"] == "promoted", result
+    memory = owner.call("read", path=result["path"])
+    assert (memory["author"], memory["imported_by"], memory["imported_from"]) == ("emp-2", "owner-1", INTERVIEW)
+
+
+def test_the_interviewee_is_told_in_their_next_briefing_who_interviewed_them(owner: Session, dana: Session) -> None:
+    result = owner.call("promote", path=imported(owner), level="project", author="emp-2", imported_from=INTERVIEW)
+
+    told = added_context(dana.start())
+
+    assert "owner-1 interviewed you" in told
+    assert "written from your interview" in told
+    assert result["path"] in told and "Money amounts" in told
+    assert "promoted a memory in your name" not in told
+
+
+def test_an_interviewee_who_is_not_a_member_leaves_the_interviewer_as_author(owner: Session) -> None:
+    personal = imported(owner)
+
+    refusal = owner.refusal("promote", path=personal, level="project", author="@outside-expert", imported_from=INTERVIEW)
+    result = owner.call("promote", path=personal, level="project")
+
+    assert "without author" in refusal and "body" in refusal
+    assert result["status"] == "promoted", result
+    assert owner.call("read", path=result["path"])["author"] == "owner-1"
+    steps = owner.call("onboard")
+    assert "isn't a member" in steps[steps.index("## Interview an expert") :]

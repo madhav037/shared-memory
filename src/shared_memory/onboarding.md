@@ -16,6 +16,7 @@ Read the progress so far first: the section at the end of these steps lists each
 - **Git history**: commit messages that give a reason, reverts, and patterns removed and why (`git log --grep`, `git log -S`, the messages of `revert` commits). "We removed X because Y" is a memory worth keeping.
 - **A scan of the code**: the conventions the code actually follows and the existing utilities agents keep duplicating (shared helpers, wrappers, base classes), each proposal naming the file it describes.
 - **Outside sources**: wiki or doc exports (Confluence, Notion, SharePoint, runbooks, knowledge-transfer documents), tickets, and pull request review comments the reviewers keep repeating. Reach each with a tool you already have, `gh` or `glab` for tickets and review comments, an Atlassian or Notion MCP server for a wiki; without one, ask the member for an exported folder and read that. Tell the member which outside sources you couldn't reach and why.
+- **An interview** of an expert, who answers in this session: see *Interview an expert* at the end of these steps.
 
 What Shared Memory wrote itself is no source: the section of `AGENTS.md` between the `shared-memory` markers, `.cursor/rules/shared-memory.mdc`, `.agents/skills/shared-memory/` and the other connection files.
 
@@ -92,3 +93,14 @@ Leave a file alone when any of its passages is still waiting on a foundation cha
 Call `record_onboarding_progress` once for each repository and each kind of outside source (`wiki`, `ticket`, `pr-comment`, `interview`) this run read: `status` is `done` when every proposal from it is promoted, waiting on a challenge, dropped or left out, `partly_done` when some are not yet, and `left_out` is how many passages of it you left out. Record a repository with `repository`, an outside source with `outside_source`. The project's leads see it in project settings, and the next run reads it.
 
 Cover every repository and source this run read, one part each, and the outside sources you couldn't reach. Tell the member what was promoted to project and to team memory and to which foundation and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in any repository or in your local memory, except the pointers the member approved in step 7. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.
+
+## Interview an expert
+
+Any member may interview an expert: someone whose knowledge is in their head, who answers here, in this session, instead of running a coding agent themselves. The expert is the interviewee; this member runs the interview.
+
+1. Ask who the interviewee is and which topics to cover. Find their member ID, or their GitHub username, as for a writer.
+2. Ask the interviewee questions topic by topic, a few at a time: what the code does that surprises newcomers, why it is built the way it is, what was tried and dropped, what breaks. Follow up on anything vague.
+3. Cut their answers into proposals as in step 2, each with the source `interview:<topic> with <interviewee>` and the interviewee as writer. Leave out the same things as for any source.
+4. The interviewee approves each proposal in the session, in their own words, as in step 3: they change, drop or bring back what they like. The choice is theirs, not the interviewer's.
+5. Save and promote as in steps 4 and 6, with the interviewee as author: `promote` with `author="<their member ID or @username>"` and `imported_from="interview:<topic> with <interviewee>"`. The interviewee becomes the author, this member is recorded as its importer and the interview as its source, and the interviewee is told in their next briefing and in the console, where they can retire any of it.
+6. An interviewee who isn't a member, or can't reach this project, can't be the author: the server says so. Then end the body with `From an interview with <name>.` using `edit_memory`, and promote without `author` and `imported_from`, so this member stays the author.

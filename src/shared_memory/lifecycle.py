@@ -325,13 +325,19 @@ class Lifecycle:
             conn.execute("DELETE FROM imports WHERE team = %s AND path = %s", (team, str(path)))
 
     def _tell_author(self, team: str, imported: Imported, importer: str, title: str, path: PurePosixPath, level: Level) -> None:
-        """Tell a member, in their next briefing, that a memory now stands in their name."""
-        self._challenges.tell(
-            team,
-            imported.author,
-            f'{importer} promoted a memory in your name: "{title}" ({path}), imported from {imported.source}, is now '
-            f"{level} memory and you are its author. If it is wrong, retire it or supersede it.",
-        )
+        """Tell a member, in their next briefing, that a memory now stands in their name: written from their interview
+        when it came from one (ADR-0029), imported from what they wrote otherwise (ADR-0016)."""
+        if sources.is_interview(imported.source):
+            told = (
+                f'{importer} interviewed you: "{title}" ({path}) was written from your interview ({imported.source}), is '
+                f"now {level} memory and you are its author. If it is wrong, retire it or supersede it."
+            )
+        else:
+            told = (
+                f'{importer} promoted a memory in your name: "{title}" ({path}), imported from {imported.source}, is '
+                f"now {level} memory and you are its author. If it is wrong, retire it or supersede it."
+            )
+        self._challenges.tell(team, imported.author, told)
 
     def _promotable(
         self, caller: Caller, path: str, level: str, foundation: str | None = None
