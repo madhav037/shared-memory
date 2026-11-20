@@ -71,7 +71,7 @@ A topic every project must have, holding one of its sources of truth: its archit
 _Avoid_: Source of truth, charter, core doc, required topic
 
 **Author**:
-The member who wrote a memory; for an imported memory promoted in its writer's name, the member who wrote the passage it was cut from.
+The member who wrote a memory; for an imported memory promoted in its writer's name, the member who wrote the passage it was cut from, or the interviewee whose answer it was.
 _Avoid_: Owner, creator
 
 **Level**:
@@ -164,7 +164,7 @@ _Avoid_: Replace, overwrite, update
 
 **Challenge**:
 A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
-_Avoid_: Approval, proposal, change request
+_Avoid_: Approval, change request
 
 **Reason**:
 Which of two grounds a challenge that doubts a memory names: *misled me*, or *contradicts the code*, quoting the file and line. It is not the reasoning, which is free text.
@@ -189,7 +189,7 @@ _Avoid_: Delete, archive
 ### Onboarding
 
 **Onboarding**:
-A session a member starts deliberately, in which their coding agent imports what they and the repository already have written down. It is not the welcoming of a new member to the team.
+A session a member starts deliberately, in which their coding agent imports what the team already has written down, from one repository's checkout or several; or a headless run in CI over one repository, which saves nothing and writes a proposals file. It is not the welcoming of a new member to the team.
 _Avoid_: Migration, bulk import, bootstrap, setup
 
 **Import**:
@@ -197,8 +197,28 @@ To cut a passage of a source into a memory during onboarding: saved as the impor
 _Avoid_: Migrate, ingest, upload, sync
 
 **Source**:
-A file onboarding imports from: a repository document, a coding agent's local memory, or another coding agent's rule file.
+Anything onboarding imports from: a repository document, a coding agent's local memory, another coding agent's rule file, a repository's git history, a scan of its code, or an outside source.
 _Avoid_: Origin, input, provenance
+
+**Outside source**:
+A source that is not in a repository's checkout: a wiki or doc export, tickets, pull request review comments, or an interview. The coding agent reaches it with tools it already has, or reads it from an exported folder.
+_Avoid_: Connector, integration, external source
+
+**Proposal**:
+A passage of a source that onboarding offers as one memory, with its source, writer and proposed level, waiting for a member to approve or drop it. It is not yet memory and the server never holds it; it is not a draft learning, which a session drafts from its own work.
+_Avoid_: Suggestion, pending memory, import candidate
+
+**Proposals file**:
+The file a headless onboarding run writes instead of saving: its proposals for one repository, which a member later loads into an onboarding session to approve and promote.
+_Avoid_: Proposal export, import report, manifest
+
+**Interview**:
+An outside source made in a session: the coding agent questions an interviewee and cuts their answers into proposals. Any member may run one.
+_Avoid_: Knowledge transfer, KT, questionnaire
+
+**Interviewee**:
+The member an interview questions: the author of every memory promoted from their answers, told so in the console and in their next briefing, and free to retire any of them.
+_Avoid_: Expert, SME, respondent
 
 **Importer**:
 The member whose session imported a memory; recorded on the memory, with its source, when it is promoted in another member's name.
