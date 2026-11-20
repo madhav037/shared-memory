@@ -8,7 +8,7 @@ function words(member: MemberSummary): string {
 }
 
 /**
- * Choose a member of the team by name, member ID or GitHub account, so nobody has to look an ID up on Team first.
+ * Choose a member of the company by name, member ID or GitHub account, so nobody has to look an ID up on Company first.
  * Its value is still the member ID, so what is sent is unchanged.
  */
 export function MemberPicker({
@@ -27,7 +27,7 @@ export function MemberPicker({
   return (
     <Select
       searchable
-      nothingFoundMessage="No member of the team matches."
+      nothingFoundMessage="No member of the company matches."
       // As wide as the longest member, so a name, ID and GitHub account stay on one line beside a narrow filter.
       comboboxProps={{ width: "max-content", position: "bottom-start" }}
       classNames={{ dropdown: "member-picker-dropdown" }}
@@ -44,7 +44,7 @@ export function MemberPicker({
               {" · "}
               <span className="member-id">{member.member_id}</span>
               {member.github_login && ` · @${member.github_login}`}
-              {member.removed && " · has left the team"}
+              {member.removed && " · has left the company"}
             </span>
           </span>
         );

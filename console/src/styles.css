@@ -120,7 +120,7 @@
   --masthead: 60px;
   --contents: 304px;
   --measure: 68ch;
-  /* The two page measures. Every single-column page (contents, folders, search, sessions, the team, settings, forms
+  /* The two page measures. Every single-column page (contents, folders, search, sessions, the company, settings, forms
      and refusals) holds to the first; registers (Challenges, the board, the audit log) to the second. A memory's page
      has its own reading grid. */
   --page-measure: 760px;
@@ -367,7 +367,7 @@ mark {
   font-weight: 700;
   letter-spacing: -0.015em;
 }
-.wordmark-team {
+.wordmark-company {
   font-size: 0.875rem;
   color: var(--band-ink-2);
   padding-left: 10px;
@@ -2649,7 +2649,7 @@ div.dotted {
   }
   .nav,
   .masthead-search,
-  .wordmark-team,
+  .wordmark-company,
   .who,
   .who-chevron {
     display: none;
@@ -2955,7 +2955,7 @@ div.dotted {
   line-height: 1.2;
   letter-spacing: -0.014em;
 }
-/* A card's description is the team's working note, not memory: Markdown set in Cooper Hewitt at the panel's size. */
+/* A card's description is the company's working note, not memory: Markdown set in Cooper Hewitt at the panel's size. */
 .card-description .prose {
   margin-top: 0;
   font-family: var(--sans);
@@ -3141,7 +3141,7 @@ div.dotted {
   align-items: center;
   gap: 8px 14px;
 }
-/* Asking before a card is deleted: a step of paper, as the team's confirmations are; the red button says the rest. */
+/* Asking before a card is deleted: a step of paper, as the console's confirmations are; the red button says the rest. */
 .card-confirm {
   display: grid;
   gap: 8px;

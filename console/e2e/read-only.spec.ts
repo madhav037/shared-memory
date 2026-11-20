@@ -27,11 +27,11 @@ test("an admin of a read-only hosted server sees until when and how to restore i
   await expect(page.getByTestId("read-only-notice")).toHaveCount(0);
 
   // Inviting a member is refused with a plain answer, and nobody is added.
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await page.getByTestId("new-member-id").fill("emp-late");
   await page.getByTestId("new-name").fill("Lee Late");
   await page.getByTestId("add-member").click();
-  await expect(page.getByTestId("team-refused")).toContainText("read-only");
+  await expect(page.getByTestId("company-refused")).toContainText("read-only");
   await expect(page.getByTestId("new-member-token")).toHaveCount(0);
 
   await signOut(page);

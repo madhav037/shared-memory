@@ -36,7 +36,7 @@ const WORDS: Record<Kind, string> = {
   rate_limits_changed: "Rate limits changed",
   license_installed: "License key installed",
   token_limited: "Personal token limited",
-  team_exported: "Team data downloaded",
+  team_exported: "Company data downloaded",
   gate_timed_out: "Gate's wait passed",
   different_work: "Said different work",
   project_wait_changed: "Project's wait changed",
@@ -65,7 +65,7 @@ const WORDS: Record<Kind, string> = {
   repository_added: "Repository added",
   repository_removed: "Repository forgotten",
   project_restricted: "Project restricted",
-  project_opened: "Project opened to the team",
+  project_opened: "Project opened to the company",
   access_granted: "Access granted",
   access_revoked: "Access taken away",
 };
@@ -77,7 +77,7 @@ const DECIDED_AS: Record<string, string> = {
   keeper: "Decided as a keeper of the foundation",
   admin: "Decided as an admin",
   fallback: "Decided once it had waited long enough for anyone to",
-  author_left: "Decided because its author has left the team",
+  author_left: "Decided because its author has left the company",
 };
 
 /** A memory file, named the way the contents name it, linked to where it can be read. */
@@ -132,7 +132,8 @@ function Details({
     return (
       <DetailLine
         said={[
-          String(detail.team),
+          // A license installed before the rename (ADR-0031) recorded its company only as `team`.
+          String(detail.company ?? detail.team),
           `${String(detail.member_cap)} members`,
           `expires ${String(detail.expires)}`,
         ]}
@@ -208,16 +209,16 @@ function showing(count: number, more: boolean, filtered: boolean): string {
   return count === 1 ? `Showing the only change${match}.` : `Showing all ${count} changes${match}.`;
 }
 
-/** Who changed what, and when: the team's register, newest first. */
+/** Who changed what, and when: the company's register, newest first. */
 export function AuditLog({ member }: { member: SignedInMember }) {
   const { projects, nameOf } = useContents();
   const [filters, setFilters] = useState<AuditFilters>({});
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
-  const wholeTeam = member.role === "owner" || member.role === "admin";
+  const wholeCompany = member.role === "owner" || member.role === "admin";
   // Members who have left stay choosable: their changes are still in the log.
-  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const { answer: company } = useAsked((signal) => fetchMembers(signal), []);
   // A phone sets each change out as an entry several lines tall, so it asks for fewer at a time.
   const [limit] = useState(() => (window.matchMedia("(max-width: 600px)").matches ? PHONE_PAGE : undefined));
   const filtered = Object.values(filters).some(Boolean);
@@ -258,15 +259,15 @@ export function AuditLog({ member }: { member: SignedInMember }) {
     <div className="medium">
       <h1 className="page-title wide">Audit log</h1>
       <p className="standfirst">
-        {wholeTeam
-          ? `Every change in team ${member.team}, newest first, from the console and from every coding agent.`
+        {wholeCompany
+          ? `Every change in company ${member.company}, newest first, from the console and from every coding agent.`
           : "Every change in the projects you lead, newest first."}{" "}
         What a memory said lives in its history; this records who changed it and when.
       </p>
 
       <div className="form-line" style={{ marginTop: 24 }}>
         <MemberPicker
-          members={team?.members ?? []}
+          members={company?.members ?? []}
           label="Member"
           placeholder="Everyone"
           clearable
@@ -362,7 +363,7 @@ export function AuditLog({ member }: { member: SignedInMember }) {
                               <MemoryLink path={event.target} title={event.title} />
                             ) : event.kind.startsWith("card_") && event.project_id ? (
                               <CardLink projectId={event.project_id} target={event.target} />
-                            ) : /^(team|projects)\//.test(event.target) ? (
+                            ) : /^(company|projects)\//.test(event.target) ? (
                               <Link to={folderUrl(event.target)} title={event.target} className="path">
                                 {event.target.split("/").pop()}/
                               </Link>

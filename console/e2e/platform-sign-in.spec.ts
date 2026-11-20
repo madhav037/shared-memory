@@ -58,7 +58,7 @@ test("a sign-in whose signature doesn't check out is turned away", async ({ page
   await expect(page.getByTestId("sign-in")).toBeVisible();
 });
 
-test("a sign-in for another team's server is turned away", async ({ page }) => {
+test("a sign-in for another company's server is turned away", async ({ page }) => {
   await platformSignsIn(page, { id: 1, login: "olive", subdomain: "globex" });
 
   await chooseToSignIn(page);

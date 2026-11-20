@@ -19,3 +19,11 @@ test("a member opens a project, reads a memory, and finds it by searching", asyn
   await expect(page.getByTestId("results")).toContainText("Use pnpm, not npm");
   await expect(page.getByTestId("results")).toContainText("Project memory");
 });
+
+test("the contents open with company memory, which holds for every project in the company", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+
+  await expect(page.getByTestId("project-card").first()).toContainText("Company memory");
+  await expect(page.getByTestId("company-note")).toContainText("Holds for every project in the company.");
+  await expect(page.getByTestId("project-card").first()).not.toContainText("Team memory");
+});

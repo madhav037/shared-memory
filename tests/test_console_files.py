@@ -61,7 +61,7 @@ def test_the_top_holds_team_memory_and_every_project_with_what_each_holds(
 
     assert top["folder"] == ""
     assert [(one["name"], one["kind"], one["memories"]) for one in top["folders"]] == [
-        ("Company memory", "team", 1),
+        ("Company memory", "company", 1),
         ("Billing", "project", 2),
         ("Payments", "project", 0),
     ]
@@ -97,7 +97,7 @@ def test_any_memory_reads_by_its_path_with_its_file_as_claude_reads_it(
     team = memory(signed_out, it["logging"])
     personal = memory(signed_out, it["note"])
 
-    assert team["level"] == "team"
+    assert team["level"] == "company"
     assert team["body"] == "Every service logs one JSON object per line."
     assert team["source"].startswith("---\ntitle: Every service logs JSON\n")
     assert team["source"].rstrip().endswith("Every service logs one JSON object per line.")

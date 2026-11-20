@@ -158,7 +158,7 @@ class Licenses:
             member=member,
             actor=actor,
             detail={
-                "team": held.company,  # the console reads `team` until #627
+                "team": held.company,  # the old name, until the rename's contract step (#629)
                 "company": held.company,
                 "member_cap": held.member_cap,
                 "expires": held.expires.isoformat(),

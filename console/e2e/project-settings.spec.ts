@@ -55,7 +55,7 @@ test("a lead assigns a keeper to a foundation in project settings, and the keepe
   await signInAs(page, 1, "olive");
 
   // A member and a project of this journey's own, so no other journey's foundations change.
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await page.getByTestId("new-member-id").fill("emp-keeper");
   await page.getByTestId("new-name").fill("Kit Keeper");
   await page.getByTestId("new-github").fill("kit-keeper");

@@ -13,7 +13,7 @@ const FIELD_NAMES: Record<string, string> = {
   status: "its status",
   superseded_by: "what superseded it",
   replaces: "what it replaces",
-  exception_to: "the team memory it is an exception to",
+  exception_to: "the company memory it is an exception to",
   promoted_by: "who promoted it",
   imported_by: "who imported it",
   imported_from: "its source",

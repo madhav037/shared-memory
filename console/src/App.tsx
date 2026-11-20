@@ -43,7 +43,7 @@ import { SearchPage } from "./pages/SearchPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { SignIn } from "./pages/SignIn";
 import { YourSettings } from "./pages/YourSettings";
-import { LICENSE_CHANGED, licenseSentence, Team } from "./pages/Team";
+import { Company, LICENSE_CHANGED, licenseSentence } from "./pages/Company";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -87,7 +87,7 @@ export function App() {
     return (
       <>
         <header className="masthead">
-          <Wordmark team={null} />
+          <Wordmark company={null} />
         </header>
         <div className="title-page" data-testid="status" aria-busy="true" />
       </>
@@ -98,7 +98,7 @@ export function App() {
     return (
       <>
         <header className="masthead">
-          <Wordmark team={null} />
+          <Wordmark company={null} />
         </header>
         <main className="title-page">
           <div className="title-page-inner" data-testid="status">
@@ -117,7 +117,7 @@ export function App() {
     return (
       <>
         <header className="masthead">
-          <Wordmark team={null} />
+          <Wordmark company={null} />
         </header>
         <SignIn status={status} refused={signInRefused} />
       </>
@@ -137,12 +137,12 @@ export function App() {
   );
 }
 
-function Wordmark({ team }: { team: string | null }) {
+function Wordmark({ company }: { company: string | null }) {
   return (
     <Link to="/" className="wordmark" aria-label="Shared Memory, contents">
       <i className="wordmark-mark" aria-hidden />
       <b>Shared Memory</b>
-      {team && <span className="wordmark-team">{team}</span>}
+      {company && <span className="wordmark-company">{company}</span>}
     </Link>
   );
 }
@@ -187,7 +187,7 @@ function SignedIn({
     { to: "/", label: "Contents", end: true, testid: "to-contents" },
     { to: "/search", label: "Search", testid: "to-search" },
     { to: "/challenges", label: "Challenges", count: waiting, testid: "to-challenges" },
-    { to: "/team", label: "Team", testid: "to-team" },
+    { to: "/company", label: "Company", testid: "to-company" },
     ...(readsAudit ? [{ to: "/audit", label: "Audit log", testid: "to-audit" }] : []),
   ];
 
@@ -197,7 +197,7 @@ function SignedIn({
         Skip to the page
       </a>
       <header className="masthead">
-        <Wordmark team={member.team} />
+        <Wordmark company={member.company} />
         <nav className="nav" aria-label="The console">
           {links.map((link) => (
             <NavLink key={link.to} to={link.to} end={link.end} data-testid={link.testid}>
@@ -271,7 +271,8 @@ function SignedIn({
             <Route path="/projects/:projectId/health" element={<HealthPage />} />
             <Route path="/projects/:projectId/memory" element={<OldMemoryAddress />} />
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
-            <Route path="/team" element={<Team me={member} />} />
+            <Route path="/company" element={<Company me={member} />} />
+            <Route path="/team" element={<Navigate to="/company" replace />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
             <Route path="/my-token" element={<Navigate to="/connect" replace />} />
@@ -297,7 +298,7 @@ function SignedIn({
 function LicenseBanner({ manages }: { manages: boolean }) {
   const [license, setLicense] = useState<LicenseState | null>(null);
   const [installed, setInstalled] = useState(0);
-  // The Team page says when it installs a key, so the banner follows without a reload.
+  // The Company page says when it installs a key, so the banner follows without a reload.
   useEffect(() => {
     const again = () => setInstalled((count) => count + 1);
     window.addEventListener(LICENSE_CHANGED, again);
@@ -321,7 +322,7 @@ function LicenseBanner({ manages }: { manages: boolean }) {
   }
   return (
     <p className="license-banner" role="status" data-testid="license-banner" data-status={license.status}>
-      {licenseSentence(license)} <Link to="/team">Team</Link>
+      {licenseSentence(license)} <Link to="/company">Company</Link>
     </p>
   );
 }
@@ -395,7 +396,7 @@ function MemberMenu({
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>
-          {member.name} ({member.member_id}), {member.role} of {member.team}
+          {member.name} ({member.member_id}), {member.role} of {member.company}
         </Menu.Label>
         <div className="only-small">
           {links.map((link) => (

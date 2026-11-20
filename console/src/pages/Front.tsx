@@ -42,7 +42,7 @@ export function Front({ member }: { member: SignedInMember }) {
         </p>
       )}
       <p className="standfirst">
-        Everything the coding agents of team {member.team} read, set out folder by folder. Open a memory to read it
+        Everything the coding agents of company {member.company} read, set out folder by folder. Open a memory to read it
         exactly as they do, and to see who changed it and when.
       </p>
 
@@ -82,9 +82,9 @@ export function Front({ member }: { member: SignedInMember }) {
                     <Link to={`/projects/${encodeURIComponent(project.project_id)}/settings`}>Settings</Link>
                   </p>
                 )}
-                {part.kind === "team" && (
-                  <p className="toc-part-note" data-testid="team-note">
-                    Holds for every project in the team.
+                {part.kind === "company" && (
+                  <p className="toc-part-note" data-testid="company-note">
+                    Holds for every project in the company.
                     {part.memories === 0 &&
                       " It arrives when a member’s coding agent promotes a memory in a session; the console never writes it."}
                   </p>
@@ -100,7 +100,7 @@ export function Front({ member }: { member: SignedInMember }) {
 
       <footer className="colophon">
         <p>
-          Kept by the Shared Memory server in a git repository. Memory the team has accepted is never deleted: it is
+          Kept by the Shared Memory server in a git repository. Memory the company has accepted is never deleted: it is
           superseded or retired, and every version stays in its history.
         </p>
         <p>Set in Cooper Hewitt, Charis SIL and Source Code Pro.</p>

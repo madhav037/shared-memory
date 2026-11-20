@@ -37,11 +37,11 @@ export function Challenges({
   // A memory's page links here for the challenges against that one memory, its doubts among them.
   const [asked] = useSearchParams();
   const only = asked.get("path");
-  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const { answer: company } = useAsked((signal) => fetchMembers(signal), []);
   const [slip, setSlip] = useState<Slip | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const names = new Map((team?.members ?? []).map((one) => [one.member_id, one.name]));
-  // A member is their name here; their member ID belongs on Team.
+  const names = new Map((company?.members ?? []).map((one) => [one.member_id, one.name]));
+  // A member is their name here; their member ID belongs on Company.
   const who = (memberId: string) => names.get(memberId) ?? memberId;
 
   const decided = (said: Slip, left: ChallengeList) => {
@@ -303,7 +303,7 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
   keeper: "yours to decide as a keeper of the foundation",
   admin: "yours to decide as an admin",
   fallback: "nobody has decided in time, so anyone may",
-  author_left: "its author has left the team, so anyone may",
+  author_left: "its author has left the company, so anyone may",
 };
 
 type Choice = "accept" | "reject";
@@ -518,7 +518,7 @@ function OthersDoubts({ path, who }: { path: string; who: (memberId: string) => 
       <h2 className="section-heading">Open doubts about {answer.title}</h2>
       <p className="standfirst">
         {answer.author_name}
-        {answer.level === "team" ? "" : ", a project lead"} or an admin decides these. Until then, recall ranks the
+        {answer.level === "company" ? "" : ", a project lead"} or an admin decides these. Until then, recall ranks the
         memory lower and marks it for every coding agent.
       </p>
       {doubts.map((one) => (

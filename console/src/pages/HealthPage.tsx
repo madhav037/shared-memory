@@ -10,7 +10,7 @@ type Outdated = ProjectHealth["possibly_outdated"][number];
 type Doubted = ProjectHealth["in_doubt"][number];
 
 /**
- * A project's health (CONTEXT.md: Project health), for its leads and the team's admins: the project memory that may
+ * A project's health (CONTEXT.md: Project health), for its leads and the company's admins: the project memory that may
  * no longer be true, and the memory sessions doubt. It only reads: pinning, retiring and deciding stay on the memory's
  * own page and the challenges page, which each entry links to (ADR-0009).
  */

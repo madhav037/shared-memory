@@ -8,7 +8,8 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   page,
 }) => {
   await signInAs(page, 1, "olive");
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Company \S+$/);
 
   await page.getByTestId("new-member-id").fill("emp-7");
   await page.getByTestId("new-name").fill("Dana Dev");
@@ -36,9 +37,9 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   await expect(page.getByTestId("member-places")).toContainText(/places used|no member cap/);
 });
 
-test("an admin downloads all of the team's data as one zip, and the audit log records it", async ({ page }) => {
+test("an admin downloads all of the company's data as one zip, and the audit log records it", async ({ page }) => {
   await signInAs(page, 1, "olive");
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
 
   const downloading = page.waitForEvent("download");
   await page.getByTestId("download-export").click();
@@ -49,5 +50,13 @@ test("an admin downloads all of the team's data as one zip, and the audit log re
   expect(readFileSync(saved).subarray(0, 2).toString()).toBe("PK");
 
   await page.getByTestId("to-audit").click();
-  await expect(page.getByText("Team data downloaded").first()).toBeVisible();
+  await expect(page.getByText("Company data downloaded").first()).toBeVisible();
+});
+
+test("the old address of the members page opens the Company page", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.goto("/team");
+
+  await expect(page).toHaveURL(/\/company$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Company \S+$/);
 });

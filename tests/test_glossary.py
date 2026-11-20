@@ -80,7 +80,7 @@ ALLOWED: tuple[Allow, ...] = (
             "console/src/App.tsx",
             PAGES + "AuditLog.tsx",
             PAGES + "ProjectSettings.tsx",
-            PAGES + "Team.tsx",
+            PAGES + "Company.tsx",
         ),
     ),
     Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
@@ -200,13 +200,13 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "issue",
         "to issue a personal token, the verb",
-        (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Team.tsx"),
+        (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Company.tsx"),
     ),
     Allow("take", "saves take turns", (SERVER + "store.py",), "take turns"),
     Allow(
         "take",
         "taking access or a role away from a member, not claiming a card",
-        (PAGES + "ProjectSettings.tsx", PAGES + "Team.tsx"),
+        (PAGES + "ProjectSettings.tsx", PAGES + "Company.tsx"),
     ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),
@@ -217,7 +217,7 @@ ALLOWED: tuple[Allow, ...] = (
         "every task starts with the briefing",
     ),
     Allow("manager", "an example search about a package manager", (PAGES + "SearchPage.tsx",), "package manager"),
-    Allow("dev", "a made-up member's name in a placeholder", (PAGES + "Team.tsx",), "dana dev"),
+    Allow("dev", "a made-up member's name in a placeholder", (PAGES + "Company.tsx",), "dana dev"),
     Allow("note", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
     Allow("notes", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
     Allow(
