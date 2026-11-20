@@ -45,6 +45,8 @@ def test_promoting_to_team_or_to_company_lands_in_company_memory(owner: Session)
     assert said_team["path"].startswith("company/gotchas/")
     assert said_company["path"].startswith("company/conventions/")
     assert owner.call("read", path=said_company["path"])["level"] == "company"
+    by_old_path = owner.call("read", path=said_company["path"].replace("company/", "team/", 1))
+    assert (by_old_path["path"], by_old_path["level"]) == (said_company["path"], "company")
 
 
 def test_searching_company_or_team_finds_the_same_memories_and_says_company(owner: Session) -> None:

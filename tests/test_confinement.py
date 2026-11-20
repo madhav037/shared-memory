@@ -18,21 +18,28 @@ def member(team: Team) -> Session:
 
 
 def linked_folder(team: Team, tmp_path: Path) -> str:
-    """A folder of someone else's memory, linked into this team's team memory; the memory path through the link."""
+    """A folder of someone else's memory, linked into this team's company memory; the memory path through the link."""
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     (elsewhere / "secret.md").write_text(Memory("Secret", "Not yours.", "convention", "x", "b").to_text(), "utf-8")
-    conventions = team.server.settings.memory_root / team.code / "team" / "conventions"
+    conventions = team.server.settings.memory_root / team.code / "company" / "conventions"
     conventions.mkdir(parents=True, exist_ok=True)
     try:
         os.symlink(elsewhere, conventions / "linked", target_is_directory=True)
     except OSError:
         pytest.skip("this machine can't make links")
-    return "team/conventions/linked/secret.md"
+    return "company/conventions/linked/secret.md"
 
 
 def test_a_memory_reached_through_a_linked_folder_is_refused(team: Team, member: Session, tmp_path: Path) -> None:
     path = linked_folder(team, tmp_path)
+
+    with pytest.raises(ToolRefused, match="outside your team's memory"):
+        member.call("read", path=path)
+
+
+def test_the_old_team_path_through_a_linked_folder_is_refused_too(team: Team, member: Session, tmp_path: Path) -> None:
+    path = linked_folder(team, tmp_path).replace("company/", "team/", 1)
 
     with pytest.raises(ToolRefused, match="outside your team's memory"):
         member.call("read", path=path)

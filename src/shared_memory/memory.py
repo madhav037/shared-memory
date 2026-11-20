@@ -47,7 +47,8 @@ def asked_level(level: str | None) -> str | None:
 
 
 def asked_folder(folder: PurePosixPath) -> PurePosixPath:
-    """A folder as the console asked for it, where the old company memory folder, `team`, is the company folder."""
+    """A folder or memory path as a caller gave it, where the old company memory folder, `team`, is the company
+    folder."""
     if folder.parts[:1] == ("team",):
         return PurePosixPath(COMPANY_FOLDER, *folder.parts[1:])
     return folder
@@ -126,7 +127,7 @@ class Location:
 
 
 def locate(path: str) -> Location:
-    pure = PurePosixPath(path.replace("\\", "/"))
+    pure = asked_folder(PurePosixPath(path.replace("\\", "/")))  # a `team/` path is company memory's (#625)
     parts = pure.parts
     if pure.is_absolute() or ".." in parts or not parts or pure.suffix != ".md" or pure.name == INDEX_NAME:
         raise Refused(f"{path!r} is not a memory path.")
