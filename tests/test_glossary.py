@@ -229,6 +229,8 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("collision", "two sessions on the same work, the glossary's Collision", ("README.md",), "avoid collisions"),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
+    Allow("team", "the company's old name; the code, API, console and README are renamed in their own ticket (#600)"),
+    Allow("team memory", "company memory's old name; renamed with the code in its own ticket (#600)"),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
 )
 
