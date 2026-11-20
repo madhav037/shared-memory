@@ -151,9 +151,13 @@ def test_promote_accepts_an_outside_source_a_commit_or_an_interview_as_where_an_
 ) -> None:
     for number, source in enumerate(OUTSIDE_SOURCES):
         memory = {**CENTS, "title": f"Money amounts {number}", "body": f"{CENTS['body']} Rule {number}."}
-        result = owner.call(
-            "promote", path=imported(owner, memory), level="project", author="emp-2", imported_from=source
-        )
+        personal = imported(owner, memory)
+        result = owner.call("promote", path=personal, level="project", author="emp-2", imported_from=source)
+        if result["status"] == "similar_memories":
+            keep_both = {one["path"]: "keep_both" for one in result["similar"]}
+            result = owner.call(
+                "promote", path=personal, level="project", reference=result["reference"], resolutions=keep_both
+            )
         assert result["status"] == "promoted", (source, result)
 
         promoted = owner.call("read", path=result["path"])
