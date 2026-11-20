@@ -42,3 +42,8 @@ def of_repository(source: str, repository: str) -> bool:
 def of_kind(source: str, kind: str) -> bool:
     """Whether a source is an outside source of this kind."""
     return source.startswith(f"{kind}:")
+
+
+def is_interview(source: str) -> bool:
+    """Whether a source is an interview, whose interviewee is the author of what it produced (ADR-0029)."""
+    return source.startswith(f"{INTERVIEW}:")
