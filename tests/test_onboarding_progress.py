@@ -106,7 +106,7 @@ def test_the_steps_tell_the_agent_to_read_progress_first_and_record_it_per_repos
 
     assert "record_onboarding_progress" in steps
     assert "Progress so far" in steps
-    assert steps.index("Read the progress so far") < steps.index("## 1. List the sources")
+    assert steps.index("Read the progress so far") < steps.index("## 1. ")
 
 
 # Reading, in the console
