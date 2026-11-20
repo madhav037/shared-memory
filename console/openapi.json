@@ -2037,10 +2037,6 @@
             "title": "Name",
             "type": "string"
           },
-          "team": {
-            "title": "Team",
-            "type": "string"
-          },
           "company": {
             "title": "Company",
             "type": "string"
@@ -2062,7 +2058,6 @@
         "required": [
           "member_id",
           "name",
-          "team",
           "company",
           "role",
           "leads_a_project"
@@ -6117,17 +6112,6 @@
             "title": "Status",
             "type": "string"
           },
-          "team": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Team"
-          },
           "company": {
             "anyOf": [
               {
@@ -6238,7 +6222,6 @@
         },
         "required": [
           "status",
-          "team",
           "company",
           "member_cap",
           "issued",

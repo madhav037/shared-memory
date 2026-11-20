@@ -61,7 +61,6 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
-from shared_memory.memory import asked_level
 from shared_memory.messages import Messages
 from shared_memory.license import PUBLIC_KEYS
 from shared_memory.licensing import Licenses
@@ -1025,16 +1024,14 @@ def build_app(
         ctx: Context,
         company: str | None = None,
         github: str | None = None,
-        team: str | None = None,
     ) -> dict[str, Any]:
         """Owner and admins: add a member to your company. Their personal token is shown once, in this result.
 
         github is their GitHub username, which lets them sign in to the console.
         """
         current = caller(ctx)
-        # `team` names the company as callers did before the rename (ADR-0031), until its contract step (#629).
-        token = identity.add_member(current, member_id, name, company or team, github)
-        return {"team": current.company, "company": current.company, "member_id": member_id, "name": name, "personal_token": token}
+        token = identity.add_member(current, member_id, name, company, github)
+        return {"company": current.company, "member_id": member_id, "name": name, "personal_token": token}
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -1147,7 +1144,7 @@ def build_app(
         wrong: check it against the code. level is company, project or personal; type is
         convention, decision, architecture, gotcha or known_issue.
         """
-        found = service.search(caller(ctx), query, asked_level(level), type, limit)
+        found = service.search(caller(ctx), query, level, type, limit)
         token = new_token()
         for result in found["results"]:
             result["title"] = escape(result["title"])
@@ -1163,7 +1160,7 @@ def build_app(
 
         level is company, project or personal; leave it out to see everything in this project.
         """
-        shown = service.tree(caller(ctx), asked_level(level))
+        shown = service.tree(caller(ctx), level)
         token = new_token()
         for entry in shown["folders"]:
             for each in entry["memories"]:
@@ -1317,7 +1314,6 @@ def build_app(
         decisions, or an extra one a project lead added), the places holding its sources of truth; an architecture or decision memory goes into its own
         foundation without it. Pass it again on every call of one promotion.
         """
-        level = asked_level(level) or level
         if reference is None:
             # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
             proposal = await anyio.to_thread.run_sync(

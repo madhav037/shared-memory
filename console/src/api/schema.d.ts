@@ -1009,8 +1009,6 @@ export interface components {
             member_id: string;
             /** Name */
             name: string;
-            /** Team */
-            team: string;
             /** Company */
             company: string;
             /**
@@ -2652,8 +2650,6 @@ export interface components {
              * @enum {string}
              */
             status: "licensed" | "expiring" | "lapsed" | "read-only" | "unlicensed" | "invalid";
-            /** Team */
-            team: string | null;
             /** Company */
             company: string | null;
             /** Member Cap */

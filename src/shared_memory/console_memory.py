@@ -19,7 +19,6 @@ from shared_memory.memory import (
     COMPANY_FOLDER,
     FOUNDATIONS_FOLDER,
     Memory,
-    asked_folder,
     foundation_title,
     locate,
 )
@@ -113,7 +112,7 @@ class ConsoleMemory:
         holds and when they last changed, so the structure reads without opening it. Asked for deep, it also sets out
         every folder beneath it with the memories in each, so a whole part of the contents reads on one page.
         """
-        pure = asked_folder(PurePosixPath(folder.replace("\\", "/").strip("/")))
+        pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
         caller.require_reach(str(pure))
         reachable = {project.project_id: project.name for project in self._identity.projects(caller.member)}
         people = {one["member_id"]: one["name"] for one in self._identity.members(caller.member)}

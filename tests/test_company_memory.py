@@ -1,13 +1,14 @@
-"""The expand step of the team -> company rename (ADR-0031, #625).
+"""The team -> company rename (ADR-0031): its expand step (#625) and its contract step (#629).
 
-The top level of memory is company memory, kept under `company/` in each company's folder. A session may still say
-`team` where it says a level, and is answered with `company`; the console's JSON API names the company beside the
-team. A server that still holds memory under `team/` moves it to `company/` once, as it sets up, keeping every
-memory's history, pins and challenges.
+The top level of memory is company memory, kept under `company/` in each company's folder. A session saying `team`
+where it says a level is refused with a message naming `company`, and a `team/` path is no memory path; the console's
+JSON API names the company alone. A server that still holds memory under `team/` moves it to `company/` once, as it
+sets up, keeping every memory's history, pins and challenges.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -38,35 +39,60 @@ def promoted(session: Session, memory: dict[str, str], level: str) -> dict[str, 
     return result
 
 
-def test_promoting_to_team_or_to_company_lands_in_company_memory(owner: Session) -> None:
-    said_team = promoted(owner, GATEWAY, "team")
+def test_promoting_to_company_lands_in_company_memory(owner: Session) -> None:
     said_company = promoted(owner, RETRIES, "company")
 
-    assert said_team["path"].startswith("company/gotchas/")
     assert said_company["path"].startswith("company/conventions/")
     assert owner.call("read", path=said_company["path"])["level"] == "company"
-    by_old_path = owner.call("read", path=said_company["path"].replace("company/", "team/", 1))
-    assert (by_old_path["path"], by_old_path["level"]) == (said_company["path"], "company")
 
 
-def test_searching_company_or_team_finds_the_same_memories_and_says_company(owner: Session) -> None:
+def test_promoting_to_team_is_refused_naming_company(owner: Session) -> None:
+    personal = owner.call("remember", **GATEWAY)["path"]
+
+    refused = owner.refusal("promote", path=personal, level="team")
+
+    assert "company" in refused
+    assert owner.call("read", path=personal)["level"] == "personal"
+
+
+def test_reading_company_memory_by_its_old_team_path_is_refused(owner: Session) -> None:
+    path = promoted(owner, GATEWAY, "company")["path"]
+
+    refused = owner.refusal("read", path=path.replace("company/", "team/", 1))
+
+    assert "not a memory path" in refused
+
+
+def test_searching_company_memory_says_company(owner: Session) -> None:
     path = promoted(owner, GATEWAY, "company")["path"]
 
     by_company = owner.call("search", query="payment gateway timeout", level="company")["results"]
-    by_team = owner.call("search", query="payment gateway timeout", level="team")["results"]
 
     assert [(hit["path"], hit["level"]) for hit in by_company] == [(path, "company")]
-    assert by_team == by_company
 
 
-def test_the_tree_of_company_or_team_is_company_memory(owner: Session) -> None:
+def test_searching_team_is_refused_naming_company(owner: Session) -> None:
+    promoted(owner, GATEWAY, "company")
+
+    refused = owner.refusal("search", query="payment gateway timeout", level="team")
+
+    assert "company" in refused
+
+
+def test_the_tree_of_company_is_company_memory(owner: Session) -> None:
     promoted(owner, GATEWAY, "company")
 
     by_company = owner.call("tree", level="company")
-    by_team = owner.call("tree", level="team")
 
-    assert by_team == by_company
     assert [folder["folder"] for folder in by_company["folders"]] == ["company/gotchas"]
+
+
+def test_the_tree_of_team_is_refused_naming_company(owner: Session) -> None:
+    promoted(owner, GATEWAY, "company")
+
+    refused = owner.refusal("tree", level="team")
+
+    assert "company" in refused
 
 
 def test_a_pinned_company_memory_reaches_every_briefing(company: Company, owner: Session) -> None:
@@ -78,20 +104,47 @@ def test_a_pinned_company_memory_reaches_every_briefing(company: Company, owner:
     assert "ERR_TIMEOUT after 30 seconds" in company.owner().in_project(other).call("briefing")
 
 
-def test_adding_a_member_names_the_company_beside_the_team(company: Company, project: str) -> None:
+def test_pinning_by_the_old_team_path_is_refused(owner: Session) -> None:
+    path = promoted(owner, GATEWAY, "company")["path"]
+
+    refused = owner.refusal("pin", path=path.replace("company/", "team/", 1))
+
+    assert "not a memory path" in refused
+
+
+def test_adding_a_member_names_the_company_alone(company: Company, project: str) -> None:
     added = company.owner().call("add_member", member_id="emp-9", name="Ira Ito")
 
-    assert added["company"] == added["team"] == company.code
+    assert added["company"] == company.code
+    assert "team" not in added
 
 
-def test_the_console_names_the_company_beside_the_team(console: Console, signed_out: ConsoleClient) -> None:
+def test_add_member_takes_no_team_argument(company: Company, project: str) -> None:
+    [add_member] = [tool for tool in json.loads(company.owner().tool_listing()) if tool["name"] == "add_member"]
+
+    assert "team" not in add_member["input_schema"]["properties"]
+
+
+def test_the_console_names_the_company_alone(console: Console, signed_out: ConsoleClient) -> None:
     code, _ = console.a_company("olive-company")
     console.github.as_(6250, "olive-company")
     signed_out.sign_in()
 
     signed_in_as = signed_out.status()["member"]
 
-    assert signed_in_as["company"] == signed_in_as["team"] == code
+    assert signed_in_as["company"] == code
+    assert "team" not in signed_in_as
+
+
+def test_the_console_refuses_a_search_of_team_naming_company(console: Console, signed_out: ConsoleClient) -> None:
+    console.a_company("olive-company-search")
+    console.github.as_(6252, "olive-company-search")
+    signed_out.sign_in()
+
+    found = signed_out.get("/api/search?query=gateway&level=team")
+
+    assert found.status_code == 403
+    assert "company" in found.json()["message"]
 
 
 def _commit(root: Path, path: str, text: str, message: str) -> None:

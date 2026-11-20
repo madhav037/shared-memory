@@ -36,24 +36,6 @@ Level = Literal["company", "project", "personal"]
 COMPANY_FOLDER = "company"
 COMPANY_LEVEL: Level = "company"
 
-# The name company memory's level and folder had while the top level was called team. A session may still say it, and
-# is answered with `company`, until the rename's contract step (#629) takes it out.
-OLD_LEVEL = "team"
-
-
-def asked_level(level: str | None) -> str | None:
-    """A level as a caller gave it, where the old name of company memory's level, `team`, is `company`."""
-    return COMPANY_LEVEL if level == OLD_LEVEL else level
-
-
-def asked_folder(folder: PurePosixPath) -> PurePosixPath:
-    """A folder or memory path as a caller gave it, where the old company memory folder, `team`, is the company
-    folder."""
-    if folder.parts[:1] == (OLD_LEVEL,):
-        return PurePosixPath(COMPANY_FOLDER, *folder.parts[1:])
-    return folder
-
-
 @dataclass
 class Memory:
     title: str
@@ -115,7 +97,7 @@ class Location:
 
 
 def locate(path: str) -> Location:
-    pure = asked_folder(PurePosixPath(path.replace("\\", "/")))  # a `team/` path is company memory's (#625)
+    pure = PurePosixPath(path.replace("\\", "/"))
     parts = pure.parts
     if pure.is_absolute() or ".." in parts or not parts or pure.suffix != ".md" or pure.name == INDEX_NAME:
         raise Refused(f"{path!r} is not a memory path.")
