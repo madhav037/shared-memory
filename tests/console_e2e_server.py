@@ -352,6 +352,27 @@ def seeded(
         # Dana's run of the tickets, the only one she sees as a member who leads nothing.
         in_project.call("record_onboarding_progress", status="done", repository="billing-api", left_out=2)
         dana.call("record_onboarding_progress", status="partly_done", outside_source="ticket", left_out=1)
+        # A memory written from Olive's interview of Mira, for the journey where Mira sees and retires it.
+        answer = in_project.call(
+            "remember",
+            title="Webhook payloads are signed",
+            summary="Every webhook from the payment provider carries a signature to check.",
+            type="gotcha",
+            body="Check the signature header on every provider webhook before trusting its payload.",
+        )
+        interviewed = in_project.call(
+            "promote", path=answer["path"], level="project", author="emp-mira",
+            imported_from="interview:Payments with Mira",
+        )  # fmt: skip
+        if interviewed["status"] == "similar_memories":
+            interviewed = in_project.call(
+                "promote",
+                path=answer["path"],
+                level="project",
+                reference=interviewed["reference"],
+                resolutions={one["path"]: "keep_both" for one in interviewed["similar"]},
+            )
+        assert interviewed["status"] == "promoted", interviewed
         # A challenge for the journey where a project lead decides: in a project Lena leads, against a memory of
         # Wes's, whom no journey signs in as. Olive raises it, so it isn't hers to decide as an admin, and the
         # journeys that check she has nothing waiting still find nothing.

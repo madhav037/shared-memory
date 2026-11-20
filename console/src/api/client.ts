@@ -41,6 +41,7 @@ export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ProjectHealth = components["schemas"]["ProjectHealth"];
 export type OnboardingProgress = components["schemas"]["OnboardingProgress"];
 export type OnboardingEntry = components["schemas"]["OnboardingEntry"];
+export type InterviewMemories = components["schemas"]["InterviewMemories"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
@@ -161,6 +162,11 @@ export function pinAt(path: string): Promise<PinState> {
 
 export function unpinAt(path: string): Promise<PinState> {
   return change<PinState>("/api/memory/unpin", { path });
+}
+
+/** The memories written from this member's interviews, which they author. */
+export function fetchInterviewed(signal?: AbortSignal): Promise<InterviewMemories> {
+  return ask<InterviewMemories>("/api/interviewed", { signal });
 }
 
 /** Retire a memory by its path; another author's raises a challenge they decide. */

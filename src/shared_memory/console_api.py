@@ -80,6 +80,7 @@ from shared_memory.console_contract import (
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
     OnboardingEntry, OnboardingProgress,
+    InterviewMemories, InterviewMemory,
 )
 from shared_memory.errors import Refused
 from shared_memory.export import CompanyExport
@@ -443,6 +444,7 @@ class ConsoleApi:
             "pins": self._pins,
             "files": self._files,
             "memory_at": self._memory_at,
+            "interviewed": self._interviewed,
             "history_at": self._history_at,
             "version_at": self._version_at,
             "pin_at": self._pin_at,
@@ -1178,6 +1180,38 @@ class ConsoleApi:
         if member is None:
             return _sign_in_first()
         return self._disputes(self._identity.caller_in(member, None))
+
+    def _interviewed(self, request: Request) -> Response:
+        """What was written from the member's interviews, in the projects they can still reach. Only a read: retiring
+        one is the retire any author has (ADR-0009)."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        promoted = self._audit.interviews_of(member)
+        reachable = {project.project_id for project in self._identity.projects(member)}
+        theirs = self._explorer.still_authored(
+            member.company_code,
+            (one.path for one in promoted if _project_in(one.path) is None or _project_in(one.path) in reachable),
+            member.member_id,
+        )
+        names = self._names(member)
+        answer = InterviewMemories(
+            memories=[
+                InterviewMemory(
+                    path=one.path,
+                    title=theirs[one.path].title,
+                    summary=theirs[one.path].summary,
+                    level=locate(one.path).level,
+                    source=one.source,
+                    interviewer=one.interviewer,
+                    interviewer_name=names.get(one.interviewer, one.interviewer),
+                    interviewed_at=one.at,
+                )
+                for one in promoted
+                if one.path in theirs
+            ]
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _notices(self, request: Request) -> Response:
         """What the member has been told. Only a read: each notice still waits for their next briefing."""

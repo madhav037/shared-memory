@@ -601,6 +601,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/interviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing. */
+        get: operations["interviewed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/memory": {
         parameters: {
             query?: never;
@@ -2186,6 +2203,42 @@ export interface components {
             inside: components["schemas"]["FolderSection"][];
         };
         /**
+         * InterviewMemory
+         * @description A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says
+         *     in brief, its level, the interview it came from (source), and who ran the interview and when its memory was
+         *     promoted.
+         */
+        InterviewMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Level */
+            level: string;
+            /** Source */
+            source: string;
+            /** Interviewer */
+            interviewer: string;
+            /** Interviewer Name */
+            interviewer_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
+        };
+        /**
+         * InterviewMemories
+         * @description Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They
+         *     may retire any of it, with the same retire as any memory they author; nothing here edits one.
+         */
+        InterviewMemories: {
+            /** Memories */
+            memories: components["schemas"]["InterviewMemory"][];
+        };
+        /**
          * DoubtEvidence
          * @description What one member who raised a doubt brought: their reasoning and, for contradicts_code, the line of code they
          *     quote, written repository:path:line, as the code has it.
@@ -3632,6 +3685,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Folder"];
+                };
+            };
+        };
+    };
+    interviewed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewMemories"];
                 };
             };
         };

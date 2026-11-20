@@ -35,3 +35,24 @@ test("a member told a memory was promoted in their name reads who did it and ope
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Money is integer cents");
 });
+
+test("an interviewee sees what was written from their interview and retires one from the front page", async ({
+  page,
+}) => {
+  await signInAs(page, 3, "mira");
+
+  const list = page.getByTestId("from-your-interview");
+  const memory = list.getByTestId("interview-memory").filter({ hasText: "Webhook payloads are signed" });
+  await expect(memory.getByTestId("interviewer")).toHaveText("Olive Owner");
+
+  await memory.getByTestId("retire-interview-memory").click();
+
+  await expect(page.getByTestId("interview-memory").filter({ hasText: "Webhook payloads are signed" })).toHaveCount(0);
+});
+
+test("a member who was never interviewed sees no list of memories from an interview", async ({ page }) => {
+  await signInAs(page, 2, "dana");
+
+  await expect(page.getByTestId("projects")).toBeVisible();
+  await expect(page.getByTestId("from-your-interview")).toHaveCount(0);
+});
