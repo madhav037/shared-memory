@@ -23,7 +23,7 @@ from pathlib import PurePosixPath
 
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.memory import Memory
 from shared_memory.store import MemoryStore
 
@@ -138,3 +138,11 @@ _WHAT_TO_DO = (
 def _days(span: timedelta) -> int:
     """A span in whole days, never 0: a setting below a day still reads as a day."""
     return max(1, round(span.total_seconds() / 86400))
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep when the memories under the folder `old` were last used at the folder `new`, where they moved
+    (`company_move.py`), so moving them doesn't make them look used now or never."""
+    conn.execute(
+        "UPDATE memory_uses SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

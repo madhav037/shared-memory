@@ -232,6 +232,12 @@ CREATE TABLE IF NOT EXISTS license_settings (
 Conn = psycopg.Connection[dict[str, Any]]
 
 
+def moved_prefix(old: str, new: str) -> dict[str, object]:
+    """The parameters with which the owner of a table holding memory paths moves every path under the folder `old` to
+    the folder `new` (`company_move.py`): `SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s`."""
+    return {"old": f"{old}/%", "new": f"{new}/", "after": len(old) + 2}
+
+
 class SaveTransaction:
     """One save's transaction, holding the locks its turns are made of (ADR-0013). Which locks, and in what order, is
     decided by `store.Turns`.

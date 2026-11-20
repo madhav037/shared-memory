@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, check_name
 from shared_memory.index import Reach
@@ -228,3 +228,10 @@ class TiedFiles:
             if glob is not None:
                 found.append(Tie(memory, repository, glob))
         return found
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the ties of the memories under the folder `old` at the folder `new`, where they moved (`company_move.py`)."""
+    conn.execute(
+        "UPDATE tied_files SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

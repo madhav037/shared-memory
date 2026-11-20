@@ -28,7 +28,9 @@ class SignedInMember(BaseModel):
 
     member_id: str
     name: str
+    # The company the member is in (ADR-0031); `team` says the same until the rename's contract step (#629).
     team: str
+    company: str
     role: Literal["owner", "admin", "member"]
     leads_a_project: bool
 
@@ -96,7 +98,9 @@ class LicenseState(BaseModel):
     includes the key itself."""
 
     status: Literal["licensed", "expiring", "lapsed", "read-only", "unlicensed", "invalid"]
+    # The company the key is for (ADR-0031); `team` says the same until the rename's contract step (#629).
     team: str | None
+    company: str | None
     member_cap: int | None
     issued: str | None
     expires: str | None

@@ -44,8 +44,8 @@ def test_team_memory_is_visible_from_every_project(team: Team, owner: Session) -
 
     results = team.owner().in_project(other_project).call("search", query="how are money amounts stored")["results"]
 
-    assert path.startswith("team/conventions/")
-    assert (results[0]["path"], results[0]["level"]) == (path, "team")
+    assert path.startswith("company/conventions/")
+    assert (results[0]["path"], results[0]["level"]) == (path, "company")
 
 
 def test_similar_memories_are_returned_before_anything_changes(owner: Session, dana: Session) -> None:

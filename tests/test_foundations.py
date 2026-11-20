@@ -108,7 +108,7 @@ def test_team_memory_has_no_foundations(owner: Session) -> None:
 def test_an_architecture_memory_promoted_to_team_memory_is_unchanged(owner: Session) -> None:
     result = promote(owner, SERVICES, level="team")
 
-    assert result["path"].startswith("team/architecture/")
+    assert result["path"].startswith("company/architecture/")
 
 
 def test_similar_memories_report_the_foundation_they_sit_in(owner: Session, dana: Session) -> None:

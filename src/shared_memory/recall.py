@@ -28,7 +28,7 @@ from pathlib import PurePosixPath
 
 from shared_memory.challenges import Challenges, InDoubt, ranked
 from shared_memory.config import Settings
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.fence import escape, fenced, framing_of_fence, new_token
@@ -300,3 +300,11 @@ class Recall:
         told = framing(token)
         told = f"{told} {self._uses.check_any()}" if outdated else told
         return "<shared-memory-recall>\n" + told +"\n\n" + "\n\n".join(entries) + "\n</shared-memory-recall>"
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep what each session was told of the memories under the folder `old` at the folder `new`, where they moved
+    (`company_move.py`), so recall doesn't tell it them again."""
+    conn.execute(
+        "UPDATE recall_told SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

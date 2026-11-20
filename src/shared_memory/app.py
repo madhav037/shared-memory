@@ -34,6 +34,7 @@ from shared_memory.audit import PROJECT_CREATED, Audit
 from shared_memory.board import DONE, Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi, SessionTalk
+from shared_memory.company_move import move_company_memory
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.fence import escape, fenced, new_token
 from shared_memory.monitoring import start_reporting
@@ -60,6 +61,7 @@ from shared_memory.known_issues import KnownIssues
 from shared_memory.listing import ProjectState, is_listed_to
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import NEVER_LOCK, Lock, Locks, ProjectPatterns
+from shared_memory.memory import asked_level, told_levels
 from shared_memory.messages import Messages
 from shared_memory.license import PUBLIC_KEYS
 from shared_memory.licensing import Licenses
@@ -168,10 +170,13 @@ class NeverCached:
 
 
 def _refusals_as_tool_errors(fn: F) -> F:
+    """A tool's refusal as the tool error its session reads. Every tool's answer passes here, so here too company
+    memory's level is said as `company` (#625, until #626 names it so inside)."""
+
     @functools.wraps(fn)
     def wrapper(*args: object, **kwargs: object) -> object:
         try:
-            return fn(*args, **kwargs)
+            return told_levels(fn(*args, **kwargs))
         except Refused as refused:
             raise ToolError(str(refused)) from refused
 
@@ -371,6 +376,9 @@ def build_app(
     handoff_notes = HandoffNotes(settings, db, sessions, activities, collisions, clock)
     standbys = Standbys(settings, db, sessions, gates.wait, clock)
     draft_learning_store = DraftLearnings(settings, db, service, clock)
+    if setup:
+        # The one-off move out of `team/` (#625), once every table it moves paths in is made; nothing once it has run.
+        move_company_memory(db, store)
 
     def state_of(current: Caller) -> ProjectState:
         """What the caller's project and repository hold, asked once per listing and only as far as the caller has
@@ -1009,7 +1017,7 @@ def build_app(
         """
         current = caller(ctx)
         token = identity.add_member(current, member_id, name, team, github)
-        return {"team": current.team, "member_id": member_id, "name": name, "personal_token": token}
+        return {"team": current.team, "company": current.team, "member_id": member_id, "name": name, "personal_token": token}
 
     @server.tool()
     @_refusals_as_tool_errors
@@ -1122,7 +1130,7 @@ def build_app(
         wrong: check it against the code. level is team, project or personal; type is
         convention, decision, architecture, gotcha or known_issue.
         """
-        found = service.search(caller(ctx), query, level, type, limit)
+        found = service.search(caller(ctx), query, asked_level(level), type, limit)
         token = new_token()
         for result in found["results"]:
             result["title"] = escape(result["title"])
@@ -1138,7 +1146,7 @@ def build_app(
 
         level is team, project or personal; leave it out to see everything in this project.
         """
-        shown = service.tree(caller(ctx), level)
+        shown = service.tree(caller(ctx), asked_level(level))
         token = new_token()
         for entry in shown["folders"]:
             for each in entry["memories"]:
@@ -1289,6 +1297,7 @@ def build_app(
         decisions, or an extra one a project lead added), the places holding its sources of truth; an architecture or decision memory goes into its own
         foundation without it. Pass it again on every call of one promotion.
         """
+        level = asked_level(level) or level
         if reference is None:
             # Finding similar memories saves none, so it runs on the shared pool instead of queueing behind saves.
             proposal = await anyio.to_thread.run_sync(

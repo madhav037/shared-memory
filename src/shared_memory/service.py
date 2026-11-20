@@ -15,7 +15,7 @@ from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, Reach, SearchIndex, split_sections
-from shared_memory.memory import KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
+from shared_memory.memory import COMPANY_FOLDER, KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
 from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.tied import Tie, TiedFiles, file_named
@@ -364,8 +364,8 @@ class MemoryService:
         project = caller.require_project()
         project_folder = PurePosixPath("projects", project.project_id)
         roots = {
-            None: [PurePosixPath("team"), project_folder],
-            "team": [PurePosixPath("team")],
+            None: [PurePosixPath(COMPANY_FOLDER), project_folder],
+            "team": [PurePosixPath(COMPANY_FOLDER)],
             "project": [project_folder / "shared"],
             "personal": [project_folder / "people"],
         }

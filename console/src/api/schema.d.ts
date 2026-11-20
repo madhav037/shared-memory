@@ -977,6 +977,8 @@ export interface components {
             name: string;
             /** Team */
             team: string;
+            /** Company */
+            company: string;
             /**
              * Role
              * @enum {string}
@@ -2537,6 +2539,8 @@ export interface components {
             status: "licensed" | "expiring" | "lapsed" | "read-only" | "unlicensed" | "invalid";
             /** Team */
             team: string | null;
+            /** Company */
+            company: string | null;
             /** Member Cap */
             member_cap: number | null;
             /** Issued */

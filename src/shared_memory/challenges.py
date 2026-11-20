@@ -12,7 +12,7 @@ from typing import Any, Literal
 from shared_memory.audit import CHALLENGE_RAISED, KEEPER_REMOVED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, project_in
 from shared_memory.memory import locate
@@ -884,3 +884,15 @@ def _members(evidence: Iterable[Evidence]) -> tuple[str, ...]:
 def _show_the_author_again(conn: Conn, challenge_id: int) -> None:
     """Ask the author's next prompt to show a doubt again, a raise having joined it with new evidence."""
     conn.execute("UPDATE challenges SET author_notified_at = NULL WHERE id = %s", (challenge_id,))
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the challenges to and from the memories under the folder `old` on them at the folder `new`, where they
+    moved (`company_move.py`)."""
+    moved = moved_prefix(old, new)
+    conn.execute("UPDATE challenges SET target_path = %(new)s || substr(target_path, %(after)s) WHERE target_path LIKE %(old)s", moved)
+    conn.execute(
+        "UPDATE challenges SET challenger_path = %(new)s || substr(challenger_path, %(after)s)"
+        " WHERE challenger_path LIKE %(old)s",
+        moved,
+    )

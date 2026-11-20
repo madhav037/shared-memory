@@ -31,6 +31,39 @@ FOUNDATION_TYPE = {"architecture": "architecture", "decisions": "decision"}
 
 Level = Literal["team", "project", "personal"]
 
+# Company memory's folder in each team's folder (ADR-0031). Its level is still called "team" inside the server until
+# the rename's migrate step (#626). Memory kept under the old folder is moved here once, as the server sets up
+# (`company_move.py`).
+COMPANY_FOLDER = "company"
+
+# The rename's expand step (#625): a session may say `company` or `team` for company memory's level, and is answered
+# with `company`. The contract step (#629) takes `team` out.
+COMPANY_LEVEL = "company"
+
+
+def asked_level(level: str | None) -> str | None:
+    """A level as a caller gave it, as the server names it inside: `company` is company memory's level."""
+    return "team" if level == COMPANY_LEVEL else level
+
+
+def asked_folder(folder: PurePosixPath) -> PurePosixPath:
+    """A folder as the console asked for it, where the old company memory folder, `team`, is the company folder."""
+    if folder.parts[:1] == ("team",):
+        return PurePosixPath(COMPANY_FOLDER, *folder.parts[1:])
+    return folder
+
+
+def told_levels(answer: object) -> object:
+    """An answer to a session with every memory `level` of company memory said as `company`."""
+    if isinstance(answer, dict):
+        return {
+            key: COMPANY_LEVEL if key == "level" and value == "team" else told_levels(value)
+            for key, value in answer.items()
+        }
+    if isinstance(answer, list):
+        return [told_levels(each) for each in answer]
+    return answer
+
 
 @dataclass
 class Memory:
@@ -99,7 +132,7 @@ def locate(path: str) -> Location:
         raise Refused(f"{path!r} is not a memory path.")
     if len(parts) == 6 and parts[0] == "projects" and parts[2] == "shared" and parts[3] == FOUNDATIONS_FOLDER:
         return Location(pure, "project", None, parts[1], None, foundation=parts[4])
-    if parts[0] == "team" and len(parts) in (3, 4):
+    if parts[0] == COMPANY_FOLDER and len(parts) in (3, 4):
         level: Level = "team"
         project_id = member_id = None
         type_index = 1
@@ -131,7 +164,7 @@ class Area:
     def folder(self) -> PurePosixPath:
         """The folder holding the whole area, its own index included."""
         if self.level == "team":
-            return PurePosixPath("team")
+            return PurePosixPath(COMPANY_FOLDER)
         assert self.project_id is not None
         if self.level == "project":
             return PurePosixPath("projects", self.project_id, "shared")
@@ -146,7 +179,7 @@ class Area:
 def area_of(path: PurePosixPath) -> Area | None:
     """The area a memory, a folder or a folder's index lies in; None for the folders above the areas, which they share."""
     parts = path.parts
-    if parts[:1] == ("team",):
+    if parts[:1] == (COMPANY_FOLDER,):
         return Area("team")
     if len(parts) >= 3 and parts[0] == "projects" and parts[2] == "shared":
         return Area("project", parts[1])
@@ -158,7 +191,7 @@ def area_of(path: PurePosixPath) -> Area | None:
 def level_folder(level: Level, kind: str, project_id: str | None = None, member_id: str | None = None) -> PurePosixPath:
     """The type folder a memory of this level and type lives in."""
     if level == "team":
-        return PurePosixPath("team", type_folder(kind))
+        return PurePosixPath(COMPANY_FOLDER, type_folder(kind))
     assert project_id is not None
     if level == "project":
         return PurePosixPath("projects", project_id, "shared", type_folder(kind))

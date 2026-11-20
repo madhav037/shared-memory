@@ -35,6 +35,7 @@ import hashlib
 import itertools
 import logging
 import os
+import shutil
 import stat
 import sys
 import threading
@@ -1079,3 +1080,44 @@ class MemoryStore:
 
     def teams(self) -> list[str]:
         return sorted(d.name for d in self._root.iterdir() if d.is_dir() and not d.name.startswith("."))
+
+    def move_folder(
+        self, old: str, new: str, rewritten: Callable[[PurePosixPath, str], str], message: str, alongside: Callable[[], None]
+    ) -> list[str]:
+        """Move every team's top folder `old` to `new` in one commit by the server, so each file's history continues
+        at its new path (`history.py` follows a file to where the same commit removed it). Every file of the teams
+        moved passes its text through `rewritten`, the moved ones included, and is committed where that changed it.
+        `alongside` runs in the commit's database transaction. Returns the teams moved: none once nothing is left in
+        `old`, so it is safe to run on every start.
+
+        Run only while setting up, before any worker saves: it takes no area's turn. Cut off part way, it is run again
+        whole: the new files are written again and the old folder goes only once main holds the move.
+        """
+        moving = [team for team in self.teams() if (self._root / team / old).is_dir()]
+        if not moving:
+            return []
+        with self._transaction() as transaction:
+            repository = self._repository()
+            blobs: dict[str, pygit2.Oid | None] = {}
+            for team in moving:
+                folder = self._root / team
+                # A file still being written has a leading dot and was never committed (`write_whole`).
+                files = sorted(each for each in folder.rglob("*") if each.is_file() and not each.name.startswith("."))
+                for file in files:
+                    path = PurePosixPath(file.relative_to(folder).as_posix())
+                    text = read_whole(file)
+                    if path.parts[0] == old:
+                        blobs[f"{team}/{path}"] = None
+                        path = PurePosixPath(new, *path.parts[1:])
+                    elif rewritten(path, text) == text:
+                        continue
+                    target = self._file(team, path)
+                    write_whole(target, rewritten(path, text))
+                    blobs[f"{team}/{path}"] = repository.create_blob(target.read_bytes())
+            alongside()
+            _land(repository, blobs, message, pygit2.Signature(*SERVER), self._turns.moving_main(transaction))
+            transaction.commit()
+        for team in moving:
+            _settled(lambda: shutil.rmtree(self._root / team / old))  # noqa: B023  # runs at once, inside the loop
+        self._parsed.forget(file for team in moving for file in (self._root / team).rglob("*.md"))
+        return moving

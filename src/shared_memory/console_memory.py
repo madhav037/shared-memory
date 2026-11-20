@@ -15,7 +15,14 @@ from typing import Any
 from shared_memory.challenges import Challenges
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
-from shared_memory.memory import FOUNDATIONS_FOLDER, Memory, foundation_title, locate
+from shared_memory.memory import (
+    COMPANY_FOLDER,
+    FOUNDATIONS_FOLDER,
+    Memory,
+    asked_folder,
+    foundation_title,
+    locate,
+)
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import reasons_for
 from shared_memory.uses import Uses
@@ -38,7 +45,7 @@ def accepted_first(folder: PurePosixPath) -> tuple[tuple[int, str], ...]:
 def folder_kind(folder: PurePosixPath) -> str:
     """What a memory folder is: team or project, project or personal memory, a member's, a type, or a topic."""
     parts = folder.parts
-    if parts[:1] == ("team",):
+    if parts[:1] == (COMPANY_FOLDER,):
         return ("team", "type")[len(parts) - 1] if len(parts) <= 2 else "topic"
     if parts == ("projects",):
         return "projects"
@@ -93,13 +100,13 @@ class ConsoleMemory:
         holds and when they last changed, so the structure reads without opening it. Asked for deep, it also sets out
         every folder beneath it with the memories in each, so a whole part of the contents reads on one page.
         """
-        pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
+        pure = asked_folder(PurePosixPath(folder.replace("\\", "/").strip("/")))
         caller.require_reach(str(pure))
         reachable = {project.project_id: project.name for project in self._identity.projects(caller.member)}
         people = {one["member_id"]: one["name"] for one in self._identity.members(caller.member)}
         memories: list[tuple[PurePosixPath, Memory]] = []
         if not pure.parts:
-            subfolders = [PurePosixPath("team")] + [PurePosixPath("projects", project) for project in reachable]
+            subfolders = [PurePosixPath(COMPANY_FOLDER)] + [PurePosixPath("projects", project) for project in reachable]
         elif pure.parts == ("projects",):
             subfolders = [PurePosixPath("projects", project) for project in reachable]
         else:

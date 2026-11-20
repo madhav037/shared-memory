@@ -25,7 +25,7 @@ from shared_memory.audit import (
 )
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, restricted_project
 from shared_memory.memory import locate
@@ -930,3 +930,13 @@ class Board:
         (card,) = _shown_all(conn, [row])
         return card
 
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the cards pointing at the memories under the folder `old` pointing at them at the folder `new`, where they
+    moved (`company_move.py`)."""
+    conn.execute(
+        "UPDATE card_links SET target = %(new)s || substr(target, %(after)s)"
+        " WHERE kind IN ('memory', 'known_issue') AND target LIKE %(old)s",
+        moved_prefix(old, new),
+    )
