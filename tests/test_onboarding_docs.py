@@ -12,7 +12,7 @@ def test_the_docs_page_covers_sources_repositories_headless_runs_interviews_and_
 
     for heading in ("## Choosing sources", "## Many repositories", "## Headless runs in CI", "## Interviews", "## Progress"):
         assert heading in page, heading
-    assert "Nothing is sent anywhere but your team's Shared Memory server" in page
+    assert "Nothing is sent anywhere but your company's Shared Memory server" in page
 
 
 def test_the_docs_page_has_a_worked_example_of_a_headless_run_in_ci() -> None:
