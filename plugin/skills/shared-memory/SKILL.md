@@ -24,7 +24,7 @@ Memory tools need the repository to be connected to a project. If a tool says th
 
 ## Onboarding
 
-When the member asks to onboard, to import what they and this repository already have written down (its documents, your local memory, other coding agents' rule files), call `onboard` and follow the steps it returns, in order. Start it only when the member asks.
+When the member asks to onboard, to import what they, this project's repositories and their team already have (documents, your local memory, other coding agents' rule files, git history, the code, wikis, tickets and review comments), call `onboard` and follow the steps it returns, in order. Start it only when the member asks.
 
 ## What to save where
 
