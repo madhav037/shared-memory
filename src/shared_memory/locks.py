@@ -29,7 +29,7 @@ Only this module reads the `locks` table; a holder is a `Session`, which is the 
 A project's own never-lock patterns are `ProjectPatterns`, beside the built-in `NEVER_LOCK`:
 
 - `of(project_id)`: the project's patterns, oldest first, each a `NeverLockPattern`.
-- `add(caller, pattern)` and `remove(caller, pattern)`: for the project's leads and the team's admins. Each writes an
+- `add(caller, pattern)` and `remove(caller, pattern)`: for the project's leads and the company's admins. Each writes an
   audit log entry. A lock held on a file the added pattern matches ends there.
 
 Only this module reads the `never_lock_patterns` table, and `Locks.never_locks` is still the one place a path is
@@ -740,7 +740,7 @@ class ProjectPatterns:
         project_id = caller.require_project().project_id
         if not self._identity.looks_after(caller.member, project_id):
             raise Refused(
-                "Only this project's leads and the team's admins can add or remove its never-lock patterns. Any "
+                "Only this project's leads and the company's admins can add or remove its never-lock patterns. Any "
                 "member of the project can read them, by calling never_lock with nothing."
             )
         return project_id

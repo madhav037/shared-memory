@@ -86,7 +86,7 @@ class KnownIssues:
         folder = level_folder("project", KNOWN_ISSUE, caller.project.project_id)
         return [
             memory.title
-            for _, memories in self._store.walk(caller.team, folder)
+            for _, memories in self._store.walk(caller.company, folder)
             for _, memory in memories
             if memory.status == "active" and memory.type == KNOWN_ISSUE
         ]
@@ -114,7 +114,7 @@ class KnownIssues:
             row = conn.execute(
                 "SELECT similar_paths FROM known_issue_saves WHERE reference = %s AND team = %s AND member_id = %s"
                 " AND project_id = %s",
-                (reference, caller.team, caller.member_id, project.project_id),
+                (reference, caller.company, caller.member_id, project.project_id),
             ).fetchone()
         if row is None:
             raise Refused("Unknown reference for this known issue. Call save_known_issue again without a reference.")
@@ -133,7 +133,7 @@ class KnownIssues:
         if len(linked) > 1:
             raise Refused("Link to one known issue only; resolve the others as keep_both.")
         if linked:
-            existing = self._store.read(caller.team, PurePosixPath(linked[0]))
+            existing = self._store.read(caller.company, PurePosixPath(linked[0]))
             if existing.type != KNOWN_ISSUE:
                 raise Refused(
                     f"{linked[0]} is a {existing.type}: link only to a known issue. Resolve it as keep_both or cancel."
@@ -163,13 +163,13 @@ class KnownIssues:
         if card is not None:
             self._board.require_card(caller, card)
         # Embedded before its save takes a turn; the similar check reads the same vectors.
-        self._index.prepare(caller.team, memory)
+        self._index.prepare(caller.company, memory)
         return memory
 
     def _similar(self, caller: Caller, memory: Memory) -> dict[str, Any] | None:
         project = caller.require_project()
         similar = self._index.similar_to(
-            caller.team,
+            caller.company,
             memory,
             reach=Reach.project_memory_of(project.project_id),
             threshold=self._settings.similar_threshold,
@@ -181,13 +181,13 @@ class KnownIssues:
             conn.execute(
                 "INSERT INTO known_issue_saves (reference, team, member_id, project_id, similar_paths, created_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s)",
-                (reference, caller.team, caller.member_id, project.project_id, [p for p, _ in similar], self._clock()),
+                (reference, caller.company, caller.member_id, project.project_id, [p for p, _ in similar], self._clock()),
             )
         return {
             "status": "similar_memories",
             "reference": reference,
             "similar": [
-                {**describe(PurePosixPath(p), self._store.read(caller.team, PurePosixPath(p))), "similarity": round(s, 3)}
+                {**describe(PurePosixPath(p), self._store.read(caller.company, PurePosixPath(p))), "similarity": round(s, 3)}
                 for p, s in similar
             ],
             "next": "Judge with the member whether each similar memory describes the same problem, then call "
@@ -219,7 +219,7 @@ class KnownIssues:
         area = Area("project", project.project_id)
         folder = level_folder("project", KNOWN_ISSUE, project.project_id)
         tracking: list[int] = []
-        with self._store.change(caller.team, committer(caller), f"Known issue: {memory.title}", areas=[area]) as change:
+        with self._store.change(caller.company, committer(caller), f"Known issue: {memory.title}", areas=[area]) as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type, level="project"))

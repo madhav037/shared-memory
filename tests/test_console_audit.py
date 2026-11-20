@@ -49,7 +49,7 @@ def test_a_member_who_is_not_the_owner_cannot_read_the_log(console: Console, sig
     refused = signed_out.get("/api/audit")
 
     assert refused.status_code == 403
-    assert "Only the team's owner" in refused.json()["message"]
+    assert "Only the company's owner" in refused.json()["message"]
 
 
 def test_the_log_cannot_be_read_without_signing_in(console: Console, signed_out: ConsoleClient) -> None:

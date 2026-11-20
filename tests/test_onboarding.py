@@ -383,7 +383,7 @@ def test_the_steps_collapse_identical_rules_and_show_disagreeing_variants_side_b
     steps = owner.call("onboard")
 
     assert "becomes one proposal" in steps
-    assert "`team` level" in steps
+    assert "`company` level" in steps
     assert "side by side" in steps
 
 

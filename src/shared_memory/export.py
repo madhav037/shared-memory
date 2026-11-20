@@ -1,4 +1,4 @@
-"""An admin's export of all the team's data, as one zip archive (spec #409).
+"""An admin's export of all the company's data, as one zip archive (spec #409).
 
 It holds the memory folder's git repository with its full history as a git bundle, and JSON of the members, projects
 (with their repositories, leads and access), the cards of every board and the audit log. It only reads, so it is
@@ -32,7 +32,7 @@ def _json(value: object) -> str:
     return json.dumps(value, indent=2, default=str)
 
 
-class TeamExport:
+class CompanyExport:
     """Everything one admin may take away, built from the services that own each table."""
 
     def __init__(self, settings: Settings, identity: Identity, board: Board, audit: Audit) -> None:
@@ -42,9 +42,9 @@ class TeamExport:
         self._audit = audit
 
     def build(self, member: Member) -> bytes:
-        """The archive for this member's team, or a refusal when the member is not an admin."""
+        """The archive for this member's company, or a refusal when the member is not an admin."""
         if not (member.is_owner or member.is_admin):
-            raise Refused("Only the team's owner and its admins can download all of the team's data.")
+            raise Refused("Only the company's owner and its admins can download all of the company's data.")
         projects = [
             self._identity.project_detail(member, project.project_id) for project in self._identity.projects(member)
         ]

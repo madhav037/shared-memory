@@ -10,7 +10,7 @@ Every agent's hooks post to the same endpoints and name, as ?format=, the family
 
 A format this server doesn't know, or none at all, is answered in Claude Code's shape, which is what these endpoints
 have always answered. Nothing here ever refuses or raises: a hook that cannot be answered is answered emptily, so no
-session is ever held up by the state of the team's memory.
+session is ever held up by the state of the company's memory.
 
 The before-edit hook runs before every tool call, not only an edit (ADR-0025): it keeps the session active, records
 its branch and the files the tool names, and hands the session its waiting news where the agent's hook before a tool

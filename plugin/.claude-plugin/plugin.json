@@ -1,7 +1,7 @@
 {
   "name": "shared-memory",
   "version": "0.1.9",
-  "description": "Connects Claude Code sessions to your team's Shared Memory server.",
+  "description": "Connects Claude Code sessions to your company's Shared Memory server.",
   "author": {
     "name": "madhav037",
     "url": "https://github.com/madhav037"
@@ -14,13 +14,13 @@
     "server_url": {
       "type": "string",
       "title": "Shared Memory server URL",
-      "description": "Address of your team's Shared Memory server, for example https://memory.example.com",
+      "description": "Address of your company's Shared Memory server, for example https://memory.example.com",
       "sensitive": false
     },
     "personal_token": {
       "type": "string",
       "title": "Personal token",
-      "description": "Your personal token from your team's owner. It proves which member you are.",
+      "description": "Your personal token from your company's owner. It proves which member you are.",
       "sensitive": true
     }
   }

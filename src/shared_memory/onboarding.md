@@ -1,6 +1,6 @@
 # Onboarding
 
-Onboarding imports what this member, this project's repositories and their team already have written down into Shared Memory. You read the sources and cut them into memories; the member approves each one before it is saved, and again before it is promoted. Run the steps in order, and tell the member which step you are on. Everything runs here, in this session: nothing is sent anywhere but this team's Shared Memory server.
+Onboarding imports what this member, this project's repositories and their company already have written down into Shared Memory. You read the sources and cut them into memories; the member approves each one before it is saved, and again before it is promoted. Run the steps in order, and tell the member which step you are on. Everything runs here, in this session: nothing is sent anywhere but this company's Shared Memory server.
 
 Read the progress so far first: the section at the end of these steps lists each repository and kind of outside source an earlier run recorded, with its status. Tell the member what is already done and skip it unless they ask to run it again.
 
@@ -29,7 +29,7 @@ Read each *import* source in full and cut it into proposals, one thing per memor
 - a **title**, and a one-line **summary** that tells a teammate what it says without opening it;
 - a **type**: `convention` (a rule followed every day), `decision` (a choice made once, with its reasons), `architecture` (how the system is built), or `gotcha` (a surprising fact that wastes time);
 - a **body** of at most 600 words, keeping the source's own wording;
-- a proposed **level**: `project` if everyone on this project follows it, `team` if it holds for every project in the team, `personal` if it is one member's note that teammates may still want to read;
+- a proposed **level**: `project` if everyone on this project follows it, `company` if it holds for every project in the company, `personal` if it is one member's note that teammates may still want to read;
 - its **source**, named precisely enough that a teammate can check it: `repository:path` for a file in a repository, using the repository name your briefing gives for this one (its last line: "It works in the repository ....") or the name the project lists for another checkout; `commit:repository@revision` for a commit; `wiki:<page>` for a wiki or doc export page; `ticket:<reference>` for a ticket; `pr-comment:<reference>` for a pull request review comment (`pr-comment:billing-api#88`); or `interview:<reference>` for an interview;
 - its **writer**, found as below.
 
@@ -43,7 +43,7 @@ Read each *import* source in full and cut it into proposals, one thing per memor
 - secrets. Describe where a secret is kept instead; the server refuses a memory that looks like it holds one;
 - what Shared Memory already says: `search` for each proposal first.
 
-**Repeated rules.** Across several repositories and sources the same rule turns up again and again. An identical rule found in many places becomes one proposal, listing every source; propose it at `project` level, or `team` level when it holds across the team's projects (the member says which). Where variants of a rule disagree, don't pick one: show the variants side by side, with their sources, and have the member settle which holds, or that each stays in its own repository, before anything is saved.
+**Repeated rules.** Across several repositories and sources the same rule turns up again and again. An identical rule found in many places becomes one proposal, listing every source; propose it at `project` level, or `company` level when it holds across the company's projects (the member says which). Where variants of a rule disagree, don't pick one: show the variants side by side, with their sources, and have the member settle which holds, or that each stays in its own repository, before anything is saved.
 
 **Done when** every *import* source is accounted for passage by passage: each passage is in a proposal or noted as left out with its reason, and every repeated rule is one proposal.
 
@@ -70,7 +70,7 @@ A project's **foundations** hold its sources of truth: `architecture`, `product`
 
 ## 6. Promote what the member approved, one at a time
 
-Take the memories approved for `project` or `team` level in turn, one at a time, and finish each `promote` before starting the next, so the similar-memory check runs on every one, even those the member approved a whole source at once.
+Take the memories approved for `project` or `company` level in turn, one at a time, and finish each `promote` before starting the next, so the similar-memory check runs on every one, even those the member approved a whole source at once.
 
 - **A single writer with a GitHub username**: call `promote` with `author="@<username>"` and `imported_from="<source>"`. That member becomes the author, this member is recorded as its importer, and the author is told in their next briefing. If the server answers that they are not a member or can't reach this project, add the `Originally written by` line with `edit_memory` and promote without `author` and `imported_from`.
 - **No single writer**: call `promote` with the path and level alone.
@@ -78,7 +78,7 @@ Take the memories approved for `project` or `team` level in turn, one at a time,
 - **`similar_memories` comes back**: judge whether each similar memory contradicts this one, show the member each with your judgement, and call `promote` again with the `reference` and their `resolutions`. A memory that turns out to repeat an existing one is `cancel`; offer to `delete_memory` it.
 - **`challenge_raised` comes back**: tell the member whose decision it waits on. The memory stays personal until then. A member who is neither a keeper of the foundation nor a project lead always gets one for a foundation, a foundation challenge a keeper or lead decides.
 
-**Done when** every memory approved for project or team level is promoted, waiting on a challenge, or cancelled on the member's word.
+**Done when** every memory approved for project or company level is promoted, waiting on a challenge, or cancelled on the member's word.
 
 ## 7. Replace imported files with pointers
 
@@ -92,7 +92,7 @@ Leave a file alone when any of its passages is still waiting on a foundation cha
 
 Call `record_onboarding_progress` once for each repository and each kind of outside source (`wiki`, `ticket`, `pr-comment`, `interview`) this run read: `status` is `done` when every proposal from it is promoted, waiting on a challenge, dropped or left out, `partly_done` when some are not yet, and `left_out` is how many passages of it you left out. Record a repository with `repository`, an outside source with `outside_source`. The project's leads see it in project settings, and the next run reads it.
 
-Cover every repository and source this run read, one part each, and the outside sources you couldn't reach. Tell the member what was promoted to project and to team memory and to which foundation and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in any repository or in your local memory, except the pointers the member approved in step 7. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.
+Cover every repository and source this run read, one part each, and the outside sources you couldn't reach. Tell the member what was promoted to project and to company memory and to which foundation and in whose name, what stays personal, what waits on a challenge, and what was left out and why. Onboarding changes no file in any repository or in your local memory, except the pointers the member approved in step 7. A memory that turns out wrong is put right the usual way: `retire` it, or promote one that supersedes it.
 
 ## Interview an expert
 

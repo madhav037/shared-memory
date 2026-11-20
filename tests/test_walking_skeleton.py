@@ -82,4 +82,4 @@ def test_a_project_from_another_team_is_refused(team: Team) -> None:
 
     refusal = team.owner().in_project(foreign_project).refusal("read", path="team/conventions/x.md")
 
-    assert "not a project in your team" in refusal
+    assert "not a project in your company" in refusal

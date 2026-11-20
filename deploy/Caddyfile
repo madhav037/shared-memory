@@ -41,7 +41,7 @@
 		max_size 1MB
 	}
 
-	# A team's server is kept out of search engines: the landing page lives on the platform. Whoever wants a server
+	# A company's server is kept out of search engines: the landing page lives on the platform. Whoever wants a server
 	# indexed anyway sets SHARED_MEMORY_ROBOTS_TAG=all.
 	header X-Robots-Tag {$CADDY_ROBOTS_TAG:noindex}
 

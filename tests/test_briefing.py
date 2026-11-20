@@ -34,13 +34,13 @@ def test_pinned_team_memory_is_in_every_projects_briefing(team: Team, owner: Ses
     owner.call("pin", path=path)
     other_project = team.owner().call("create_project", name="Checkout")["project_id"]
 
-    assert f"[team memory] Log in JSON ({path})" in added_context(team.owner().in_project(other_project).start())
+    assert f"[company memory] Log in JSON ({path})" in added_context(team.owner().in_project(other_project).start())
 
 
 def test_personal_memory_cannot_be_pinned(owner: Session) -> None:
     personal = owner.call("remember", title="Mine", summary="s", type="gotcha", body="b")["path"]
 
-    assert "Only project memory and team memory" in owner.refusal("pin", path=personal)
+    assert "Only project memory and company memory" in owner.refusal("pin", path=personal)
 
 
 def test_a_pin_that_would_go_over_the_cap_is_refused_and_lists_the_pins(owner: Session) -> None:

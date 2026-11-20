@@ -111,7 +111,7 @@ class Progress:
                 " left_out = EXCLUDED.left_out, recorded_by = EXCLUDED.recorded_by,"
                 " recorded_at = EXCLUDED.recorded_at",
                 (
-                    caller.team, project.project_id, repository or "", outside_source or "", status, left_out,
+                    caller.company, project.project_id, repository or "", outside_source or "", status, left_out,
                     caller.member_id, self._clock(),
                 ),  # fmt: skip
             )
@@ -119,7 +119,7 @@ class Progress:
 
     def entries(self, caller: Caller) -> tuple[bool, list[Entry]]:
         """The caller's project's entries, repositories first, with whether they are every entry: the project's
-        leads and the team's admins see all of them, any other member only the ones they recorded."""
+        leads and the company's admins see all of them, any other member only the ones they recorded."""
         project = caller.require_project()
         everyone = self._identity.looks_after(caller.member, project.project_id)
         return everyone, [
@@ -134,9 +134,9 @@ class Progress:
                 "SELECT repository, outside_source, status, left_out, recorded_by, recorded_at"
                 " FROM onboarding_progress WHERE team = %s AND project_id = %s"
                 " ORDER BY repository = '', repository, outside_source",
-                (caller.team, project.project_id),
+                (caller.company, project.project_id),
             ).fetchall()
-        promoted, waiting = self._audit.imports_in(caller.member.team_pk, project.project_id)
+        promoted, waiting = self._audit.imports_in(caller.member.company_pk, project.project_id)
         found = []
         for row in rows:
             entry = Entry(
@@ -199,6 +199,6 @@ def offer(caller: Caller, store: MemoryStore, audit: Audit) -> list[str]:
         return []
     if repository is not None and audit.has_imported_from(caller, repository):
         return []
-    if has_project_memory(store, caller.team, project.project_id):
+    if has_project_memory(store, caller.company, project.project_id):
         return []
     return [OFFER]

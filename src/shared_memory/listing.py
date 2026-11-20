@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from shared_memory.agents import CLAUDE_CODE
 from shared_memory.identity import Caller
 
-# The tools only the team's owner and its admins can use (`Identity._require_admin`).
+# The tools only the company's owner and its admins can use (`Identity._require_admin`).
 ADMIN_TOOLS = frozenset({"add_member", "remove_member", "reissue_token"})
 
 # The tools that act on a card already on the board; `board` and `add_card` are always listed.

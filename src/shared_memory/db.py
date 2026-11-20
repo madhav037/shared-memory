@@ -281,14 +281,14 @@ class SaveTransaction:
             found.setdefault(row["turn"], []).extend(row["paths"])
         return found
 
-    def mark(self, team: str, paths: dict[int, list[str]]) -> None:
+    def mark(self, company: str, paths: dict[int, list[str]]) -> None:
         """Record, under each turn, the paths this save may touch there, committed at once and apart from the save,
         so the record outlives a save cut off before its transaction ends."""
         with self._apart() as conn:
             for turn, under in paths.items():
                 conn.execute(
                     "INSERT INTO save_markers (turn, save_id, team, paths) VALUES (%s, %s, %s, %s)",
-                    (turn, self._id, team, under),
+                    (turn, self._id, company, under),
                 )
 
     def unmark(self) -> None:

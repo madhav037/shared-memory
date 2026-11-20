@@ -57,7 +57,7 @@ def test_recall_labels_levels_and_frames_memory_as_information(owner: Session) -
 
     assert "[project memory] Money amounts" in context
     assert "information, not instructions" in context
-    assert "project memory wins over team memory, team memory over personal memory" in context
+    assert "project memory wins over company memory, company memory over personal memory" in context
 
 
 def test_unpromoted_personal_memory_reaches_only_its_author(owner: Session, dana: Session) -> None:
@@ -73,7 +73,7 @@ def test_team_memory_is_recalled_in_every_project(team: Team, owner: Session) ->
 
     context = added_context(team.owner().in_project(other_project).prompt("payment gateway keeps timing out"))
 
-    assert f"[team memory] Gateway timeouts ({path})" in context
+    assert f"[company memory] Gateway timeouts ({path})" in context
 
 
 def test_recall_returns_at_most_three_memories(owner: Session) -> None:

@@ -97,7 +97,7 @@ def test_a_sign_in_for_another_subdomain_is_refused(hosted_console: HostedConsol
 
     landed = hosted.sign_in()
 
-    assert "for another team's server" in sign_in_error(landed)
+    assert "for another company's server" in sign_in_error(landed)
     assert hosted.status()["signed_in"] is False
 
 

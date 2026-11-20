@@ -168,7 +168,7 @@ def test_project_health_is_refused_to_a_member_who_is_not_a_lead(console: Consol
     refused = dana.get(f"/api/projects/{project}/health")
 
     assert refused.status_code == 403
-    assert refused.json()["message"] == "Only this project's leads and the team's admins can see its health."
+    assert refused.json()["message"] == "Only this project's leads and the company's admins can see its health."
 
 
 def test_project_health_of_a_restricted_project_is_refused_outside_its_leads_and_admins(
@@ -188,7 +188,7 @@ def test_project_health_of_a_restricted_project_is_refused_outside_its_leads_and
     kept_out = signed_in(console, "ash-health-restricted", 5541).get(f"/api/projects/{project}/health")
 
     assert allowed_in.status_code == 403
-    assert allowed_in.json()["message"] == "Only this project's leads and the team's admins can see its health."
+    assert allowed_in.json()["message"] == "Only this project's leads and the company's admins can see its health."
     assert kept_out.status_code == 403
     assert "is restricted" in kept_out.json()["message"]
     assert health(signed_in(console, "lee-health-restricted", 5542), project)["project_id"] == project

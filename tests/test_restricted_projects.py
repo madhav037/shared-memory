@@ -128,7 +128,7 @@ def test_team_memory_stays_readable_by_the_whole_team(console: Console, signed_o
     found = it.dana.in_project(payments, "payments-api").call("search", query="how do our services log")
 
     assert [hit["title"] for hit in found["results"]] == ["Every service logs as JSON"]
-    assert found["results"][0]["label"] == "team memory"
+    assert found["results"][0]["label"] == "company memory"
 
 
 def test_a_member_who_does_not_lead_the_project_cannot_restrict_it(
@@ -142,7 +142,7 @@ def test_a_member_who_does_not_lead_the_project_cannot_restrict_it(
     letting_someone_in = dana.post_json(f"/api/projects/{it.billing}/access", {"member_id": "E1001"})
 
     assert opening_it.status_code == 403
-    assert "leads and the team's admins" in opening_it.json()["message"]
+    assert "leads and the company's admins" in opening_it.json()["message"]
     assert letting_someone_in.status_code == 403
     assert fetch_project(dana, it.billing)["you_may_change"] is False
     dana.close()

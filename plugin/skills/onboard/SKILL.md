@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Import what you, this project's repositories and your team already have, from documents and rule files to git history, wikis and tickets, into your team's Shared Memory.
+description: Import what you, this project's repositories and your company already have, from documents and rule files to git history, wikis and tickets, into your company's Shared Memory.
 disable-model-invocation: true
 ---
 

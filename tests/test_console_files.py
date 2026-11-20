@@ -61,7 +61,7 @@ def test_the_top_holds_team_memory_and_every_project_with_what_each_holds(
 
     assert top["folder"] == ""
     assert [(one["name"], one["kind"], one["memories"]) for one in top["folders"]] == [
-        ("Team memory", "team", 1),
+        ("Company memory", "team", 1),
         ("Billing", "project", 2),
         ("Payments", "project", 0),
     ]
@@ -173,7 +173,7 @@ def test_a_restricted_project_stays_out_of_the_files_of_anyone_outside_it(
     found = dana.get("/api/search?query=pnpm").json()["results"]
     team = memory(dana, it["logging"])
 
-    assert [one["name"] for one in top["folders"]] == ["Team memory", "Payments"]
+    assert [one["name"] for one in top["folders"]] == ["Company memory", "Payments"]
     assert inside.status_code == 403
     assert "is restricted" in inside.json()["message"]
     assert read.status_code == 403

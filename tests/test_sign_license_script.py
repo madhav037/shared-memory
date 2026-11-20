@@ -28,7 +28,7 @@ def test_a_signed_key_is_accepted_by_the_servers_check(tmp_path: Path) -> None:
 
     assert done.returncode == 0, done.stderr
     found = verify(done.stdout.strip(), TEST_PUBLIC_KEYS)
-    assert (found.team, found.member_cap, found.expires, found.key_id) == ("Acme", 10, date(2027, 11, 6), "acme-1")
+    assert (found.company, found.member_cap, found.expires, found.key_id) == ("Acme", 10, date(2027, 11, 6), "acme-1")
 
 
 def test_the_script_signs_a_hosted_servers_key(tmp_path: Path) -> None:

@@ -7,10 +7,10 @@ which only this module reads. A memory is possibly outdated when it is active, n
 
 The interface:
 
-- `used(team, paths)`: those memories were used now.
-- `possibly_outdated(team, statuses)`: which of these memories (path to status) are possibly outdated.
-- `last_used(team, path)`: when one memory was last used, or None.
-- `check(team, path)`: what an agent is told to do about a possibly outdated memory.
+- `used(company, paths)`: those memories were used now.
+- `possibly_outdated(company, statuses)`: which of these memories (path to status) are possibly outdated.
+- `last_used(company, path)`: when one memory was last used, or None.
+- `check(company, path)`: what an agent is told to do about a possibly outdated memory.
 - `check_any()`: the same, told once beside recall or search results when any of them is possibly outdated.
 """
 
@@ -41,7 +41,7 @@ _RECORD = (
     " ON CONFLICT (team, path) DO UPDATE SET last_used_at = GREATEST(memory_uses.last_used_at, EXCLUDED.last_used_at)"
 )
 
-# Which of a team's paths are pinned, the memory itself or the topic folder it sits in: the briefing's to answer.
+# Which of a company's paths are pinned, the memory itself or the topic folder it sits in: the briefing's to answer.
 PinnedAmong = Callable[[str, Iterable[str]], set[str]]
 
 
@@ -64,26 +64,26 @@ class Uses:
                 return
             conn.execute(SCHEMA)
             now = self._clock()
-            for team in store.teams():
-                rows = [(team, str(path), now) for _, memories in store.walk(team, PurePosixPath()) for path, _ in memories]
+            for company in store.companies():
+                rows = [(company, str(path), now) for _, memories in store.walk(company, PurePosixPath()) for path, _ in memories]
                 if rows:
                     conn.cursor().executemany(_RECORD, rows)
 
-    def used(self, team: str, paths: Iterable[str]) -> None:
-        rows = [(team, path, self._clock()) for path in dict.fromkeys(paths)]
+    def used(self, company: str, paths: Iterable[str]) -> None:
+        rows = [(company, path, self._clock()) for path in dict.fromkeys(paths)]
         if not rows:
             return
         with self._db.transaction() as conn:
             conn.cursor().executemany(_RECORD, rows)
 
-    def last_used(self, team: str, path: str) -> datetime | None:
+    def last_used(self, company: str, path: str) -> datetime | None:
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT last_used_at FROM memory_uses WHERE team = %s AND path = %s", (team, path)
+                "SELECT last_used_at FROM memory_uses WHERE team = %s AND path = %s", (company, path)
             ).fetchone()
         return None if row is None else row["last_used_at"]
 
-    def possibly_outdated(self, team: str, statuses: Mapping[str, str]) -> set[str]:
+    def possibly_outdated(self, company: str, statuses: Mapping[str, str]) -> set[str]:
         """Which of these memories, given as path to status, are possibly outdated. A memory with no last use isn't."""
         active = [path for path, status in statuses.items() if status == "active"]
         if not active:
@@ -91,14 +91,14 @@ class Uses:
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT path FROM memory_uses WHERE team = %s AND path = ANY(%s) AND last_used_at < %s",
-                (team, active, self._clock() - self._after),
+                (company, active, self._clock() - self._after),
             ).fetchall()
         unused = {row["path"] for row in rows}
-        return unused - self._pinned_among(team, unused) if unused else set()
+        return unused - self._pinned_among(company, unused) if unused else set()
 
-    def check(self, team: str, path: str) -> str:
+    def check(self, company: str, path: str) -> str:
         """What a coding agent is told about a possibly outdated memory: how long it has gone unused, and what to do."""
-        last = self.last_used(team, path)
+        last = self.last_used(company, path)
         unused = self._clock() - last if last is not None else self._after
         return (
             f"Possibly outdated: no coding agent has recalled or read this memory for {_days(unused)} days. "
@@ -114,7 +114,7 @@ class Uses:
 
     @contextmanager
     def on_change(
-        self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
+        self, company: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
     ) -> Iterator[None]:
         """Saving a memory starts its clock again; deleting one forgets it. Committed once the save has landed.
 
@@ -122,10 +122,10 @@ class Uses:
         with self._db.transaction() as conn:
             gone = [str(path) for path in deletes]
             if gone:
-                conn.execute("DELETE FROM memory_uses WHERE team = %s AND path = ANY(%s)", (team, gone))
+                conn.execute("DELETE FROM memory_uses WHERE team = %s AND path = ANY(%s)", (company, gone))
             now = self._clock()
             if writes:
-                conn.cursor().executemany(_RECORD, [(team, str(path), now) for path in writes])
+                conn.cursor().executemany(_RECORD, [(company, str(path), now) for path in writes])
             yield
 
 

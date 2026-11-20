@@ -148,7 +148,7 @@ def test_leads_and_admins_assign_and_remove_keepers_and_nobody_else(console: Con
     removed_by_an_admin = signed_out.post(f"{where}/emp-3/remove")
 
     assert by_a_member.status_code == 403
-    assert "leads and the team's admins" in by_a_member.json()["message"]
+    assert "leads and the company's admins" in by_a_member.json()["message"]
     assert keepers(by_a_lead.json(), "architecture") == ["emp-3"]
     assert removed_by_a_member.status_code == 403
     assert keepers(removed_by_an_admin.json(), "architecture") == []

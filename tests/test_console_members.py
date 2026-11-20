@@ -124,7 +124,7 @@ def test_an_admin_can_manage_members_but_not_admins(console: Console, signed_out
     assert removing_the_owner.status_code == 403
     assert "owner can't be removed" in removing_the_owner.json()["message"]
     assert granting_admin.status_code == 403
-    assert "Only the team's owner can grant admin" in granting_admin.json()["message"]
+    assert "Only the company's owner can grant admin" in granting_admin.json()["message"]
     ash.close()
 
 
@@ -142,7 +142,7 @@ def test_only_the_owner_removes_an_admin(console: Console, signed_out: ConsoleCl
     owner_removing_admin = signed_out.post("/api/members/emp-3/remove")
 
     assert admin_removing_admin.status_code == 403
-    assert "Only the team's owner can remove an admin" in admin_removing_admin.json()["message"]
+    assert "Only the company's owner can remove an admin" in admin_removing_admin.json()["message"]
     assert owner_removing_admin.status_code == 200
     ash.close()
 

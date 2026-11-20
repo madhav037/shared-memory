@@ -29,41 +29,29 @@ FOUNDATIONS_FOLDER = "foundations"
 CORE_FOUNDATIONS = ("architecture", "product", "glossary", "decisions")
 FOUNDATION_TYPE = {"architecture": "architecture", "decisions": "decision"}
 
-Level = Literal["team", "project", "personal"]
+Level = Literal["company", "project", "personal"]
 
-# Company memory's folder in each team's folder (ADR-0031). Its level is still called "team" inside the server until
-# the rename's migrate step (#626). Memory kept under the old folder is moved here once, as the server sets up
-# (`company_move.py`).
+# Company memory's folder in each company's folder (ADR-0031). Memory kept under the old folder, `team/`, is moved here
+# once, as the server sets up (`company_move.py`).
 COMPANY_FOLDER = "company"
+COMPANY_LEVEL: Level = "company"
 
-# The rename's expand step (#625): a session may say `company` or `team` for company memory's level, and is answered
-# with `company`. The contract step (#629) takes `team` out.
-COMPANY_LEVEL = "company"
+# The name company memory's level and folder had while the top level was called team. A session may still say it, and
+# is answered with `company`, until the rename's contract step (#629) takes it out.
+OLD_LEVEL = "team"
 
 
 def asked_level(level: str | None) -> str | None:
-    """A level as a caller gave it, as the server names it inside: `company` is company memory's level."""
-    return "team" if level == COMPANY_LEVEL else level
+    """A level as a caller gave it, where the old name of company memory's level, `team`, is `company`."""
+    return COMPANY_LEVEL if level == OLD_LEVEL else level
 
 
 def asked_folder(folder: PurePosixPath) -> PurePosixPath:
     """A folder or memory path as a caller gave it, where the old company memory folder, `team`, is the company
     folder."""
-    if folder.parts[:1] == ("team",):
+    if folder.parts[:1] == (OLD_LEVEL,):
         return PurePosixPath(COMPANY_FOLDER, *folder.parts[1:])
     return folder
-
-
-def told_levels(answer: object) -> object:
-    """An answer to a session with every memory `level` of company memory said as `company`."""
-    if isinstance(answer, dict):
-        return {
-            key: COMPANY_LEVEL if key == "level" and value == "team" else told_levels(value)
-            for key, value in answer.items()
-        }
-    if isinstance(answer, list):
-        return [told_levels(each) for each in answer]
-    return answer
 
 
 @dataclass
@@ -114,7 +102,7 @@ class Memory:
 
 @dataclass(frozen=True)
 class Location:
-    """Where a memory sits, decoded from its path relative to the team's folder."""
+    """Where a memory sits, decoded from its path relative to the company's folder."""
 
     path: PurePosixPath
     level: Level
@@ -134,7 +122,7 @@ def locate(path: str) -> Location:
     if len(parts) == 6 and parts[0] == "projects" and parts[2] == "shared" and parts[3] == FOUNDATIONS_FOLDER:
         return Location(pure, "project", None, parts[1], None, foundation=parts[4])
     if parts[0] == COMPANY_FOLDER and len(parts) in (3, 4):
-        level: Level = "team"
+        level: Level = "company"
         project_id = member_id = None
         type_index = 1
     elif parts[0] == "projects" and len(parts) in (5, 6) and parts[2] == "shared":
@@ -149,12 +137,12 @@ def locate(path: str) -> Location:
     return Location(pure, level, FOLDER_TYPES[parts[type_index]], project_id, member_id, topic)
 
 
-_LEVEL_ORDER: dict[Level, int] = {"team": 0, "project": 1, "personal": 2}
+_LEVEL_ORDER: dict[Level, int] = {"company": 0, "project": 1, "personal": 2}
 
 
 @dataclass(frozen=True)
 class Area:
-    """The memory one save can change without waiting on others (CONTEXT.md): the team memory, one project's project
+    """The memory one save can change without waiting on others (CONTEXT.md): the company memory, one project's project
     memory, or one member's personal memory in one project. Saves take turns per area (ADR-0012)."""
 
     level: Level
@@ -164,7 +152,7 @@ class Area:
     @property
     def folder(self) -> PurePosixPath:
         """The folder holding the whole area, its own index included."""
-        if self.level == "team":
+        if self.level == "company":
             return PurePosixPath(COMPANY_FOLDER)
         assert self.project_id is not None
         if self.level == "project":
@@ -173,7 +161,7 @@ class Area:
         return PurePosixPath("projects", self.project_id, "people", self.member_id)
 
     def order(self) -> tuple[int, str, str]:
-        """The order a save takes its areas' turns in: team, then project memory, then personal memory, each by id."""
+        """The order a save takes its areas' turns in: company, then project memory, then personal memory, each by id."""
         return _LEVEL_ORDER[self.level], self.project_id or "", self.member_id or ""
 
 
@@ -181,7 +169,7 @@ def area_of(path: PurePosixPath) -> Area | None:
     """The area a memory, a folder or a folder's index lies in; None for the folders above the areas, which they share."""
     parts = path.parts
     if parts[:1] == (COMPANY_FOLDER,):
-        return Area("team")
+        return Area("company")
     if len(parts) >= 3 and parts[0] == "projects" and parts[2] == "shared":
         return Area("project", parts[1])
     if len(parts) >= 4 and parts[0] == "projects" and parts[2] == "people" and parts[3] != INDEX_NAME:
@@ -191,7 +179,7 @@ def area_of(path: PurePosixPath) -> Area | None:
 
 def level_folder(level: Level, kind: str, project_id: str | None = None, member_id: str | None = None) -> PurePosixPath:
     """The type folder a memory of this level and type lives in."""
-    if level == "team":
+    if level == "company":
         return PurePosixPath(COMPANY_FOLDER, type_folder(kind))
     assert project_id is not None
     if level == "project":

@@ -125,7 +125,7 @@ def test_install_license_says_what_it_does_in_the_glossarys_words(capsys: pytest
         cli.run(["install-license", "--help"])
 
     said = " ".join(capsys.readouterr().out.split())
-    assert "Install a license key server-wide, as an admin does on the Team page" in said
+    assert "Install a license key server-wide, as an admin does on the Company page" in said
     assert "recorded in the audit log as installed by the vendor" in said
     assert "The platform runs it to renew a hosted server's license key" in said
 

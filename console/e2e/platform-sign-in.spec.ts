@@ -63,7 +63,7 @@ test("a sign-in for another team's server is turned away", async ({ page }) => {
 
   await chooseToSignIn(page);
 
-  await expect(page.getByTestId("sign-in-error")).toContainText("for another team's server");
+  await expect(page.getByTestId("sign-in-error")).toContainText("for another company's server");
   await expect(page.getByTestId("sign-in")).toBeVisible();
 });
 

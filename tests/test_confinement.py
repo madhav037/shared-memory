@@ -34,14 +34,14 @@ def linked_folder(team: Team, tmp_path: Path) -> str:
 def test_a_memory_reached_through_a_linked_folder_is_refused(team: Team, member: Session, tmp_path: Path) -> None:
     path = linked_folder(team, tmp_path)
 
-    with pytest.raises(ToolRefused, match="outside your team's memory"):
+    with pytest.raises(ToolRefused, match="outside your company's memory"):
         member.call("read", path=path)
 
 
 def test_the_old_team_path_through_a_linked_folder_is_refused_too(team: Team, member: Session, tmp_path: Path) -> None:
     path = linked_folder(team, tmp_path).replace("company/", "team/", 1)
 
-    with pytest.raises(ToolRefused, match="outside your team's memory"):
+    with pytest.raises(ToolRefused, match="outside your company's memory"):
         member.call("read", path=path)
 
 

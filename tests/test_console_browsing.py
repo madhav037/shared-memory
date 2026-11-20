@@ -181,7 +181,7 @@ def test_another_members_personal_memory_is_labelled_as_not_accepted(
 
     found = ask(signed_out, "/api/search", query="fixtures scratch folder")
 
-    assert found["results"][0]["label"] == "personal memory of emp-2, not accepted by the team"
+    assert found["results"][0]["label"] == "personal memory of emp-2, not accepted by the company"
 
 
 def test_browsing_needs_a_signed_in_member_and_a_project_of_their_team(
@@ -195,7 +195,7 @@ def test_browsing_needs_a_signed_in_member_and_a_project_of_their_team(
 
     assert signed_out_answer.status_code == 401
     assert stranger_project.status_code == 403
-    assert "not a project in your team" in stranger_project.json()["message"]
+    assert "not a project in your company" in stranger_project.json()["message"]
 
 
 def test_a_projects_foundations_folder_browses_like_any_topic(console: Console, signed_out: ConsoleClient) -> None:
