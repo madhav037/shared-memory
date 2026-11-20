@@ -52,7 +52,7 @@ from shared_memory.audit import (
     PROJECT_RESTRICTED,
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
-    TEAM_EXPORTED,
+    COMPANY_EXPORTED,
     TOKEN_ISSUED,
     Audit,
 )
@@ -82,7 +82,7 @@ from shared_memory.console_contract import (
     OnboardingEntry, OnboardingProgress,
 )
 from shared_memory.errors import Refused
-from shared_memory.export import TeamExport
+from shared_memory.export import CompanyExport
 from shared_memory.identity import Caller, Identity, Member
 from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import Limits
@@ -170,7 +170,7 @@ def _plainly(wrong: Exception) -> str:
 
 
 def _project_in(path: str) -> str | None:
-    """The project a memory path belongs to, or nothing for team memory and anything unreadable."""
+    """The project a memory path belongs to, or nothing for company memory and anything unreadable."""
     try:
         return locate(path).project_id
     except Refused:
@@ -254,7 +254,7 @@ def _named(each: SessionActivity) -> NamedSession:
 
 
 def _standby_of(standby: Standby | None, names: dict[str, str]) -> SessionStandby | None:
-    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer on the team
+    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer in the company
     by their member ID."""
     if standby is None:
         return None
@@ -377,7 +377,7 @@ class ConsoleApi:
         uses: Uses,
         rate_limits: RateLimiter,
         licenses: Licenses,
-        export: TeamExport,
+        export: CompanyExport,
         talk: SessionTalk,
         project_health: health.ProjectHealth,
         progress: onboarding.Progress,
@@ -739,12 +739,12 @@ class ConsoleApi:
         """One memory in full: what it says, its file as Claude reads it, whether it is pinned, and when a coding agent
         last used it. Reading it here is no use of it."""
         memory = self._service.read(caller, path)
-        memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
-        memory["last_used"] = self._uses.last_used(caller.team, memory["path"])
+        memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.company)
+        memory["last_used"] = self._uses.last_used(caller.company, memory["path"])
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
-        against = self._challenging.doubts_against(caller.team, [memory["path"]])[memory["path"]]
+        against = self._challenging.doubts_against(caller.company, [memory["path"]])[memory["path"]]
         doubts = {each.challenge.id: each for each in against}
         memory["open_challenges"] = [
             _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
@@ -1089,7 +1089,7 @@ class ConsoleApi:
             )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        pinned = self._briefing.pinned_paths(caller.team)
+        pinned = self._briefing.pinned_paths(caller.company)
         for memory in [*found["memories"], *(one for section in found["inside"] for one in section["memories"])]:
             memory["pinned"] = memory["path"] in pinned
         found["pinnable"] = bool(found["folder"]) and _may_be_pinned(found["folder"])
@@ -1152,7 +1152,7 @@ class ConsoleApi:
     def _at(
         self, request: Request, look: Callable[[Caller, str], BaseModel], path: str | None = None
     ) -> Response:
-        """Anything done to one memory by its path, placed in the project it lives in (or any, for team memory)."""
+        """Anything done to one memory by its path, placed in the project it lives in (or any, for company memory)."""
         member = self._member(request)
         if member is None:
             return _sign_in_first()
@@ -1212,10 +1212,10 @@ class ConsoleApi:
             challenge_id = int(request.path_params["challenge_id"])
         except ValueError:
             return JSONResponse({"message": "That isn't a challenge."}, status_code=422)
-        challenge = self._challenging.open_challenge(member.team_code, challenge_id)
+        challenge = self._challenging.open_challenge(member.company_code, challenge_id)
         if challenge is None:
             return JSONResponse(
-                {"message": f"There is no open challenge {challenge_id} in your team."}, status_code=403
+                {"message": f"There is no open challenge {challenge_id} in your company."}, status_code=403
             )
         try:
             result = self._lifecycle.decide_challenge(
@@ -1239,7 +1239,7 @@ class ConsoleApi:
         found = self._challenging.waiting_for(caller)
         doubts = {
             doubt.challenge.id: doubt
-            for each in self._challenging.doubts_against(caller.team, [one.challenge.target_path for one in found]).values()
+            for each in self._challenging.doubts_against(caller.company, [one.challenge.target_path for one in found]).values()
             for doubt in each
         }
         waiting = [self._dispute(caller, one, doubts.get(one.challenge.id)) for one in found]
@@ -1299,8 +1299,8 @@ class ConsoleApi:
     def _working_in(self, member: Member, project_id: str | None) -> Caller:
         """A caller placed in a project, as a session would be: the one asked for, or any the member can reach.
 
-        The console isn't in a project the way a session is, and team memory belongs to none, so anything about
-        team memory is done from a project its member can reach.
+        The console isn't in a project the way a session is, and company memory belongs to none, so anything about
+        company memory is done from a project its member can reach.
         """
         if project_id is None:
             reachable = self._identity.projects(member)
@@ -1327,7 +1327,7 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        return self._team(member)
+        return self._company(member)
 
     def _add_member(self, request: Request) -> Response:
         member = self._member(request)
@@ -1348,7 +1348,7 @@ class ConsoleApi:
     def _remove_member(self, request: Request) -> Response:
         def remove(member: Member, caller: Caller, member_id: str) -> None:
             self._identity.remove_member(caller, member_id)
-            self._sessions.end_all_for(member_id, member.team_pk)
+            self._sessions.end_all_for(member_id, member.company_pk)
             self._audit.record(MEMBER_REMOVED, member=member, target=member_id)
 
         return self._run_on_member(request, remove)
@@ -1404,8 +1404,8 @@ class ConsoleApi:
         held = current.license
         return LicenseState(
             status=current.status,  # type: ignore[arg-type]
-            team=held.team if held else None,
-            company=held.team if held else None,
+            team=held.company if held else None,
+            company=held.company if held else None,
             member_cap=held.member_cap if held else None,
             issued=held.issued.isoformat() if held else None,
             expires=held.expires.isoformat() if held else None,
@@ -1443,7 +1443,7 @@ class ConsoleApi:
         return self._run_on_member(request, hand_over)
 
     def _run_on_member(self, request: Request, change: Callable[[Member, Caller, str], None]) -> Response:
-        """Everything an admin does to one member: the same guard, the same answer, the team as it now stands."""
+        """Everything an admin does to one member: the same guard, the same answer, the company as it now stands."""
         member = self._member(request)
         if member is None:
             return _sign_in_first()
@@ -1451,9 +1451,9 @@ class ConsoleApi:
             change(member, self._identity.caller_in(member, None), request.path_params["member_id"])
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        return self._team(member)
+        return self._company(member)
 
-    def _team(self, member: Member) -> Response:
+    def _company(self, member: Member) -> Response:
         everyone = Members(
             members=[MemberSummary(**one) for one in self._identity.members(member)],
             member_cap=self._identity.member_cap(),
@@ -1539,7 +1539,7 @@ class ConsoleApi:
         except ValueError:
             return JSONResponse({"message": "That filter wasn't understood."}, status_code=422)
         titles = self._explorer.titles(
-            member.team_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
+            member.company_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
         )
         answer = AuditPage(
             events=[AuditEvent(**vars(event), title=titles.get(event.target or "")) for event in page.events],
@@ -1555,8 +1555,8 @@ class ConsoleApi:
             package = self._export_of.build(member)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        self._audit.record(TEAM_EXPORTED, member=member, detail={"bytes": len(package)})
-        name = f"{member.team_code}-shared-memory-export.zip"
+        self._audit.record(COMPANY_EXPORTED, member=member, detail={"bytes": len(package)})
+        name = f"{member.company_code}-shared-memory-export.zip"
         return Response(
             package, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'}
         )
@@ -1584,8 +1584,8 @@ class ConsoleApi:
             else SignedInMember(
                 member_id=member.member_id,
                 name=member.name,
-                team=member.team_code,
-                company=member.team_code,
+                team=member.company_code,
+                company=member.company_code,
                 role=member.role,  # type: ignore[arg-type]
                 leads_a_project=bool(self._identity.leads_of(member)),
             ),

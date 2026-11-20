@@ -91,7 +91,7 @@ def test_personal_team_and_foundation_memory_are_refused(owner: Session) -> None
     held = project_memory(owner, SERVICES)
 
     assert "promote it with foundation" in owner.refusal("add_to_foundation", path=personal, foundation="product")
-    assert "Team memory has no foundations" in owner.refusal("add_to_foundation", path=team, foundation="product")
+    assert "Company memory has no foundations" in owner.refusal("add_to_foundation", path=team, foundation="product")
     assert "already in the architecture foundation" in owner.refusal("add_to_foundation", path=held, foundation="product")
 
 

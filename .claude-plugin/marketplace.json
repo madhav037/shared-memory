@@ -9,7 +9,7 @@
     {
       "name": "shared-memory",
       "source": "./plugin",
-      "description": "Connects Claude Code sessions to your team's Shared Memory server.",
+      "description": "Connects Claude Code sessions to your company's Shared Memory server.",
       "category": "productivity",
       "tags": ["memory", "team", "mcp"]
     }

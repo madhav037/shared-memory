@@ -30,9 +30,9 @@ def _promoting(path: str) -> str:
     choice of level is actually in front of an agent, and because some agents read neither.
     """
     return (
-        f"Saved as this member's personal memory: the team can read it but hasn't accepted it. If everyone on this "
-        f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'team' if it "
-        f"holds for every project in the team. Anything written for the whole team, such as how-we-work notes or what a new "
+        f"Saved as this member's personal memory: the company can read it but hasn't accepted it. If everyone on this "
+        f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'company' if it "
+        f"holds for every project in the company. Anything written for the whole company, such as how-we-work notes or what a new "
         f"member reads first, belongs at one of those levels. Leave it personal if it is only this member's own note."
     )
 
@@ -93,7 +93,7 @@ def _resolving(similar: list[SimilarMemory]) -> str:
     """What to do about the similar memories a save named."""
     return (
         f"`similar` names {len(similar)} similar memor{'y' if len(similar) == 1 else 'ies'} in reach. Judge each with "
-        "the member: supersede it if this one replaces it, promote this one if the team should follow it, or leave "
+        "the member: supersede it if this one replaces it, promote this one if the company should follow it, or leave "
         "both if both hold."
     )
 
@@ -136,13 +136,13 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
 
 
 def label(caller: Caller, level: str, member_id: str | None) -> str:
-    if level == "team":
-        return "team memory"
+    if level == "company":
+        return "company memory"
     if level == "project":
         return "project memory"
     if member_id == caller.member_id:
         return "your personal memory"
-    return f"personal memory of {member_id}, not accepted by the team"
+    return f"personal memory of {member_id}, not accepted by the company"
 
 
 class MemoryService:
@@ -177,7 +177,7 @@ class MemoryService:
             "name": project.name,
             "settings": self.settings_for(project.project_id, repository),
             "files": self.connection_files(server_url, project.project_id, project.name, repository),
-            "next": "Write the files for the coding agents this team uses, creating or merging each as its `how` "
+            "next": "Write the files for the coding agents this company uses, creating or merging each as its `how` "
             "says and keeping anything already there, then ask the member to commit them. Each member sets their "
             "personal token once in the SHARED_MEMORY_TOKEN environment variable. Other repositories of the same "
             "product use the same project ID with their own repository name.",
@@ -229,9 +229,9 @@ class MemoryService:
             if not topic.strip() or topic_folder in ("memory", "index"):
                 raise Refused("A topic needs a name made of letters or digits.")
             folder = folder / topic_folder
-        self._index.prepare(caller.team, memory)
+        self._index.prepare(caller.company, memory)
         mine = Area("personal", project.project_id, caller.member_id)
-        with self._store.change(caller.team, committer(caller), f"Remember: {memory.title}", areas=[mine]) as change:
+        with self._store.change(caller.company, committer(caller), f"Remember: {memory.title}", areas=[mine]) as change:
             path = change.new_path(folder, memory.title)
             change.write(path, memory)
             change.also(lambda: self._audit.memory(caller, MEMORY_SAVED, str(path), type=memory.type))
@@ -248,7 +248,7 @@ class MemoryService:
         turn is over, and the saved memory's vectors are stored by then, so no model runs (ADR-0012, ADR-0013)."""
         project = caller.require_project()
         close = self._index.similar_to(
-            caller.team,
+            caller.company,
             memory,
             reach=Reach.of_member(caller.member_id, project.project_id, caller.unreachable),
             threshold=self._settings.save_similar_threshold,
@@ -257,13 +257,13 @@ class MemoryService:
         similar: list[SimilarMemory] = []
         for found, similarity in close:
             try:
-                other = self._store.read(caller.team, PurePosixPath(found))
+                other = self._store.read(caller.company, PurePosixPath(found))
             except Refused:
                 continue  # moved or deleted since the index was read
             similar.append(SimilarMemory(found, locate(found).level, other.title, other.summary, similarity))
             if len(similar) == SAVE_SIMILAR_LIMIT:
                 break
-        in_doubt = self._challenges.in_doubt(caller.team, [each.path for each in similar])
+        in_doubt = self._challenges.in_doubt(caller.company, [each.path for each in similar])
         return [replace(each, in_doubt=in_doubt.get(each.path)) for each in similar]
 
     def read(self, caller: Caller, path: str, for_agent: bool = False) -> dict[str, Any]:
@@ -271,32 +271,32 @@ class MemoryService:
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        memory = describe(location.path, self._store.read(caller.team, location.path))
-        memory["pending"] = self._challenges.pending(caller.team, [memory["path"]])[memory["path"]]
+        memory = describe(location.path, self._store.read(caller.company, location.path))
+        memory["pending"] = self._challenges.pending(caller.company, [memory["path"]])[memory["path"]]
         memory["open_challenges"] = self._challenges.against(caller, memory["path"])
-        memory["possibly_outdated"] = bool(self._uses.possibly_outdated(caller.team, {memory["path"]: memory["status"]}))
+        memory["possibly_outdated"] = bool(self._uses.possibly_outdated(caller.company, {memory["path"]: memory["status"]}))
         if memory["possibly_outdated"]:
-            memory["check"] = self._uses.check(caller.team, memory["path"])
-        if for_agent and (in_doubt := self._challenges.in_doubt(caller.team, [memory["path"]]).get(memory["path"])):
+            memory["check"] = self._uses.check(caller.company, memory["path"])
+        if for_agent and (in_doubt := self._challenges.in_doubt(caller.company, [memory["path"]]).get(memory["path"])):
             memory["in_doubt"] = in_doubt.line()
         return memory
 
     def tied_memories(self, caller: Caller, file: str) -> dict[str, Any]:
         """The memories tied to one file, written repository:path, within recall's reach: their own personal memory in
-        this project, this project's memory and team memory. A memory in doubt carries its in-doubt line."""
+        this project, this project's memory and company memory. A memory in doubt carries its in-doubt line."""
         project = caller.require_project()
         asked = file_named(file)
         ties = self._tied.tied_to(
-            caller.team, asked.repository, [asked.path], Reach.of_recall(caller.member_id, project.project_id)
+            caller.company, asked.repository, [asked.path], Reach.of_recall(caller.member_id, project.project_id)
         )
         found: list[TiedMemory] = []
         for tie in ties:
             try:
-                memory = self._store.read(caller.team, PurePosixPath(tie.memory_path))
+                memory = self._store.read(caller.company, PurePosixPath(tie.memory_path))
             except Refused:
                 continue  # moved or deleted since the index was read
             found.append(TiedMemory(tie, locate(tie.memory_path).level, memory))
-        in_doubt = self._challenges.in_doubt(caller.team, [each.tie.memory_path for each in found])
+        in_doubt = self._challenges.in_doubt(caller.company, [each.tie.memory_path for each in found])
         return {
             "file": asked.written,
             "memories": [each.answer(in_doubt.get(each.tie.memory_path)) for each in found],
@@ -307,8 +307,8 @@ class MemoryService:
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        self._store.read(caller.team, location.path)  # refuses a memory that isn't there
-        versions = self._history.versions(caller.team, location.path)
+        self._store.read(caller.company, location.path)  # refuses a memory that isn't there
+        versions = self._history.versions(caller.company, location.path)
         return {
             "path": str(location.path),
             "versions": [
@@ -332,15 +332,15 @@ class MemoryService:
         return {
             "path": str(location.path),
             "commit": commit,
-            "text": self._history.text_at(caller.team, location.path, commit),
+            "text": self._history.text_at(caller.company, location.path, commit),
         }
 
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
         caller.require_project()
         caller.require_reach(folder)
         pure = PurePosixPath(folder.replace("\\", "/").strip("/"))
-        memories, folders = self._store.list_folder(caller.team, pure)
-        pending = self._challenges.pending(caller.team, [str(path) for path, _ in memories])
+        memories, folders = self._store.list_folder(caller.company, pure)
+        pending = self._challenges.pending(caller.company, [str(path) for path, _ in memories])
         return {
             "folder": str(pure),
             "memories": [
@@ -365,19 +365,19 @@ class MemoryService:
         project_folder = PurePosixPath("projects", project.project_id)
         roots = {
             None: [PurePosixPath(COMPANY_FOLDER), project_folder],
-            "team": [PurePosixPath(COMPANY_FOLDER)],
+            "company": [PurePosixPath(COMPANY_FOLDER)],
             "project": [project_folder / "shared"],
             "personal": [project_folder / "people"],
         }
         if level not in roots:
-            raise Refused(f"Unknown level {level!r}: use team, project or personal, or leave it out for everything.")
+            raise Refused(f"Unknown level {level!r}: use company, project or personal, or leave it out for everything.")
         walked = [
             (folder, memories)
             for root in roots[level]
-            for folder, memories in self._store.walk(caller.team, root)
+            for folder, memories in self._store.walk(caller.company, root)
             if memories
         ]
-        pending = self._challenges.pending(caller.team, [str(path) for _, memories in walked for path, _ in memories])
+        pending = self._challenges.pending(caller.company, [str(path) for _, memories in walked for path, _ in memories])
         entries = [
             {
                 "folder": str(folder),
@@ -400,12 +400,12 @@ class MemoryService:
         self, caller: Caller, query: str, level: str | None = None, type: str | None = None, limit: int = 10
     ) -> dict[str, Any]:
         project = caller.require_project()
-        if level not in (None, "team", "project", "personal"):
-            raise Refused(f"Unknown level {level!r}: use team, project or personal.")
+        if level not in (None, "company", "project", "personal"):
+            raise Refused(f"Unknown level {level!r}: use company, project or personal.")
         if not query.strip():
             raise Refused("Search needs some words to look for.")
         candidates = self._index.search(
-            caller.team,
+            caller.company,
             query,
             project_id=project.project_id,
             levels=None if level is None else [level],
@@ -414,7 +414,7 @@ class MemoryService:
             source=QuerySource.SEARCH,
         )
         # Every candidate is ranked again before the cut, so a memory in doubt makes way for one that isn't.
-        in_doubt = self._challenges.in_doubt(caller.team, [hit.path for hit in candidates])
+        in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in candidates])
         penalty = self._settings.in_doubt_penalty
         hits = sorted(candidates, key=lambda hit: -ranked(hit.score, in_doubt.get(hit.path), penalty))
         results = self._found(caller, hits[: max(1, min(limit, 50))], in_doubt=in_doubt)
@@ -425,13 +425,13 @@ class MemoryService:
     def search_everywhere(
         self, caller: Caller, query: str, level: str | None = None, type: str | None = None, limit: int = 10
     ) -> dict[str, Any]:
-        """Search team memory and every project this member can reach, for the console."""
-        if level not in (None, "team", "project", "personal"):
-            raise Refused(f"Unknown level {level!r}: use team, project or personal.")
+        """Search company memory and every project this member can reach, for the console."""
+        if level not in (None, "company", "project", "personal"):
+            raise Refused(f"Unknown level {level!r}: use company, project or personal.")
         if not query.strip():
             raise Refused("Search needs some words to look for.")
         hits = self._index.search(
-            caller.team,
+            caller.company,
             query,
             project_id=[project.project_id for project in self._identity.projects(caller.member)],
             levels=None if level is None else [level],
@@ -449,15 +449,15 @@ class MemoryService:
         in doubt, carries its in-doubt line; the console's search page shows neither. For the console, each says
         whether it matched the words searched for, so a match by meaning alone can be set apart."""
         for_agent = in_doubt is not None
-        pending = self._challenges.pending(caller.team, [hit.path for hit in hits])
+        pending = self._challenges.pending(caller.company, [hit.path for hit in hits])
         found: list[tuple[Hit, Memory]] = []
         for hit in hits:
             try:
-                found.append((hit, self._store.read(caller.team, PurePosixPath(hit.path))))
+                found.append((hit, self._store.read(caller.company, PurePosixPath(hit.path))))
             except Refused:
                 continue
         outdated = (
-            self._uses.possibly_outdated(caller.team, {hit.path: memory.status for hit, memory in found})
+            self._uses.possibly_outdated(caller.company, {hit.path: memory.status for hit, memory in found})
             if for_agent
             else set()
         )
@@ -486,7 +486,7 @@ class MemoryService:
     def source(self, caller: Caller, path: str) -> str:
         """One memory's file exactly as it is on disk, header and all: what every Claude reads."""
         caller.require_reach(path)
-        return self._store.text(caller.team, locate(path).path)
+        return self._store.text(caller.company, locate(path).path)
 
     def _own_personal_memory(self, caller: Caller, change: Change, path: str, verb: str) -> tuple[Location, Memory]:
         """The caller's own personal memory, read in the save that changes it."""
@@ -496,7 +496,7 @@ class MemoryService:
         memory = change.read(location.path)
         if location.level != "personal" or location.member_id != caller.member_id:
             raise Refused(
-                f"You can only {verb} your own personal memory. Project and team memory change only by "
+                f"You can only {verb} your own personal memory. Project and company memory change only by "
                 "promoting a memory that supersedes it."
             )
         return location, memory
@@ -512,11 +512,11 @@ class MemoryService:
     ) -> None:
         """Embed an edit's new text before its save takes its turn. A refusal is left for the save itself to raise."""
         try:
-            memory = self._store.read(caller.team, locate(path).path)
+            memory = self._store.read(caller.company, locate(path).path)
         except Refused:
             return
         self._index.prepare(
-            caller.team,
+            caller.company,
             replace(
                 memory,
                 title=memory.title if title is None else title.strip(),
@@ -536,7 +536,7 @@ class MemoryService:
         tied_files: list[str] | None = None,
     ) -> dict[str, Any]:
         self._prepare_edit(caller, path, title, summary, body, tied_files)
-        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
+        with self._store.change(caller.company, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "edit")
             if type is not None and type != location.type:
                 raise Refused(
@@ -554,17 +554,17 @@ class MemoryService:
             change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)
             change.also(lambda: self._audit.memory(caller, MEMORY_EDITED, str(location.path)))
-        self._challenges.resolve_doubts(caller.team, str(location.path), caller.member_id, "its author edited it.")
+        self._challenges.resolve_doubts(caller.company, str(location.path), caller.member_id, "its author edited it.")
         described = describe(location.path, edited)
         if reasons := reasons_for(edited):
             described.update(answer_for(reasons))
         return described
 
     def tie(self, caller: Caller, path: str, tied_files: list[str]) -> dict[str, Any]:
-        """Replace the tied files of the caller's own personal memory. Whether project and team memory may be retied
+        """Replace the tied files of the caller's own personal memory. Whether project and company memory may be retied
         too is undecided (#503), so until then they are retied by superseding them."""
         validate_tied_files(tied_files)
-        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
+        with self._store.change(caller.company, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "tie")
             tied = replace(memory, tied_files=list(tied_files))
             change.message = f"Tie: {tied.title}"
@@ -573,7 +573,7 @@ class MemoryService:
         return describe(location.path, tied)
 
     def delete_memory(self, caller: Caller, path: str) -> dict[str, Any]:
-        with self._store.change(caller.team, committer(caller), areas=_areas_of(path)) as change:
+        with self._store.change(caller.company, committer(caller), areas=_areas_of(path)) as change:
             location, memory = self._own_personal_memory(caller, change, path, "delete")
             change.message = f"Delete: {memory.title}"
             change.delete(location.path)

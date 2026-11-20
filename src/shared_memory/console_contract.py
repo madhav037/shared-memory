@@ -11,16 +11,26 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PlainSerializer
 
 from shared_memory.audit import Kind
 from shared_memory.challenges import DecidesAs, Reason
+from shared_memory.memory import COMPANY_LEVEL, OLD_LEVEL
 from shared_memory.messages import TEXT_LIMIT
 from shared_memory.ratelimit import MAX_PER_MINUTE, MIN_PER_MINUTE
 
 PREFIX = "/api"
+
+
+def _as_the_console_reads(level: str) -> str:
+    return OLD_LEVEL if level == COMPANY_LEVEL else level
+
+
+# A memory's level, or a folder's kind, where the console still reads company memory's as `team` until it reads
+# `company` (#627); the rename's contract step (#629) takes this out.
+ConsoleLevel = Annotated[str, PlainSerializer(_as_the_console_reads, return_type=str)]
 
 
 class SignedInMember(BaseModel):
@@ -79,7 +89,7 @@ class RateLimits(BaseModel):
     token_per_minute: int
     console_per_minute: int
     address_per_minute: int
-    # Whether the signed-in member may change them: the team's owner and its admins.
+    # Whether the signed-in member may change them: the company's owner and its admins.
     you_may_change: bool
 
 
@@ -112,7 +122,7 @@ class LicenseState(BaseModel):
     reason: str | None
     # Where the key came from: installed in the console, or set in the server's environment.
     source: Literal["console", "environment"] | None
-    # Whether the signed-in member may install a key: the team's owner and its admins.
+    # Whether the signed-in member may install a key: the company's owner and its admins.
     you_may_change: bool
 
 
@@ -215,7 +225,7 @@ class RepositoryName(BaseModel):
 
 
 class Restriction(BaseModel):
-    """Whether this project is closed to its access list, or open to the whole team."""
+    """Whether this project is closed to its access list, or open to the whole company."""
 
     restricted: bool
 
@@ -269,7 +279,7 @@ class Pin(BaseModel):
 
     path: str
     kind: str
-    level: str
+    level: ConsoleLevel
     title: str
     tokens: int
     pinned_by: str
@@ -322,7 +332,7 @@ class ChallengedMemory(BaseModel):
     title: str
     summary: str
     body: str
-    level: str
+    level: ConsoleLevel
     type: str
     author: str
     status: str
@@ -417,7 +427,7 @@ class MemoryDetail(BaseModel):
     """One memory in full, as its author wrote it."""
 
     path: str
-    level: str
+    level: ConsoleLevel
     project_id: str | None
     title: str
     summary: str
@@ -454,7 +464,7 @@ class SearchHit(BaseModel):
     project_id: str | None
     title: str
     heading: str
-    level: str
+    level: ConsoleLevel
     type: str
     author: str
     summary: str
@@ -474,7 +484,7 @@ class FolderEntry(BaseModel):
 
     path: str
     name: str
-    kind: str
+    kind: ConsoleLevel
     memories: int
     changed: datetime | None
 
@@ -486,7 +496,7 @@ class FileEntry(BaseModel):
     title: str
     summary: str
     type: str
-    level: str
+    level: ConsoleLevel
     status: str
     author: str
     author_name: str
@@ -503,7 +513,7 @@ class FolderSection(BaseModel):
 
     path: str
     name: str
-    kind: str
+    kind: ConsoleLevel
     depth: int
     count: int
     changed: datetime | None
@@ -518,11 +528,11 @@ class Crumb(BaseModel):
 
 
 class Folder(BaseModel):
-    """One folder of the team's memory: where it sits, the folders in it, and its memories."""
+    """One folder of the company's memory: where it sits, the folders in it, and its memories."""
 
     folder: str
     name: str
-    kind: str
+    kind: ConsoleLevel
     pinnable: bool
     pinned: bool
     trail: list[Crumb]
@@ -532,7 +542,7 @@ class Folder(BaseModel):
 
 
 class MemberSummary(BaseModel):
-    """One member of the team, as an admin sees them."""
+    """One member of the company, as an admin sees them."""
 
     member_id: str
     name: str
@@ -549,7 +559,7 @@ class Members(BaseModel):
 
 
 class NewMember(BaseModel):
-    """A member being added to the team."""
+    """A member being added to the company."""
 
     member_id: str
     name: str
@@ -720,7 +730,7 @@ class NewCard(BaseModel):
 
 class CardFields(BaseModel):
     """What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-    card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+    card's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,
     replace the card's links of that kind: memories by path, files as repository:path."""
 
     title: str | None = None
@@ -934,7 +944,7 @@ class DoubtedMemory(BaseModel):
 
 
 class ProjectHealth(BaseModel):
-    """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+    """A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory
     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
 
@@ -1142,7 +1152,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/projects/{project_id}/restrict",
         method="POST",
         operation_id="restrict_project",
-        summary="Close a project to its access list, or open it to the whole team again.",
+        summary="Close a project to its access list, or open it to the whole company again.",
         answers=ProjectDetail,
         changes=True,
         accepts=Restriction,
@@ -1202,7 +1212,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="project_health",
         summary=(
-            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
+            "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in "
             "doubt, with each one's count and reasons. Changes nothing."
         ),
         answers=ProjectHealth,
@@ -1316,7 +1326,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/audit",
         method="GET",
         operation_id="audit",
-        summary="The team's audit log, newest first.",
+        summary="The company's audit log, newest first.",
         answers=AuditPage,
         query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
@@ -1324,7 +1334,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/export",
         method="GET",
         operation_id="export",
-        summary="All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        summary="All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         answers=None,
         download="application/zip",
     ),
@@ -1339,7 +1349,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/files",
         method="GET",
         operation_id="files",
-        summary="One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        summary="One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
         answers=Folder,
         query=("folder", "deep"),
     ),
@@ -1371,7 +1381,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/memory/pin",
         method="POST",
         operation_id="pin_at",
-        summary="Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        summary="Pin a project or company memory, or a topic folder, into every briefing it belongs in.",
         answers=PinState,
         changes=True,
         accepts=MemoryPath,
@@ -1398,7 +1408,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/search",
         method="GET",
         operation_id="search_everywhere",
-        summary="Memories that match, across team memory and every project this member can reach.",
+        summary="Memories that match, across company memory and every project this member can reach.",
         answers=SearchResults,
         query=("query", "level", "type", "limit"),
     ),
@@ -1446,7 +1456,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/license",
         method="GET",
         operation_id="license_state",
-        summary="The server's license key: its status, team, member cap and expiry.",
+        summary="The server's license key: its status, company, member cap and expiry.",
         answers=LicenseState,
     ),
     Declaration(
@@ -1462,7 +1472,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members",
         method="GET",
         operation_id="members",
-        summary="Everyone in the team, with their role and GitHub account.",
+        summary="Everyone in the company, with their role and GitHub account.",
         answers=Members,
     ),
     Declaration(
@@ -1504,7 +1514,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members/{member_id}/ownership",
         method="POST",
         operation_id="hand_over_ownership",
-        summary="Make another member the team's owner.",
+        summary="Make another member the company's owner.",
         answers=Members,
         changes=True,
     ),
@@ -1545,7 +1555,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members/{member_id}/token",
         method="POST",
         operation_id="reissue_token",
-        summary="Issue a new personal token for a member of the team, revoking the one they had.",
+        summary="Issue a new personal token for a member of the company, revoking the one they had.",
         answers=IssuedToken,
         changes=True,
     ),

@@ -40,11 +40,11 @@ def test_an_admin_and_the_owner_are_listed_the_admin_tools(team: Team, dana: Ses
 def test_a_tool_the_caller_is_not_listed_still_refuses_them_as_before(dana: Session) -> None:
     refused = dana.refusal("add_member", member_id="emp-9", name="Eve")
 
-    assert "Only the team's owner and its admins can manage members and personal tokens." in refused
+    assert "Only the company's owner and its admins can manage members and personal tokens." in refused
 
 
 def test_a_tool_hidden_from_the_first_caller_still_works_for_an_admin_after(team: Team, dana: Session) -> None:
-    assert "Only the team's owner" in dana.refusal("add_member", member_id="emp-9", name="Eve")
+    assert "Only the company's owner" in dana.refusal("add_member", member_id="emp-9", name="Eve")
 
     assert team.owner().call("add_member", member_id="emp-9", name="Eve")["member_id"] == "emp-9"
 

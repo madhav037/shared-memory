@@ -407,7 +407,7 @@
     "/api/projects/{project_id}/restrict": {
       "post": {
         "operationId": "restrict_project",
-        "summary": "Close a project to its access list, or open it to the whole team again.",
+        "summary": "Close a project to its access list, or open it to the whole company again.",
         "parameters": [
           {
             "name": "project_id",
@@ -430,7 +430,7 @@
         },
         "responses": {
           "200": {
-            "description": "Close a project to its access list, or open it to the whole team again.",
+            "description": "Close a project to its access list, or open it to the whole company again.",
             "content": {
               "application/json": {
                 "schema": {
@@ -697,7 +697,7 @@
     "/api/projects/{project_id}/health": {
       "get": {
         "operationId": "project_health",
-        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+        "summary": "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,7 +710,7 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+            "description": "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1147,7 +1147,7 @@
     "/api/audit": {
       "get": {
         "operationId": "audit",
-        "summary": "The team's audit log, newest first.",
+        "summary": "The company's audit log, newest first.",
         "parameters": [
           {
             "name": "limit",
@@ -1208,7 +1208,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The team's audit log, newest first.",
+            "description": "The company's audit log, newest first.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1223,10 +1223,10 @@
     "/api/export": {
       "get": {
         "operationId": "export",
-        "summary": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        "summary": "All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         "responses": {
           "200": {
-            "description": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+            "description": "All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
             "content": {
               "application/zip": {
                 "schema": {
@@ -1270,7 +1270,7 @@
     "/api/files": {
       "get": {
         "operationId": "files",
-        "summary": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        "summary": "One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
         "parameters": [
           {
             "name": "folder",
@@ -1291,7 +1291,7 @@
         ],
         "responses": {
           "200": {
-            "description": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+            "description": "One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1398,7 +1398,7 @@
     "/api/memory/pin": {
       "post": {
         "operationId": "pin_at",
-        "summary": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        "summary": "Pin a project or company memory, or a topic folder, into every briefing it belongs in.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1411,7 +1411,7 @@
         },
         "responses": {
           "200": {
-            "description": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+            "description": "Pin a project or company memory, or a topic folder, into every briefing it belongs in.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1482,7 +1482,7 @@
     "/api/search": {
       "get": {
         "operationId": "search_everywhere",
-        "summary": "Memories that match, across team memory and every project this member can reach.",
+        "summary": "Memories that match, across company memory and every project this member can reach.",
         "parameters": [
           {
             "name": "query",
@@ -1519,7 +1519,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Memories that match, across team memory and every project this member can reach.",
+            "description": "Memories that match, across company memory and every project this member can reach.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1652,10 +1652,10 @@
     "/api/license": {
       "get": {
         "operationId": "license_state",
-        "summary": "The server's license key: its status, team, member cap and expiry.",
+        "summary": "The server's license key: its status, company, member cap and expiry.",
         "responses": {
           "200": {
-            "description": "The server's license key: its status, team, member cap and expiry.",
+            "description": "The server's license key: its status, company, member cap and expiry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1696,10 +1696,10 @@
     "/api/members": {
       "get": {
         "operationId": "members",
-        "summary": "Everyone in the team, with their role and GitHub account.",
+        "summary": "Everyone in the company, with their role and GitHub account.",
         "responses": {
           "200": {
-            "description": "Everyone in the team, with their role and GitHub account.",
+            "description": "Everyone in the company, with their role and GitHub account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1844,7 +1844,7 @@
     "/api/members/{member_id}/ownership": {
       "post": {
         "operationId": "hand_over_ownership",
-        "summary": "Make another member the team's owner.",
+        "summary": "Make another member the company's owner.",
         "parameters": [
           {
             "name": "member_id",
@@ -1857,7 +1857,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Make another member the team's owner.",
+            "description": "Make another member the company's owner.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1962,7 +1962,7 @@
     "/api/members/{member_id}/token": {
       "post": {
         "operationId": "reissue_token",
-        "summary": "Issue a new personal token for a member of the team, revoking the one they had.",
+        "summary": "Issue a new personal token for a member of the company, revoking the one they had.",
         "parameters": [
           {
             "name": "member_id",
@@ -1975,7 +1975,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Issue a new personal token for a member of the team, revoking the one they had.",
+            "description": "Issue a new personal token for a member of the company, revoking the one they had.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2400,7 +2400,7 @@
         "type": "object"
       },
       "Restriction": {
-        "description": "Whether this project is closed to its access list, or open to the whole team.",
+        "description": "Whether this project is closed to its access list, or open to the whole company.",
         "properties": {
           "restricted": {
             "title": "Restricted",
@@ -2898,7 +2898,7 @@
         "type": "object"
       },
       "ProjectHealth": {
-        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
+        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -3905,7 +3905,7 @@
         "type": "object"
       },
       "CardFields": {
-        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,\nreplace the card's links of that kind: memories by path, files as repository:path.",
+        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,\nreplace the card's links of that kind: memories by path, files as repository:path.",
         "properties": {
           "title": {
             "anyOf": [
@@ -4778,7 +4778,7 @@
         "type": "object"
       },
       "Folder": {
-        "description": "One folder of the team's memory: where it sits, the folders in it, and its memories.",
+        "description": "One folder of the company's memory: where it sits, the folders in it, and its memories.",
         "properties": {
           "folder": {
             "title": "Folder",
@@ -6184,7 +6184,7 @@
         "type": "object"
       },
       "MemberSummary": {
-        "description": "One member of the team, as an admin sees them.",
+        "description": "One member of the company, as an admin sees them.",
         "properties": {
           "member_id": {
             "title": "Member Id",
@@ -6287,7 +6287,7 @@
         "type": "object"
       },
       "NewMember": {
-        "description": "A member being added to the team.",
+        "description": "A member being added to the company.",
         "properties": {
           "member_id": {
             "title": "Member Id",

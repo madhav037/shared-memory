@@ -133,7 +133,7 @@ class ConsoleSessions:
         except InvalidSignIn as wrong:
             raise Refused(str(wrong)) from None
         if handed.subdomain != self._settings.subdomain:
-            raise Refused("That sign-in was for another team's server, so it can't sign you in here. Try again.")
+            raise Refused("That sign-in was for another company's server, so it can't sign you in here. Try again.")
         now = self._clock()
         if handed.expires <= now:
             raise Refused("That sign-in took too long. Try again.")
@@ -257,10 +257,10 @@ class ConsoleSessions:
             ).fetchone()
         return int(row["member_id"]) if row else None
 
-    def end_all_for(self, member_id: str, team_pk: int) -> None:
-        """End every console session of one member, for when they are removed from the team."""
+    def end_all_for(self, member_id: str, company_pk: int) -> None:
+        """End every console session of one member, for when they are removed from the company."""
         with self._db.transaction() as conn:
-            found = self._identity.in_team(conn, team_pk, [member_id]).get(member_id)
+            found = self._identity.in_company(conn, company_pk, [member_id]).get(member_id)
             if found is None:
                 return
             conn.execute(

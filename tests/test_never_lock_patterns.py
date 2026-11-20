@@ -114,7 +114,7 @@ def test_a_member_who_neither_leads_the_project_nor_administers_is_refused_and_t
     removing = cole.refusal("never_lock", remove="*.snap")
 
     for refusal in (adding, removing):
-        assert "Only this project's leads and the team's admins" in refusal
+        assert "Only this project's leads and the company's admins" in refusal
     assert patterns(cole) == ["*.snap"]
     assert take(cole, "tests/invoice.fixture")["locked"] is True
 

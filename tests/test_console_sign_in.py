@@ -49,7 +49,7 @@ def test_a_removed_member_can_no_longer_sign_in(console: Console, signed_out: Co
 
     landed = signed_out.sign_in()
 
-    assert "removed from this team" in sign_in_error(landed)
+    assert "removed from this company" in sign_in_error(landed)
     assert signed_out.status()["signed_in"] is False
 
 

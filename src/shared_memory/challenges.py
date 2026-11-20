@@ -259,7 +259,7 @@ def ranked(score: float, in_doubt: InDoubt | None, penalty: float) -> float:
 
 
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
-# of the team's admins (the owner is one), because the fallback period has passed, or because its author has left.
+# of the company's admins (the owner is one), because the fallback period has passed, or because its author has left.
 DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left"]
 
 
@@ -272,7 +272,7 @@ class Waiting:
 
 
 def project_of(challenge: Challenge) -> str | None:
-    """The project a challenge is about: the challenging memory's, or the challenged one's. Team memory has none."""
+    """The project a challenge is about: the challenging memory's, or the challenged one's. Company memory has none."""
     for path in (challenge.challenger_path, challenge.target_path):
         if path is None:
             continue
@@ -321,7 +321,7 @@ class Challenges:
                 " promoted_by, raised_at, state, reasoning, foundation) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)"
                 " RETURNING id",
                 (
-                    caller.team, kind, target_path, target_author, challenger_path, level, caller.member_id,
+                    caller.company, kind, target_path, target_author, challenger_path, level, caller.member_id,
                     promoted_by, self._clock(), reasoning, foundation,
                 ),  # fmt: skip
             ).fetchone()
@@ -357,7 +357,7 @@ class Challenges:
         if written is not None:
             refuse_secret(written, "This reasoning", "into a challenge")
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        memory = self._store.read(caller.company, location.path)
         if memory.status != "active":
             raise Refused(f"{location.path} is already {memory.status}, so there is nothing left to doubt.")
         evidence = Evidence(caller.member_id, usable(session), written, reference, self._clock())
@@ -407,7 +407,7 @@ class Challenges:
                 "INSERT INTO challenges (team, kind, target_path, target_author, level, raised_by, raised_at, state,"
                 " reason) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open', %s) ON CONFLICT (team, target_path, reason)"
                 " WHERE kind = 'doubt' AND state = 'open' DO NOTHING RETURNING id",
-                (caller.team, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
+                (caller.company, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
             ).fetchone()
             if opened is not None:
                 return int(opened["id"]), False
@@ -417,12 +417,12 @@ class Challenges:
             found = conn.execute(
                 "SELECT id FROM challenges WHERE team = %s AND kind = 'doubt' AND state = 'open' AND target_path = %s"
                 " AND reason = %s FOR UPDATE",
-                (caller.team, target_path, reason),
+                (caller.company, target_path, reason),
             ).fetchone()
             if found is not None:
                 return int(found["id"]), True
 
-    def doubts_against(self, team: str, paths: Iterable[str]) -> dict[str, list[Doubt]]:
+    def doubts_against(self, company: str, paths: Iterable[str]) -> dict[str, list[Doubt]]:
         """For each memory path, its open challenges that name a reason, each with all its evidence: what makes a
         memory in doubt (CONTEXT.md). A path with none maps to an empty list."""
         wanted = list(dict.fromkeys(paths))
@@ -431,7 +431,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT * FROM challenges WHERE team = %s AND state = 'open' AND reason IS NOT NULL"
                 " AND target_path = ANY(%s) ORDER BY id",
-                (team, wanted),
+                (company, wanted),
             ).fetchall()
         evidence = self._evidence([row["id"] for row in rows])
         for row in rows:
@@ -440,12 +440,12 @@ class Challenges:
             doubts[challenge.target_path].append(Doubt(challenge, challenge.reason, evidence.get(challenge.id, ())))
         return doubts
 
-    def in_doubt(self, team: str, paths: Iterable[str]) -> dict[str, InDoubt]:
+    def in_doubt(self, company: str, paths: Iterable[str]) -> dict[str, InDoubt]:
         """Those of these memories that are in doubt, each with what marks it so. One batch, however many paths."""
         wanted = list(paths)
         if not wanted:
             return {}
-        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(team, wanted).items() if doubts}
+        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(company, wanted).items() if doubts}
 
     def _evidence(self, challenge_ids: list[int]) -> dict[int, tuple[Evidence, ...]]:
         """Each challenge's evidence, first raised first."""
@@ -460,18 +460,18 @@ class Challenges:
             found.setdefault(row["challenge_id"], []).append(Evidence.from_row(row))
         return {challenge_id: tuple(each) for challenge_id, each in found.items()}
 
-    def open_challenge(self, team: str, challenge_id: int) -> Challenge | None:
+    def open_challenge(self, company: str, challenge_id: int) -> Challenge | None:
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT * FROM challenges WHERE id = %s AND team = %s AND state = 'open'", (challenge_id, team)
+                "SELECT * FROM challenges WHERE id = %s AND team = %s AND state = 'open'", (challenge_id, company)
             ).fetchone()
         return None if row is None else Challenge.from_row(row)
 
     def open_challenges(
-        self, team: str, *, target_path: str | None = None, challenger_paths: Iterable[str] | None = None
+        self, company: str, *, target_path: str | None = None, challenger_paths: Iterable[str] | None = None
     ) -> list[Challenge]:
         conditions: list[str] = ["team = %s", "state = 'open'"]
-        params: list[Any] = [team]
+        params: list[Any] = [company]
         if target_path is not None:
             conditions.append("target_path = %s")
             params.append(target_path)
@@ -491,22 +491,22 @@ class Challenges:
                 (state, decider, self._clock(), explanation, challenge.id),
             )
 
-    def close_all_against(self, team: str, target_path: str, decider: str, explanation: str) -> None:
+    def close_all_against(self, company: str, target_path: str, decider: str, explanation: str) -> None:
         """Close every open challenge against a memory, telling each member who raised one why."""
-        self._close(team, self.open_challenges(team, target_path=target_path), decider, explanation)
+        self._close(company, self.open_challenges(company, target_path=target_path), decider, explanation)
 
-    def resolve_doubts(self, team: str, target_path: str, decider: str, explanation: str) -> None:
+    def resolve_doubts(self, company: str, target_path: str, decider: str, explanation: str) -> None:
         """Close every open doubt against a memory as resolved, its author having put the memory right in a session,
         telling each member who added evidence how."""
-        doubts = [one for one in self.open_challenges(team, target_path=target_path) if one.kind == DOUBT]
-        self._close(team, doubts, decider, f"resolved, {explanation}")
+        doubts = [one for one in self.open_challenges(company, target_path=target_path) if one.kind == DOUBT]
+        self._close(company, doubts, decider, f"resolved, {explanation}")
 
-    def _close(self, team: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
+    def _close(self, company: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
         raisers = self.raisers(challenges)
         for challenge in challenges:
             self.decide(challenge, "closed", decider, explanation)
             self.tell_raisers(
-                team,
+                company,
                 raisers[challenge.id],
                 f"Your challenge {challenge.id} against {challenge.target_path} was closed: {explanation}",
             )
@@ -531,24 +531,24 @@ class Challenges:
         raised.update({challenge_id: tuple(members) for challenge_id, members in found.items()})
         return raised
 
-    def tell_raisers(self, team: str, raisers: tuple[str, ...], text: str) -> None:
+    def tell_raisers(self, company: str, raisers: tuple[str, ...], text: str) -> None:
         """Tell every member who raised a challenge, each once: its `raisers`, for a doubt everyone who added evidence
         to it."""
         for member_id in raisers:
-            self.tell(team, member_id, text)
+            self.tell(company, member_id, text)
 
-    def tell(self, team: str, member_id: str, text: str) -> None:
+    def tell(self, company: str, member_id: str, text: str) -> None:
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO notices (team, member_id, text, created_at) VALUES (%s, %s, %s, %s)",
-                (team, member_id, text, self._clock()),
+                (company, member_id, text, self._clock()),
             )
 
-    def pending(self, team: str, paths: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
+    def pending(self, company: str, paths: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
         """For each personal memory path, the open challenges it is waiting on."""
         wanted = list(paths)
         labels: dict[str, list[dict[str, Any]]] = {path: [] for path in wanted}
-        for challenge in self.open_challenges(team, challenger_paths=wanted):
+        for challenge in self.open_challenges(company, challenger_paths=wanted):
             assert challenge.challenger_path is not None
             labels[challenge.challenger_path].append(
                 {"challenge_id": challenge.id, "kind": challenge.kind, "replaces": challenge.target_path}
@@ -558,7 +558,7 @@ class Challenges:
     def against(self, caller: Caller, path: str) -> list[dict[str, Any]]:
         """Every open challenge against one memory, and whether this member may decide it and in what capacity."""
         listed = []
-        challenges = self.open_challenges(caller.team, target_path=path)
+        challenges = self.open_challenges(caller.company, target_path=path)
         raisers = self.raisers(challenges)
         for c in challenges:
             decides_as = self.decides_as(caller, c, raisers[c.id])
@@ -580,7 +580,7 @@ class Challenges:
         theirs in."""
         reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
         waiting = []
-        reached = [one for one in self.open_challenges(caller.team) if project_of(one) in reachable]
+        reached = [one for one in self.open_challenges(caller.company) if project_of(one) in reachable]
         raisers = self.raisers(reached)
         for challenge in reached:
             decides_as = self.decides_as(caller, challenge, raisers[challenge.id])
@@ -594,7 +594,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT id, kind, reason, target_path, challenger_path, raised_at, state, decided_by, decided_at,"
                 " explanation, reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
-                (caller.team, caller.member_id),
+                (caller.company, caller.member_id),
             ).fetchall()
         return [
             {
@@ -615,7 +615,7 @@ class Challenges:
         ]
 
     def drop_keepers(self, conn: Conn, caller: Caller) -> Callable[[], None]:
-        """Drop the keepers who can no longer reach their project: removed from the team, or shut out of a restricted
+        """Drop the keepers who can no longer reach their project: removed from the company, or shut out of a restricted
         project. Identity calls this inside the transaction of any change that may have cost a member a project
         (`Identity.on_access_lost`). What it gives back notes each drop in the audit log once that has committed."""
         dropped = self._identity.drop_keepers(conn, caller)
@@ -638,7 +638,7 @@ class Challenges:
         """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
-        the team's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); team
+        the company's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); company
         memory has no project, so only admins stand there. Once the author has left, or after the fallback period,
         any member may. `raisers` is the challenge's, from `raisers`, fetched once however many are decided.
 
@@ -661,7 +661,7 @@ class Challenges:
                 return "lead"
             if caller.member.is_owner or caller.member.is_admin:
                 return "admin"
-        if self._identity.is_removed(caller.team, challenge.target_author):
+        if self._identity.is_removed(caller.company, challenge.target_author):
             return "author_left"
         if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
             return "fallback"
@@ -700,7 +700,7 @@ class Challenges:
                 f"{'another project lead or an admin' if in_project else 'or another admin'} can; "
                 f"anyone may once it has been open for {days} days."
             )
-        others = "a lead of its project and the team's admins" if in_project else "and the team's admins"
+        others = "a lead of its project and the company's admins" if in_project else "and the company's admins"
         raise Refused(
             f"Only {challenge.target_author}, the author of the challenged memory, {others} can decide this challenge "
             f"until it has been open for {days} days."
@@ -719,7 +719,7 @@ class Challenges:
         else:
             outcome = "your memory is now retired" if challenge.challenger_path is None else "your memory is now superseded"
         self.tell(
-            caller.team,
+            caller.company,
             challenge.target_author,
             f"Challenge {challenge.id} by {challenge.raised_by} against your memory {challenge.target_path} was "
             f"{decision} by {caller.member_id}, deciding {self._capacity(decides_as)}: {outcome}.",
@@ -734,7 +734,7 @@ class Challenges:
             "lead": "as a project lead",
             "keeper": "as a keeper of the foundation",
             "admin": "as an admin",
-            "author_left": "as any member may once its author has left the team",
+            "author_left": "as any member may once its author has left the company",
         }[decides_as]
 
     # What sessions are told
@@ -747,7 +747,7 @@ class Challenges:
         """Challenges against the member's memories not yet shown on a prompt (with the others against the same
         memory), and news not yet delivered."""
         mine = [
-            c for c in self.open_challenges(caller.team) if c.target_author == caller.member_id and c.foundation is None
+            c for c in self.open_challenges(caller.company) if c.target_author == caller.member_id and c.foundation is None
         ]
         with self._db.transaction() as conn:
             fresh_targets = {
@@ -785,9 +785,9 @@ class Challenges:
             if first.foundation is not None and first.kind == "add":
                 lines.append(f"The {first.foundation} foundation ({target_path}):")
             elif first.foundation is not None:
-                lines.append(f"{self._title(caller.team, target_path)} ({target_path}), in the {first.foundation} foundation:")
+                lines.append(f"{self._title(caller.company, target_path)} ({target_path}), in the {first.foundation} foundation:")
             else:
-                lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
+                lines.append(f"{self._title(caller.company, target_path)} ({target_path}):")
             for one in (one for one in waiting if one.challenge.target_path == target_path):
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
@@ -822,14 +822,14 @@ class Challenges:
         """The challenging memory, titled and summarised when it can still be read."""
         assert challenge.challenger_path is not None
         try:
-            challenger = self._store.read(caller.team, PurePosixPath(challenge.challenger_path))
+            challenger = self._store.read(caller.company, PurePosixPath(challenge.challenger_path))
         except Refused:
             return challenge.challenger_path
         return f'"{challenger.title}" ({challenge.challenger_path}): {challenger.summary}'
 
-    def _title(self, team: str, path: str) -> str:
+    def _title(self, company: str, path: str) -> str:
         try:
-            return self._store.read(team, PurePosixPath(path)).title
+            return self._store.read(company, PurePosixPath(path)).title
         except Refused:
             return path
 
@@ -838,7 +838,7 @@ class Challenges:
             rows = conn.execute(
                 "UPDATE notices SET delivered_at = %s WHERE team = %s AND member_id = %s AND delivered_at IS NULL"
                 " RETURNING id, text",
-                (self._clock(), caller.team, caller.member_id),
+                (self._clock(), caller.company, caller.member_id),
             ).fetchall()
         texts = [row["text"] for row in sorted(rows, key=lambda row: row["id"])]
         return "[shared memory news]\n" + "\n".join(f"- {text}" for text in texts) if texts else None
@@ -851,7 +851,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT id, text, created_at FROM notices WHERE team = %s AND member_id = %s"
                 " AND (delivered_at IS NULL OR created_at >= %s) ORDER BY id DESC LIMIT %s",
-                (caller.team, caller.member_id, self._clock() - timedelta(days=days), limit),
+                (caller.company, caller.member_id, self._clock() - timedelta(days=days), limit),
             ).fetchall()
         return [{"notice_id": row["id"], "text": row["text"], "created_at": row["created_at"]} for row in rows]
 
@@ -901,3 +901,9 @@ def move_paths(conn: Conn, old: str, new: str) -> None:
         " WHERE challenger_path LIKE %(old)s",
         moved,
     )
+
+
+def rename_level(conn: Conn, old: str, new: str) -> None:
+    """Say the level `old` as `new` in the challenges: company memory's level was `team` before the
+    rename (`company_move.py`)."""
+    conn.execute("UPDATE challenges SET level = %s WHERE level = %s", (new, old))

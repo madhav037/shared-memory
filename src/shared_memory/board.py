@@ -46,7 +46,7 @@ COMMENT_CHARACTER_LIMIT = 1_500
 # A card stays in Done on the board this long after it got there, then leaves the board for the archive.
 DONE_KEPT = timedelta(days=14)
 
-# Tell a member something in their next briefing: team, member ID, text.
+# Tell a member something in their next briefing: company, member ID, text.
 Tell = Callable[[str, str, str], None]
 # Retire a known issue whose card is done, or challenge its author: caller, path, reasoning. None when there is nothing
 # to retire.
@@ -321,7 +321,7 @@ class Board:
         values.append(archived)
         with self._db.transaction() as conn:
             if assignee:
-                found = self._identity.in_team(conn, caller.member.team_pk, [assignee.strip()]).get(assignee.strip())
+                found = self._identity.in_company(conn, caller.member.company_pk, [assignee.strip()]).get(assignee.strip())
                 wheres.append("c.assignee_id = %s")
                 values.append(found[0] if found else None)
             rows = conn.execute(f"{_CARD} WHERE {' AND '.join(wheres)} ORDER BY {order}", values).fetchall()
@@ -433,7 +433,7 @@ class Board:
         A card moves to Blocked only with a blocked_reason, and may name the card it waits on (waits_on 0 clears
         it); both go when it leaves Blocked. When the card waited on is done, the blocked card's assignee is told.
 
-        A card with an assignee is changed only by them, the project's leads and the team's admins; any member may
+        A card with an assignee is changed only by them, the project's leads and the company's admins; any member may
         change an unassigned one, but only those three set its assignee: a member makes a card theirs by claiming
         it. Only those three reopen a Done card, assigned or not.
 
@@ -471,14 +471,14 @@ class Board:
             runs_it = self._runs(conn, caller, project_id, found)
             if assignee is not None and assignee.strip() and not runs_it:
                 raise Refused(
-                    "Only a card's assignee, the project's leads and the team's admins give a card an assignee. To "
+                    "Only a card's assignee, the project's leads and the company's admins give a card an assignee. To "
                     f"work on card {number} yourself, claim it with claim_card."
                 )
             card_id, from_column = found["id"], found["board_column"]
             lands = to_column or from_column
             if from_column == "done" and lands != "done" and not runs_it:
                 raise Refused(
-                    f"Card {number} is done: only its assignee, the project's leads and the team's admins can reopen "
+                    f"Card {number} is done: only its assignee, the project's leads and the company's admins can reopen "
                     "it. Say why it should be reopened with comment_card instead."
                 )
             blocking = self._blocking(conn, project_id, number, from_column, lands, blocked_reason, waits_on)
@@ -506,7 +506,7 @@ class Board:
                 moved |= {"blocked_reason": card["blocked_reason"], "waits_on": card["waits_on"]}
             self._audit.card(caller, CARD_MOVED, project_id, number, **moved)
         for member_id, text in notices:
-            self._tell(caller.team, member_id, text)
+            self._tell(caller.company, member_id, text)
         if card["column"] == "done" and (from_column != "done" or to_column == "done"):
             card["known_issues_fixed"] = self._fixed(caller, card)
         return card
@@ -656,7 +656,7 @@ class Board:
                 if card["assignee"] is None:
                     change = f"{_who(caller)} took you off {named}; it has no assignee now."
                 else:
-                    _, name = Identity.in_team(conn, caller.member.team_pk, [card["assignee"]])[card["assignee"]]
+                    _, name = Identity.in_company(conn, caller.member.company_pk, [card["assignee"]])[card["assignee"]]
                     change = f"{_who(caller)} gave your {named} to {name} ({card['assignee']})."
                 told.append((before["assignee"], change))
         unblocked = before["board_column"] == "blocked" and card["column"] != "blocked"
@@ -733,11 +733,11 @@ class Board:
         self._audit.card(caller, CARD_COMMENTED, project_id, number)
         if found["assignee"] is not None and found["assignee"] != caller.member_id:
             named = _named_card(number, found["title"], project_id)
-            self._tell(caller.team, found["assignee"], f'{_who(caller)} commented on your {named}: "{body}"')
+            self._tell(caller.company, found["assignee"], f'{_who(caller)} commented on your {named}: "{body}"')
         return card
 
     def delete(self, caller: Caller, number: int) -> dict[str, Any]:
-        """Delete a card, its links and its comments. Its assignee, the project's leads and the team's admins may;
+        """Delete a card, its links and its comments. Its assignee, the project's leads and the company's admins may;
         so may its creator while it has no assignee. Its number is not used again.
 
         The known issues it was to fix stay active, unlinked, and the project's leads are told, so that someone adds a
@@ -749,11 +749,11 @@ class Board:
                 if found["assignee_id"] is not None:
                     raise Refused(
                         f"Card {number} is assigned to {_assignee_named(found)}: only they, the project's leads and "
-                        "the team's admins can delete it. Say what you want with comment_card instead."
+                        "the company's admins can delete it. Say what you want with comment_card instead."
                     )
                 if found["creator_id"] != caller.member.pk:
                     raise Refused(
-                        f"Card {number} has no assignee, so only its creator, the project's leads and the team's "
+                        f"Card {number} has no assignee, so only its creator, the project's leads and the company's "
                         "admins can delete it. Say why it should go with comment_card instead."
                     )
             known_issues = self._card(conn, found["id"])["known_issues"]
@@ -775,21 +775,21 @@ class Board:
                 )
             for lead in leads:
                 if lead != caller.member_id:
-                    self._tell(caller.team, lead, text)
+                    self._tell(caller.company, lead, text)
         return {"deleted": number}
 
     def return_cards(self, conn: Conn, caller: Caller) -> Callable[[], None]:
         """Put back in To do, with no assignee, every open card whose assignee can no longer reach its project:
-        removed from the team, or shut out of a restricted project. Done cards keep their assignee, as a record of
+        removed from the company, or shut out of a restricted project. Done cards keep their assignee, as a record of
         who did them.
 
         Identity calls this inside the transaction of any change that may have cost a member a project, so the change
         and the cards' return happen together or not at all. What it gives back is called once that transaction has
-        committed: it notes each return in the audit log and tells the project's leads, or the team's owner and admins
+        committed: it notes each return in the audit log and tells the project's leads, or the company's owner and admins
         where it has none."""
         now = self._clock()
-        team_pk = caller.member.team_pk
-        projects = self._identity.team_projects(conn, team_pk)
+        company_pk = caller.member.company_pk
+        projects = self._identity.company_projects(conn, company_pk)
         conn.execute(
             "SELECT project_id FROM boards WHERE project_id = ANY(%s) ORDER BY project_id FOR UPDATE", (projects,)
         )
@@ -798,7 +798,7 @@ class Board:
             " WHERE project_id = ANY(%s) AND board_column <> 'done' AND assignee_id IS NOT NULL",
             (projects,),
         ).fetchall()
-        lost = self._identity.cannot_reach(conn, team_pk, [(row["assignee_id"], row["project_id"]) for row in assigned])
+        lost = self._identity.cannot_reach(conn, company_pk, [(row["assignee_id"], row["project_id"]) for row in assigned])
         rows = conn.execute(
             "SELECT c.id, c.project_id, c.number, c.board_column, c.assignee_id FROM cards c"
             " JOIN unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id)"
@@ -833,15 +833,15 @@ class Board:
                     f"{name} ({member_id}) can no longer reach {project_id}, so {listed} went back to To do with no "
                     "assignee."
                 )
-                self._tell(caller.team, lead, text)
+                self._tell(caller.company, lead, text)
 
         return committed
 
     @staticmethod
     def _leads(conn: Conn, caller: Caller, project_id: str) -> list[str]:
-        """Who is told about a project's board as a whole: its leads, or the team's owner and admins where it has
+        """Who is told about a project's board as a whole: its leads, or the company's owner and admins where it has
         none."""
-        return Identity.told_about(conn, caller.member.team_pk, project_id)
+        return Identity.told_about(conn, caller.member.company_pk, project_id)
 
     @staticmethod
     def _found(conn: Conn, project_id: str, number: int) -> dict[str, Any]:
@@ -864,14 +864,14 @@ class Board:
         found = self._found(conn, project_id, number)
         if found["assignee_id"] is not None and not self._runs(conn, caller, project_id, found):
             raise Refused(
-                f"Card {number} is assigned to {_assignee_named(found)}: only they, the project's leads and the team's "
+                f"Card {number} is assigned to {_assignee_named(found)}: only they, the project's leads and the company's "
                 "admins can change it. Say what you want with comment_card instead."
             )
         return found
 
     @staticmethod
     def _runs(conn: Conn, caller: Caller, project_id: str, card: dict[str, Any]) -> bool:
-        """Whether the caller may do anything to this card: its assignee, the project's leads and the team's admins."""
+        """Whether the caller may do anything to this card: its assignee, the project's leads and the company's admins."""
         member = caller.member
         return card["assignee_id"] == member.pk or Identity.looks_after_in(conn, member, project_id)
 

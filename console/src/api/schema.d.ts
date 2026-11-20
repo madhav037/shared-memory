@@ -235,7 +235,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Close a project to its access list, or open it to the whole team again. */
+        /** Close a project to its access list, or open it to the whole company again. */
         post: operations["restrict_project"];
         delete?: never;
         options?: never;
@@ -352,7 +352,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+        /** A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
         get: operations["project_health"];
         put?: never;
         post?: never;
@@ -540,7 +540,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The team's audit log, newest first. */
+        /** The company's audit log, newest first. */
         get: operations["audit"];
         put?: never;
         post?: never;
@@ -557,7 +557,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All of the team's data as one zip: the memory with its history, and the team's records. Admins only. */
+        /** All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
         get: operations["export"];
         put?: never;
         post?: never;
@@ -591,7 +591,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+        /** One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
         get: operations["files"];
         put?: never;
         post?: never;
@@ -661,7 +661,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+        /** Pin a project or company memory, or a topic folder, into every briefing it belongs in. */
         post: operations["pin_at"];
         delete?: never;
         options?: never;
@@ -710,7 +710,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Memories that match, across team memory and every project this member can reach. */
+        /** Memories that match, across company memory and every project this member can reach. */
         get: operations["search_everywhere"];
         put?: never;
         post?: never;
@@ -796,7 +796,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The server's license key: its status, team, member cap and expiry. */
+        /** The server's license key: its status, company, member cap and expiry. */
         get: operations["license_state"];
         put?: never;
         /** Install a license key on the server. Admins only. */
@@ -814,7 +814,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Everyone in the team, with their role and GitHub account. */
+        /** Everyone in the company, with their role and GitHub account. */
         get: operations["members"];
         put?: never;
         /** Add a member and issue their first personal token. */
@@ -885,7 +885,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Make another member the team's owner. */
+        /** Make another member the company's owner. */
         post: operations["hand_over_ownership"];
         delete?: never;
         options?: never;
@@ -954,7 +954,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue a new personal token for a member of the team, revoking the one they had. */
+        /** Issue a new personal token for a member of the company, revoking the one they had. */
         post: operations["reissue_token"];
         delete?: never;
         options?: never;
@@ -1158,7 +1158,7 @@ export interface components {
         };
         /**
          * Restriction
-         * @description Whether this project is closed to its access list, or open to the whole team.
+         * @description Whether this project is closed to its access list, or open to the whole company.
          */
         Restriction: {
             /** Restricted */
@@ -1373,7 +1373,7 @@ export interface components {
         };
         /**
          * ProjectHealth
-         * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+         * @description A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory
          *     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
          *     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.
          */
@@ -1830,7 +1830,7 @@ export interface components {
         /**
          * CardFields
          * @description What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-         *     card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+         *     card's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,
          *     replace the card's links of that kind: memories by path, files as repository:path.
          */
         CardFields: {
@@ -2163,7 +2163,7 @@ export interface components {
         };
         /**
          * Folder
-         * @description One folder of the team's memory: where it sits, the folders in it, and its memories.
+         * @description One folder of the company's memory: where it sits, the folders in it, and its memories.
          */
         Folder: {
             /** Folder */
@@ -2632,7 +2632,7 @@ export interface components {
         };
         /**
          * MemberSummary
-         * @description One member of the team, as an admin sees them.
+         * @description One member of the company, as an admin sees them.
          */
         MemberSummary: {
             /** Member Id */
@@ -2672,7 +2672,7 @@ export interface components {
         };
         /**
          * NewMember
-         * @description A member being added to the team.
+         * @description A member being added to the company.
          */
         NewMember: {
             /** Member Id */
@@ -3087,7 +3087,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Close a project to its access list, or open it to the whole team again. */
+            /** @description Close a project to its access list, or open it to the whole company again. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3259,7 +3259,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+            /** @description A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3560,7 +3560,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The team's audit log, newest first. */
+            /** @description The company's audit log, newest first. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3580,7 +3580,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description All of the team's data as one zip: the memory with its history, and the team's records. Admins only. */
+            /** @description All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3625,7 +3625,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+            /** @description One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3716,7 +3716,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+            /** @description Pin a project or company memory, or a topic folder, into every briefing it belongs in. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3789,7 +3789,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Memories that match, across team memory and every project this member can reach. */
+            /** @description Memories that match, across company memory and every project this member can reach. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3919,7 +3919,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The server's license key: its status, team, member cap and expiry. */
+            /** @description The server's license key: its status, company, member cap and expiry. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3963,7 +3963,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Everyone in the team, with their role and GitHub account. */
+            /** @description Everyone in the company, with their role and GitHub account. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4083,7 +4083,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Make another member the team's owner. */
+            /** @description Make another member the company's owner. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4193,7 +4193,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Issue a new personal token for a member of the team, revoking the one they had. */
+            /** @description Issue a new personal token for a member of the company, revoking the one they had. */
             200: {
                 headers: {
                     [name: string]: unknown;

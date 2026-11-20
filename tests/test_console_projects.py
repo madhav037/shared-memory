@@ -126,7 +126,7 @@ def test_a_lead_adds_and_removes_repositories_and_a_plain_member_cannot(
 
     assert [one["name"] for one in added_by_a_lead.json()["repositories"]] == ["billing-api"]
     assert added_by_a_member.status_code == 403
-    assert "leads and the team's admins" in added_by_a_member.json()["message"]
+    assert "leads and the company's admins" in added_by_a_member.json()["message"]
     assert removed_by_a_lead.json()["repositories"] == []
     dana.close()
     ash.close()
@@ -164,7 +164,7 @@ def test_a_project_lead_reads_the_audit_log_for_their_own_projects_only(
     assert log.status_code == 200, log.text
     assert {event["project_id"] for event in log.json()["events"]} == {billing}
     assert refused.status_code == 403
-    assert "Only the team's owner, its admins and a project's leads" in refused.json()["message"]
+    assert "Only the company's owner, its admins and a project's leads" in refused.json()["message"]
     dana.close()
     ash.close()
 
@@ -200,5 +200,5 @@ def test_an_admin_sees_a_project_of_their_team_and_nothing_else(console: Console
     changing_a_missing_one = signed_out.post_json("/api/projects/not-a-project/rename", {"name": "Nope"})
 
     assert missing.status_code == 403
-    assert "not a project in your team" in missing.json()["message"]
+    assert "not a project in your company" in missing.json()["message"]
     assert changing_a_missing_one.status_code == 403

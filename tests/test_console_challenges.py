@@ -530,7 +530,7 @@ def test_a_challenge_against_team_memory_waits_for_an_admin_and_not_for_a_projec
 
     assert for_the_lead == []
     assert refused.status_code == 403
-    assert "and the team's admins can decide this challenge" in refused.json()["message"]
+    assert "and the company's admins can decide this challenge" in refused.json()["message"]
     assert [(one["challenge_id"], one["decides_as"]) for one in for_the_admin] == [(challenge_id, "admin")]
     assert [one["decides_as"] for one in ask(lee, "/api/memory", path=target)["open_challenges"]] == [None]
     lee.close()

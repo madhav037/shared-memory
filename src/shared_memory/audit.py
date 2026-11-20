@@ -4,8 +4,8 @@ It answers "who did this" for changes that leave no memory file behind — signi
 alongside the memory changes themselves. It is append-only and holds no memory content: it points at paths, and the
 memory folder's git history holds what they said.
 
-A sign-in that no member can be found for belongs to no team; those entries are shown to every team's readers, because a
-server holds one team in practice and nobody else could otherwise see that someone tried.
+A sign-in that no member can be found for belongs to no company; those entries are shown to every company's readers, because a
+server holds one company in practice and nobody else could otherwise see that someone tried.
 """
 
 from __future__ import annotations
@@ -126,12 +126,12 @@ NEVER_LOCK_PATTERN_ADDED: Kind = "never_lock_pattern_added"
 NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
 # An admin changed the server's rate limit; the entry's detail holds the limits now and the limits before.
 RATE_LIMITS_CHANGED: Kind = "rate_limits_changed"
-# An admin installed a license key; the entry's detail holds the team, member cap, expiry and key ID (never the key).
+# An admin installed a license key; the entry's detail holds the company, member cap, expiry and key ID (never the key).
 LICENSE_INSTALLED: Kind = "license_installed"
 # A personal token was limited, at most once an hour; the entry's target is its member.
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
-# An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.
-TEAM_EXPORTED: Kind = "team_exported"
+# An admin downloaded all of the company's data (spec #409); the entry's detail holds the archive's size in bytes.
+COMPANY_EXPORTED: Kind = "team_exported"
 # A later session's gate ended (ADR-0024): its wait passed with no answer, or its member said it is different work. The
 # entry's actor is the later session's member, its target the earlier one's, and its detail holds the collision's score
 # and cause, never a prompt.
@@ -178,7 +178,7 @@ class Audit:
         kind: str,
         *,
         member: Member | None = None,
-        team_pk: int | None = None,
+        company_pk: int | None = None,
         actor: str | None = None,
         project_id: str | None = None,
         target: str | None = None,
@@ -191,7 +191,7 @@ class Audit:
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     self._clock(),
-                    member.team_pk if member else team_pk,
+                    member.company_pk if member else company_pk,
                     member.pk if member else None,
                     actor or (member.member_id if member else "unknown"),
                     kind,
@@ -224,7 +224,7 @@ class Audit:
             row = conn.execute(
                 "SELECT 1 FROM audit_events WHERE team_id = %s AND kind = %s AND actor_id = %s"
                 " AND split_part(detail->>'imported_from', ':', 1) = %s LIMIT 1",
-                (caller.member.team_pk, MEMORY_PROMOTED, caller.member.pk, repository),
+                (caller.member.company_pk, MEMORY_PROMOTED, caller.member.pk, repository),
             ).fetchone()
         return row is not None
 
@@ -266,17 +266,17 @@ class Audit:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> Page:
-        """The reader's team's log, newest first. One page, with where the next page starts.
+        """The reader's company's log, newest first. One page, with where the next page starts.
 
-        A project lead who doesn't run the team sees their own projects' events and nothing else.
+        A project lead who doesn't run the company sees their own projects' events and nothing else.
         """
         self.require_reader(reader)
         limit = max(1, min(limit, 200))
         wheres = ["(e.team_id = %s OR e.team_id IS NULL)"]
-        values: list[Any] = [reader.team_pk]
-        if not _runs_the_team(reader):
+        values: list[Any] = [reader.company_pk]
+        if not _runs_the_company(reader):
             wheres = ["e.team_id = %s", "e.project_id = ANY(%s)"]
-            values = [reader.team_pk, self._identity.leads_of(reader)]
+            values = [reader.company_pk, self._identity.leads_of(reader)]
         if before is not None:
             wheres.append("e.id < %s")
             values.append(before)
@@ -295,7 +295,7 @@ class Audit:
         with self._db.transaction() as conn:
             if member_id:
                 # An entry with a member is theirs by row id; one without, such as a refused sign-in, by its actor.
-                found = self._identity.in_team(conn, reader.team_pk, [member_id]).get(member_id)
+                found = self._identity.in_company(conn, reader.company_pk, [member_id]).get(member_id)
                 wheres.append("(e.actor_id = %s OR (e.actor_id IS NULL AND e.actor = %s))")
                 values += [found[0] if found else None, member_id]
             rows = conn.execute(
@@ -320,12 +320,12 @@ class Audit:
 
     def _may_read(self, member: Member) -> bool:
         """The owner and the admins read the whole log; a project lead reads their own projects'."""
-        return _runs_the_team(member) or bool(self._identity.leads_of(member))
+        return _runs_the_company(member) or bool(self._identity.leads_of(member))
 
     def require_reader(self, member: Member) -> None:
         if not self._may_read(member):
-            raise Refused("Only the team's owner, its admins and a project's leads can read the audit log.")
+            raise Refused("Only the company's owner, its admins and a project's leads can read the audit log.")
 
 
-def _runs_the_team(member: Member) -> bool:
+def _runs_the_company(member: Member) -> bool:
     return member.is_owner or member.is_admin

@@ -62,7 +62,7 @@ def test_a_member_who_neither_leads_nor_administers_still_waits_for_the_fallback
 
     refusal = frank.refusal("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
 
-    assert "Only emp-3, the author of the challenged memory, a lead of its project and the team's admins" in refusal
+    assert "Only emp-3, the author of the challenged memory, a lead of its project and the company's admins" in refusal
     assert "until it has been open for 3 days" in refusal
 
 
@@ -74,7 +74,7 @@ def test_only_an_admin_decides_a_challenge_against_team_memory_not_a_project_lea
     refusal = lead.refusal("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
     accepted = admin.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
 
-    assert "Only emp-3, the author of the challenged memory, and the team's admins can decide" in refusal
+    assert "Only emp-3, the author of the challenged memory, and the company's admins can decide" in refusal
     assert f"Challenge {raised['challenge_id']}" not in news(lead)
     assert accepted["status"] == "accepted"
     assert "deciding as an admin" in news(cole)

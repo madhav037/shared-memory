@@ -101,7 +101,7 @@ def test_other_members_personal_memory_is_labeled_as_not_accepted(team: Team, pr
 
     first = owner.call("search", query="webhook signature")["results"][0]
 
-    assert (first["path"], first["label"]) == (path, "personal memory of emp-2, not accepted by the team")
+    assert (first["path"], first["label"]) == (path, "personal memory of emp-2, not accepted by the company")
 
 
 def test_search_stays_within_the_sessions_project(team: Team, owner: Session) -> None:

@@ -143,7 +143,7 @@ def test_only_a_lead_or_an_admin_changes_the_extras_in_the_console(console: Cons
     removed = plain.post(f"{where}/security-model/remove")
 
     assert added.status_code == removed.status_code == 403
-    assert "leads and the team's admins" in added.json()["message"]
+    assert "leads and the company's admins" in added.json()["message"]
     assert signed_out.post(f"{where}/security-model/remove").status_code == 200
     plain.close()
 

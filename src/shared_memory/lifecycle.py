@@ -127,7 +127,7 @@ class Lifecycle:
         promotable = self._promotable(caller, path, level, foundation)
         location, target, promoted_by = promotable.location, promotable.target, promotable.promoted_by
         project, into = promotable.project, promotable.foundation
-        memory_type = self._store.read(caller.team, location.path).type
+        memory_type = self._store.read(caller.company, location.path).type
         self._keep_import(caller, location, project, author, imported_from, first_call=reference is None)
         if reference is None:
             proposal = self._similar(caller, path, location, level, project)
@@ -141,7 +141,7 @@ class Lifecycle:
             row = conn.execute(
                 "SELECT similar_paths FROM promotions WHERE reference = %s AND team = %s AND member_id = %s"
                 " AND path = %s AND level = %s",
-                (reference, caller.team, caller.member_id, path, level),
+                (reference, caller.company, caller.member_id, path, level),
             ).fetchone()
         if row is None:
             raise Refused("Unknown promotion reference for this memory. Call promote again without a reference.")
@@ -156,7 +156,7 @@ class Lifecycle:
             raise Refused(f"Unknown resolution {unknown[0]!r}: use supersede, keep_both or cancel.")
         if "cancel" in chosen.values():
             self._forget(reference)
-            self._forget_import(caller.team, location.path)
+            self._forget_import(caller.company, location.path)
             return {"status": "cancelled", "path": path}
         supersede: str | None = None
         exception_to: str | None = None
@@ -164,12 +164,12 @@ class Lifecycle:
         leads = self._leads(caller, project.project_id)
         for similar_path in sorted(p for p, resolution in chosen.items() if resolution == "supersede"):
             similar_location = locate(similar_path)
-            other = self._store.read(caller.team, similar_location.path)
+            other = self._store.read(caller.company, similar_location.path)
             if other.status != "active":
                 raise Refused(f"{similar_path} is no longer active. Call promote again without a reference.")
-            if target == "project" and similar_location.level == "team":
+            if target == "project" and similar_location.level == "company":
                 if exception_to is not None:
-                    raise Refused("A project memory can be an exception to only one team memory.")
+                    raise Refused("A project memory can be an exception to only one company memory.")
                 exception_to = similar_path
             elif similar_location.foundation is not None and not self._changes_at_once(
                 caller, project.project_id, similar_location.foundation, leads
@@ -233,8 +233,8 @@ class Lifecycle:
         )
         if supersede is not None:
             superseded = f"its author superseded it with {result['path']}."
-            self._challenges.resolve_doubts(caller.team, supersede, caller.member_id, superseded)
-            self._challenges.close_all_against(caller.team, supersede, caller.member_id, superseded)
+            self._challenges.resolve_doubts(caller.company, supersede, caller.member_id, superseded)
+            self._challenges.close_all_against(caller.company, supersede, caller.member_id, superseded)
         return result
 
     def similar_before_promoting(
@@ -272,7 +272,7 @@ class Lifecycle:
         them forgets what an earlier one kept, so a memory is never promoted in a name its last promote didn't give."""
         if author is None and imported_from is None:
             if first_call:
-                self._forget_import(caller.team, location.path)
+                self._forget_import(caller.company, location.path)
             return
         imported = self._imported(caller, location, project, author, imported_from)
         with self._db.transaction() as conn:
@@ -280,7 +280,7 @@ class Lifecycle:
                 "INSERT INTO imports (team, path, author, source, created_at) VALUES (%s, %s, %s, %s, %s)"
                 " ON CONFLICT (team, path) DO UPDATE SET author = EXCLUDED.author, source = EXCLUDED.source,"
                 " created_at = EXCLUDED.created_at",
-                (caller.team, str(location.path), imported.author, imported.source, self._clock()),
+                (caller.company, str(location.path), imported.author, imported.source, self._clock()),
             )
 
     def _imported(
@@ -303,7 +303,7 @@ class Lifecycle:
             member_id = self._identity.member_with_github(caller, named)
             if member_id is None:
                 raise Refused(
-                    f"No member of your team signs in with the GitHub account {named}, so they can't be the author. "
+                    f"No member of your company signs in with the GitHub account {named}, so they can't be the author. "
                     "Promote without author and imported_from, and name the original writer in the memory's body."
                 )
         else:
@@ -313,18 +313,18 @@ class Lifecycle:
         self._identity.member_reaching(caller, project.project_id, member_id)
         return Imported(member_id, source)
 
-    def _kept_import(self, team: str, path: PurePosixPath) -> Imported | None:
+    def _kept_import(self, company: str, path: PurePosixPath) -> Imported | None:
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT author, source FROM imports WHERE team = %s AND path = %s", (team, str(path))
+                "SELECT author, source FROM imports WHERE team = %s AND path = %s", (company, str(path))
             ).fetchone()
         return None if row is None else Imported(row["author"], row["source"])
 
-    def _forget_import(self, team: str, path: PurePosixPath) -> None:
+    def _forget_import(self, company: str, path: PurePosixPath) -> None:
         with self._db.transaction() as conn:
-            conn.execute("DELETE FROM imports WHERE team = %s AND path = %s", (team, str(path)))
+            conn.execute("DELETE FROM imports WHERE team = %s AND path = %s", (company, str(path)))
 
-    def _tell_author(self, team: str, imported: Imported, importer: str, title: str, path: PurePosixPath, level: Level) -> None:
+    def _tell_author(self, company: str, imported: Imported, importer: str, title: str, path: PurePosixPath, level: Level) -> None:
         """Tell a member, in their next briefing, that a memory now stands in their name: written from their interview
         when it came from one (ADR-0029), imported from what they wrote otherwise (ADR-0016)."""
         if sources.is_interview(imported.source):
@@ -337,33 +337,33 @@ class Lifecycle:
                 f'{importer} promoted a memory in your name: "{title}" ({path}), imported from {imported.source}, is '
                 f"now {level} memory and you are its author. If it is wrong, retire it or supersede it."
             )
-        self._challenges.tell(team, imported.author, told)
+        self._challenges.tell(company, imported.author, told)
 
     def _promotable(
         self, caller: Caller, path: str, level: str, foundation: str | None = None
     ) -> Promotable:
         """Refuse a promotion that can't happen."""
         project = caller.require_project()
-        if level not in ("project", "team"):
-            raise Refused(f"Promote into 'project' or 'team' memory, not {level!r}.")
+        if level not in ("project", "company"):
+            raise Refused(f"Promote into 'project' or 'company' memory, not {level!r}.")
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)  # refuses a memory that isn't there
+        memory = self._store.read(caller.company, location.path)  # refuses a memory that isn't there
         if location.level != "personal":
             raise Refused(f"This is already {location.level} memory. Only personal memory can be promoted.")
         promoted_by: str | None = None
         if location.member_id != caller.member_id:
-            if location.member_id is None or not self._identity.is_removed(caller.team, location.member_id):
+            if location.member_id is None or not self._identity.is_removed(caller.company, location.member_id):
                 raise Refused(
                     "You can only promote your own personal memory, or the personal memory of a member who has "
-                    "been removed from the team."
+                    "been removed from the company."
                 )
             promoted_by = caller.member_id
         if location.project_id != project.project_id:
             raise Refused("This memory belongs to another project. Promote it from a session in that project.")
-        waiting = self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)])
+        waiting = self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)])
         if waiting:
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
-        target: Level = "team" if level == "team" else "project"
+        target: Level = "company" if level == "company" else "project"
         into = self._foundation_for(memory, target, foundation, project.project_id)
         return Promotable(location, target, promoted_by, project, into)
 
@@ -373,11 +373,11 @@ class Lifecycle:
         project = caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        memory = self._store.read(caller.company, location.path)
         if location.level == "personal":
             raise Refused("Personal memory goes into a foundation by promoting it: promote it with foundation.")
-        if location.level == "team":
-            raise Refused("Team memory has no foundations: foundations are a project's.")
+        if location.level == "company":
+            raise Refused("Company memory has no foundations: foundations are a project's.")
         if location.foundation is not None:
             raise Refused(f"This memory is already in the {location.foundation} foundation.")
         if location.project_id != project.project_id:
@@ -388,7 +388,7 @@ class Lifecycle:
         if into is None:
             raise Refused("Name the foundation to add this memory to.")
         waiting = [
-            one for one in self._challenges.open_challenges(caller.team, challenger_paths=[str(location.path)]) if one.kind == "add"
+            one for one in self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)]) if one.kind == "add"
         ]
         if waiting:
             raise Refused(f"This memory is already waiting to join a foundation on challenge {waiting[0].id}.")
@@ -401,7 +401,7 @@ class Lifecycle:
     def _closed_by_move(self, caller: Caller, location: Location, new_path: str) -> None:
         """A project memory that moved leaves its old path behind: challenges against it are closed, their raisers told."""
         self._challenges.close_all_against(
-            caller.team, str(location.path), caller.member_id, f"the memory moved into a foundation, to {new_path}."
+            caller.company, str(location.path), caller.member_id, f"the memory moved into a foundation, to {new_path}."
         )
 
     def add_foundation(self, caller: Caller, project_id: str, name: str, leads_only: bool = False) -> str:
@@ -415,12 +415,12 @@ class Lifecycle:
     def remove_foundation(self, caller: Caller, project_id: str, slug: str) -> None:
         """Remove an extra foundation of a project, once it holds no active memory."""
         self._identity.require_extra_foundation(caller, project_id, slug)
-        memories, _ = self._store.list_folder(caller.team, foundation_folder(project_id, slug))
+        memories, _ = self._store.list_folder(caller.company, foundation_folder(project_id, slug))
         if any(memory.status == "active" for _, memory in memories):
             raise Refused(
                 f"The {slug} foundation still holds active memory. Retire or move it first; only an empty foundation can be removed."
             )
-        for one in self._challenges.open_challenges(caller.team):
+        for one in self._challenges.open_challenges(caller.company):
             if one.kind == "add" and one.foundation == slug and project_of(one) == project_id:
                 raise Refused(
                     f"A memory is waiting to join the {slug} foundation on challenge {one.id}. Decide it first; "
@@ -440,7 +440,7 @@ class Lifecycle:
             return lines
         asked = {
             one.foundation
-            for one in self._challenges.open_challenges(caller.team)
+            for one in self._challenges.open_challenges(caller.company)
             if one.kind == "add" and project_of(one) == project.project_id
         }
         missing = [
@@ -449,7 +449,7 @@ class Lifecycle:
             if slug not in asked
             and not any(
                 memory.status == "active"
-                for _, memories in self._store.walk(caller.team, foundation_folder(project.project_id, slug))
+                for _, memories in self._store.walk(caller.company, foundation_folder(project.project_id, slug))
                 for _, memory in memories
             )
         ]
@@ -461,7 +461,7 @@ class Lifecycle:
         outside = sum(
             1
             for kind in ("architecture", "decision")
-            for _, memories in self._store.walk(caller.team, level_folder("project", kind, project.project_id))
+            for _, memories in self._store.walk(caller.company, level_folder("project", kind, project.project_id))
             for _, memory in memories
             if memory.status == "active" and memory.type == kind
         )
@@ -525,9 +525,9 @@ class Lifecycle:
         architecture memory belongs in Architecture and a decision memory in Decisions, named or not; any other type
         goes into a foundation only when it is named, and it names one of the project's, core or extra."""
         slug = None if named is None else named.strip().lower()
-        if target == "team":
+        if target == "company":
             if slug is not None:
-                raise Refused("Team memory has no foundations: foundations are a project's. Promote into 'project' instead.")
+                raise Refused("Company memory has no foundations: foundations are a project's. Promote into 'project' instead.")
             return None
         own = {"architecture": "architecture", "decision": "decisions"}.get(memory.type)
         if own is not None and slug not in (None, own):
@@ -552,7 +552,7 @@ class Lifecycle:
         self, caller: Caller, path: str, location: Location, level: str, project: Project
     ) -> dict[str, Any] | None:
         similar = self._index.similar(
-            caller.team, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
+            caller.company, location.path, project_id=project.project_id, threshold=self._settings.similar_threshold
         )
         if not similar:
             return None
@@ -561,13 +561,13 @@ class Lifecycle:
             conn.execute(
                 "INSERT INTO promotions (reference, team, member_id, path, level, similar_paths, created_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (reference, caller.team, caller.member_id, path, level, [p for p, _ in similar], self._clock()),
+                (reference, caller.company, caller.member_id, path, level, [p for p, _ in similar], self._clock()),
             )
         return {
             "status": "similar_memories",
             "reference": reference,
             "similar": [
-                {**describe(PurePosixPath(p), self._store.read(caller.team, PurePosixPath(p))), "similarity": round(s, 3)}
+                {**describe(PurePosixPath(p), self._store.read(caller.company, PurePosixPath(p))), "similarity": round(s, 3)}
                 for p, s in similar
             ],
             "next": "Judge whether each similar memory contradicts this one, ask the member, then call promote "
@@ -590,17 +590,17 @@ class Lifecycle:
         reason: str = "Promote",
         foundation: str | None = None,
     ) -> dict[str, Any]:
-        """Move a personal memory into project or team memory, reading it in the same save that moves it.
+        """Move a personal memory into project or company memory, reading it in the same save that moves it.
 
         A memory moved or deleted by a save that went first is refused here, so it is never promoted twice. An imported
         memory whose promotion named its writer moves in that member's name, with its importer and source recorded.
         """
-        imported = self._kept_import(caller.team, location.path)
+        imported = self._kept_import(caller.company, location.path)
         # Every area the move touches, known before it takes a turn: where the memory is, where it goes, and the
         # memories it supersedes or is an exception to.
         areas = {area_of(location.path), Area(target, location.project_id if target == "project" else None)}
         areas |= {area_of(PurePosixPath(path)) for path in (supersede, exception_to) if path is not None}
-        with self._store.change(caller.team, committer(caller), areas=[a for a in areas if a is not None]) as change:
+        with self._store.change(caller.company, committer(caller), areas=[a for a in areas if a is not None]) as change:
             memory = change.read(location.path)
             change.message = f"{reason}: {memory.title}"
             if foundation is not None:
@@ -635,8 +635,8 @@ class Lifecycle:
 
             def credited() -> None:
                 if imported is not None:
-                    self._tell_author(caller.team, imported, memory.author, memory.title, new_path, target)
-                    self._forget_import(caller.team, location.path)
+                    self._tell_author(caller.company, imported, memory.author, memory.title, new_path, target)
+                    self._forget_import(caller.company, location.path)
 
             change.also(audited)
             change.also(credited)
@@ -676,7 +676,7 @@ class Lifecycle:
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        memory = self._store.read(caller.company, location.path)
         if location.level == "personal":
             raise Refused("Personal memory isn't retired. If it's yours and no longer true, remove it with delete_memory.")
         if memory.status != "active":
@@ -698,11 +698,11 @@ class Lifecycle:
                 foundation=location.foundation,
             )
             return self._challenge_raised(challenge_id, str(location.path), memory.author, in_foundation)
-        with self._store.change(caller.team, committer(caller), f"Retire: {memory.title}", areas=areas) as change:
+        with self._store.change(caller.company, committer(caller), f"Retire: {memory.title}", areas=areas) as change:
             change.write(location.path, replace(self._active(change, location.path), status="retired"))
             change.also(lambda: self._audit.memory(caller, MEMORY_RETIRED, str(location.path)))
         by = "its author" if memory.author == caller.member_id else "a project lead"
-        self._challenges.close_all_against(caller.team, str(location.path), caller.member_id, f"{by} retired it.")
+        self._challenges.close_all_against(caller.company, str(location.path), caller.member_id, f"{by} retired it.")
         return {"status": "retired", "path": str(location.path)}
 
     def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
@@ -710,19 +710,19 @@ class Lifecycle:
         to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do.
         A challenge the caller already raised to retire it, still open, is given back rather than raised again."""
         location = locate(path)
-        if not self._store.exists(caller.team, location.path):
+        if not self._store.exists(caller.company, location.path):
             return None
-        memory = self._store.read(caller.team, location.path)
+        memory = self._store.read(caller.company, location.path)
         if memory.status != "active":
             return None
-        for challenge in self._challenges.open_challenges(caller.team, target_path=str(location.path)):
+        for challenge in self._challenges.open_challenges(caller.company, target_path=str(location.path)):
             if challenge.kind == "retire" and challenge.raised_by == caller.member_id:
                 return self._challenge_raised(challenge.id, str(location.path), memory.author)
         try:
             return self.retire(caller, path, reasoning)
         except Refused:
             # A save that went first retired or superseded it after it was read: nothing is left to do.
-            if self._store.read(caller.team, location.path).status != "active":
+            if self._store.read(caller.company, location.path).status != "active":
                 return None
             raise
 
@@ -732,9 +732,9 @@ class Lifecycle:
         caller.require_project()
         if decision not in ("accept", "reject"):
             raise Refused("Decide a challenge with 'accept' or 'reject'.")
-        challenge = self._challenges.open_challenge(caller.team, challenge_id)
+        challenge = self._challenges.open_challenge(caller.company, challenge_id)
         if challenge is None:
-            raise Refused(f"There is no open challenge {challenge_id} in your team.")
+            raise Refused(f"There is no open challenge {challenge_id} in your company.")
         caller.require_reach(challenge.target_path)
         caller.require_reach(challenge.challenger_path)
         # Who raised it, asked once: it settles who may decide, and who is told how it ended.
@@ -747,7 +747,7 @@ class Lifecycle:
             self._decided(caller, challenge, raisers, "rejected", decides_as)
             stands = "The memory stands as it is." if challenge.kind == DOUBT else "Your memory stays where it is."
             self._challenges.tell_raisers(
-                caller.team,
+                caller.company,
                 raisers,
                 f"Your challenge {challenge.id} against {challenge.target_path} was rejected by {decider}. {stands}",
             )
@@ -757,10 +757,10 @@ class Lifecycle:
             result, outcome = self._accept_add(caller, challenge)
             self._challenges.decide(challenge, "accepted", decider)
             self._decided(caller, challenge, raisers, "accepted", decides_as)
-            self._challenges.tell(caller.team, challenge.raised_by, outcome)
+            self._challenges.tell(caller.company, challenge.raised_by, outcome)
             return result
         target_path = PurePosixPath(challenge.target_path)
-        target = self._store.read(caller.team, target_path)
+        target = self._store.read(caller.company, target_path)
         if target.status != "active":
             raise Refused(f"{challenge.target_path} is no longer active, so this challenge can't be accepted.")
         if challenge.challenger_path is None:
@@ -769,9 +769,9 @@ class Lifecycle:
             result, outcome = self._accept_supersede(caller, challenge, challenge.challenger_path)
         self._challenges.decide(challenge, "accepted", decider)
         self._decided(caller, challenge, raisers, "accepted", decides_as)
-        self._challenges.tell_raisers(caller.team, raisers, outcome)
+        self._challenges.tell_raisers(caller.company, raisers, outcome)
         self._challenges.close_all_against(
-            caller.team,
+            caller.company,
             challenge.target_path,
             decider,
             f"challenge {challenge.id} by {challenge.raised_by} was accepted instead.",
@@ -791,11 +791,11 @@ class Lifecycle:
 
     def _accept_supersede(self, caller: Caller, challenge: Challenge, challenger_path: str) -> tuple[dict[str, Any], str]:
         challenger_location = locate(challenger_path)
-        if not self._store.exists(caller.team, challenger_location.path):
+        if not self._store.exists(caller.company, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
-        level: Level = "team" if challenge.level == "team" else "project"
-        challenger = self._store.read(caller.team, challenger_location.path)
+        level: Level = "company" if challenge.level == "company" else "project"
+        challenger = self._store.read(caller.company, challenger_location.path)
         moved = self._move(
             caller,
             challenger_location,
@@ -816,10 +816,10 @@ class Lifecycle:
         """Move the challenging memory into the foundation it asked to join."""
         assert challenge.challenger_path is not None and challenge.foundation is not None
         challenger_location = locate(challenge.challenger_path)
-        if not self._store.exists(caller.team, challenger_location.path):
+        if not self._store.exists(caller.company, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
-        if challenger_location.level == "project" and self._store.read(caller.team, challenger_location.path).status != "active":
+        if challenger_location.level == "project" and self._store.read(caller.company, challenger_location.path).status != "active":
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory is no longer active.")
             raise Refused("The challenging memory is no longer active, so the challenge has been withdrawn.")
         moved = self._move(
@@ -843,7 +843,7 @@ class Lifecycle:
     ) -> tuple[dict[str, Any], str]:
         message = f"Accept challenge {challenge.id}: retire {target.title}"
         areas = [area for area in [area_of(target_path)] if area is not None]
-        with self._store.change(caller.team, committer(caller), message, areas=areas) as change:
+        with self._store.change(caller.company, committer(caller), message, areas=areas) as change:
             change.write(target_path, replace(self._active(change, target_path), status="retired"))
             where = project_of(challenge)
             change.also(
@@ -861,3 +861,9 @@ def move_paths(conn: Conn, old: str, new: str) -> None:
     conn.execute(
         "UPDATE imports SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
     )
+
+
+def rename_level(conn: Conn, old: str, new: str) -> None:
+    """Say the level `old` as `new` in waiting promotions: company memory's level was `team` before the
+    rename (`company_move.py`)."""
+    conn.execute("UPDATE promotions SET level = %s WHERE level = %s", (new, old))

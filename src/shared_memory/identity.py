@@ -1,4 +1,4 @@
-"""Identity and access: teams, members, personal tokens, projects and repositories."""
+"""Identity and access: companies, members, personal tokens, projects and repositories."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ AccessLost = Callable[[Conn, "Caller"], Callable[[], None]]
 @dataclass(frozen=True)
 class Member:
     pk: int
-    team_pk: int
-    team_code: str
+    company_pk: int
+    company_code: str
     member_id: str
     name: str
     is_owner: bool
@@ -73,8 +73,8 @@ class Caller:
             raise restricted_project(project_id)
 
     @property
-    def team(self) -> str:
-        return self.member.team_code
+    def company(self) -> str:
+        return self.member.company_code
 
     @property
     def member_id(self) -> str:
@@ -100,7 +100,7 @@ def _github_login(login: str | None) -> str | None:
 
 
 def project_in(path: str) -> str | None:
-    """The project a memory path or folder is inside, or nothing for team memory."""
+    """The project a memory path or folder is inside, or nothing for company memory."""
     parts = PurePosixPath(path.replace("\\", "/").strip("/")).parts
     return parts[1] if len(parts) >= 2 and parts[0] == "projects" else None
 
@@ -108,8 +108,8 @@ def project_in(path: str) -> str | None:
 def restricted_project(project_id: str) -> Refused:
     """The one refusal a member gets for a restricted project, wherever they meet it."""
     return Refused(
-        f"Project {project_id!r} is restricted, so it isn't open to the whole team. "
-        "Ask one of its project leads or a team admin to add you to its access list."
+        f"Project {project_id!r} is restricted, so it isn't open to the whole company. "
+        "Ask one of its project leads or a company admin to add you to its access list."
     )
 
 
@@ -131,27 +131,27 @@ class Identity:
         # The member cap (CONTEXT.md): how many members the server may have at once, or None for no cap. A function,
         # so the cap can come from somewhere that changes while the server runs.
         self.member_cap = member_cap
-        # Called when a member may have lost a project: removed from the team, taken off an access list or a lead, no
+        # Called when a member may have lost a project: removed from the company, taken off an access list or a lead, no
         # longer an admin, or a project restricted.
         self._access_lost: list[AccessLost] = []
         self._db = db
         self._clock = clock
 
-    def setup_team(self, team_code: str, owner_member_id: str, owner_name: str, owner_github: str | None = None) -> str:
-        check_name("Team ID", team_code)
+    def setup_company(self, company_code: str, owner_member_id: str, owner_name: str, owner_github: str | None = None) -> str:
+        check_name("Company ID", company_code)
         check_name("Member ID", owner_member_id)
         now = self._clock()
         with self._db.transaction() as conn:
-            if conn.execute("SELECT 1 FROM teams WHERE code = %s", (team_code,)).fetchone():
-                raise Refused(f"Team {team_code!r} already exists.")
-            team = conn.execute(
-                "INSERT INTO teams (code, created_at) VALUES (%s, %s) RETURNING id", (team_code, now)
+            if conn.execute("SELECT 1 FROM teams WHERE code = %s", (company_code,)).fetchone():
+                raise Refused(f"Company {company_code!r} already exists.")
+            company = conn.execute(
+                "INSERT INTO teams (code, created_at) VALUES (%s, %s) RETURNING id", (company_code, now)
             ).fetchone()
-            assert team is not None
+            assert company is not None
             member = conn.execute(
                 "INSERT INTO members (team_id, member_id, name, is_owner, github_login, created_at)"
                 " VALUES (%s, %s, %s, TRUE, %s, %s) RETURNING id",
-                (team["id"], owner_member_id, owner_name, _github_login(owner_github), now),
+                (company["id"], owner_member_id, owner_name, _github_login(owner_github), now),
             ).fetchone()
             assert member is not None
             return self._issue_token(conn, member["id"])
@@ -184,9 +184,9 @@ class Identity:
                     "Memory settings), or issue yourself a new token from the console."
                 )
             if row["removed_at"] is not None:
-                raise Refused("This personal token belongs to a member who has been removed from the team.")
+                raise Refused("This personal token belongs to a member who has been removed from the company.")
             if row["revoked_at"] is not None:
-                raise Refused("This personal token has been revoked. Ask your team's owner for a new one.")
+                raise Refused("This personal token has been revoked. Ask your company's owner for a new one.")
             member = Member(
                 row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
                 row["is_admin"],
@@ -240,14 +240,14 @@ class Identity:
 
     def _require_admin(self, caller: Caller) -> None:
         if not (caller.member.is_owner or caller.member.is_admin):
-            raise Refused("Only the team's owner and its admins can manage members and personal tokens.")
+            raise Refused("Only the company's owner and its admins can manage members and personal tokens.")
 
     def _require_owner(self, caller: Caller) -> None:
         if not caller.member.is_owner:
-            raise Refused("Only the team's owner can grant admin, take it away, or hand over ownership.")
+            raise Refused("Only the company's owner can grant admin, take it away, or hand over ownership.")
 
     def looks_after(self, member: Member, project_id: str) -> bool:
-        """Whether this member looks after the project: its leads do, and so do the team's owner and admins, because
+        """Whether this member looks after the project: its leads do, and so do the company's owner and admins, because
         they have to be able to repair it."""
         if member.is_owner or member.is_admin:
             return True
@@ -260,8 +260,8 @@ class Identity:
         return member.is_owner or member.is_admin or Identity._leads_it(conn, member.pk, project_id)
 
     @staticmethod
-    def told_about(conn: Conn, team_pk: int, project_id: str) -> list[str]:
-        """Who hears about a project as a whole, by member ID: its leads, or the team's owner and admins where it has
+    def told_about(conn: Conn, company_pk: int, project_id: str) -> list[str]:
+        """Who hears about a project as a whole, by member ID: its leads, or the company's owner and admins where it has
         none. Asked inside a transaction already open."""
         leads = conn.execute(
             "SELECT m.member_id FROM project_leads l JOIN members m ON m.id = l.member_id"
@@ -272,13 +272,13 @@ class Identity:
             leads = conn.execute(
                 "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
                 " ORDER BY member_id",
-                (team_pk,),
+                (company_pk,),
             ).fetchall()
         return [row["member_id"] for row in leads]
 
     def _require_lead(self, caller: Caller, project_id: str) -> None:
         if not self.looks_after(caller.member, project_id):
-            raise Refused("Only this project's leads and the team's admins can change it.")
+            raise Refused("Only this project's leads and the company's admins can change it.")
 
     @staticmethod
     def _leads_it(conn: Conn, member_pk: int, project_id: str) -> bool:
@@ -290,29 +290,29 @@ class Identity:
     def _member_pk(self, conn: Conn, caller: Caller, member_id: str) -> int:
         row = conn.execute(
             "SELECT id FROM members WHERE team_id = %s AND member_id = %s AND removed_at IS NULL",
-            (caller.member.team_pk, member_id),
+            (caller.member.company_pk, member_id),
         ).fetchone()
         if row is None:
-            raise Refused(f"No member with member ID {member_id!r} in your team.")
+            raise Refused(f"No member with member ID {member_id!r} in your company.")
         pk: int = row["id"]
         return pk
 
     def add_member(
-        self, caller: Caller, member_id: str, name: str, team: str | None = None, github: str | None = None
+        self, caller: Caller, member_id: str, name: str, company: str | None = None, github: str | None = None
     ) -> str:
         self._require_admin(caller)
-        if team is not None and team != caller.team:
-            raise Refused(f"You can only add members to your own team ({caller.team}).")
+        if company is not None and company != caller.company:
+            raise Refused(f"You can only add members to your own company ({caller.company}).")
         check_name("Member ID", member_id)
         if not name.strip():
             raise Refused("A member needs a name.")
         with self._db.transaction() as conn:
             existing = conn.execute(
                 "SELECT removed_at FROM members WHERE team_id = %s AND member_id = %s",
-                (caller.member.team_pk, member_id),
+                (caller.member.company_pk, member_id),
             ).fetchone()
             if existing is not None:
-                raise Refused(f"Member ID {member_id!r} is already a member of your team, or was one.")
+                raise Refused(f"Member ID {member_id!r} is already a member of your company, or was one.")
             cap = self.member_cap()
             if cap is not None and self._members_in_use(conn) >= cap:
                 raise Refused(
@@ -321,17 +321,17 @@ class Identity:
                 )
             login = _github_login(github)
             if login is not None:
-                self._github_free(conn, caller.member.team_pk, login, None)
+                self._github_free(conn, caller.member.company_pk, login, None)
             row = conn.execute(
                 "INSERT INTO members (team_id, member_id, name, github_login, created_at)"
                 " VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (caller.member.team_pk, member_id, name.strip(), login, self._clock()),
+                (caller.member.company_pk, member_id, name.strip(), login, self._clock()),
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
 
     def _members_in_use(self, conn: Conn) -> int:
-        """The members the server has now, in every team. A removed member holds no place."""
+        """The members the server has now, in every company. A removed member holds no place."""
         row = conn.execute("SELECT count(*) AS n FROM members WHERE removed_at IS NULL").fetchone()
         assert row is not None
         used: int = row["n"]
@@ -341,14 +341,14 @@ class Identity:
         with self._db.transaction() as conn:
             return self._members_in_use(conn)
 
-    def members_in_team(self, team_code: str) -> int:
-        """The members one team has now, counted as the member cap counts them: a removed member holds no place."""
+    def members_in_company(self, company_code: str) -> int:
+        """The members one company has now, counted as the member cap counts them: a removed member holds no place."""
         with self._db.transaction() as conn:
-            team = conn.execute("SELECT id FROM teams WHERE code = %s", (team_code,)).fetchone()
-            if team is None:
-                raise Refused(f"No team {team_code!r} on this server.")
+            company = conn.execute("SELECT id FROM teams WHERE code = %s", (company_code,)).fetchone()
+            if company is None:
+                raise Refused(f"No company {company_code!r} on this server.")
             row = conn.execute(
-                "SELECT count(*) AS n FROM members WHERE team_id = %s AND removed_at IS NULL", (team["id"],)
+                "SELECT count(*) AS n FROM members WHERE team_id = %s AND removed_at IS NULL", (company["id"],)
             ).fetchone()
         assert row is not None
         members: int = row["n"]
@@ -376,7 +376,7 @@ class Identity:
             )
             return self._issue_token(conn, pk)
 
-    def link_github(self, team_code: str, member_id: str, github_login: str) -> None:
+    def link_github(self, company_code: str, member_id: str, github_login: str) -> None:
         """Link a GitHub account to a member who already exists, so they can sign in to the console."""
         login = _github_login(github_login)
         if login is None:
@@ -385,17 +385,17 @@ class Identity:
             row = conn.execute(
                 "SELECT m.id FROM members m JOIN teams t ON t.id = m.team_id"
                 " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL",
-                (team_code, member_id),
+                (company_code, member_id),
             ).fetchone()
             if row is None:
-                raise Refused(f"No member with member ID {member_id!r} in team {team_code!r}.")
+                raise Refused(f"No member with member ID {member_id!r} in company {company_code!r}.")
             taken = conn.execute(
                 "SELECT m.member_id FROM members m JOIN teams t ON t.id = m.team_id"
                 " WHERE t.code = %s AND lower(m.github_login) = lower(%s) AND m.id <> %s",
-                (team_code, login, row["id"]),
+                (company_code, login, row["id"]),
             ).fetchone()
             if taken is not None:
-                raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this team.")
+                raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this company.")
             # Clearing the account id makes the next sign-in bind this login to whichever account signs in with it.
             conn.execute(
                 "UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, row["id"])
@@ -416,10 +416,10 @@ class Identity:
                     f"The GitHub account @{login} isn't linked to a member. Ask an admin to link it to you."
                 )
             if len(rows) > 1:
-                raise Refused(f"The GitHub account @{login} is linked to members in more than one team. Ask an admin.")
+                raise Refused(f"The GitHub account @{login} is linked to members in more than one company. Ask an admin.")
             row = rows[0]
             if row["removed_at"] is not None:
-                raise Refused("You have been removed from this team, so you can no longer sign in.")
+                raise Refused("You have been removed from this company, so you can no longer sign in.")
             conn.execute(
                 "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
                 (account_id, login, row["id"]),
@@ -467,30 +467,30 @@ class Identity:
             conn.execute("UPDATE members SET chosen_time_zone = %s WHERE id = %s", (name, member.pk))
         return self.time_zone(member.pk)
 
-    def _github_free(self, conn: Conn, team_pk: int, login: str, except_pk: int | None) -> None:
+    def _github_free(self, conn: Conn, company_pk: int, login: str, except_pk: int | None) -> None:
         taken = conn.execute(
             "SELECT member_id FROM members WHERE team_id = %s AND lower(github_login) = lower(%s)"
             " AND (%s::bigint IS NULL OR id <> %s)",
-            (team_pk, login, except_pk, except_pk),
+            (company_pk, login, except_pk, except_pk),
         ).fetchone()
         if taken is not None:
-            raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this team.")
+            raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this company.")
 
     def _only_the_owner_touches_admins(self, conn: Conn, caller: Caller, pk: int, done: str, verb: str) -> None:
         row = conn.execute("SELECT is_owner, is_admin FROM members WHERE id = %s", (pk,)).fetchone()
         assert row is not None
         if row["is_owner"]:
-            raise Refused(f"The team's owner can't be {done}. Hand ownership over first.")
+            raise Refused(f"The company's owner can't be {done}. Hand ownership over first.")
         if row["is_admin"] and not caller.member.is_owner:
-            raise Refused(f"Only the team's owner can {verb} an admin.")
+            raise Refused(f"Only the company's owner can {verb} an admin.")
 
     def members(self, member: Member) -> list[dict[str, Any]]:
-        """Everyone in this member's team, with their role and the GitHub account they sign in with."""
+        """Everyone in this member's company, with their role and the GitHub account they sign in with."""
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT member_id, name, is_owner, is_admin, github_login, removed_at FROM members"
                 " WHERE team_id = %s ORDER BY is_owner DESC, is_admin DESC, member_id",
-                (member.team_pk,),
+                (member.company_pk,),
             ).fetchall()
         return [
             {
@@ -515,7 +515,7 @@ class Identity:
             if github is not None:
                 login = _github_login(github)
                 if login is not None:
-                    self._github_free(conn, caller.member.team_pk, login, pk)
+                    self._github_free(conn, caller.member.company_pk, login, pk)
                 # Clearing the account id lets the next sign-in bind this login to whoever signs in with it.
                 conn.execute("UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, pk))
 
@@ -532,7 +532,7 @@ class Identity:
             committed()
 
     def hand_over_ownership(self, caller: Caller, member_id: str) -> None:
-        """Make another member the team's owner. The member handing it over stays an admin."""
+        """Make another member the company's owner. The member handing it over stays an admin."""
         self._require_owner(caller)
         if member_id == caller.member_id:
             raise Refused("You are already the owner.")
@@ -541,11 +541,11 @@ class Identity:
             conn.execute("UPDATE members SET is_owner = FALSE, is_admin = TRUE WHERE id = %s", (caller.member.pk,))
             conn.execute("UPDATE members SET is_owner = TRUE, is_admin = TRUE WHERE id = %s", (pk,))
 
-    def is_removed(self, team_code: str, member_id: str) -> bool:
+    def is_removed(self, company_code: str, member_id: str) -> bool:
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT m.removed_at FROM members m JOIN teams t ON t.id = m.team_id WHERE t.code = %s AND m.member_id = %s",
-                (team_code, member_id),
+                (company_code, member_id),
             ).fetchone()
         return row is not None and row["removed_at"] is not None
 
@@ -557,37 +557,37 @@ class Identity:
                 " OR EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = %s)"
                 " OR EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = %s))"
                 " ORDER BY p.name",
-                (member.team_pk, member.is_owner or member.is_admin, member.pk, member.pk),
+                (member.company_pk, member.is_owner or member.is_admin, member.pk, member.pk),
             ).fetchall()
         return [Project(row["project_id"], row["name"]) for row in rows]
 
     def _reachable(self, conn: Conn, member: Member, project_id: str) -> Project:
-        """One of this member's team's projects, refused if it is restricted and they are not allowed into it."""
+        """One of this member's company's projects, refused if it is restricted and they are not allowed into it."""
         found = conn.execute(
             "SELECT project_id, name, restricted FROM projects WHERE project_id = %s AND team_id = %s",
-            (project_id, member.team_pk),
+            (project_id, member.company_pk),
         ).fetchone()
         if found is None:
-            raise Refused(f"Project {project_id!r} is not a project in your team.")
+            raise Refused(f"Project {project_id!r} is not a project in your company.")
         if found["restricted"] and not self._allowed_in(conn, member, project_id):
             raise restricted_project(project_id)
         return Project(found["project_id"], found["name"])
 
     @staticmethod
     def _unreachable(conn: Conn, member: Member) -> frozenset[str]:
-        """The restricted projects of this member's team that they aren't allowed into."""
+        """The restricted projects of this member's company that they aren't allowed into."""
         if member.is_owner or member.is_admin:
             return frozenset()
         rows = conn.execute(
             "SELECT p.project_id FROM projects p WHERE p.team_id = %s AND p.restricted"
             " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = %s)"
             " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = %s)",
-            (member.team_pk, member.pk, member.pk),
+            (member.company_pk, member.pk, member.pk),
         ).fetchall()
         return frozenset(row["project_id"] for row in rows)
 
     def _allowed_in(self, conn: Conn, member: Member, project_id: str) -> bool:
-        """Who a restricted project lets in: the team's owner and admins, its leads, and its access list."""
+        """Who a restricted project lets in: the company's owner and admins, its leads, and its access list."""
         if member.is_owner or member.is_admin or self._leads_it(conn, member.pk, project_id):
             return True
         found = conn.execute(
@@ -596,7 +596,7 @@ class Identity:
         return found is not None
 
     def member_reaching(self, caller: Caller, project_id: str, member_id: str) -> int:
-        """A member of the caller's team who can reach this project, such as a card's assignee; refused otherwise."""
+        """A member of the caller's company who can reach this project, such as a card's assignee; refused otherwise."""
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
             row = conn.execute(
@@ -630,20 +630,20 @@ class Identity:
         return {row["id"]: (row["member_id"], row["name"]) for row in rows}
 
     @staticmethod
-    def in_team(conn: Conn, team_pk: int, member_ids: Iterable[str]) -> dict[str, tuple[int, str]]:
-        """These members of a team by member ID, removed ones too, each as its row id and name. Asked inside a
+    def in_company(conn: Conn, company_pk: int, member_ids: Iterable[str]) -> dict[str, tuple[int, str]]:
+        """These members of a company by member ID, removed ones too, each as its row id and name. Asked inside a
         transaction already open."""
         asked = list(set(member_ids))
         if not asked:
             return {}
         rows = conn.execute(
-            "SELECT id, member_id, name FROM members WHERE team_id = %s AND member_id = ANY(%s)", (team_pk, asked)
+            "SELECT id, member_id, name FROM members WHERE team_id = %s AND member_id = ANY(%s)", (company_pk, asked)
         ).fetchall()
         return {row["member_id"]: (row["id"], row["name"]) for row in rows}
 
     @staticmethod
     def present(conn: Conn, member_pk: int) -> Member | None:
-        """The member with this row id, or None once they have been removed from the team. Asked inside a
+        """The member with this row id, or None once they have been removed from the company. Asked inside a
         transaction already open."""
         row = conn.execute(
             "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
@@ -657,15 +657,15 @@ class Identity:
         )
 
     @staticmethod
-    def team_projects(conn: Conn, team_pk: int) -> list[str]:
-        """The project IDs of this team's projects, asked inside a transaction already open."""
-        rows = conn.execute("SELECT project_id FROM projects WHERE team_id = %s", (team_pk,)).fetchall()
+    def company_projects(conn: Conn, company_pk: int) -> list[str]:
+        """The project IDs of this company's projects, asked inside a transaction already open."""
+        rows = conn.execute("SELECT project_id FROM projects WHERE team_id = %s", (company_pk,)).fetchall()
         return [row["project_id"] for row in rows]
 
     @staticmethod
-    def cannot_reach(conn: Conn, team_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
-        """Of these members (by row id) each in a project, those of this team who can no longer reach it: removed
-        from the team, or shut out of a restricted project. Asked inside the transaction of the change."""
+    def cannot_reach(conn: Conn, company_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
+        """Of these members (by row id) each in a project, those of this company who can no longer reach it: removed
+        from the company, or shut out of a restricted project. Asked inside the transaction of the change."""
         if not pairs:
             return []
         rows = conn.execute(
@@ -675,22 +675,22 @@ class Identity:
             " AND NOT EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
             " AND NOT EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
             "))",
-            ([pk for pk, _ in pairs], [project_id for _, project_id in pairs], team_pk),
+            ([pk for pk, _ in pairs], [project_id for _, project_id in pairs], company_pk),
         ).fetchall()
         return [(row["member_id"], row["project_id"]) for row in rows]
 
     def member_with_github(self, caller: Caller, login: str) -> str | None:
-        """The member ID of the member of the caller's team who signs in with this GitHub account, if there is one."""
+        """The member ID of the member of the caller's company who signs in with this GitHub account, if there is one."""
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT member_id FROM members WHERE team_id = %s AND lower(github_login) = lower(%s)"
                 " AND removed_at IS NULL",
-                (caller.member.team_pk, _github_login(login) or ""),
+                (caller.member.company_pk, _github_login(login) or ""),
             ).fetchone()
         return None if row is None else str(row["member_id"])
 
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
-        """The member as a caller of the memory services, working in one of their team's projects."""
+        """The member as a caller of the memory services, working in one of their company's projects."""
         with self._db.transaction() as conn:
             unreachable = self._unreachable(conn, member)
             if project_id is None:
@@ -702,7 +702,7 @@ class Identity:
         if not name.strip():
             raise Refused("A project needs a name.")
         now = self._clock()
-        # Project IDs are unique across every team and the suffix is random, so two projects with a common name can
+        # Project IDs are unique across every company and the suffix is random, so two projects with a common name can
         # draw the same suffix: draw again rather than fail the member.
         for attempt in range(PROJECT_ID_ATTEMPTS):
             project_id = f"{slugify(name)[:40].strip('-')}-{secrets.token_hex(4)}"
@@ -710,7 +710,7 @@ class Identity:
                 with self._db.transaction() as conn:
                     conn.execute(
                         "INSERT INTO projects (project_id, team_id, name, created_at) VALUES (%s, %s, %s, %s)",
-                        (project_id, caller.member.team_pk, name.strip(), now),
+                        (project_id, caller.member.company_pk, name.strip(), now),
                     )
                     conn.execute(
                         "INSERT INTO project_leads (project_id, member_id, appointed_at) VALUES (%s, %s, %s)",
@@ -738,18 +738,18 @@ class Identity:
             rows = conn.execute(
                 "SELECT l.project_id FROM project_leads l JOIN projects p ON p.project_id = l.project_id"
                 " WHERE l.member_id = %s AND p.team_id = %s ORDER BY l.project_id",
-                (member.pk, member.team_pk),
+                (member.pk, member.company_pk),
             ).fetchall()
         return [row["project_id"] for row in rows]
 
     @staticmethod
     def _project_name(conn: Conn, member: Member, project_id: str) -> str:
-        """The project's name, if it is one of this member's team's projects."""
+        """The project's name, if it is one of this member's company's projects."""
         row = conn.execute(
-            "SELECT name FROM projects WHERE project_id = %s AND team_id = %s", (project_id, member.team_pk)
+            "SELECT name FROM projects WHERE project_id = %s AND team_id = %s", (project_id, member.company_pk)
         ).fetchone()
         if row is None:
-            raise Refused(f"Project {project_id!r} is not a project in your team.")
+            raise Refused(f"Project {project_id!r} is not a project in your company.")
         name: str = row["name"]
         return name
 
@@ -822,7 +822,7 @@ class Identity:
         }
 
     def restrict(self, caller: Caller, project_id: str, restricted: bool) -> None:
-        """Close a project to its access list, or open it to the whole team again.
+        """Close a project to its access list, or open it to the whole company again.
 
         Unrestricting keeps the access list, so restricting it again lets the same members straight back in.
         """
@@ -874,9 +874,9 @@ class Identity:
             )
 
     def remove_lead(self, caller: Caller, project_id: str, member_id: str) -> None:
-        """Take a lead off a project. Only the team's admins can, so one lead can't unseat another."""
+        """Take a lead off a project. Only the company's admins can, so one lead can't unseat another."""
         if not (caller.member.is_owner or caller.member.is_admin):
-            raise Refused("Only the team's owner and its admins can take a lead off a project.")
+            raise Refused("Only the company's owner and its admins can take a lead off a project.")
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)
             pk = self._member_pk(conn, caller, member_id)
@@ -980,7 +980,7 @@ class Identity:
             self._project_name(conn, caller.member, project_id)
             self._require_foundation(conn, project_id, foundation)
             pk = self._member_pk(conn, caller, member_id)
-            if self.cannot_reach(conn, caller.member.team_pk, [(pk, project_id)]):
+            if self.cannot_reach(conn, caller.member.company_pk, [(pk, project_id)]):
                 raise Refused(
                     f"{member_id!r} can't reach project {project_id!r}: it is restricted and they aren't on its "
                     "access list."
@@ -1009,12 +1009,12 @@ class Identity:
     def drop_keepers(self, conn: Conn, caller: Caller) -> list[tuple[str, str, str]]:
         """Drop the keeper assignments of members who can no longer reach their project, as (project ID, foundation,
         member ID). Asked inside the transaction of the change that cost them it."""
-        team_pk = caller.member.team_pk
+        company_pk = caller.member.company_pk
         held = conn.execute(
             "SELECT DISTINCT member_id, project_id FROM foundation_keepers WHERE project_id = ANY(%s)",
-            (self.team_projects(conn, team_pk),),
+            (self.company_projects(conn, company_pk),),
         ).fetchall()
-        lost = self.cannot_reach(conn, team_pk, [(row["member_id"], row["project_id"]) for row in held])
+        lost = self.cannot_reach(conn, company_pk, [(row["member_id"], row["project_id"]) for row in held])
         if not lost:
             return []
         dropped = conn.execute(

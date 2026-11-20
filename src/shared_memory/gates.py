@@ -32,7 +32,7 @@ Kept in Postgres, so every worker agrees (ADR-0013):
   gate on it, the later session is told once (story 5 of #523). Kept past the earlier session's end for that.
 - `gate_urgents`: per later and earlier session, when the later session sent the urgent message, and when the earlier
   member answered it. Its primary key is what keeps it to one per collision.
-- `project_waits`: a project's own wait, in minutes, set by its leads and the team's admins. A project without one
+- `project_waits`: a project's own wait, in minutes, set by its leads and the company's admins. A project without one
   waits `Settings.gate_wait_minutes`.
 
 All but `project_waits` and `gate_waits` are cleared through `Sessions.on_gone` when either session ends or comes back
@@ -471,11 +471,11 @@ class Gates:
         return int(row["minutes"]) if row else self._default_wait
 
     def set_wait(self, caller: Caller, minutes: int) -> int:
-        """Set the caller's project's wait: for its leads and the team's admins."""
+        """Set the caller's project's wait: for its leads and the company's admins."""
         project_id = caller.require_project().project_id
         if not self._identity.looks_after(caller.member, project_id):
             raise Refused(
-                "Only this project's leads and the team's admins can change its wait. Any member of the project can "
+                "Only this project's leads and the company's admins can change its wait. Any member of the project can "
                 "read it, by calling project_wait with nothing."
             )
         if not 1 <= minutes <= WAIT_LIMIT_MINUTES:
@@ -592,7 +592,7 @@ class Gates:
         self._audit.record(
             _AUDITED[kind] if isinstance(kind, Ending | Answer) else kind,
             member=None if actor else caller.member,
-            team_pk=caller.member.team_pk if actor else None,
+            company_pk=caller.member.company_pk if actor else None,
             actor=actor,
             project_id=project_id,
             target=other,

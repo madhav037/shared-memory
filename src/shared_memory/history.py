@@ -42,31 +42,31 @@ class MemoryHistory:
         self._root = memory_folder(root)
 
     def _git(self, *args: str) -> str:
-        result = subprocess.run(  # noqa: S603  # an argument list, never a shell; commits are checked hex and paths start with the team
+        result = subprocess.run(  # noqa: S603  # an argument list, never a shell; commits are checked hex and paths start with the company
             ["git", "-C", ordinary(self._root), *args], env=dict(os.environ), capture_output=True, text=True, check=False  # noqa: S607  # git from the PATH the image installs it on
         )
         if result.returncode != 0:
             raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
         return result.stdout
 
-    def versions(self, team: str, path: PurePosixPath) -> list[Version]:
+    def versions(self, company: str, path: PurePosixPath) -> list[Version]:
         """Every version of one memory, newest first: who wrote it, when, and what the change was called.
 
         It follows the memory back through promotion, when its file moved from a member's folder to the shared one,
         so the trail starts where the memory was first written rather than where it now lives.
         """
-        return [version for version, _ in self._trail(team, path)]
+        return [version for version, _ in self._trail(company, path)]
 
-    def _trail(self, team: str, path: PurePosixPath) -> list[tuple[Version, str]]:
+    def _trail(self, company: str, path: PurePosixPath) -> list[tuple[Version, str]]:
         """Each version of a memory with the path its file had at that version.
 
         Promotion moves a memory's file to another folder under the same name, in one commit. So where a file came
-        into being in a commit that also removed a file of the same name from the team's folder, that file is where
+        into being in a commit that also removed a file of the same name from the company's folder, that file is where
         the memory was before, and its history continues there. Git's own rename guessing is not used: memory files
         are short and alike, and it would join the histories of different memories.
         """
         trail: list[tuple[Version, str]] = []
-        where: str | None = self._inside_team(team, path)
+        where: str | None = self._inside_company(company, path)
         until: str | None = None
         while where is not None:
             revision = [f"{until}^"] if until else []
@@ -95,40 +95,40 @@ class MemoryHistory:
                     break
             if born is None:
                 break
-            where, until = self._moved_from(team, born, where), born
+            where, until = self._moved_from(company, born, where), born
         return trail
 
-    def _moved_from(self, team: str, commit: str, where: str) -> str | None:
+    def _moved_from(self, company: str, commit: str, where: str) -> str | None:
         """The file a memory was moved from when this commit created it, if it was moved rather than written."""
         name = PurePosixPath(where).name
         changes = self._git("show", "--no-renames", "--name-status", "--format=", commit)
         removed = []
         for line in changes.splitlines():
             status, _, changed = line.partition("\t")
-            if status == "D" and changed.startswith(f"{team}/") and PurePosixPath(changed).name == name:
+            if status == "D" and changed.startswith(f"{company}/") and PurePosixPath(changed).name == name:
                 removed.append(changed)
         # The move of company memory's folder (#625) removed every file below it in one commit, some of the same name
         # in different type folders: the one moved is the one at the same place below the folder.
         below = PurePosixPath(where).parts[2:]
         return next((each for each in removed if PurePosixPath(each).parts[2:] == below), removed[0] if removed else None)
 
-    def _where_then(self, team: str, path: PurePosixPath, commit: str) -> str:
+    def _where_then(self, company: str, path: PurePosixPath, commit: str) -> str:
         """The path this memory's file had at one version, which is not where it lives now once it was promoted."""
-        for version, where in self._trail(team, path):
+        for version, where in self._trail(company, path):
             if version.commit.startswith(commit):
                 return where
-        return self._inside_team(team, path)
+        return self._inside_company(company, path)
 
-    def text_at(self, team: str, path: PurePosixPath, commit: str) -> str:
+    def text_at(self, company: str, path: PurePosixPath, commit: str) -> str:
         """The memory's text as it was at one version."""
         _check_commit(commit)
-        where = self._where_then(team, path, commit)
+        where = self._where_then(company, path, commit)
         try:
             return self._git("show", f"{commit}:{where}")
         except RuntimeError:
             raise Refused(f"There is no version {commit!r} of {str(path)!r}.") from None
 
-    def _inside_team(self, team: str, path: PurePosixPath) -> str:
-        """The path git knows this memory by, confined to the team's own folder."""
-        confine(self._root, team, path)  # refuses anything outside the team's folder
-        return str(PurePosixPath(team) / path)
+    def _inside_company(self, company: str, path: PurePosixPath) -> str:
+        """The path git knows this memory by, confined to the company's own folder."""
+        confine(self._root, company, path)  # refuses anything outside the company's folder
+        return str(PurePosixPath(company) / path)

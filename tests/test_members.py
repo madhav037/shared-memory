@@ -37,7 +37,7 @@ def test_a_removed_members_token_stops_working_but_their_memories_stay(team: Tea
 
     team.owner().call("remove_member", member_id="emp-2")
 
-    assert "removed from the team" in member.refusal("read", path=saved["path"])
+    assert "removed from the company" in member.refusal("read", path=saved["path"])
     assert team.owner().in_project(project).call("read", path=saved["path"])["author"] == "emp-2"
 
 
@@ -85,4 +85,4 @@ def test_add_member_accepts_the_team_id_but_only_the_callers_own_team(team: Team
     added = team.owner().call("add_member", team=team.code, member_id="emp-2", name="Dana Dev")
 
     assert added["team"] == team.code
-    assert "your own team" in team.owner().refusal("add_member", team="some-other-team", member_id="emp-3", name="Eve")
+    assert "your own company" in team.owner().refusal("add_member", team="some-other-team", member_id="emp-3", name="Eve")
