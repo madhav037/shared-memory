@@ -182,9 +182,9 @@ OFFER = (
 
 def has_project_memory(store: MemoryStore, team: str, project_id: str) -> bool:
     """Whether the project holds any active project memory beyond its foundations."""
-    shared = PurePosixPath("projects", project_id, "shared")
-    foundations = shared / FOUNDATIONS_FOLDER
-    for folder, memories in store.walk(team, shared):
+    project_memory = PurePosixPath("projects", project_id, "shared")
+    foundations = project_memory / FOUNDATIONS_FOLDER
+    for folder, memories in store.walk(team, project_memory):
         if folder == foundations or foundations in folder.parents:
             continue
         if any(memory.status == "active" for _, memory in memories):

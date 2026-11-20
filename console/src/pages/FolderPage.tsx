@@ -42,10 +42,12 @@ const TEACHING: Record<string, string> = {
 
 /** Whether a project's page lists any project memory beyond its foundations. */
 function holdsProjectMemory(projectId: string, folder: Folder): boolean {
-  const shared = `projects/${projectId}/shared`;
-  const foundations = `${shared}/foundations`;
+  const projectMemory = `projects/${projectId}/shared`;
+  const foundations = `${projectMemory}/foundations`;
   const isProjectMemory = (path: string) =>
-    (path === shared || path.startsWith(`${shared}/`)) && path !== foundations && !path.startsWith(`${foundations}/`);
+    (path === projectMemory || path.startsWith(`${projectMemory}/`)) &&
+    path !== foundations &&
+    !path.startsWith(`${foundations}/`);
   if (folder.kind === "shared" && folder.memories.length > 0) return true;
   return folder.inside.some((section) => isProjectMemory(section.path) && section.memories.length > 0);
 }
