@@ -1,17 +1,21 @@
 # Shared Memory
 
-A memory that every member's coding agent can read and write, so what one member's agent learns reaches every other member's agent and the team's ways of working stay consistent.
+A memory that every member's coding agent can read and write, so what one member's agent learns reaches every other member's agent and the company's ways of working stay consistent.
 
 ## Language
 
 ### Structure
 
-**Team**:
-The top-level group of members that owns projects and team memory.
-_Avoid_: Company, organization, org
+**Company**:
+The top-level group of members that owns departments, projects and company memory; one server holds one company.
+_Avoid_: Team, organization, org
+
+**Department**:
+A named group of a company's projects, one level deep, holding the department memory its projects share; a project sits in at most one department, and a project in none reads company memory only.
+_Avoid_: Division, business unit, org unit
 
 **Project**:
-A named space within a team holding the memory for one product; one or more repositories point to it by its project ID.
+A named space within a company holding the memory for one product; one or more repositories point to it by its project ID.
 _Avoid_: Workspace, namespace
 
 **Repository**:
@@ -21,31 +25,39 @@ _Avoid_: Repo
 ### People and access
 
 **Member**:
-A person who belongs to a team and whose coding agent's sessions are connected to its memory.
+A person who belongs to a company and whose coding agent's sessions are connected to its memory.
 _Avoid_: User, developer, dev, employee
 
 **Owner**:
-The one member of a team who can grant and revoke **admin** and hand ownership to another member; an owner can do everything an admin can.
+The one member of a company who can grant and revoke **admin** and hand ownership to another member; an owner can do everything an admin can.
 _Avoid_: Super admin, root
 
 **Admin**:
-A member who manages the team's members, roles, projects and personal tokens, and can reach every project.
+A member who manages the company's members, roles, departments, projects and personal tokens, and can reach every department and project.
 _Avoid_: Manager, superuser, moderator
 
 **Project lead**:
 A member who looks after one project: its access, its repositories and who else leads it.
 _Avoid_: Maintainer, project admin, project owner
 
+**Department lead**:
+A member who looks after one department: its projects, its access, its keepers and who else leads it. Only a department lead promotes into department memory.
+_Avoid_: Department head, department manager, department admin
+
 **Keeper**:
-A member a project lead assigns to one or more of that project's foundations; with the project's leads, a keeper drafts those foundations and decides their foundation challenges.
+A member a project lead, or a lead of the project's department, assigns to one or more of that project's foundations; with the project's leads, a keeper drafts those foundations and decides their foundation challenges.
 _Avoid_: Steward, curator, maintainer
 
 **Restricted project**:
-A project only its **access list**, its project leads and the team's admins can reach; every other project is open to the whole team.
+A project only its **access list**, its project leads and the company's admins can reach; every other project is open to everyone who can reach its department, or to the whole company if it is in none. A project in a restricted department can be restricted further, never opened wider.
 _Avoid_: Private project, locked project
 
+**Restricted department**:
+A department only its access list, its department leads and the company's admins can reach; its department memory and its projects are invisible to everyone else. Every other department is open to the whole company.
+_Avoid_: Private department, locked department
+
 **Access list**:
-The members allowed into a restricted project.
+The members allowed into a restricted project or a restricted department.
 _Avoid_: ACL, allowlist, permissions
 
 **Personal token**:
@@ -67,7 +79,7 @@ A folder of memories with an index, used when a subject is too long for one memo
 _Avoid_: Long memory, folder memory
 
 **Foundation**:
-A topic every project must have, holding one of its sources of truth: its architecture, product, glossary or decisions, and any extra a project lead adds. At project level, architecture and decision memories live only in their foundation, and a foundation outweighs other project and team memory.
+A topic every project must have, holding one of its sources of truth: its architecture, product, glossary or decisions, and any extra a project lead adds. At project level, architecture and decision memories live only in their foundation, and a foundation outweighs other project, department and company memory.
 _Avoid_: Source of truth, charter, core doc, required topic
 
 **Author**:
@@ -75,31 +87,35 @@ The member who wrote a memory; for an imported memory promoted in its writer's n
 _Avoid_: Owner, creator
 
 **Level**:
-Where a memory sits: local, personal, project or team.
+Where a memory sits, from narrowest to broadest: local, personal, project, department or company.
 _Avoid_: Tier, scope, L1/L2/L3
 
 **Local memory**:
-A coding agent's own built-in memory on one member's machine, such as Claude Code's; it reaches the team only when that member imports from it.
+A coding agent's own built-in memory on one member's machine, such as Claude Code's; it reaches the company only when that member imports from it.
 _Avoid_: Private memory, auto memory
 
 **Personal memory**:
-A memory belonging to one member, readable by the whole team but not accepted by it.
+A memory belonging to one member, readable by the whole company but not accepted by it.
 _Avoid_: Draft, notes, my memory
 
 **Project memory**:
 A memory that holds for everyone working on one project.
 _Avoid_: Shared memory
 
-**Team memory**:
-A memory that holds for every project in the team.
-_Avoid_: Company memory, global memory, shared memory
+**Department memory**:
+A memory that holds for every project in one department, usually a way of working.
+_Avoid_: Division memory, group memory, shared memory
+
+**Company memory**:
+A memory that holds for every project in the company, usually policy such as privacy and secrets.
+_Avoid_: Team memory, global memory, organization memory, shared memory
 
 **Area**:
-The memory one save can change without waiting on others: the team memory, one project's project memory, or one member's personal memory in one project.
+The memory one save can change without waiting on others: the company memory, one department's department memory, one project's project memory, or one member's personal memory in one project.
 _Avoid_: Partition, shard, space, scope
 
 **Exception**:
-A project memory that deliberately overrides a named team memory for that one project.
+A memory that deliberately overrides a named memory at a broader level for its own project or department: a project memory over a department or company memory, or a department memory over a company memory. Only the narrower level's lead keeps one.
 _Avoid_: Override, local rule
 
 **Outdated memory**:
@@ -129,7 +145,7 @@ _Avoid_: Learning proposal, memory candidate
 ### Memory types
 
 **Convention**:
-A rule for how the team works, followed every day.
+A rule for how the company, a department or a project works, followed every day.
 _Avoid_: Standard, guideline
 
 **Decision**:
@@ -151,19 +167,23 @@ _Avoid_: Bug, open issue, defect
 ### Changing memory
 
 **Promote**:
-To move a personal memory into project memory or team memory.
+To move a personal memory into project memory, department memory or company memory. Promoting into department memory is for its department leads; anyone else's promotion there is a challenge to them, and stays the member's personal memory until it is decided.
 _Avoid_: Share, publish
 
 **Contradiction**:
 Two memories that cannot both be true.
 _Avoid_: Conflict, collision
 
+**Level contradiction**:
+A contradiction between a memory and one at a broader level, waiting for the narrower level's lead (a project lead, or a department lead for department memory) to make theirs follow the broader memory or keep it as an exception. It is raised whichever of the two came first, and until it is settled the narrower memory still holds for its project or department, marked as waiting.
+_Avoid_: Clash, conflict, level conflict, override request
+
 **Supersede**:
 To put a new memory in an old one's place, keeping the old one in history.
 _Avoid_: Replace, overwrite, update
 
 **Challenge**:
-A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a project lead of the project the memory is in, or by an admin.
+A request to supersede or retire another author's memory, or a session's doubt about any memory it can read, giving a reason, waiting to be decided: by that author, by a lead of the project or department the memory is in, or by an admin.
 _Avoid_: Approval, change request
 
 **Reason**:
@@ -189,7 +209,7 @@ _Avoid_: Delete, archive
 ### Onboarding
 
 **Onboarding**:
-A session a member starts deliberately, in which their coding agent imports what the team already has written down, from one repository's checkout or several; or a headless run in CI over one repository, which saves nothing and writes a proposals file. It is not the welcoming of a new member to the team.
+A session a member starts deliberately, in which their coding agent imports what the company already has written down, from one repository's checkout or several; or a headless run in CI over one repository, which saves nothing and writes a proposals file. It is not the welcoming of a new member to the company.
 _Avoid_: Migration, bulk import, bootstrap, setup
 
 **Import**:
@@ -227,7 +247,7 @@ _Avoid_: Migrator, uploader, submitter
 ### Reading memory
 
 **Briefing**:
-What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned for its project, the project's known issues, the member's own cards, any notice waiting for the member, such as a challenge they must decide, and the project's other active sessions with their activity.
+What every session receives when it starts, or fetches with the briefing tool where its coding agent has no hook for it: the memories pinned in its project's project, department and company memory, the project's known issues, the member's own cards, any notice waiting for the member, such as a challenge or a level contradiction they must decide, and the project's other active sessions with their activity.
 _Avoid_: Pinned set
 
 **Pin**:
@@ -235,15 +255,15 @@ A mark that puts a memory into every briefing.
 _Avoid_: Star, favorite
 
 **Recall**:
-Memories added to a prompt automatically because they match it. A session is given each memory once, and again only if the memory has changed.
+Memories added to a prompt automatically because they match it, searched across the member's personal memory and the project, department and company memory the session can reach. A session is given each memory once, and again only if the memory has changed.
 _Avoid_: Injection, auto-search
 
 **Told record**:
-Everything a session was told by Shared Memory, in order and with when: its briefing, each recall, and the memories added before an edit. It never holds what the member typed. Its member, the project's leads and the team's admins can read it, for thirty days.
+Everything a session was told by Shared Memory, in order and with when: its briefing, each recall, and the memories added before an edit. It never holds what the member typed. Its member, the project's leads and the company's admins can read it, for thirty days.
 _Avoid_: Session log, briefing history, transcript
 
 **Question**:
-What a member asks a memory's author about that memory, from a session or the console; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read. A question unanswered for seven days, or whose author has left, goes to the memory's project leads (the admins, for team memory) as well; the author may still answer it.
+What a member asks a memory's author about that memory, from a session or the console; it reaches the author's next briefing, and its answers form a thread on the memory that anyone who can read the memory can read. A question unanswered for seven days, or whose author has left, goes to the memory's project leads (the department's leads, for department memory; the admins, for company memory) as well; the author may still answer it.
 _Avoid_: Memory comment, discussion
 
 **Hook**:
@@ -259,13 +279,13 @@ How many members one server may have at once, set by `SHARED_MEMORY_MEMBER_CAP` 
 _Avoid_: Seat limit, user limit
 
 **License key**:
-A small document signed with Ed25519 that names a team, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. On a self-hosted server, memory, MCP tools and hooks never depend on it; a lapsed key makes a hosted server read-only.
+A small document signed with Ed25519 that names a company, its member cap, the dates it was issued and expires, and a key ID. The server checks it offline against a public key built into it, and never calls the vendor to do so. A server is _licensed_, _expiring_ (30 days or fewer left), _lapsed_ or _unlicensed_ (no key, or one that can't be trusted); the console tells admins, and a valid key sets the member cap. On a self-hosted server, memory, MCP tools and hooks never depend on it; a lapsed key makes a hosted server read-only.
 _Avoid_: Serial, activation code
 
 ### The console
 
 **Console**:
-The web app where members browse memory and admins run the team; members sign in to it with GitHub.
+The web app where members browse memory and admins run the company; members sign in to it with GitHub.
 _Avoid_: Dashboard, admin panel, web UI
 
 **Project health**:
@@ -281,21 +301,21 @@ The record of who changed members, roles, access, tokens, memory, cards, questio
 _Avoid_: History, activity, trail
 
 **Landing page**:
-What the platform shows a visitor: what Shared Memory is, shown working on an example team, and its plans. A team's console shows only its sign-in.
+What the platform shows a visitor: what Shared Memory is, shown working on an example company, and its plans. A company's console shows only its sign-in.
 _Avoid_: Title page, home page, marketing site
 
 ### Paying for Shared Memory
 
 **Plan**:
-What a team pays for: the most members it may have (5, 10 or 15) on a hosted server or a self-hosted server.
+What a company pays for: the most members it may have (5, 10 or 15) on a hosted server or a self-hosted server.
 _Avoid_: Tier, seat, subscription level
 
 **Hosted server**:
-A team's server that we run for it on a host. It is the team's alone, with its own memory, members and data, and no other team can reach them; only the host beneath it is shared. It carries a license key that the platform signs and renews while the team pays. Once that key lapses, the server is _read-only_: members can still read and export memory, but nothing new is saved. If the team still hasn't paid after fourteen days, the server is stopped, and its data is deleted thirty days after that.
+A company's server that we run for it on a host. It is the company's alone, with its own memory, members and data, and no other company can reach them; only the host beneath it is shared. It carries a license key that the platform signs and renews while the company pays. Once that key lapses, the server is _read-only_: members can still read and export memory, but nothing new is saved. If the company still hasn't paid after fourteen days, the server is stopped, and its data is deleted thirty days after that.
 _Avoid_: Cloud instance, tenant, SaaS
 
 **Host**:
-A machine we run several teams' hosted servers on.
+A machine we run several companies' hosted servers on.
 _Avoid_: Node, box, shared server
 
 **Vendor**:
@@ -303,7 +323,7 @@ Us: the people who sell Shared Memory and run the hosted servers.
 _Avoid_: Operator, super admin
 
 **Platform**:
-The vendor's own server: it carries the landing page, sign-up and trials, takes payments, starts and watches hosted servers, and signs license keys. Teams' memory never passes through it.
+The vendor's own server: it carries the landing page, sign-up and trials, takes payments, starts and watches hosted servers, and signs license keys. Companies' memory never passes through it.
 _Avoid_: Control plane, main server, backend
 
 **Vendor console**:
@@ -311,7 +331,7 @@ The platform's web app, where the vendor runs hosts, hosted servers, plans and l
 _Avoid_: Admin panel, super admin panel, back office
 
 **Self-hosted server**:
-A team's server that the team runs itself, under a license.
+A company's server that the company runs itself, under a license.
 _Avoid_: On-prem, private install
 
 **License**:
@@ -319,7 +339,7 @@ The right to run a self-hosted server for a plan's members for twelve months, pa
 _Avoid_: Subscription, key (the license key only proves it)
 
 **Trial**:
-Seven days on a hosted server before the team pays.
+Seven days on a hosted server before the company pays.
 _Avoid_: Free plan, free tier
 
 ### The board
@@ -374,7 +394,7 @@ _Avoid_: Status, working-on line
 A session's claim on a file in a repository that its coding agent is editing.
 
 **Never-lock pattern**:
-A glob naming files that never lock: one of the built-in list, which holds in every project, or one a project's leads or the team's admins added for all of that project's repositories.
+A glob naming files that never lock: one of the built-in list, which holds in every project, or one a project's leads or the company's admins added for all of that project's repositories.
 _Avoid_: Ignore pattern, lock exclusion, lock exemption, skip list
 
 **Holder**:
