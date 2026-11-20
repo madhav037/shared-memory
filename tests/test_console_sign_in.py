@@ -21,6 +21,7 @@ def test_a_member_signs_in_with_their_linked_github_account(console: Console, si
             "member_id": "E1001",
             "name": "Olive Owner",
             "team": team,
+            "company": team,
             "role": "owner",
             "leads_a_project": False,
         },

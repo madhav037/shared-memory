@@ -1995,6 +1995,10 @@
             "title": "Team",
             "type": "string"
           },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
           "role": {
             "enum": [
               "owner",
@@ -2013,6 +2017,7 @@
           "member_id",
           "name",
           "team",
+          "company",
           "role",
           "leads_a_project"
         ],
@@ -5914,6 +5919,17 @@
             ],
             "title": "Team"
           },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
           "member_cap": {
             "anyOf": [
               {
@@ -6014,6 +6030,7 @@
         "required": [
           "status",
           "team",
+          "company",
           "member_cap",
           "issued",
           "expires",

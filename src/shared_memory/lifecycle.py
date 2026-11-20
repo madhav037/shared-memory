@@ -18,7 +18,7 @@ from shared_memory.audit import (
 from shared_memory.challenges import DOUBT, Challenge, Challenges, DecidesAs, project_of
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
@@ -849,3 +849,11 @@ class Lifecycle:
             )
         outcome = f"Your challenge {challenge.id} was accepted by {caller.member_id}: {challenge.target_path} is retired."
         return {"status": "accepted", "challenge_id": challenge.id, "retired": challenge.target_path}, outcome
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the record of the imported memories under the folder `old` at the folder `new`, where they moved
+    (`company_move.py`)."""
+    conn.execute(
+        "UPDATE imports SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

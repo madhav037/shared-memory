@@ -68,6 +68,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
             "member_id": "E1001",
             "name": "Olive Owner",
             "team": team,
+            "company": team,
             "role": "owner",
             "leads_a_project": False,
         },

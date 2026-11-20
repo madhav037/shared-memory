@@ -279,7 +279,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
               </span>
             ))}
             ; its author
-            {memory.pending.every((challenge) => challenge.replaces?.startsWith("team/")) ? "" : ", a project lead"} or
+            {memory.pending.every((challenge) => challenge.replaces?.startsWith("company/")) ? "" : ", a project lead"} or
             an admin decides.
           </p>
         )}

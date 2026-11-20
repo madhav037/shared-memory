@@ -98,7 +98,8 @@ export function headerOf(source: string): Map<string, string> {
 
 /** Which level a memory path sits at: team memory, a project's accepted memory, or a member's personal memory. */
 export function levelOf(path: string): string {
-  if (path.startsWith("team/")) return "team";
+  // Company memory lives under company/ (ADR-0031); its level is still called team here until #627.
+  if (path.startsWith("company/") || path.startsWith("team/")) return "team";
   return path.split("/")[2] === "people" ? "personal" : "project";
 }
 
@@ -123,7 +124,7 @@ export function sessionsUrl(projectId: string): string {
 /** Whether a folder is a topic: a folder of its own inside a type, as the server's console_memory.folder_kind has it. */
 export function isTopic(path: string): boolean {
   const parts = path.split("/").filter(Boolean);
-  if (parts[0] === "team") return parts.length > 2;
+  if (parts[0] === "company" || parts[0] === "team") return parts.length > 2;
   if (parts[0] !== "projects" || parts.length < 4) return false;
   return parts[2] === "shared" ? parts.length > 4 : parts.length > 5;
 }

@@ -102,11 +102,15 @@ class MemoryHistory:
         """The file a memory was moved from when this commit created it, if it was moved rather than written."""
         name = PurePosixPath(where).name
         changes = self._git("show", "--no-renames", "--name-status", "--format=", commit)
+        removed = []
         for line in changes.splitlines():
             status, _, changed = line.partition("\t")
             if status == "D" and changed.startswith(f"{team}/") and PurePosixPath(changed).name == name:
-                return changed
-        return None
+                removed.append(changed)
+        # The move of company memory's folder (#625) removed every file below it in one commit, some of the same name
+        # in different type folders: the one moved is the one at the same place below the folder.
+        below = PurePosixPath(where).parts[2:]
+        return next((each for each in removed if PurePosixPath(each).parts[2:] == below), removed[0] if removed else None)
 
     def _where_then(self, team: str, path: PurePosixPath, commit: str) -> str:
         """The path this memory's file had at one version, which is not where it lives now once it was promoted."""

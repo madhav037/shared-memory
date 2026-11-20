@@ -236,7 +236,7 @@ def test_tied_memories_gives_own_personal_project_and_team_memory(owner: Session
     found = dana.call("tied_memories", file="billing-api:src/tax.ts")["memories"]
 
     assert sorted((each["path"], each["level"]) for each in found) == sorted(
-        [(in_team, "team"), (in_project, "project"), (mine, "personal")]
+        [(in_team, "company"), (in_project, "project"), (mine, "personal")]
     )
 
 

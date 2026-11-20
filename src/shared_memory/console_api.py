@@ -87,7 +87,7 @@ from shared_memory.ratelimit import Limits
 from shared_memory.ratelimit import RateLimits as RateLimiter
 from shared_memory.lifecycle import Lifecycle
 from shared_memory.locks import Locks
-from shared_memory.memory import Memory, locate
+from shared_memory.memory import Memory, asked_level, locate
 from shared_memory.saves import Saves
 from shared_memory.service import MemoryService
 from shared_memory.suspected import reasons_in
@@ -1106,7 +1106,7 @@ class ConsoleApi:
             found = self._service.search_everywhere(
                 self._identity.caller_in(member, None),
                 asked.get("query", ""),
-                level=asked.get("level") or None,
+                level=asked_level(asked.get("level") or None),
                 type=asked.get("type") or None,
                 limit=int(asked.get("limit", 20)),
             )
@@ -1373,6 +1373,7 @@ class ConsoleApi:
         return LicenseState(
             status=current.status,  # type: ignore[arg-type]
             team=held.team if held else None,
+            company=held.team if held else None,
             member_cap=held.member_cap if held else None,
             issued=held.issued.isoformat() if held else None,
             expires=held.expires.isoformat() if held else None,
@@ -1552,6 +1553,7 @@ class ConsoleApi:
                 member_id=member.member_id,
                 name=member.name,
                 team=member.team_code,
+                company=member.team_code,
                 role=member.role,  # type: ignore[arg-type]
                 leads_a_project=bool(self._identity.leads_of(member)),
             ),

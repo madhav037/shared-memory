@@ -136,7 +136,7 @@ def test_a_save_names_near_copies_in_project_and_team_memory(console: Console, s
 
     saved = save(team.dana, NEW)
 
-    assert [(each["path"], each["level"]) for each in saved["similar"]] == [(in_project, "project"), (in_team, "team")]
+    assert [(each["path"], each["level"]) for each in saved["similar"]] == [(in_project, "project"), (in_team, "company")]
 
 
 def test_at_most_three_similar_memories_are_named_most_similar_first(

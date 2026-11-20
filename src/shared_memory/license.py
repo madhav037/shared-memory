@@ -109,7 +109,9 @@ def verify(text: str, public_keys: Mapping[int, bytes] = PUBLIC_KEYS) -> License
     try:
         body = json.loads(_unb64(parts[1]))
         return License(
-            team=str(body["team"]),
+            # A key names its company as `team` when issued before the rename (ADR-0031) and stays valid (ADR-0023);
+            # a key may name it as `company`.
+            team=str(body["company"] if "company" in body else body["team"]),
             member_cap=int(body["member_cap"]),
             issued=date.fromisoformat(body["issued"]),
             expires=date.fromisoformat(body["expires"]),

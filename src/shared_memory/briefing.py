@@ -12,10 +12,10 @@ from shared_memory.audit import MEMORY_PINNED, MEMORY_UNPINNED, Audit
 from shared_memory.challenges import Challenges, InDoubt
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
-from shared_memory.memory import FOLDER_TYPES, Memory, locate
+from shared_memory.memory import COMPANY_FOLDER, FOLDER_TYPES, Memory, locate
 from shared_memory.fence import escape, fenced, new_token
 from shared_memory.recall import framing
 from shared_memory.store import MemoryStore
@@ -120,7 +120,7 @@ def pin_target(path: str) -> PinTarget:
             raise Refused(ONLY_ACCEPTED)
         return PinTarget(str(location.path), "memory", location.level, location.project_id)
     parts = PurePosixPath(cleaned).parts
-    if ".." not in parts and len(parts) == 3 and parts[0] == "team" and parts[1] in FOLDER_TYPES:
+    if ".." not in parts and len(parts) == 3 and parts[0] == COMPANY_FOLDER and parts[1] in FOLDER_TYPES:
         return PinTarget(cleaned, "topic", "team", None)
     if ".." not in parts and len(parts) == 5 and parts[0] == "projects" and parts[2] == "shared" and parts[3] in FOLDER_TYPES:
         return PinTarget(cleaned, "topic", "project", parts[1])
@@ -363,3 +363,10 @@ def _render(target: PinTarget, memories: list[tuple[str, Memory]], token: str, i
     ]
     name = PurePosixPath(target.path).name
     return f"[{target.level} memory topic] {name} ({target.path})\n" + "\n".join(lines)
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep what is pinned under the folder `old` pinned at the folder `new`, where it moved (`company_move.py`)."""
+    conn.execute(
+        "UPDATE pins SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

@@ -19,7 +19,7 @@ from typing import Any
 
 from pgvector import Vector
 
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, CachedQueries, QuerySource
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
@@ -486,3 +486,11 @@ class SearchIndex:
             f" WHERE {where} AND tokens @@ q.tq ORDER BY rank DESC LIMIT {_CANDIDATES}",
             params,
         ).fetchall()
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Index the memories under the folder `old` at the folder `new`, where they moved (`company_move.py`): their
+    sections are the same, so nothing is embedded again."""
+    conn.execute(
+        "UPDATE sections SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )

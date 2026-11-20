@@ -90,7 +90,7 @@ def test_the_author_can_be_named_by_their_github_username(team: Team, owner: Ses
 
     memory = owner.call("read", path=promoted_for(owner, "@gita-hub", level="team"))
 
-    assert (memory["level"], memory["author"], memory["imported_by"]) == ("team", "emp-7", "owner-1")
+    assert (memory["level"], memory["author"], memory["imported_by"]) == ("company", "emp-7", "owner-1")
 
 
 def test_someone_who_is_not_a_member_cannot_be_named_as_author(team: Team, owner: Session, dana: Session) -> None:

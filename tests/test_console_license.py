@@ -24,7 +24,7 @@ from shared_memory import cli
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
-from tests.license_keys import TEST_PUBLIC_KEYS, a_key
+from tests.license_keys import TEST_PUBLIC_KEYS, a_key, a_key_saying
 from tests.support import (
     REPO_ROOT,
     Console,
@@ -604,3 +604,27 @@ def test_install_license_refuses_a_key_of_the_other_kind_or_another_team_on_stan
         assert printed == ""
         assert complained.strip() == install(client, key).json()["message"]
         assert license_of(client)["status"] == "unlicensed"
+
+
+def test_a_key_issued_before_the_rename_still_validates_and_names_the_company(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-before-rename", 835)
+    issued_before = {"team": "Acme", "member_cap": 10, "issued": "2026-09-01", "expires": "2027-09-01", "key_id": "k-old"}
+
+    installed = install(client, a_key_saying(issued_before))
+
+    assert installed.status_code == 200, installed.text
+    found = license_of(client)
+    assert (found["status"], found["team"], found["company"], found["key_id"]) == ("licensed", "Acme", "Acme", "k-old")
+
+
+def test_a_key_naming_its_company_validates(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-company", 836)
+    naming = {"company": "Acme", "member_cap": 10, "issued": "2026-09-01", "expires": "2027-09-01", "key_id": "k-new"}
+
+    installed = install(client, a_key_saying(naming))
+
+    assert installed.status_code == 200, installed.text
+    found = license_of(client)
+    assert (found["status"], found["team"], found["company"], found["key_id"]) == ("licensed", "Acme", "Acme", "k-new")
