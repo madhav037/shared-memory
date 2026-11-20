@@ -426,3 +426,41 @@ export function commentCard(projectId: string, number: number, text: string): Pr
 export function deleteCard(projectId: string, number: number): Promise<DeletedCard> {
   return change<DeletedCard>(cardPath(projectId, number, "delete"));
 }
+
+export type Departments = components["schemas"]["Departments"];
+export type DepartmentSummary = components["schemas"]["DepartmentSummary"];
+
+/** Every department of the company, with its leads and the projects in it this member can reach (ADR-0032). */
+export function fetchDepartments(signal?: AbortSignal): Promise<Departments> {
+  return ask<Departments>("/api/departments", { signal });
+}
+
+export function createDepartment(name: string): Promise<Departments> {
+  return change<Departments>("/api/departments", { name });
+}
+
+export function renameDepartment(departmentId: string, name: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/rename`, { name });
+}
+
+export function removeDepartment(departmentId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/remove`);
+}
+
+export function appointDepartmentLead(departmentId: string, memberId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/leads`, { member_id: memberId });
+}
+
+export function removeDepartmentLead(departmentId: string, memberId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/leads/${encodeURIComponent(memberId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
+}
+
+export function moveProjectIn(departmentId: string, projectId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/projects`, { project_id: projectId });
+}
+
+export function moveProjectOut(departmentId: string, projectId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/projects/${encodeURIComponent(projectId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
+}

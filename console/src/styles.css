@@ -568,6 +568,13 @@ li[aria-expanded="true"] > .tree-row .twist {
 .tree-group {
   margin-top: 6px;
 }
+/* A department's name over its projects in the contents (ADR-0032). */
+.tree-department {
+  margin-top: 14px;
+  padding-left: 20px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
 .contents-foot {
   display: grid;
   justify-items: start;

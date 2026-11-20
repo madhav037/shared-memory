@@ -288,9 +288,15 @@ class Identity:
         return found is not None
 
     def _member_pk(self, conn: Conn, caller: Caller, member_id: str) -> int:
+        return self.present_member(conn, caller.member.company_pk, member_id)
+
+    @staticmethod
+    def present_member(conn: Conn, company_pk: int, member_id: str) -> int:
+        """The row id of a member of this company who hasn't been removed, refused otherwise. Asked inside a
+        transaction already open."""
         row = conn.execute(
             "SELECT id FROM members WHERE team_id = %s AND member_id = %s AND removed_at IS NULL",
-            (caller.member.company_pk, member_id),
+            (company_pk, member_id),
         ).fetchone()
         if row is None:
             raise Refused(f"No member with member ID {member_id!r} in your company.")

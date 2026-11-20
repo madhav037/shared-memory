@@ -76,6 +76,12 @@ Kind = Literal[
     "gate_agreed",
     "gate_refused",
     "urgent_message",
+    "department_created",
+    "department_renamed",
+    "department_removed",
+    "department_lead_appointed",
+    "department_lead_removed",
+    "project_moved",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -148,6 +154,17 @@ GATE_REFUSED: Kind = "gate_refused"
 URGENT_MESSAGE: Kind = "urgent_message"
 # A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
 PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
+# A department (ADR-0032); the entry's target is its department ID and its detail its name. A removed department's
+# detail also lists the projects it left in no department.
+DEPARTMENT_CREATED: Kind = "department_created"
+DEPARTMENT_RENAMED: Kind = "department_renamed"
+DEPARTMENT_REMOVED: Kind = "department_removed"
+# A department's lead; the entry's target is the department ID and its detail names the member.
+DEPARTMENT_LEAD_APPOINTED: Kind = "department_lead_appointed"
+DEPARTMENT_LEAD_REMOVED: Kind = "department_lead_removed"
+# A project moved into or out of a department; the entry's detail holds the department it is in now and the one it
+# was in, either None for no department.
+PROJECT_MOVED: Kind = "project_moved"
 
 
 @dataclass(frozen=True)

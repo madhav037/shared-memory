@@ -44,6 +44,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
+from shared_memory.departments import Departments
 from shared_memory.draft_learnings import ASKING as DRAFT_LEARNINGS_ASKING
 from shared_memory.draft_learnings import DraftLearning, DraftLearnings, Edits, Moment, asked_for_card
 from shared_memory.collisions import Collisions, reminder
@@ -317,6 +318,7 @@ def build_app(
     audit = Audit(db, clock, identity)
     licenses = Licenses(settings, db, audit, clock, license_keys)
     identity.member_cap = licenses.member_cap
+    departments = Departments(db, identity, clock)
 
     def unless_read_only(step: F) -> F:
         """A tool, or a step of one, that changes memory: refused while the server is read-only (a hosted server whose
@@ -1156,11 +1158,15 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def tree(ctx: Context, level: str | None = None) -> dict[str, Any]:
-        """Show the memory folders of this project with each memory's title and summary.
+        """Show the memory folders of this project with each memory's title and summary, and the department the
+        project is in (null when it is in none).
 
         level is company, project or personal; leave it out to see everything in this project.
         """
-        shown = service.tree(caller(ctx), level)
+        current = caller(ctx)
+        shown = service.tree(current, level)
+        found = departments.of_project(current.require_project().project_id)
+        shown["department"] = None if found is None else {"department_id": found.department_id, "name": found.name}
         token = new_token()
         for entry in shown["folders"]:
             for each in entry["memories"]:
@@ -1760,6 +1766,7 @@ def build_app(
             SessionTalk(collisions, gates, unhooked, messages, handoff_notes, talk, standbys, clock),
             ProjectHealth(identity, store, uses, challenges),
             progress,
+            departments,
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.
