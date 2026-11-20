@@ -199,6 +199,6 @@ def offer(caller: Caller, store: MemoryStore, audit: Audit) -> list[str]:
         return []
     if repository is not None and audit.has_imported_from(caller, repository):
         return []
-    if has_project_memory(store, caller.team, project.project_id):
+    if has_project_memory(store, caller.company, project.project_id):
         return []
     return [OFFER]
