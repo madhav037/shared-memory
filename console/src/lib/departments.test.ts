@@ -38,6 +38,29 @@ describe("the top of the contents, grouped by department", () => {
     ]);
   });
 
+  it("puts a department's memory first under its name, as department memory, then its projects", () => {
+    const folders = [
+      folder("company", "Company memory"),
+      folder("departments/payments-1", "Payments"),
+      folder("departments/research-1", "Research"),
+      folder("projects/billing", "Billing"),
+      folder("projects/site", "Site"),
+    ];
+    const projects = new Map([
+      ["billing", project("billing", { department_id: "payments-1", name: "Payments" })],
+      ["site", project("site", null)],
+    ]);
+
+    const groups = grouped(folders, projects).map((group) => [group.heading, group.folders.map((one) => one.name)]);
+
+    expect(groups).toEqual([
+      [null, ["Company memory"]],
+      ["Payments", ["Department memory", "Billing"]],
+      ["Research", ["Department memory"]],
+      ["No department", ["Site"]],
+    ]);
+  });
+
   it("heads nothing when the company has no departments, so the contents read as before", () => {
     const folders = [folder("company", "Company memory"), folder("projects/site", "Site")];
 

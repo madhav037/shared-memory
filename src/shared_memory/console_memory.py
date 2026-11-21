@@ -13,10 +13,12 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from shared_memory.challenges import Challenges
+from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, project_in
 from shared_memory.memory import (
     COMPANY_FOLDER,
+    DEPARTMENTS_FOLDER,
     FOUNDATIONS_FOLDER,
     Memory,
     foundation_title,
@@ -42,10 +44,13 @@ def accepted_first(folder: PurePosixPath) -> tuple[tuple[int, str], ...]:
 
 
 def folder_kind(folder: PurePosixPath) -> str:
-    """What a memory folder is: company or project, project or personal memory, a member's, a type, or a topic."""
+    """What a memory folder is: company, a department's or a project's, project or personal memory, a member's, a type,
+    or a topic."""
     parts = folder.parts
     if parts[:1] == (COMPANY_FOLDER,):
         return ("company", "type")[len(parts) - 1] if len(parts) <= 2 else "topic"
+    if parts[:1] == (DEPARTMENTS_FOLDER,):
+        return {1: "departments", 2: "department", 3: "type"}.get(len(parts), "topic")
     if parts == ("projects",):
         return "projects"
     kinds = {2: "project", 3: "shared" if parts[2:3] == ("shared",) else "people"}
@@ -56,14 +61,19 @@ def folder_kind(folder: PurePosixPath) -> str:
     return {4: "member", 5: "type"}.get(len(parts), "topic")
 
 
-def folder_name(folder: PurePosixPath, projects: dict[str, str], people: dict[str, str]) -> str:
-    """A folder's name as a member would say it, rather than as it is spelled on disk."""
+def folder_name(
+    folder: PurePosixPath, projects: dict[str, str], people: dict[str, str], departments: dict[str, str] | None = None
+) -> str:
+    """A folder's name as a member would say it, rather than as it is spelled on disk: a department's memory folder
+    by the department's name."""
     kind = folder_kind(folder)
     last = folder.name
     if kind == "topic" and folder.parent.name == FOUNDATIONS_FOLDER:
         return foundation_title(last)
     return {
         "company": "Company memory",
+        "departments": "Departments",
+        "department": (departments or {}).get(last, last),
         "projects": "Projects",
         "project": projects.get(last, last),
         "shared": "Project memory",
@@ -76,7 +86,10 @@ def folder_name(folder: PurePosixPath, projects: dict[str, str], people: dict[st
 class ConsoleMemory:
     """The company's memory as the console's explorer lays it out."""
 
-    def __init__(self, identity: Identity, store: MemoryStore, challenges: Challenges, uses: Uses) -> None:
+    def __init__(
+        self, identity: Identity, store: MemoryStore, challenges: Challenges, uses: Uses, departments: Departments
+    ) -> None:
+        self._departments = departments
         self._identity = identity
         self._store = store
         self._challenges = challenges
@@ -108,7 +121,8 @@ class ConsoleMemory:
     def explore(self, caller: Caller, folder: str, deep: bool = False) -> dict[str, Any]:
         """One folder of the company's memory for the console's explorer.
 
-        The top holds company memory and every project this member can reach. Each subfolder says how many memories it
+        The top holds company memory, every department's memory and every project this member can reach. Each subfolder
+        says how many memories it
         holds and when they last changed, so the structure reads without opening it. Asked for deep, it also sets out
         every folder beneath it with the memories in each, so a whole part of the contents reads on one page.
         """
@@ -116,9 +130,16 @@ class ConsoleMemory:
         caller.require_reach(str(pure))
         reachable = {project.project_id: project.name for project in self._identity.projects(caller.member)}
         people = {one["member_id"]: one["name"] for one in self._identity.members(caller.member)}
+        departments = {
+            view.department.department_id: view.department.name for view in self._departments.listed(caller.member)
+        }
         memories: list[tuple[PurePosixPath, Memory]] = []
         if not pure.parts:
-            subfolders = [PurePosixPath(COMPANY_FOLDER)] + [PurePosixPath("projects", project) for project in reachable]
+            subfolders = [
+                PurePosixPath(COMPANY_FOLDER),
+                *(PurePosixPath(DEPARTMENTS_FOLDER, department) for department in departments),
+                *(PurePosixPath("projects", project) for project in reachable),
+            ]
         elif pure.parts == ("projects",):
             subfolders = [PurePosixPath("projects", project) for project in reachable]
         else:
@@ -135,7 +156,7 @@ class ConsoleMemory:
                 inside.append(
                     {
                         "path": str(below),
-                        "name": folder_name(below, reachable, people),
+                        "name": folder_name(below, reachable, people, departments),
                         "kind": folder_kind(below),
                         "depth": len(below.parts) - len(pure.parts),
                         "count": count,
@@ -150,7 +171,7 @@ class ConsoleMemory:
             folders.append(
                 {
                     "path": str(sub),
-                    "name": folder_name(sub, reachable, people),
+                    "name": folder_name(sub, reachable, people, departments),
                     "kind": folder_kind(sub),
                     "memories": count,
                     "changed": changed,
@@ -158,12 +179,15 @@ class ConsoleMemory:
             )
         return {
             "folder": str(pure) if pure.parts else "",
-            "name": folder_name(pure, reachable, people) if pure.parts else "Memory",
+            "name": folder_name(pure, reachable, people, departments) if pure.parts else "Memory",
             "kind": folder_kind(pure) if pure.parts else "root",
             "trail": [
-                {"path": str(PurePosixPath(*pure.parts[:depth])), "name": folder_name(PurePosixPath(*pure.parts[:depth]), reachable, people)}
+                {
+                    "path": str(PurePosixPath(*pure.parts[:depth])),
+                    "name": folder_name(PurePosixPath(*pure.parts[:depth]), reachable, people, departments),
+                }
                 for depth in range(1, len(pure.parts))
-                if pure.parts[:depth] != ("projects",)
+                if pure.parts[:depth] not in (("projects",), (DEPARTMENTS_FOLDER,))
             ],
             "folders": folders,
             "memories": self._entries(caller, memories, people),

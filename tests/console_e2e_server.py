@@ -78,6 +78,13 @@ MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 WAITED_ON_ACTIVITY = "Moving the currency formatting into one shared helper"
 # How long the stand-in gives a standby to be held, or to end once Mira moves on.
 STANDBY_SECONDS = 15
+# The memory Olive's session promotes into department memory when the department memory journey asks (#631).
+DEPARTMENT_WAY = {
+    "title": "Every change ships behind a flag",
+    "summary": "Every change in this department ships behind a feature flag first.",
+    "type": "convention",
+    "body": "Ship every change behind a feature flag, turned on for staff first, then for everyone.",
+}
 
 
 def olives_token(settings: Settings, seeded: str) -> str:
@@ -101,7 +108,9 @@ class Teammates:
     states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
     question; `GET /heard` says what Mira's second session hears on its next tool call. On `POST /stand-by` a third
     session of Olive's and a third of Mira's state the same work, so Mira's is gated on Olive's, and Mira's stands by in
-    the background, held until `POST /move-on`, where her next prompt ends it. Each is the session's own call
+    the background, held until `POST /move-on`, where her next prompt ends it. On `POST /department-memory?project_id=...` a
+    session of Olive's in that project promotes a memory into its department's memory, as a department lead's session
+    does, and answers its path. Each is the session's own call
     over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
     personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
@@ -153,6 +162,10 @@ class Teammates:
             standing.append(held)
             return JSONResponse({"standing_by": True})
 
+        def department_memory(request: Request) -> Response:
+            olives = olive().in_project(request.query_params["project_id"])
+            return JSONResponse({"path": promote_keeping_both(olives, DEPARTMENT_WAY, "department")})
+
         def move_on(request: Request) -> Response:
             mira_waiting.prompt("Leave that for now and write the changelog entry.")
             ended = standing.pop().result(timeout=STANDBY_SECONDS).json()["ended"]
@@ -167,6 +180,7 @@ class Teammates:
                 Route("/heard", heard, methods=["GET"]),
                 Route("/stand-by", stand_by, methods=["POST"]),
                 Route("/move-on", move_on, methods=["POST"]),
+                Route("/department-memory", department_memory, methods=["POST"]),
             ]
         )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)

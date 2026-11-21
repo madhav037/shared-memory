@@ -40,6 +40,7 @@ def test_an_admin_downloads_the_memory_with_its_history_and_the_companys_records
     assert sorted(archive.namelist()) == [
         "audit-log.json",
         "cards.json",
+        "departments.json",
         "members.json",
         "memory.bundle",
         "projects.json",

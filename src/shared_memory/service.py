@@ -10,12 +10,24 @@ from shared_memory.audit import MEMORY_DELETED, MEMORY_EDITED, MEMORY_SAVED, Aud
 from shared_memory.challenges import Challenges, InDoubt, ranked
 from shared_memory.config import Settings
 from shared_memory.connection import claude_settings, connection_kit
+from shared_memory.departments import Departments
 from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
 from shared_memory.identity import Caller, Identity, check_name, project_in
 from shared_memory.index import Hit, Reach, SearchIndex, split_sections
-from shared_memory.memory import COMPANY_FOLDER, KNOWN_ISSUE, Area, Location, Memory, area_of, level_folder, locate, slugify
+from shared_memory.memory import (
+    COMPANY_FOLDER,
+    DEPARTMENTS_FOLDER,
+    KNOWN_ISSUE,
+    Area,
+    Location,
+    Memory,
+    area_of,
+    level_folder,
+    locate,
+    slugify,
+)
 from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.tied import Tie, TiedFiles, file_named
@@ -31,9 +43,10 @@ def _promoting(path: str) -> str:
     """
     return (
         f"Saved as this member's personal memory: the company can read it but hasn't accepted it. If everyone on this "
-        f"project should follow it, promote it with promote(path='{path}', level='project'), or level 'company' if it "
-        f"holds for every project in the company. Anything written for the whole company, such as how-we-work notes or what a new "
-        f"member reads first, belongs at one of those levels. Leave it personal if it is only this member's own note."
+        f"project should follow it, promote it with promote(path='{path}', level='project'); level 'department' if it "
+        f"is a way of working for every project in this project's department (a department lead promotes there); "
+        f"level 'company' if it is policy for every project in the company. Leave it personal if it is only this "
+        f"member's own note."
     )
 
 
@@ -138,11 +151,18 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
 def label(caller: Caller, level: str, member_id: str | None) -> str:
     if level == "company":
         return "company memory"
+    if level == "department":
+        return "department memory"
     if level == "project":
         return "project memory"
     if member_id == caller.member_id:
         return "your personal memory"
     return f"personal memory of {member_id}, not accepted by the company"
+
+
+def _known_level(level: str | None) -> None:
+    if level not in (None, "company", "department", "project", "personal"):
+        raise Refused(f"Unknown level {level!r}: use company, department, project or personal.")
 
 
 class MemoryService:
@@ -157,8 +177,10 @@ class MemoryService:
         audit: Audit,
         uses: Uses,
         tied: TiedFiles,
+        departments: Departments,
     ) -> None:
         self._settings = settings
+        self._departments = departments
         self._tied = tied
         self._uses = uses
         self._identity = identity
@@ -286,9 +308,8 @@ class MemoryService:
         this project, this project's memory and company memory. A memory in doubt carries its in-doubt line."""
         project = caller.require_project()
         asked = file_named(file)
-        ties = self._tied.tied_to(
-            caller.company, asked.repository, [asked.path], Reach.of_recall(caller.member_id, project.project_id)
-        )
+        reach = Reach.of_recall(caller.member_id, project.project_id, self.department_of(project.project_id))
+        ties = self._tied.tied_to(caller.company, asked.repository, [asked.path], reach)
         found: list[TiedMemory] = []
         for tie in ties:
             try:
@@ -360,17 +381,36 @@ class MemoryService:
             "folders": [str(sub) for sub in folders if project_in(str(sub)) not in caller.unreachable],
         }
 
+    def department_of(self, project_id: str) -> str | None:
+        """The department ID of the department a project is in, or None for a project in none."""
+        found = self._departments.of_project(project_id)
+        return None if found is None else found.department_id
+
+    def department_memory(self, caller: Caller, department_id: str) -> list[str]:
+        """The paths of a department's active department memory, for retiring it when the department is removed."""
+        return [
+            str(path)
+            for _, memories in self._store.walk(caller.company, PurePosixPath(DEPARTMENTS_FOLDER, department_id))
+            for path, memory in memories
+            if memory.status == "active"
+        ]
+
     def tree(self, caller: Caller, level: str | None = None) -> dict[str, Any]:
         project = caller.require_project()
         project_folder = PurePosixPath("projects", project.project_id)
+        department_id = self.department_of(project.project_id)
+        department = [] if department_id is None else [PurePosixPath(DEPARTMENTS_FOLDER, department_id)]
         roots = {
-            None: [PurePosixPath(COMPANY_FOLDER), project_folder],
+            None: [PurePosixPath(COMPANY_FOLDER), *department, project_folder],
             "company": [PurePosixPath(COMPANY_FOLDER)],
+            "department": department,
             "project": [project_folder / "shared"],
             "personal": [project_folder / "people"],
         }
         if level not in roots:
-            raise Refused(f"Unknown level {level!r}: use company, project or personal, or leave it out for everything.")
+            raise Refused(
+                f"Unknown level {level!r}: use company, department, project or personal, or leave it out for everything."
+            )
         walked = [
             (folder, memories)
             for root in roots[level]
@@ -400,14 +440,15 @@ class MemoryService:
         self, caller: Caller, query: str, level: str | None = None, type: str | None = None, limit: int = 10
     ) -> dict[str, Any]:
         project = caller.require_project()
-        if level not in (None, "company", "project", "personal"):
-            raise Refused(f"Unknown level {level!r}: use company, project or personal.")
+        _known_level(level)
         if not query.strip():
             raise Refused("Search needs some words to look for.")
+        department_id = self.department_of(project.project_id)
         candidates = self._index.search(
             caller.company,
             query,
             project_id=project.project_id,
+            departments=[] if department_id is None else [department_id],
             levels=None if level is None else [level],
             type=type,
             limit=None,
@@ -425,15 +466,17 @@ class MemoryService:
     def search_everywhere(
         self, caller: Caller, query: str, level: str | None = None, type: str | None = None, limit: int = 10
     ) -> dict[str, Any]:
-        """Search company memory and every project this member can reach, for the console."""
-        if level not in (None, "company", "project", "personal"):
-            raise Refused(f"Unknown level {level!r}: use company, project or personal.")
+        """Search company memory, every project this member can reach and the department memory of those projects'
+        departments, for the console."""
+        _known_level(level)
         if not query.strip():
             raise Refused("Search needs some words to look for.")
+        projects = [project.project_id for project in self._identity.projects(caller.member)]
         hits = self._index.search(
             caller.company,
             query,
-            project_id=[project.project_id for project in self._identity.projects(caller.member)],
+            project_id=projects,
+            departments=sorted({found.department_id for found in self._departments.of_projects(projects).values()}),
             levels=None if level is None else [level],
             type=type,
             limit=max(1, min(limit, 50)),

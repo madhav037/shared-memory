@@ -42,7 +42,7 @@ def test_pinned_company_memory_is_in_every_projects_briefing(company: Company, o
 def test_personal_memory_cannot_be_pinned(owner: Session) -> None:
     personal = owner.call("remember", title="Mine", summary="s", type="gotcha", body="b")["path"]
 
-    assert "Only project memory and company memory" in owner.refusal("pin", path=personal)
+    assert "Only project, department and company memory" in owner.refusal("pin", path=personal)
 
 
 def test_a_pin_that_would_go_over_the_cap_is_refused_and_lists_the_pins(owner: Session) -> None:

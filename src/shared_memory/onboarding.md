@@ -29,7 +29,7 @@ Read each *import* source in full and cut it into proposals, one thing per memor
 - a **title**, and a one-line **summary** that tells a teammate what it says without opening it;
 - a **type**: `convention` (a rule followed every day), `decision` (a choice made once, with its reasons), `architecture` (how the system is built), or `gotcha` (a surprising fact that wastes time);
 - a **body** of at most 600 words, keeping the source's own wording;
-- a proposed **level**: `project` if everyone on this project follows it, `company` if it holds for every project in the company, `personal` if it is one member's note that teammates may still want to read;
+- a proposed **level**, the one that fits (nothing enforces it): `project` for this product's rules that everyone on this project follows, `department` for a way of working shared by every project in this project's department (only a department lead promotes there; the `tree` tool names the department, if any), `company` for policy that holds for every project in the company, such as privacy and secrets, `personal` if it is one member's note that teammates may still want to read;
 - its **source**, named precisely enough that a teammate can check it: `repository:path` for a file in a repository, using the repository name your briefing gives for this one (its last line: "It works in the repository ....") or the name the project lists for another checkout; `commit:repository@revision` for a commit; `wiki:<page>` for a wiki or doc export page; `ticket:<reference>` for a ticket; `pr-comment:<reference>` for a pull request review comment (`pr-comment:billing-api#88`); or `interview:<reference>` for an interview;
 - its **writer**, found as below.
 

@@ -23,6 +23,7 @@ import { useAsked } from "../lib/useAsked";
 /** What each folder holds, in the words CONTEXT.md defines them with. */
 const MEANING: Record<string, string> = {
   company: "Memory that holds for every project in the company.",
+  department: "Department memory: ways of working that hold for every project in this department.",
   shared: "Memory that holds for everyone working on this project.",
   people: "Each member’s personal memory in this project: readable by the whole company, but not accepted by it.",
   member: "Personal memory: readable by the whole company, but not accepted by it.",
@@ -35,6 +36,7 @@ const MEANING: Record<string, string> = {
 
 const TEACHING: Record<string, string> = {
   company: "Company memory holds for every project. It arrives here when a member promotes one of their memories to company memory.",
+  department: "Department memory holds for every project in this department. It arrives here when a department lead promotes one of their memories to department memory.",
   project: "This project has no memory yet. Connect a repository from its settings; memory arrives when a member’s coding agent saves something there.",
   shared: "Project memory is what everyone on this project follows. It arrives when a member promotes one of their memories.",
   people: "Personal memory is what each member’s coding agent has saved in this project. Nobody has saved anything here yet.",

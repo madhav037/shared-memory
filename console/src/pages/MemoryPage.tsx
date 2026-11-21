@@ -203,7 +203,9 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
 
   const challenged = memory.open_challenges.length > 0;
   const doubts = memory.open_challenges.filter((challenge) => challenge.reason !== null);
-  const deciders = `${memory.author_name}${memory.level === "company" ? "" : ", a project lead"} or an admin`;
+  const deciders = `${memory.author_name}${
+    memory.level === "company" ? "" : memory.level === "department" ? ", a department lead" : ", a project lead"
+  } or an admin`;
   const personal = memory.level === "personal";
   const project = projects.get(projectIn(memory.path) ?? "")?.name;
   return (
@@ -256,7 +258,7 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
         {personal ? (
           <p data-testid="personal-banner">
             <b>Personal memory of {memory.author_name}.</b> The whole company can read it, but hasn’t accepted it: it becomes
-            project or company memory only when its author promotes it from their coding agent.
+            project, department or company memory only when its author promotes it from their coding agent.
           </p>
         ) : (
           !challenged && (
@@ -264,7 +266,9 @@ function Status({ memory, history }: { memory: MemoryDetail; history: History | 
               <b>In force.</b>{" "}
               {memory.level === "company"
                 ? "It holds for every project: coding agents anywhere in the company recall it."
-                : `It holds for everyone on ${project ?? "this project"}: their coding agents recall it.`}
+                : memory.level === "department"
+                  ? "It holds for every project in its department: their coding agents recall it."
+                  : `It holds for everyone on ${project ?? "this project"}: their coding agents recall it.`}
               {memory.pinned && " It is pinned, so sessions start with it in their briefing."}
             </p>
           )

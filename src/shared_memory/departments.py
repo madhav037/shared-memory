@@ -4,7 +4,7 @@ after them.
 A project sits in at most one department; a project in none reads company memory only, so a company that never makes
 a department sees no change. The company's owner and admins create, rename and remove departments and name their
 leads. A department lead names another lead and moves projects into and out of their department. Department memory
-comes later (#624); nothing here touches memory.
+lives under `departments/<department ID>/` in the memory store (`memory.py`); nothing here touches it.
 """
 
 from __future__ import annotations
@@ -102,6 +102,20 @@ class Departments:
                 (project_ids,),
             ).fetchall()
         return {row["project_id"]: Department(row["department_id"], row["name"]) for row in rows}
+
+    def exists(self, department_id: str) -> bool:
+        """Whether a department with this ID exists; a removed one doesn't."""
+        with self._db.transaction() as conn:
+            found = conn.execute("SELECT 1 FROM departments WHERE department_id = %s", (department_id,)).fetchone()
+        return found is not None
+
+    def leads(self, member: Member, department_id: str) -> bool:
+        """Whether this member is one of the department's leads."""
+        with self._db.transaction() as conn:
+            found = conn.execute(
+                "SELECT 1 FROM department_leads WHERE department_id = %s AND member_id = %s", (department_id, member.pk)
+            ).fetchone()
+        return found is not None
 
     def listed(self, member: Member) -> list[DepartmentView]:
         """Every department of the member's company by name, each with the projects in it this member can reach."""

@@ -109,10 +109,10 @@ from shared_memory.uses import Uses
 
 CONSOLE_HEADER = "x-shared-memory-console"
 
-# The calls that save memory (retiring, deciding a challenge, and moving a card, which retires the known issues it
-# fixes when it lands in Done). They wait for their turn with every other save, without holding a worker thread (see
-# `saves.py`).
-SAVING = frozenset({"retire_at", "decide_challenge", "move_card"})
+# The calls that save memory (retiring, deciding a challenge, moving a card, which retires the known issues it fixes
+# when it lands in Done, and removing a department, which retires its department memory). They wait for their turn
+# with every other save, without holding a worker thread (see `saves.py`).
+SAVING = frozenset({"retire_at", "decide_challenge", "move_card", "remove_department"})
 
 # The calls a read-only server refuses (a hosted server whose license key has lapsed, ADR-0022), the ones the memory
 # tools refuse too: every change to memory, inviting members and creating cards. Removing members, revoking personal
@@ -127,6 +127,7 @@ REFUSED_WHILE_READ_ONLY = frozenset(
         "add_foundation",
         "add_member",
         "add_card",
+        "remove_department",
     }
 )
 
@@ -798,6 +799,11 @@ class ConsoleApi:
                 target=removed.department_id,
                 detail={"name": removed.name, "projects": left},
             )
+            # Its department memory is retired the way the console retires any memory, each retiring audited and its
+            # history kept (ADR-0032, ADR-0009).
+            working = self._working_in(member, None)
+            for path in self._service.department_memory(caller, removed.department_id):
+                self._lifecycle.retire(working, path, "Its department was removed.")
 
         return self._change_departments(request, remove)
 

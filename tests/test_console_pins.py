@@ -120,7 +120,7 @@ def test_only_project_and_company_memory_can_be_pinned(console: Console, signed_
     refused = pin(signed_out, personal)
 
     assert refused.status_code == 403
-    assert "Only project memory and company memory can be pinned" in refused.json()["message"]
+    assert "Only project, department and company memory can be pinned" in refused.json()["message"]
 
 
 def test_pinning_a_topic_pins_its_index(console: Console, signed_out: ConsoleClient) -> None:

@@ -33,6 +33,7 @@ from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.fence import escape, fenced, framing_of_fence, new_token
 from shared_memory.identity import Caller
+from shared_memory.departments import Departments
 from shared_memory.index import Reach, SearchIndex, split_sections
 from shared_memory.service import label
 from shared_memory.sessions import Session, Sessions
@@ -111,8 +112,10 @@ class Recall:
         uses: Uses,
         challenges: Challenges,
         tied: TiedFiles,
+        departments: Departments,
     ) -> None:
         self._settings = settings
+        self._departments = departments
         self._challenges = challenges
         self._db = db
         if db.sets_up:
@@ -193,16 +196,23 @@ class Recall:
 
         return Telling(self._told_as_recall(caller, found, in_doubt), record)
 
+    def _department_of(self, project_id: str) -> str | None:
+        """The department a session's project is in, whose department memory recall searches too; None for none."""
+        found = self._departments.of_project(project_id)
+        return None if found is None else found.department_id
+
     def for_prompt(self, caller: Caller, prompt: str, session: Session | None = None) -> Telling | None:
         """Up to a few strongly matching sections of accepted memory and the member's own personal memory, those
         the session has not been told yet: the strongest in full, the rest as entries of one line, each entry marking
         the section it matched. Without a session, nothing is held back and nothing is kept."""
         if caller.project is None or not prompt.strip():
             return None
+        department_id = self._department_of(caller.project.project_id)
         hits = self._index.search(
             caller.company,
             prompt,
             project_id=caller.project.project_id,
+            departments=[] if department_id is None else [department_id],
             member_id=caller.member_id,
             limit=self._settings.recall_limit * 3,
             source=QuerySource.RECALL,
@@ -239,7 +249,7 @@ class Recall:
         project, repository = caller.project, caller.repository
         if project is None or repository is None or not files:
             return None
-        reach = Reach.of_recall(caller.member_id, project.project_id)
+        reach = Reach.of_recall(caller.member_id, project.project_id, self._department_of(project.project_id))
         found: list[_Found] = []
         for tie in self._tied.tied_to(caller.company, repository, files, reach):
             try:

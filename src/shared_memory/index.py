@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS sections (
     PRIMARY KEY (team, path, section_no, chunk_no)
 );
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
+-- Set on department memory alone (ADR-0032), so a search keeps it to the departments of the projects it reaches.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id TEXT;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 CREATE INDEX IF NOT EXISTS sections_content_hash ON sections (team, content_hash);
 """
@@ -83,15 +85,17 @@ class Hit:
 
 @dataclass(frozen=True)
 class Reach:
-    """The memory a search for similar memories may name: company memory if `company_memory`; the project memory of
-    `projects`, or of every project but `unreachable` when `projects` is None; and the personal memory of `member_id`
-    in `personal_in`, never any other member's."""
+    """The memory a search for similar memories may name: company memory if `company_memory`; the department memory of
+    `departments`, or of every department when `departments` is None; the project memory of `projects`, or of every
+    project but `unreachable` when `projects` is None; and the personal memory of `member_id` in `personal_in`, never
+    any other member's."""
 
     company_memory: bool = False
     projects: tuple[str, ...] | None = ()
     unreachable: frozenset[str] = frozenset()
     member_id: str | None = None
     personal_in: str | None = None
+    departments: tuple[str, ...] | None = ()
 
     @classmethod
     def project_memory_of(cls, project_id: str) -> Reach:
@@ -101,14 +105,29 @@ class Reach:
     @classmethod
     def of_member(cls, member_id: str, project_id: str, unreachable: frozenset[str]) -> Reach:
         """What a member's save is compared with: their own personal memory in the project they work in, plus the
-        company memory and the project memory of every project they can reach."""
-        return cls(company_memory=True, projects=None, unreachable=unreachable, member_id=member_id, personal_in=project_id)
+        company memory, every department's memory and the project memory of every project they can reach."""
+        return cls(
+            company_memory=True,
+            projects=None,
+            unreachable=unreachable,
+            member_id=member_id,
+            personal_in=project_id,
+            departments=None,
+        )
 
     @classmethod
-    def of_recall(cls, member_id: str, project_id: str) -> Reach:
-        """What recall searches for a member's session: company memory, the project memory of the project the session
-        works in, and the member's own personal memory there."""
-        return cls(company_memory=True, projects=(project_id,), member_id=member_id, personal_in=project_id)
+    def of_recall(cls, member_id: str, project_id: str, department_id: str | None = None) -> Reach:
+        """What recall searches for a member's session: company memory, the department memory of the project's
+        department if it has one, the project memory of the project the session works in, and the member's own
+        personal memory there."""
+        departments = () if department_id is None else (department_id,)
+        return cls(
+            company_memory=True,
+            projects=(project_id,),
+            member_id=member_id,
+            personal_in=project_id,
+            departments=departments,
+        )
 
     def where(self) -> tuple[str, dict[str, object]]:
         """This reach as a condition on `sections`, with the parameters it binds."""
@@ -116,12 +135,17 @@ class Reach:
             projects = "NOT (project_id = ANY(%(reach_unreachable)s))"
         else:
             projects = "project_id = ANY(%(reach_projects)s)"
+        if self.departments is None:
+            departments = "level = 'department'"
+        else:
+            departments = "(level = 'department' AND department_id = ANY(%(reach_departments)s))"
         condition = (
-            f"((level = 'company' AND %(reach_company)s) OR (level = 'project' AND {projects})"
+            f"((level = 'company' AND %(reach_company)s) OR {departments} OR (level = 'project' AND {projects})"
             " OR (level = 'personal' AND member_id = %(reach_member)s AND project_id = %(reach_personal_in)s))"
         )
         return condition, {
             "reach_company": self.company_memory,
+            "reach_departments": list(self.departments or ()),
             "reach_projects": list(self.projects or ()),
             "reach_unreachable": sorted(self.unreachable),
             "reach_member": self.member_id,
@@ -265,7 +289,15 @@ class SearchIndex:
     ) -> None:
         location = locate(str(path))
         texts, hashes = self._plan(memory)
-        details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
+        details = (
+            location.level,
+            location.project_id,
+            location.member_id,
+            location.department_id,
+            memory.type,
+            memory.author,
+            memory.status,
+        )
         existing = {
             (row["section_no"], row["chunk_no"]): row["content_hash"]
             for row in conn.execute(
@@ -298,12 +330,13 @@ class SearchIndex:
         for (section_no, chunk_no), text in texts.items():
             if (section_no, chunk_no) in vectors:
                 conn.execute(
-                    "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type,"
-                    " author, status, content_hash, embedding, tokens)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                    "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id,"
+                    " department_id, type, author, status, content_hash, embedding, tokens)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                     " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
                     " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
-                    " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
+                    " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id,"
+                    " department_id = EXCLUDED.department_id, type = EXCLUDED.type,"
                     " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
                     " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
                     (
@@ -320,8 +353,8 @@ class SearchIndex:
                 )
             else:
                 conn.execute(
-                    "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
-                    " status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                    "UPDATE sections SET level = %s, project_id = %s, member_id = %s, department_id = %s, type = %s,"
+                    " author = %s, status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
                     (*details, company, str(path), section_no, chunk_no),
                 )
 
@@ -361,6 +394,7 @@ class SearchIndex:
         query: str,
         *,
         project_id: str | list[str],
+        departments: Iterable[str] = (),
         member_id: str | None = None,
         levels: Iterable[str] | None = None,
         type: str | None = None,
@@ -371,12 +405,22 @@ class SearchIndex:
 
         limit None returns every candidate, for a caller that ranks them again before it cuts them: at most
         `_CANDIDATES` found by meaning and `_CANDIDATES` by exact words, so never more than twice that. member_id, when
-        given, limits personal memory to that member's own. `source` is where the query came from,
-        for the query cache's counts.
+        given, limits personal memory to that member's own. Department memory is searched only for `departments`, the
+        departments of those projects. `source` is where the query came from, for the query cache's counts.
         """
         projects = [project_id] if isinstance(project_id, str) else list(project_id)
-        conditions = ["team = %(company)s", "status = 'active'", "(level = 'company' OR project_id = ANY(%(projects)s))"]
-        params: dict[str, object] = {"company": company, "projects": projects, "text": query}
+        conditions = [
+            "team = %(company)s",
+            "status = 'active'",
+            "(level = 'company' OR (level = 'department' AND department_id = ANY(%(departments)s))"
+            " OR project_id = ANY(%(projects)s))",
+        ]
+        params: dict[str, object] = {
+            "company": company,
+            "projects": projects,
+            "departments": list(departments),
+            "text": query,
+        }
         if member_id is not None:
             conditions.append("(level <> 'personal' OR member_id = %(member)s)")
             params["member"] = member_id
@@ -426,20 +470,30 @@ class SearchIndex:
             for key in ordered[:limit]
         ]
 
-    def similar(self, company: str, path: PurePosixPath, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
-        """Active project and company memories whose sections come close in meaning to any section of this memory."""
+    def similar(
+        self, company: str, path: PurePosixPath, *, project_id: str, threshold: float, department_id: str | None = None
+    ) -> list[tuple[str, float]]:
+        """Active project, department and company memories whose sections come close in meaning to any section of this
+        memory: company memory, the department memory of `department_id` and the project memory of `project_id`."""
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             rows = conn.execute(
                 "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 " SELECT n.path, 1 - (n.embedding <=> s.embedding) AS similarity FROM sections n"
                 " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
-                " AND (n.level = 'company' OR (n.level = 'project' AND n.project_id = %(project)s))"
+                " AND (n.level = 'company' OR (n.level = 'project' AND n.project_id = %(project)s)"
+                " OR (n.level = 'department' AND n.department_id = %(department)s))"
                 f" ORDER BY n.embedding <=> s.embedding LIMIT {_SIMILAR_CANDIDATES}) c"
                 " WHERE s.team = %(company)s AND s.path = %(path)s"
                 " GROUP BY c.path HAVING MAX(c.similarity) >= %(threshold)s"
                 f" ORDER BY similarity DESC LIMIT {_SIMILAR_LIMIT}",
-                {"company": company, "path": str(path), "project": project_id, "threshold": threshold},
+                {
+                    "company": company,
+                    "path": str(path),
+                    "project": project_id,
+                    "department": department_id,
+                    "threshold": threshold,
+                },
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 

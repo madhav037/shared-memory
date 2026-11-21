@@ -162,6 +162,8 @@ CONSOLE_API = pathlib.Path(__file__).resolve().parent.parent / "src" / "shared_m
 MAY_ASK: dict[str, set[str]] = {
     "_service": {
         "connection_files",
+        # Only reads: which memory a removed department leaves, for the console to retire.
+        "department_memory",
         "history",
         "read",
         "search_everywhere",
