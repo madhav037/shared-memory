@@ -173,6 +173,14 @@ class Departments:
             row["project_id"]: Department(row["department_id"], row["name"], row["restricted"]) for row in rows
         }
 
+    def projects_in(self, department_id: str) -> list[str]:
+        """The IDs of the projects in a department."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT project_id FROM department_projects WHERE department_id = %s ORDER BY project_id", (department_id,)
+            ).fetchall()
+        return [row["project_id"] for row in rows]
+
     def exists(self, department_id: str) -> bool:
         """Whether a department with this ID exists; a removed one doesn't."""
         with self._db.transaction() as conn:
