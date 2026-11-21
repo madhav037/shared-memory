@@ -31,7 +31,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.departments import Departments
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, Project, project_in, unknown_foundation
+from shared_memory.identity import Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
@@ -744,7 +744,7 @@ class Lifecycle:
                 everywhere=level == "company",
                 threshold=self._settings.similar_threshold,
             )
-            if project_in(found) not in caller.unreachable
+            if caller.reaches(found)  # a restricted project or department stays out of sight (ADR-0006, ADR-0032)
         ]
         if not similar:
             return None
