@@ -1089,7 +1089,9 @@ class Lifecycle:
         if not self._store.exists(caller.company, challenger_location.path):
             self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
             raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
-        level: Level = "company" if challenge.level == "company" else "project"
+        level: Level = (
+            "company" if challenge.level == "company" else "department" if challenge.level == "department" else "project"
+        )
         challenger = self._store.read(caller.company, challenger_location.path)
         moved = self._move(
             caller,
@@ -1100,6 +1102,7 @@ class Lifecycle:
             supersede=challenge.target_path,
             promoted_by=challenge.promoted_by,
             reason=f"Accept challenge {challenge.id}",
+            department_id=locate(challenge.target_path).department_id,
         )
         outcome = (
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "

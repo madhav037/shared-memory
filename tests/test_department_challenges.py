@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from tests.support import Console, ConsoleClient, Session, add, added_context, ask, create, signed_in_owner
-from tests.test_department_memory import REVIEWS, department
+from tests.test_department_memory import REVIEWS, department, promoted
 
 REASONING = "Every project in payments merges money code; one reviewer has missed rounding bugs twice."
 
@@ -97,6 +97,38 @@ def test_a_lead_accepting_the_challenge_moves_the_memory_into_department_memory(
     assert accepted["path"] in added_context(dana.start())  # Dana is told it is now department memory
     decided = [e for e in ask(signed_out, "/api/audit")["events"] if e["kind"] == "challenge_decided"]
     assert decided[0]["detail"]["decided_as"] == "department_lead"
+
+
+def test_accepting_a_leads_challenge_to_another_authors_department_memory_keeps_it_department_memory(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    signed_in_owner(console, signed_out, "olive-dept-challenge-eight", 1928)
+    billing = create(signed_out, "Billing")["project_id"]
+    lena = member(console, signed_out, "emp-lena", "Lena Lead", billing)
+    mira = member(console, signed_out, "emp-mira", "Mira Lead", billing)
+    payments = department(signed_out, "Payments", billing, lead="emp-lena")
+    appointed = signed_out.post_json(f"/api/departments/{payments}/leads", {"member_id": "emp-mira"})
+    assert appointed.status_code == 200, appointed.text
+    target = promoted(lena, REVIEWS, "department")
+    personal = mira.call("remember", **REVIEWS)["path"]
+    first = mira.call("promote", path=personal, level="department")
+    assert first["status"] == "similar_memories", first
+    raised = mira.call(
+        "promote",
+        path=personal,
+        level="department",
+        reference=first["reference"],
+        resolutions={one["path"]: ("supersede" if one["path"] == target else "keep_both") for one in first["similar"]},
+    )
+    assert raised["status"] == "challenge_raised", raised
+
+    accepted = lena.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")
+
+    assert accepted["status"] == "accepted", accepted
+    assert accepted["path"].startswith(f"departments/{payments}/conventions/"), accepted
+    new = lena.call("read", path=accepted["path"])
+    assert (new["level"], new["author"], new["replaces"]) == ("department", "emp-mira", target)
+    assert lena.call("read", path=target)["status"] == "superseded"
 
 
 def test_a_lead_refusing_the_challenge_leaves_the_memory_personal(console: Console, signed_out: ConsoleClient) -> None:
