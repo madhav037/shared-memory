@@ -31,7 +31,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.departments import Departments
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, Project, unknown_foundation
+from shared_memory.identity import Caller, Identity, Project, project_in, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
@@ -185,6 +185,8 @@ class Lifecycle:
         supersede: str | None = None
         exception_to: str | None = None
         challenged: tuple[str, Memory] | None = None
+        # The narrower memories this broader one contradicts: each is a level contradiction for its leads (#635).
+        narrower: list[str] = []
         leads = self._leads(caller, project.project_id)
         for similar_path in sorted(p for p, resolution in chosen.items() if resolution == "supersede"):
             similar_location = locate(similar_path)
@@ -197,6 +199,19 @@ class Lifecycle:
                 if exception_to is not None:
                     raise Refused(f"A {target} memory can be an exception to only one broader memory.")
                 exception_to = similar_path
+            elif (
+                similar_location.level in ("department", "project")
+                and LEVEL_ORDER[similar_location.level] > LEVEL_ORDER[target]
+                and other.author != caller.member_id
+            ):
+                # A broader memory contradicting another member's narrower one: that one holds as an exception to it
+                # until its level's leads decide. The member's own narrower memory is superseded, as before.
+                if other.exception_to is not None:
+                    raise Refused(
+                        f"{similar_path} is already an exception to {other.exception_to}, and a memory can be an "
+                        "exception to only one broader memory. Keep both, or ask its leads to settle that first."
+                    )
+                narrower.append(similar_path)
             elif similar_location.foundation is not None and not self._changes_at_once(
                 caller, project.project_id, similar_location.foundation, leads
             ):
@@ -215,16 +230,16 @@ class Lifecycle:
                 if challenged is not None:
                     raise Refused("A promotion can challenge only one memory at a time.")
                 challenged = (similar_path, other)
-        if challenged is not None and (supersede is not None or exception_to is not None):
+        if challenged is not None and (supersede is not None or exception_to is not None or narrower):
             raise Refused(
                 "A promotion that challenges another author's memory can't also supersede or be an exception. "
                 "Challenge first; once it's accepted, promote the rest."
             )
         if promotable.asks_leads:
-            if challenged is not None or supersede is not None:
+            if challenged is not None or supersede is not None or narrower:
                 raise Refused(
-                    "Only a department lead promotes a memory into department memory that supersedes another. Keep "
-                    "both, or ask one of its leads."
+                    "Only a department lead promotes a memory into department memory that supersedes another or "
+                    "contradicts its projects' memory. Keep both, or ask one of its leads."
                 )
             self._forget(reference)
             return self._ask_department_leads(caller, location, promoted_by, department_id, reasoning, exception_to)
@@ -276,6 +291,16 @@ class Lifecycle:
             )
             result["next"] = (
                 f"It holds for this {target} while its leads decide: keep it as an exception, or follow {exception_to}."
+            )
+        if narrower:
+            raised = [self._hold_below(caller, path, result["path"], reasoning) for path in narrower]
+            result["level_contradictions"] = raised
+            count = f"{len(raised)} level contradiction{'' if len(raised) == 1 else 's'}"
+            result["next"] = (
+                f"It raised {count}: "
+                + "; ".join(f"{one['path']} to {one['to']}" for one in raised)
+                + ". Each narrower memory holds for its project or department until those leads keep it as an "
+                "exception or follow this one. Tell the member."
             )
         if supersede is not None:
             superseded = f"its author superseded it with {result['path']}."
@@ -483,6 +508,35 @@ class Lifecycle:
             raised_by=raised_by,
         )
 
+    def _hold_below(self, caller: Caller, narrower: str, broader: str, reasoning: str | None) -> dict[str, Any]:
+        """A narrower memory the just-promoted `broader` one contradicts: it becomes an exception to it, so it holds for
+        its project or department, and its level's leads are asked to keep it or follow (#635)."""
+        location = locate(narrower)
+        areas = [area for area in [area_of(location.path)] if area is not None]
+        with self._store.change(caller.company, committer(caller), f"Hold until decided: {narrower}", areas=areas) as change:
+            change.write(location.path, replace(self._active(change, location.path), exception_to=broader))
+        challenge_id = self._raise_level_contradiction(caller, narrower, broader, location.level, reasoning)
+        return {"challenge_id": challenge_id, "path": narrower, "level": location.level, "to": self._leads_of(caller, location)}
+
+    def _leads_of(self, caller: Caller, location: Location) -> str:
+        """Who decides a level contradiction about a memory at this location, in words."""
+        if location.department_id is not None:
+            view = next(
+                (one for one in self._departments.listed(caller.member) if one.department.department_id == location.department_id),
+                None,
+            )
+            name = location.department_id if view is None else view.department.name
+            if view is None or not view.leads:
+                return f"the company's admins, as department {name} has no lead"
+            return f"the leads of department {name}: " + ", ".join(f"{lead.name} ({lead.member_id})" for lead in view.leads)
+        assert location.project_id is not None
+        project = self._identity.project_detail(caller.member, location.project_id)
+        if not project["leads"]:
+            return f"the leads of project {project['name']}, which has none yet"
+        return f"the leads of project {project['name']}: " + ", ".join(
+            f"{lead['name']} ({lead['member_id']})" for lead in project["leads"]
+        )
+
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
         foundation, otherwise as a challenge they decide while the memory stays where it is."""
@@ -676,13 +730,22 @@ class Lifecycle:
         project: Project,
         department_id: str | None = None,
     ) -> dict[str, Any] | None:
-        similar = self._index.similar(
-            caller.company,
-            location.path,
-            project_id=project.project_id,
-            department_id=department_id,
-            threshold=self._settings.similar_threshold,
-        )
+        # A broader memory is judged against the narrower memory it reaches too (#635): a department's against its
+        # projects', company memory against every department's and project's this member may read.
+        below = self._departments.projects_in(department_id) if level == "department" and department_id else []
+        similar = [
+            (found, similarity)
+            for found, similarity in self._index.similar(
+                caller.company,
+                location.path,
+                project_id=project.project_id,
+                department_id=department_id,
+                projects=below,
+                everywhere=level == "company",
+                threshold=self._settings.similar_threshold,
+            )
+            if project_in(found) not in caller.unreachable
+        ]
         if not similar:
             return None
         reference = secrets.token_urlsafe(12)

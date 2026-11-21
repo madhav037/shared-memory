@@ -361,6 +361,8 @@ class Challenges:
         about = {} if foundation is None else {"foundation": foundation}
         if imported_from is not None:
             about["imported_from"] = imported_from
+        if kind == LEVEL_CONTRADICTION and challenger_path is not None:
+            about["narrower"] = challenger_path  # the memory that holds, as an exception, until it is decided
         self._audit.memory(
             caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author,
             **about,

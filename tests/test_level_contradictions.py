@@ -276,3 +276,147 @@ def test_the_console_follows_by_retiring_the_narrower_memory(console: Console, s
         "challenge_id": contradiction, "decision": "followed", "in_force": made["company"],
     }  # fmt: skip
     assert made["olive"].call("read", path=made["raised"]["path"])["status"] == "retired"
+
+
+# Downward (#635): a broader memory promoted against narrower memory that already exists.
+
+PAYMENTS_LOGS = {
+    "title": "Payments logs plain text",
+    "summary": "The payments services log plain text.",
+    "type": "convention",
+    "body": "The payments services write plain text logs to stdout, not JSON.",
+}
+CHECKOUT_LOGS = {
+    "title": "Checkout logs plain text",
+    "summary": "The checkout service logs plain text.",
+    "type": "convention",
+    "body": "The old checkout service writes plain text logs to stdout, not JSON.",
+}
+
+
+def contradicting_below(session: Session, memory: dict[str, str], narrower: list[str], level: str) -> dict[str, Any]:
+    """Promote a memory the session judges contradicts each memory in `narrower`: it resolves them with supersede."""
+    personal = session.call("remember", **memory)["path"]
+    first = session.call("promote", path=personal, level=level)
+    assert first["status"] == "similar_memories", first
+    shown = [one["path"] for one in first["similar"]]
+    assert set(narrower) <= set(shown), shown
+    resolutions = {path: "supersede" if path in narrower else "keep_both" for path in shown}
+    answer: dict[str, Any] = session.call(
+        "promote", path=personal, level=level, reference=first["reference"], resolutions=resolutions
+    )
+    answer["shown"] = shown
+    return answer
+
+
+def a_company_contradiction(console: Console, client: ConsoleClient, github: str, account: int) -> dict[str, Any]:
+    """Billing is in the Payments department, which Lena leads; Pete alone leads Checkout, in no department; Search has
+    no memory of its own. Payments and Checkout each hold a memory that Olive's new company memory contradicts."""
+    owner = signed_in_owner(console, client, github, account)
+    billing = create(client, "Billing")["project_id"]
+    checkout = create(client, "Checkout")["project_id"]
+    search = create(client, "Search")["project_id"]
+    lena = member(console, client, "emp-lena", "Lena Lead", billing)
+    pete = member(console, client, "emp-pete", "Pete Lead", checkout)
+    assert client.post_json(f"/api/projects/{checkout}/leads", {"member_id": "emp-pete"}).status_code == 200
+    assert client.post(f"/api/projects/{checkout}/leads/E1001/remove").status_code == 200
+    department(client, "Payments", billing, lead="emp-lena")
+    in_department = promoted_now(lena, PAYMENTS_LOGS, "department")
+    dana = member(console, client, "emp-dana", "Dana Developer", checkout)
+    in_checkout = promoted_now(dana, CHECKOUT_LOGS, "project")
+    olive = owner.in_project(search)
+    answer = contradicting_below(olive, JSON_LOGS, [in_department, in_checkout], "company")
+    return {
+        "olive": olive, "lena": lena, "pete": pete, "dana": dana, "answer": answer, "department": in_department,
+        "checkout": in_checkout,
+    }  # fmt: skip
+
+
+def test_a_company_memory_against_department_and_project_memory_raises_one_level_contradiction_to_each_of_their_leads(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    made = a_company_contradiction(console, signed_out, "olive-level-down-one", 6354)
+    answer = made["answer"]
+
+    assert answer["status"] == "promoted", answer
+    raised = {one["path"]: one["challenge_id"] for one in answer["level_contradictions"]}
+    assert set(raised) == {made["department"], made["checkout"]}
+    lena_briefed = added_context(made["lena"].start())
+    pete_briefed = added_context(made["pete"].start())
+    assert f"Level contradiction {raised[made['department']]}, waiting today" in lena_briefed
+    assert f"Level contradiction {raised[made['checkout']]}" not in lena_briefed
+    assert f"Level contradiction {raised[made['checkout']]}, waiting today" in pete_briefed
+    assert f"Level contradiction {raised[made['department']]}" not in pete_briefed
+    assert HEADING not in added_context(made["dana"].start())
+    assert [one for one in ask(signed_out, "/api/challenges")["waiting"] if one["kind"] == "level_contradiction"] == []
+    for path in (made["department"], made["checkout"]):
+        assert made["olive"].call("read", path=path)["exception_to"] == answer["path"]
+    events = [e for e in ask(signed_out, "/api/audit")["events"] if e["kind"] == "challenge_raised"]
+    assert sorted(e["detail"]["narrower"] for e in events) == sorted(raised)
+
+
+def test_the_promoting_session_is_told_how_many_level_contradictions_it_raised_and_to_whom(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    made = a_company_contradiction(console, signed_out, "olive-level-down-two", 6355)
+    answer = made["answer"]
+
+    assert "2 level contradictions" in answer["next"]
+    to = {one["path"]: one["to"] for one in answer["level_contradictions"]}
+    assert "Payments" in to[made["department"]] and "Lena Lead" in to[made["department"]]
+    assert "Checkout" in to[made["checkout"]] and "Pete Lead" in to[made["checkout"]]
+    assert all(one in answer["next"] for one in to.values())
+
+
+def test_until_it_is_decided_the_narrower_memory_holds_for_its_project_or_department(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    made = a_company_contradiction(console, signed_out, "olive-level-down-three", 6356)
+    company = made["answer"]["path"]
+
+    in_checkout = added_context(made["dana"].prompt("how does the checkout service write its logs?"))
+    in_billing = added_context(made["lena"].prompt("how do the payments services write their logs?"))
+    in_search = added_context(made["olive"].prompt("how should services write their logs?"))
+
+    assert made["checkout"] in in_checkout and f"({company})" not in in_checkout
+    assert made["department"] in in_billing and f"({company})" not in in_billing
+    assert company in in_search
+
+
+def test_following_a_downward_level_contradiction_retires_the_narrower_memory_for_the_broader(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    made = a_company_contradiction(console, signed_out, "olive-level-down-four", 6357)
+    [contradiction] = [one for one in made["answer"]["level_contradictions"] if one["path"] == made["department"]]
+
+    followed = made["lena"].call("decide_challenge", challenge_id=contradiction["challenge_id"], decision="follow")
+
+    assert followed["status"] == "followed", followed
+    assert made["lena"].call("read", path=made["department"])["status"] == "retired"
+    assert made["answer"]["path"] in added_context(made["lena"].prompt("how should services write their logs?"))
+
+
+def test_a_department_memory_against_one_of_its_projects_raises_one_to_that_projects_leads_and_none_outside(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-level-down-five", 6358)
+    billing = create(signed_out, "Billing")["project_id"]
+    checkout = create(signed_out, "Checkout")["project_id"]
+    lena = member(console, signed_out, "emp-lena", "Lena Lead", billing)
+    department(signed_out, "Payments", billing, lead="emp-lena")
+    dana = member(console, signed_out, "emp-dana", "Dana Developer", billing)
+    in_billing = promoted_now(dana, PLAIN_LOGS, "project")
+    in_checkout = promoted_now(owner.in_project(checkout), CHECKOUT_LOGS, "project")
+
+    answer = contradicting_below(lena, JSON_LOGS, [in_billing], "department")
+
+    assert answer["status"] == "promoted", answer
+    assert in_checkout not in answer["shown"]
+    [raised] = answer["level_contradictions"]
+    assert raised["path"] == in_billing and "Billing" in raised["to"]
+    assert "1 level contradiction " in answer["next"]
+    [waiting] = [one for one in ask(signed_out, "/api/challenges")["waiting"] if one["kind"] == "level_contradiction"]
+    assert (waiting["challenger"]["path"], waiting["target"]["path"]) == (in_billing, answer["path"])
+    held = added_context(dana.prompt("how does the billing service write its logs?"))
+    assert in_billing in held and f"({answer['path']})" not in held
+    assert owner.in_project(checkout).call("read", path=in_checkout)["exception_to"] is None

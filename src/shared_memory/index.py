@@ -11,7 +11,7 @@ import hashlib
 import re
 import threading
 from collections import OrderedDict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -503,18 +503,28 @@ class SearchIndex:
         ]
 
     def similar(
-        self, company: str, path: PurePosixPath, *, project_id: str, threshold: float, department_id: str | None = None
+        self,
+        company: str,
+        path: PurePosixPath,
+        *,
+        project_id: str,
+        threshold: float,
+        department_id: str | None = None,
+        projects: Sequence[str] = (),
+        everywhere: bool = False,
     ) -> list[tuple[str, float]]:
         """Active project, department and company memories whose sections come close in meaning to any section of this
-        memory: company memory, the department memory of `department_id` and the project memory of `project_id`."""
+        memory: company memory, the department memory of `department_id` and the project memory of `project_id` and of
+        `projects`. `everywhere` adds every department's and project's memory, for a promotion into company memory."""
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             rows = conn.execute(
                 "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 " SELECT n.path, 1 - (n.embedding <=> s.embedding) AS similarity FROM sections n"
                 " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
-                " AND (n.level = 'company' OR (n.level = 'project' AND n.project_id = %(project)s)"
-                " OR (n.level = 'department' AND n.department_id = %(department)s))"
+                " AND (n.level = 'company' OR (n.level = 'project' AND (n.project_id = %(project)s"
+                " OR n.project_id = ANY(%(projects)s) OR %(everywhere)s))"
+                " OR (n.level = 'department' AND (n.department_id = %(department)s OR %(everywhere)s)))"
                 f" ORDER BY n.embedding <=> s.embedding LIMIT {_SIMILAR_CANDIDATES}) c"
                 " WHERE s.team = %(company)s AND s.path = %(path)s"
                 " GROUP BY c.path HAVING MAX(c.similarity) >= %(threshold)s"
@@ -524,6 +534,8 @@ class SearchIndex:
                     "path": str(path),
                     "project": project_id,
                     "department": department_id,
+                    "projects": list(projects),
+                    "everywhere": everywhere,
                     "threshold": threshold,
                 },
             ).fetchall()
