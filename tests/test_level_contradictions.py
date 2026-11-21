@@ -414,7 +414,7 @@ def test_a_department_memory_against_one_of_its_projects_raises_one_to_that_proj
     assert in_checkout not in answer["shown"]
     [raised] = answer["level_contradictions"]
     assert raised["path"] == in_billing and "Billing" in raised["to"]
-    assert "1 level contradiction " in answer["next"]
+    assert "1 level contradiction:" in answer["next"]
     [waiting] = [one for one in ask(signed_out, "/api/challenges")["waiting"] if one["kind"] == "level_contradiction"]
     assert (waiting["challenger"]["path"], waiting["target"]["path"]) == (in_billing, answer["path"])
     held = added_context(dana.prompt("how does the billing service write its logs?"))
