@@ -132,6 +132,8 @@ class DepartmentRef(BaseModel):
 
     department_id: str
     name: str
+    # Closed to its access list: the project then reaches no one outside the department, and is never opened wider.
+    restricted: bool
 
 
 class ProjectSummary(BaseModel):
@@ -242,8 +244,8 @@ class DepartmentProject(BaseModel):
 
 
 class DepartmentSummary(BaseModel):
-    """A department (ADR-0032): its department leads, the projects in it this member can reach, and what they may
-    change."""
+    """A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is
+    restricted and who is on its access list, and what they may change."""
 
     department_id: str
     name: str
@@ -251,6 +253,10 @@ class DepartmentSummary(BaseModel):
     projects: list[DepartmentProject]
     you_lead: bool
     you_may_change: bool
+    # Restricted, its department memory and projects are invisible to everyone but its access list, its leads and the
+    # company's admins. The access list is kept while it is open, so restricting it again lets the same members back.
+    restricted: bool
+    access: list[ProjectMember]
 
 
 class Departments(BaseModel):
@@ -268,6 +274,18 @@ class DepartmentName(BaseModel):
 
 class DepartmentAppointment(BaseModel):
     """The member being made a lead of this department."""
+
+    member_id: str
+
+
+class DepartmentRestriction(BaseModel):
+    """Whether this department is closed to its access list, or open to the whole company."""
+
+    restricted: bool
+
+
+class DepartmentAccessChange(BaseModel):
+    """The member being put on this department's access list."""
 
     member_id: str
 
@@ -1281,6 +1299,32 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="POST",
         operation_id="move_project_out",
         summary="Move a project out of this department, leaving it in no department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/restrict",
+        method="POST",
+        operation_id="restrict_department",
+        summary="Close a department to its access list, or open it to the whole company again.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentRestriction,
+    ),
+    Declaration(
+        path="/departments/{department_id}/access",
+        method="POST",
+        operation_id="grant_department_access",
+        summary="Put a member on a department's access list.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentAccessChange,
+    ),
+    Declaration(
+        path="/departments/{department_id}/access/{member_id}/remove",
+        method="POST",
+        operation_id="revoke_department_access",
+        summary="Take a member off a department's access list.",
         answers=Departments,
         changes=True,
     ),

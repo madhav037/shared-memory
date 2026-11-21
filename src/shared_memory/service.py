@@ -14,7 +14,7 @@ from shared_memory.departments import Departments
 from shared_memory.embeddings import QuerySource
 from shared_memory.errors import Refused
 from shared_memory.history import MemoryHistory
-from shared_memory.identity import Caller, Identity, check_name, project_in
+from shared_memory.identity import Caller, Identity, check_name
 from shared_memory.index import Hit, Reach, SearchIndex, split_sections
 from shared_memory.memory import (
     COMPANY_FOLDER,
@@ -273,7 +273,9 @@ class MemoryService:
         close = self._index.similar_to(
             caller.company,
             memory,
-            reach=Reach.of_member(caller.member_id, project.project_id, caller.unreachable),
+            reach=Reach.of_member(
+                caller.member_id, project.project_id, caller.unreachable, caller.unreachable_departments
+            ),
             threshold=self._settings.save_similar_threshold,
             excluding=path,
         )
@@ -378,8 +380,8 @@ class MemoryService:
                 }
                 for path, m in memories
             ],
-            # Listing the projects folder names every project; a restricted one stays out of sight.
-            "folders": [str(sub) for sub in folders if project_in(str(sub)) not in caller.unreachable],
+            # Listing the projects or departments folder names every one; a restricted one stays out of sight.
+            "folders": [str(sub) for sub in folders if caller.reaches(str(sub))],
         }
 
     def department_of(self, project_id: str) -> str | None:

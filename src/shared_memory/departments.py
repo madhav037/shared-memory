@@ -5,19 +5,25 @@ A project sits in at most one department; a project in none reads company memory
 a department sees no change. The company's owner and admins create, rename and remove departments and name their
 leads. A department lead names another lead and moves projects into and out of their department. Department memory
 lives under `departments/<department ID>/` in the memory store (`memory.py`); nothing here touches it.
+
+A department is open to the whole company unless one of its leads, or an admin, restricts it to an access list
+(extending ADR-0006). A restricted department's department memory and projects are then invisible to every member
+outside it: off its access list, not one of its leads and not an admin. Identity asks this module who a department
+keeps out (`DepartmentWall`), so the same single refusal holds wherever a restricted project's does.
 """
 
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from psycopg.errors import UniqueViolation
 
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, Member, Project
+from shared_memory.identity import Caller, Identity, Member, Project, ShutOut
 from shared_memory.memory import slugify
 
 DEPARTMENT_ID_ATTEMPTS = 5
@@ -46,13 +52,34 @@ CREATE TABLE IF NOT EXISTS department_projects (
     moved_in_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS department_projects_by_department ON department_projects (department_id);
+
+-- A restricted department is reached only by its access list, its leads and the company's admins (ADR-0032).
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS restricted BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS department_access (
+    department_id TEXT NOT NULL REFERENCES departments(department_id) ON DELETE CASCADE,
+    member_id BIGINT NOT NULL REFERENCES members(id),
+    granted_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (department_id, member_id)
+);
+
+-- Who a restricted department keeps out is asked on every authenticated call, so it reads one company's restricted
+-- departments by index.
+CREATE INDEX IF NOT EXISTS departments_restricted ON departments (company_id) WHERE restricted;
 """
+
+# The members a restricted department lets in, besides the company's owner and admins: its leads and its access list.
+_LETS_IN = (
+    "(EXISTS (SELECT 1 FROM department_leads l WHERE l.department_id = d.department_id AND l.member_id = {member})"
+    " OR EXISTS (SELECT 1 FROM department_access a WHERE a.department_id = d.department_id AND a.member_id = {member}))"
+)
 
 
 @dataclass(frozen=True)
 class Department:
     department_id: str
     name: str
+    # Closed to its access list (ADR-0032); only `of_projects` says, everything else leaves it False.
+    restricted: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,13 +90,16 @@ class Lead:
 
 @dataclass(frozen=True)
 class DepartmentView:
-    """A department as one member sees it: its leads, the projects in it they can reach, and what they may change."""
+    """A department as one member sees it: its leads, the projects in it they can reach, whether it is restricted and
+    who is on its access list, and what they may change."""
 
     department: Department
     leads: list[Lead]
     projects: list[Project]
     you_lead: bool
     you_may_change: bool
+    restricted: bool = False
+    access: list[Lead] = field(default_factory=list)
 
 
 def _runs_the_company(member: Member) -> bool:
@@ -85,6 +115,44 @@ class Departments:
             with db.transaction() as conn:
                 conn.execute(SCHEMA)
 
+    # --- who a restricted department keeps out (identity.DepartmentWall) ---
+
+    def shut_out(self, conn: Conn, member: Member) -> ShutOut:
+        """The restricted departments of the member's company they are outside of, and the projects in them."""
+        rows = conn.execute(
+            "SELECT d.department_id, p.project_id FROM departments d"  # noqa: S608  # only the member's row id is bound
+            " LEFT JOIN department_projects p ON p.department_id = d.department_id"
+            f" WHERE d.company_id = %(company)s AND d.restricted AND NOT {_LETS_IN.format(member='%(member)s')}",
+            {"company": member.company_pk, "member": member.pk},
+        ).fetchall()
+        return ShutOut(
+            departments=frozenset(row["department_id"] for row in rows),
+            projects=frozenset(row["project_id"] for row in rows if row["project_id"] is not None),
+        )
+
+    def shut_pairs(self, conn: Conn, pairs: Sequence[tuple[int, str]]) -> set[tuple[int, str]]:
+        """Of these members (by row id) each in a project, those the project's restricted department keeps out."""
+        if not pairs:
+            return set()
+        rows = conn.execute(
+            "SELECT x.member_id, x.project_id"  # noqa: S608  # the clause spliced in is the code's own
+            " FROM unnest(%s::bigint[], %s::text[]) AS x(member_id, project_id)"
+            " JOIN department_projects p ON p.project_id = x.project_id"
+            " JOIN departments d ON d.department_id = p.department_id"
+            f" WHERE d.restricted AND NOT {_LETS_IN.format(member='x.member_id')}",
+            ([pk for pk, _ in pairs], [project_id for _, project_id in pairs]),
+        ).fetchall()
+        return {(row["member_id"], row["project_id"]) for row in rows}
+
+    def restricted_department_of(self, conn: Conn, project_id: str) -> str | None:
+        """The name of the restricted department a project is in, or None when it is in none or in an open one."""
+        row = conn.execute(
+            "SELECT d.name FROM department_projects p JOIN departments d ON d.department_id = p.department_id"
+            " WHERE p.project_id = %s AND d.restricted",
+            (project_id,),
+        ).fetchone()
+        return None if row is None else str(row["name"])
+
     # --- reading ---
 
     def of_project(self, project_id: str) -> Department | None:
@@ -97,11 +165,13 @@ class Departments:
             return {}
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT p.project_id, d.department_id, d.name FROM department_projects p"
+                "SELECT p.project_id, d.department_id, d.name, d.restricted FROM department_projects p"
                 " JOIN departments d ON d.department_id = p.department_id WHERE p.project_id = ANY(%s)",
                 (project_ids,),
             ).fetchall()
-        return {row["project_id"]: Department(row["department_id"], row["name"]) for row in rows}
+        return {
+            row["project_id"]: Department(row["department_id"], row["name"], row["restricted"]) for row in rows
+        }
 
     def exists(self, department_id: str) -> bool:
         """Whether a department with this ID exists; a removed one doesn't."""
@@ -135,14 +205,24 @@ class Departments:
             return any(self._identity.present(conn, row["member_id"]) is not None for row in rows)
 
     def listed(self, member: Member) -> list[DepartmentView]:
-        """Every department of the member's company by name, each with the projects in it this member can reach."""
+        """Every department of the member's company they can reach, by name, each with the projects in it this member
+        can reach. A restricted department they are outside of isn't listed at all."""
         reachable = {project.project_id: project for project in self._identity.projects(member)}
         with self._db.transaction() as conn:
-            rows = conn.execute(
-                "SELECT department_id, name FROM departments WHERE company_id = %s ORDER BY lower(name)",
-                (member.company_pk,),
-            ).fetchall()
+            kept_out = set() if _runs_the_company(member) else self.shut_out(conn, member).departments
+            rows = [
+                row
+                for row in conn.execute(
+                    "SELECT department_id, name, restricted FROM departments WHERE company_id = %s"
+                    " ORDER BY lower(name)",
+                    (member.company_pk,),
+                ).fetchall()
+                if row["department_id"] not in kept_out
+            ]
             ids = [row["department_id"] for row in rows]
+            access_rows = conn.execute(
+                "SELECT department_id, member_id FROM department_access WHERE department_id = ANY(%s)", (ids,)
+            ).fetchall()
             lead_rows = conn.execute(
                 "SELECT department_id, member_id FROM department_leads WHERE department_id = ANY(%s)", (ids,)
             ).fetchall()
@@ -150,7 +230,9 @@ class Departments:
                 "SELECT department_id, project_id FROM department_projects WHERE department_id = ANY(%s)", (ids,)
             ).fetchall()
             present = {
-                row["member_id"] for row in lead_rows if self._identity.present(conn, row["member_id"]) is not None
+                row["member_id"]
+                for row in [*lead_rows, *access_rows]
+                if self._identity.present(conn, row["member_id"]) is not None
             }
             names = self._identity.named_in(conn, present)
         views = []
@@ -172,6 +254,15 @@ class Departments:
                     ),
                     you_lead=you_lead,
                     you_may_change=you_lead or _runs_the_company(member),
+                    restricted=row["restricted"],
+                    access=sorted(
+                        (
+                            Lead(*names[one["member_id"]])
+                            for one in access_rows
+                            if one["department_id"] == department_id and one["member_id"] in present
+                        ),
+                        key=lambda allowed: allowed.member_id,
+                    ),
                 )
             )
         return views
@@ -233,6 +324,8 @@ class Departments:
             ).fetchone()
             if gone is None:
                 raise Refused(f"{member_id!r} does not lead this department.")
+            committed = self._identity.lost_access(conn, caller)
+        committed()
 
     # --- changing, for a department's leads too ---
 
@@ -271,6 +364,9 @@ class Departments:
                 "INSERT INTO department_projects (project_id, department_id, moved_in_at) VALUES (%s, %s, %s)",
                 (project.project_id, department_id, self._clock()),
             )
+            # Into a restricted department, the project is hidden from everyone outside it from now on.
+            committed = self._identity.lost_access(conn, caller)
+        committed()
 
     def move_out(self, caller: Caller, department_id: str, project_id: str) -> None:
         """Take a project out of this department, leaving it in no department."""
@@ -284,6 +380,47 @@ class Departments:
             ).fetchone()
             if gone is None:
                 raise Refused(f"Project {project.name!r} is not in this department.")
+
+    def restrict(self, caller: Caller, department_id: str, restricted: bool) -> Department:
+        """Close a department to its access list, or open it to the whole company again. Opening it keeps the access
+        list, so restricting it again lets the same members straight back in."""
+        with self._db.transaction() as conn:
+            department = self._found(conn, caller, department_id)
+            self._require_lead(conn, caller, department_id)
+            conn.execute("UPDATE departments SET restricted = %s WHERE department_id = %s", (restricted, department_id))
+            committed = self._identity.lost_access(conn, caller) if restricted else None
+        if committed is not None:
+            committed()
+        return department
+
+    def grant_access(self, caller: Caller, department_id: str, member_id: str) -> Department:
+        """Put a member on this department's access list. It takes effect on their next call."""
+        with self._db.transaction() as conn:
+            department = self._found(conn, caller, department_id)
+            self._require_lead(conn, caller, department_id)
+            pk = self._identity.present_member(conn, caller.member.company_pk, member_id)
+            conn.execute(
+                "INSERT INTO department_access (department_id, member_id, granted_at) VALUES (%s, %s, %s)"
+                " ON CONFLICT DO NOTHING",
+                (department_id, pk, self._clock()),
+            )
+        return department
+
+    def revoke_access(self, caller: Caller, department_id: str, member_id: str) -> Department:
+        """Take a member off this department's access list. They lose it on their next call."""
+        with self._db.transaction() as conn:
+            department = self._found(conn, caller, department_id)
+            self._require_lead(conn, caller, department_id)
+            pk = self._identity.present_member(conn, caller.member.company_pk, member_id)
+            gone = conn.execute(
+                "DELETE FROM department_access WHERE department_id = %s AND member_id = %s RETURNING member_id",
+                (department_id, pk),
+            ).fetchone()
+            if gone is None:
+                raise Refused(f"{member_id!r} is not on this department's access list.")
+            committed = self._identity.lost_access(conn, caller)
+        committed()
+        return department
 
     # --- guards ---
 

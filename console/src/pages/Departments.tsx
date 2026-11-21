@@ -1,4 +1,5 @@
 import { Button, Select, TextInput } from "@mantine/core";
+import { IconLock, IconLockOpen } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -7,17 +8,20 @@ import {
   createDepartment,
   fetchDepartments,
   fetchMembers,
+  grantDepartmentAccess,
   moveProjectIn,
   moveProjectOut,
   removeDepartment,
   removeDepartmentLead,
   renameDepartment,
+  restrictDepartment,
+  revokeDepartmentAccess,
   type Departments as DepartmentList,
   type DepartmentSummary,
   type MemberSummary,
   type ProjectSummary,
 } from "../api/client";
-import { Placeholder, Refusal, Trail } from "../components/Bits";
+import { Placeholder, Refusal, RestrictedMark, Trail } from "../components/Bits";
 import { folderUrl } from "../lib/format";
 import { useContents } from "../lib/contents";
 import { useAsked } from "../lib/useAsked";
@@ -58,7 +62,7 @@ export function Departments() {
       <p className="standfirst">
         A department groups projects that share ways of working. A project sits in at most one department; a project in
         none reads company memory only. The company’s admins create departments and name their leads; a department lead
-        names another lead and moves projects in and out.
+        names another lead, moves projects in and out, and can restrict the department to an access list.
       </p>
 
       {refused && (
@@ -129,6 +133,11 @@ function OneDepartment({
           </button>
         )}
       </div>
+      {department.restricted && (
+        <span data-testid="department-restricted">
+          <RestrictedMark />
+        </span>
+      )}
       {department.you_lead && <p className="section-lede">You lead this department.</p>}
       {runsTheCompany && <Renaming name={department.name} onRenamed={(name) => attempt(() => renameDepartment(id, name))} />}
 
@@ -191,7 +200,78 @@ function OneDepartment({
       {department.you_may_change && (
         <MovingIn projects={inNone} onChosen={(projectId) => attempt(() => moveProjectIn(id, projectId))} />
       )}
+
+      <Reach department={department} members={members} attempt={attempt} />
     </section>
+  );
+}
+
+/** Who can reach the department: open to the whole company, or restricted to its access list (ADR-0032). */
+function Reach({
+  department,
+  members,
+  attempt,
+}: {
+  department: DepartmentSummary;
+  members: MemberSummary[];
+  attempt: (what: () => Promise<DepartmentList>) => void;
+}) {
+  const id = department.department_id;
+  return (
+    <>
+      <h3 className="sub-heading">Who can reach it</h3>
+      <p className="section-lede" data-testid="department-reach">
+        {department.restricted
+          ? "Restricted: only the members below, this department’s leads and the company’s admins can reach its department memory and its projects — in the console and in every coding agent session. Its projects can be restricted further, never opened wider."
+          : "Every member of the company can reach its department memory and its projects, unless a project is restricted."}
+      </p>
+      {department.you_may_change && (
+        <Button
+          variant="default"
+          leftSection={department.restricted ? <IconLockOpen size={16} stroke={1.6} /> : <IconLock size={16} stroke={1.6} />}
+          onClick={() => attempt(() => restrictDepartment(id, !department.restricted))}
+          data-testid="restrict-department"
+        >
+          {department.restricted ? "Open it to the whole company" : "Restrict it to its access list"}
+        </Button>
+      )}
+      {department.restricted && (
+        <>
+          <h3 className="sub-heading">Access list</h3>
+          <ul className="entries" data-testid="department-access">
+            {department.access.length === 0 && (
+              <li className="entry" style={{ color: "var(--ink-3)", fontSize: "0.9375rem" }}>
+                Nobody has been let in yet.
+              </li>
+            )}
+            {department.access.map((person) => (
+              <li className="entry" key={person.member_id} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span>{person.name}</span>
+                {department.you_may_change && (
+                  <button
+                    type="button"
+                    className="quiet-link danger"
+                    onClick={() => attempt(() => revokeDepartmentAccess(id, person.member_id))}
+                    data-testid={`revoke-department-${person.member_id}`}
+                  >
+                    Take access away
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {department.you_may_change && (
+            <Choosing
+              members={members.filter((one) => !department.access.some((person) => person.member_id === one.member_id))}
+              missing="Choose who to let in."
+              action="Let them in"
+              testid="department-access"
+              onChosen={(memberId) => attempt(() => grantDepartmentAccess(id, memberId))}
+            />
+          )}
+        </>
+      )}
+    </>
   );
 }
 

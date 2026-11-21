@@ -346,6 +346,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/departments/{department_id}/restrict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a department to its access list, or open it to the whole company again. */
+        post: operations["restrict_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put a member on a department's access list. */
+        post: operations["grant_department_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/access/{member_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a member off a department's access list. */
+        post: operations["revoke_department_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/restrict": {
         parameters: {
             query?: never;
@@ -1165,6 +1216,8 @@ export interface components {
             department_id: string;
             /** Name */
             name: string;
+            /** Restricted */
+            restricted: boolean;
         };
         /**
          * ProjectMember
@@ -1315,8 +1368,8 @@ export interface components {
         };
         /**
          * DepartmentSummary
-         * @description A department (ADR-0032): its department leads, the projects in it this member can reach, and what they may
-         *     change.
+         * @description A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is
+         *     restricted and who is on its access list, and what they may change.
          */
         DepartmentSummary: {
             /** Department Id */
@@ -1331,6 +1384,10 @@ export interface components {
             you_lead: boolean;
             /** You May Change */
             you_may_change: boolean;
+            /** Restricted */
+            restricted: boolean;
+            /** Access */
+            access: components["schemas"]["ProjectMember"][];
         };
         /**
          * Departments
@@ -1365,6 +1422,22 @@ export interface components {
         ProjectMove: {
             /** Project Id */
             project_id: string;
+        };
+        /**
+         * DepartmentRestriction
+         * @description Whether this department is closed to its access list, or open to the whole company.
+         */
+        DepartmentRestriction: {
+            /** Restricted */
+            restricted: boolean;
+        };
+        /**
+         * DepartmentAccessChange
+         * @description The member being put on this department's access list.
+         */
+        DepartmentAccessChange: {
+            /** Member Id */
+            member_id: string;
         };
         /**
          * Restriction
@@ -2234,7 +2307,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message" | "department_created" | "department_renamed" | "department_removed" | "department_lead_appointed" | "department_lead_removed" | "project_moved";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message" | "department_created" | "department_renamed" | "department_removed" | "department_lead_appointed" | "department_lead_removed" | "project_moved" | "department_restricted" | "department_opened" | "department_access_granted" | "department_access_revoked";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -3507,6 +3580,81 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Move a project out of this department, leaving it in no department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    restrict_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentRestriction"];
+            };
+        };
+        responses: {
+            /** @description Close a department to its access list, or open it to the whole company again. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    grant_department_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentAccessChange"];
+            };
+        };
+        responses: {
+            /** @description Put a member on a department's access list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    revoke_department_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a member off a department's access list. */
             200: {
                 headers: {
                     [name: string]: unknown;

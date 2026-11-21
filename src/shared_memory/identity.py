@@ -8,7 +8,7 @@ import secrets
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 
 from psycopg.errors import UniqueViolation
 
@@ -53,24 +53,79 @@ class Project:
 
 
 @dataclass(frozen=True)
+class ShutOut:
+    """What a member can't reach beyond restricted projects' own access lists: the restricted departments they are
+    outside of, and the projects inside those departments (ADR-0032)."""
+
+    departments: frozenset[str] = frozenset()
+    projects: frozenset[str] = frozenset()
+
+
+class DepartmentWall(Protocol):
+    """Who a restricted department keeps out (ADR-0032, extending ADR-0006). Departments are kept by their own module;
+    Identity asks it through this, inside the transaction it is already in, and only ever about members who are
+    neither the company's owner nor an admin, since those reach everything."""
+
+    def shut_out(self, conn: Conn, member: Member) -> ShutOut:
+        """The restricted departments of the member's company they are outside of, and the projects in them."""
+        ...
+
+    def shut_pairs(self, conn: Conn, pairs: Sequence[tuple[int, str]]) -> set[tuple[int, str]]:
+        """Of these members (by row id) each in a project, those the project's restricted department keeps out."""
+        ...
+
+    def restricted_department_of(self, conn: Conn, project_id: str) -> str | None:
+        """The name of the restricted department a project is in, or None when it is in none or in an open one."""
+        ...
+
+
+class _NoWall:
+    """No departments: nothing beyond a project's own access list keeps anyone out."""
+
+    def shut_out(self, conn: Conn, member: Member) -> ShutOut:
+        return ShutOut()
+
+    def shut_pairs(self, conn: Conn, pairs: Sequence[tuple[int, str]]) -> set[tuple[int, str]]:
+        return set()
+
+    def restricted_department_of(self, conn: Conn, project_id: str) -> str | None:
+        return None
+
+
+@dataclass(frozen=True)
 class Caller:
     member: Member
     project: Project | None
     repository: str | None
-    # The restricted projects this member isn't allowed into, worked out when the call was authenticated.
+    # The restricted projects this member isn't allowed into, worked out when the call was authenticated; it includes
+    # every project in a restricted department they are outside of.
     unreachable: frozenset[str] = frozenset()
     # The coding agent the session runs in, as it reported itself; None for changes made from the console.
     agent: str | None = None
+    # The restricted departments this member is outside of, worked out with `unreachable` (ADR-0032).
+    unreachable_departments: frozenset[str] = frozenset()
 
     def require_reach(self, path: str | None) -> None:
-        """Refuse a memory or folder inside a restricted project this member isn't allowed into.
+        """Refuse a memory or folder inside a restricted project or restricted department this member isn't allowed
+        into.
 
-        A session is authenticated for the project it works in, but a path can point into any project, so every
-        call that takes one checks it too.
+        A session is authenticated for the project it works in, but a path can point into any project or department,
+        so every call that takes one checks it too.
         """
         project_id = project_in(path) if path else None
         if project_id is not None and project_id in self.unreachable:
             raise restricted_project(project_id)
+        department_id = department_in(path) if path else None
+        if department_id is not None and department_id in self.unreachable_departments:
+            raise restricted_department(department_id)
+
+    def reaches(self, path: str | None) -> bool:
+        """Whether `require_reach` lets this path through."""
+        try:
+            self.require_reach(path)
+        except Refused:
+            return False
+        return True
 
     @property
     def company(self) -> str:
@@ -105,12 +160,30 @@ def project_in(path: str) -> str | None:
     return parts[1] if len(parts) >= 2 and parts[0] == "projects" else None
 
 
+def department_in(path: str) -> str | None:
+    """The department a memory path or folder is inside, or nothing outside department memory."""
+    parts = PurePosixPath(path.replace("\\", "/").strip("/")).parts
+    return parts[1] if len(parts) >= 2 and parts[0] == "departments" else None
+
+
 def restricted_project(project_id: str) -> Refused:
     """The one refusal a member gets for a restricted project, wherever they meet it."""
     return Refused(
         f"Project {project_id!r} is restricted, so it isn't open to the whole company. "
         "Ask one of its project leads or a company admin to add you to its access list."
     )
+
+
+def restricted_department(department_id: str) -> Refused:
+    """The same refusal for a restricted department's memory, wherever a member outside it meets it."""
+    return Refused(
+        f"Department {department_id!r} is restricted, so it isn't open to the whole company. "
+        "Ask one of its department leads or a company admin to add you to its access list."
+    )
+
+
+def _runs_the_company(member: Member) -> bool:
+    return member.is_owner or member.is_admin
 
 
 def check_name(kind: str, value: str) -> str:
@@ -134,6 +207,8 @@ class Identity:
         # Called when a member may have lost a project: removed from the company, taken off an access list or a lead, no
         # longer an admin, or a project restricted.
         self._access_lost: list[AccessLost] = []
+        # Restricted departments keep members out of their projects too; Departments puts its wall up (`walled_by`).
+        self._wall: DepartmentWall = _NoWall()
         self._db = db
         self._clock = clock
 
@@ -200,7 +275,7 @@ class Identity:
                         "INSERT INTO repositories (project_id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                         (project.project_id, repository),
                     )
-            return Caller(member, project, repository or None, self._unreachable(conn, member))
+            return self._caller(conn, member, project, repository or None)
 
     def token_id(self, token: str) -> int | None:
         """Which personal token this is, by the number the server keeps it under, or None when it is not one the
@@ -226,6 +301,15 @@ class Identity:
 
     def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
+
+    def walled_by(self, wall: DepartmentWall) -> None:
+        """Have restricted departments keep members out of their projects (ADR-0032)."""
+        self._wall = wall
+
+    def lost_access(self, conn: Conn, caller: Caller) -> Callable[[], None]:
+        """`_lost_access`, for a change another module makes that may cost a member a project, such as restricting a
+        department."""
+        return self._lost_access(conn, caller)
 
     def _lost_access(self, conn: Conn, caller: Caller) -> Callable[[], None]:
         """Have the listeners do their writes in the transaction that cost a member a project, so a listener that
@@ -565,7 +649,8 @@ class Identity:
                 " ORDER BY p.name",
                 (member.company_pk, member.is_owner or member.is_admin, member.pk, member.pk),
             ).fetchall()
-        return [Project(row["project_id"], row["name"]) for row in rows]
+            walled = self._shut_out(conn, member).projects
+        return [Project(row["project_id"], row["name"]) for row in rows if row["project_id"] not in walled]
 
     def _reachable(self, conn: Conn, member: Member, project_id: str) -> Project:
         """One of this member's company's projects, refused if it is restricted and they are not allowed into it."""
@@ -577,11 +662,27 @@ class Identity:
             raise Refused(f"Project {project_id!r} is not a project in your company.")
         if found["restricted"] and not self._allowed_in(conn, member, project_id):
             raise restricted_project(project_id)
+        if not _runs_the_company(member) and self._wall.shut_pairs(conn, [(member.pk, project_id)]):
+            raise restricted_project(project_id)
         return Project(found["project_id"], found["name"])
+
+    def _shut_out(self, conn: Conn, member: Member) -> ShutOut:
+        """What restricted departments keep this member out of; nothing for the company's owner and admins."""
+        return ShutOut() if _runs_the_company(member) else self._wall.shut_out(conn, member)
+
+    def _caller(self, conn: Conn, member: Member, project: Project | None, repository: str | None) -> Caller:
+        walled = self._shut_out(conn, member)
+        return Caller(
+            member,
+            project,
+            repository,
+            self._unreachable(conn, member) | walled.projects,
+            unreachable_departments=walled.departments,
+        )
 
     @staticmethod
     def _unreachable(conn: Conn, member: Member) -> frozenset[str]:
-        """The restricted projects of this member's company that they aren't allowed into."""
+        """The restricted projects of this member's company that their own access lists keep them out of."""
         if member.is_owner or member.is_admin:
             return frozenset()
         rows = conn.execute(
@@ -609,10 +710,12 @@ class Identity:
                 "SELECT NOT p.restricted OR m.is_owner OR m.is_admin"
                 " OR EXISTS (SELECT 1 FROM project_leads l WHERE l.project_id = p.project_id AND l.member_id = m.id)"
                 " OR EXISTS (SELECT 1 FROM project_access a WHERE a.project_id = p.project_id AND a.member_id = m.id)"
-                " AS reaches FROM projects p, members m WHERE p.project_id = %s AND m.id = %s",
+                " AS reaches, m.is_owner OR m.is_admin AS runs FROM projects p, members m"
+                " WHERE p.project_id = %s AND m.id = %s",
                 (project_id, pk),
             ).fetchone()
-        if row is None or not row["reaches"]:
+            walled = row is not None and not row["runs"] and bool(self._wall.shut_pairs(conn, [(pk, project_id)]))
+        if row is None or not row["reaches"] or walled:
             raise Refused(
                 f"{member_id!r} can't reach project {project_id!r}: it is restricted and they aren't on its access list."
             )
@@ -668,10 +771,10 @@ class Identity:
         rows = conn.execute("SELECT project_id FROM projects WHERE team_id = %s", (company_pk,)).fetchall()
         return [row["project_id"] for row in rows]
 
-    @staticmethod
-    def cannot_reach(conn: Conn, company_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
+    def cannot_reach(self, conn: Conn, company_pk: int, pairs: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
         """Of these members (by row id) each in a project, those of this company who can no longer reach it: removed
-        from the company, or shut out of a restricted project. Asked inside the transaction of the change."""
+        from the company, or shut out of a restricted project or restricted department. Asked inside the transaction
+        of the change."""
         if not pairs:
             return []
         rows = conn.execute(
@@ -683,7 +786,18 @@ class Identity:
             "))",
             ([pk for pk, _ in pairs], [project_id for _, project_id in pairs], company_pk),
         ).fetchall()
-        return [(row["member_id"], row["project_id"]) for row in rows]
+        lost = [(row["member_id"], row["project_id"]) for row in rows]
+        # The company's owner and admins reach every department; removed members are already counted above.
+        kept_out = {
+            row["id"]
+            for row in conn.execute(
+                "SELECT id FROM members WHERE id = ANY(%s) AND team_id = %s AND removed_at IS NULL"
+                " AND NOT is_owner AND NOT is_admin",
+                (list({pk for pk, _ in pairs}), company_pk),
+            ).fetchall()
+        }
+        walled = self._wall.shut_pairs(conn, [pair for pair in pairs if pair[0] in kept_out])
+        return lost + [pair for pair in dict.fromkeys(pairs) if pair in walled and pair not in lost]
 
     def member_with_github(self, caller: Caller, login: str) -> str | None:
         """The member ID of the member of the caller's company who signs in with this GitHub account, if there is one."""
@@ -698,10 +812,8 @@ class Identity:
     def caller_in(self, member: Member, project_id: str | None) -> Caller:
         """The member as a caller of the memory services, working in one of their company's projects."""
         with self._db.transaction() as conn:
-            unreachable = self._unreachable(conn, member)
-            if project_id is None:
-                return Caller(member, None, None, unreachable)
-            return Caller(member, self._reachable(conn, member, project_id), None, unreachable)
+            project = None if project_id is None else self._reachable(conn, member, project_id)
+            return self._caller(conn, member, project, None)
 
     def create_project(self, caller: Caller, name: str) -> Project:
         """Create a project. Whoever creates it is its first project lead."""
@@ -830,11 +942,18 @@ class Identity:
     def restrict(self, caller: Caller, project_id: str, restricted: bool) -> None:
         """Close a project to its access list, or open it to the whole company again.
 
-        Unrestricting keeps the access list, so restricting it again lets the same members straight back in.
+        Unrestricting keeps the access list, so restricting it again lets the same members straight back in. A project
+        inside a restricted department is never opened to the whole company (ADR-0032).
         """
         self._require_lead(caller, project_id)
         with self._db.transaction() as conn:
-            self._project_name(conn, caller.member, project_id)
+            name = self._project_name(conn, caller.member, project_id)
+            department = None if restricted else self._wall.restricted_department_of(conn, project_id)
+            if department is not None:
+                raise Refused(
+                    f"Project {name!r} is in the restricted department {department!r}, so it can't be opened to the "
+                    "whole company. Open the department, or move the project out of it, first."
+                )
             conn.execute("UPDATE projects SET restricted = %s WHERE project_id = %s", (restricted, project_id))
             committed = self._lost_access(conn, caller) if restricted else None
         if committed is not None:
