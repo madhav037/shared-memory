@@ -66,7 +66,7 @@ _Avoid_: API key, password, project token
 
 **Sign-in method**:
 A way a member proves who they are to the console: GitHub, a magic link, or, on a self-hosted server, the company's identity provider. A member may link several, and they all lead to the same member through the verified email. Coding agents never use one; their sessions carry a personal token.
-_Avoid_: Login provider, auth provider, connection, social login
+_Avoid_: Login provider, auth provider, social login
 
 **Magic link**:
 A link emailed to a member's verified email that signs them in to the console once, within fifteen minutes of being sent.
@@ -78,7 +78,7 @@ _Avoid_: IdP, SSO provider, auth server
 
 **Verified email**:
 An email address a member has proven is theirs, because GitHub vouched for it or because they followed a confirmation link. It is how separate sign-in methods find the same member and how an invited member is recognised.
-_Avoid_: Login email, primary email, username
+_Avoid_: Login email, primary email
 
 **Time zone**:
 The zone a member's times are shown in: the one they chose, or else the one detected for them, from their browser when they sign in to the console or from their session until then.
