@@ -22,6 +22,10 @@ describe("what a challenge asks, in words", () => {
     expect(says({ kind: "retire", reason: null })).toBe("wants to retire it");
     expect(says({ kind: "doubt", reason: "contradicts_code" })).toBe("doubts it: contradicts the code");
   });
+
+  it("says a level contradiction asks to keep the narrower memory as an exception", () => {
+    expect(says({ kind: "level_contradiction", reason: null })).toBe("wants to keep theirs as an exception to it");
+  });
 });
 
 describe("a memory's open doubts", () => {

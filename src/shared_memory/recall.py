@@ -34,7 +34,7 @@ from shared_memory.errors import Refused
 from shared_memory.fence import escape, fenced, framing_of_fence, new_token
 from shared_memory.identity import Caller
 from shared_memory.departments import Departments
-from shared_memory.index import Reach, SearchIndex, split_sections
+from shared_memory.index import Reach, SearchIndex, overridden, split_sections
 from shared_memory.service import label
 from shared_memory.sessions import Session, Sessions
 from shared_memory.memory import Memory, locate
@@ -218,7 +218,11 @@ class Recall:
             source=QuerySource.RECALL,
         )
         # The bar is the similarity itself; a memory in doubt that passes it ranks lower, but still ranks.
-        strong = [hit for hit in hits if hit.similarity >= self._settings.recall_threshold]
+        # A broader memory an exception overrides here is left out: the exception is told instead.
+        overridden_here = overridden(self._db, caller.company, caller.project.project_id, department_id)
+        strong = [
+            hit for hit in hits if hit.similarity >= self._settings.recall_threshold and hit.path not in overridden_here
+        ]
         in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in strong])
         penalty = self._settings.in_doubt_penalty
         strong.sort(key=lambda hit: -ranked(hit.similarity, in_doubt.get(hit.path), penalty))
@@ -249,9 +253,13 @@ class Recall:
         project, repository = caller.project, caller.repository
         if project is None or repository is None or not files:
             return None
-        reach = Reach.of_recall(caller.member_id, project.project_id, self._department_of(project.project_id))
+        department_id = self._department_of(project.project_id)
+        reach = Reach.of_recall(caller.member_id, project.project_id, department_id)
+        overridden_here = overridden(self._db, caller.company, project.project_id, department_id)
         found: list[_Found] = []
         for tie in self._tied.tied_to(caller.company, repository, files, reach):
+            if tie.memory_path in overridden_here:
+                continue
             try:
                 memory = self._store.read(caller.company, PurePosixPath(tie.memory_path))
             except Refused:

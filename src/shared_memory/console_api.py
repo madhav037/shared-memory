@@ -1406,11 +1406,14 @@ class ConsoleApi:
             )
         try:
             result = self._lifecycle.decide_challenge(
-                self._working_in(member, project_of(challenge)), challenge_id, asked.decision
+                self._working_in(member, project_of(challenge)), challenge_id, asked.decision, asked.reason
             )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        if result["status"] == "rejected":
+        if result["status"] in ("kept_exception", "followed"):
+            decided = Decided(challenge_id=challenge.id, decision=result["status"], in_force=result["path"])
+        elif result["status"] == "rejected":
+
             decided = Decided(challenge_id=challenge.id, decision="rejected", in_force=challenge.target_path)
         else:
             decided = Decided(challenge_id=challenge.id, decision="accepted", in_force=result.get("path"))

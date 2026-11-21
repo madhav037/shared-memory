@@ -50,6 +50,8 @@ class Memory:
     replaces: str | None = None
     superseded_by: str | None = None
     exception_to: str | None = None
+    # Why the narrower level's lead keeps this memory as an exception to exception_to (a level contradiction decided).
+    exception_reason: str | None = None
     tied_files: list[str] = field(default_factory=list)
     promoted_by: str | None = None
     # Set when an imported memory was promoted in its writer's name (ADR-0016): the importer, and the source it was

@@ -80,11 +80,15 @@ def test_recall_marks_an_exception_so_claude_applies_it_in_that_project(owner: S
     assert f"exception to {company_memory}" in context
 
 
-def test_a_pointer_to_an_exception_says_so(owner: Session, dana: Session) -> None:
+def test_an_exception_is_told_in_place_of_the_memory_it_overrides(owner: Session, dana: Session) -> None:
+    """Asked about the company memory itself, a session where the exception holds is told the exception, labelled,
+    and not the company memory it overrides (#634)."""
     company_memory = promote_now(dana, JSON_LOGS, level="company")
     promote_superseding(owner, PLAIN_LOGS, target=company_memory)
 
     context = added_context(owner.prompt("do all services write structured JSON logs to stdout?"))
 
-    pointers = [line for line in context.splitlines() if line.startswith("[") and "): " in line]
-    assert any(f"exception to {company_memory}" in line for line in pointers), context
+    labelled = [line for line in context.splitlines() if line.startswith("[")]
+    assert any(f"exception to {company_memory}" in line for line in labelled), context
+    assert f"({company_memory})" not in context
+

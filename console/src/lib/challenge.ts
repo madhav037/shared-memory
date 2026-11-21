@@ -14,6 +14,7 @@ const KINDS: Record<string, string> = {
   supersede: "supersede it",
   add: "add a memory",
   promote: "promote it into department memory",
+  level_contradiction: "keep theirs as an exception to it",
 };
 
 /** Enough of a challenge to say what it asks. */

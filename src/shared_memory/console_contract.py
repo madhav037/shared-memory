@@ -434,18 +434,21 @@ class ChallengeList(BaseModel):
 
 
 class Decision(BaseModel):
-    """Accept a challenge or reject it."""
+    """Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by
+    following the broader memory, which retires the narrower one."""
 
-    decision: Literal["accept", "reject"]
+    decision: Literal["accept", "reject", "keep_exception", "follow"]
+    reason: str | None = None
 
 
 class Decided(BaseModel):
     """What deciding a challenge did."""
 
     challenge_id: int
-    decision: Literal["accepted", "rejected"]
+    decision: Literal["accepted", "rejected", "kept_exception", "followed"]
     # The memory in force now: the one offered in its place, at the path promoting it gave it, when a supersede was
-    # accepted; the challenged memory when the challenge was rejected; none when a retire was accepted.
+    # accepted; the challenged memory when the challenge was rejected; none when a retire was accepted. For a level
+    # contradiction, the narrower memory when an exception was kept, the broader one when it was followed.
     in_force: str | None
 
 
@@ -479,6 +482,8 @@ class MemoryDetail(BaseModel):
     replaces: str | None
     superseded_by: str | None
     exception_to: str | None
+    # Why its lead keeps it as an exception to exception_to, once a level contradiction is decided that way.
+    exception_reason: str | None = None
     tied_files: list[str]
     promoted_by: str | None
     imported_by: str | None

@@ -180,6 +180,9 @@ When the briefing or a prompt shows **challenges waiting for your decision**, ea
 2. Ask the member to accept or reject each one. Don't decide for them.
 3. Record the decision with `decide_challenge` (challenge_id, and `accept` or `reject`).
 
+A promotion that supersedes a broader memory (project over department or company memory, department over company memory) makes the new memory an exception to it. When the member promoting it doesn't lead that project or department, it is a **level contradiction** for its leads, and the new memory holds there until they decide. **Level contradictions waiting for your decision** show both memories and how long it has waited: ask the member whether to keep theirs as an exception, and why (`decide_challenge` with `keep_exception` and `reason`), or to follow the broader memory, which retires theirs (`follow`). Rewriting either memory is a new promotion in a session.
+
+
 News about challenges this member raised (accepted, rejected, closed) appears as **shared memory news**, and so does a challenge against the member's own memory that someone else decided, with who decided it and in what capacity. Tell the member.
 
 ## Briefing and pins

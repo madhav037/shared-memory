@@ -16,7 +16,16 @@ from shared_memory.audit import (
     MEMORY_SUPERSEDED,
     Audit,
 )
-from shared_memory.challenges import DOUBT, PROMOTE, Challenge, Challenges, DecidesAs, department_of, project_of
+from shared_memory.challenges import (
+    DOUBT,
+    LEVEL_CONTRADICTION,
+    PROMOTE,
+    Challenge,
+    Challenges,
+    DecidesAs,
+    department_of,
+    project_of,
+)
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
@@ -65,6 +74,9 @@ CREATE TABLE IF NOT EXISTS imports (
 """
 
 RESOLUTIONS = ("supersede", "keep_both", "cancel")
+# How a level contradiction is decided: the narrower memory stays as an exception, with a reason, or follows the broader
+# one and is retired. From a session or the console (ADR-0009: neither writes what the memory says).
+LEVEL_DECISIONS = ("keep_exception", "follow")
 
 
 @dataclass(frozen=True)
@@ -181,6 +193,7 @@ class Lifecycle:
                 raise Refused(f"{similar_path} is no longer active. Call promote again without a reference.")
             if similar_location.level != "personal" and LEVEL_ORDER[similar_location.level] < LEVEL_ORDER[target]:
                 # A narrower memory superseding a broader one becomes an exception to it.
+                # Until its level's leads decide, it holds where it applies: a level contradiction (#634).
                 if exception_to is not None:
                     raise Refused(f"A {target} memory can be an exception to only one broader memory.")
                 exception_to = similar_path
@@ -208,13 +221,13 @@ class Lifecycle:
                 "Challenge first; once it's accepted, promote the rest."
             )
         if promotable.asks_leads:
-            if challenged is not None or supersede is not None or exception_to is not None:
+            if challenged is not None or supersede is not None:
                 raise Refused(
-                    "Only a department lead promotes a memory into department memory that supersedes or is an "
-                    "exception to another. Keep both, or ask one of its leads."
+                    "Only a department lead promotes a memory into department memory that supersedes another. Keep "
+                    "both, or ask one of its leads."
                 )
             self._forget(reference)
-            return self._ask_department_leads(caller, location, promoted_by, department_id, reasoning)
+            return self._ask_department_leads(caller, location, promoted_by, department_id, reasoning, exception_to)
         challenged_foundation = None if challenged is None else locate(challenged[0]).foundation
         if into is not None and not self._changes_at_once(caller, project.project_id, into, leads):
             if (challenged is not None and challenged_foundation is None) or supersede is not None or exception_to is not None:
@@ -243,16 +256,27 @@ class Lifecycle:
             return self._challenge_raised(
                 challenge_id, challenged[0], challenged[1].author, challenged_foundation is not None
             )
+        # A lead of the narrower level settles a level contradiction at once, keeping theirs as an exception with the
+        # promotion's reasoning; anyone else's waits for those leads (ADR-0033 for department memory).
+        settles = exception_to is not None and (target == "department" or leads)
         result = self._move(
             caller,
             location,
             target,
             supersede=supersede,
             exception_to=exception_to,
+            exception_reason=reasoning if settles else None,
             promoted_by=promoted_by,
             foundation=into,
             department_id=department_id,
         )
+        if exception_to is not None and not settles:
+            result["level_contradiction"] = self._raise_level_contradiction(
+                caller, result["path"], exception_to, target, reasoning
+            )
+            result["next"] = (
+                f"It holds for this {target} while its leads decide: keep it as an exception, or follow {exception_to}."
+            )
         if supersede is not None:
             superseded = f"its author superseded it with {result['path']}."
             self._challenges.resolve_doubts(caller.company, supersede, caller.member_id, superseded)
@@ -407,10 +431,12 @@ class Lifecycle:
         promoted_by: str | None,
         department_id: str | None,
         reasoning: str | None,
+        exception_to: str | None = None,
     ) -> dict[str, Any]:
         """A promotion into department memory by a member who doesn't lead the department: a challenge its leads
         decide, or the company's admins once it has none (ADR-0033). It has no challenged memory, so it stands against
-        the department's folder, and the memory stays the member's personal memory until it is decided."""
+        the department's folder, and the memory stays the member's personal memory until it is decided. exception_to is
+        the company memory its session judged it contradicts: accepting it raises a level contradiction."""
         assert department_id is not None
         folder = str(PurePosixPath(DEPARTMENTS_FOLDER, department_id))
         kept = self._kept_import(caller.company, location.path)
@@ -424,6 +450,7 @@ class Lifecycle:
             promoted_by=promoted_by,
             reasoning=reasoning,
             imported_from=None if kept is None else kept.source,
+            exception_to=exception_to,
         )
         return {
             "status": "challenge_raised",
@@ -433,6 +460,28 @@ class Lifecycle:
             "next": "Only a department lead promotes into department memory, so one of its leads decides (an admin "
             "when it has none). Until then it stays your personal memory.",
         }
+
+    def _raise_level_contradiction(
+        self,
+        caller: Caller,
+        narrower: str,
+        broader: str,
+        level: Level,
+        reasoning: str | None,
+        raised_by: str | None = None,
+    ) -> int:
+        """Raise a level contradiction to the narrower level's leads: `narrower`, just promoted as an exception to
+        `broader`, holds where it applies until they keep it as an exception or follow."""
+        return self._challenges.raise_challenge(
+            caller,
+            kind=LEVEL_CONTRADICTION,
+            target_path=broader,
+            target_author=self._store.read(caller.company, PurePosixPath(broader)).author,
+            level=level,
+            challenger_path=narrower,
+            reasoning=reasoning,
+            raised_by=raised_by,
+        )
 
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
@@ -666,6 +715,7 @@ class Lifecycle:
         *,
         supersede: str | None = None,
         exception_to: str | None = None,
+        exception_reason: str | None = None,
         promoted_by: str | None = None,
         reason: str = "Promote",
         foundation: str | None = None,
@@ -699,7 +749,11 @@ class Lifecycle:
             new_path = change.new_path(folder, location.path.stem)
             change.delete(location.path)
             moved = replace(
-                memory, replaces=supersede, exception_to=exception_to, promoted_by=promoted_by or memory.promoted_by
+                memory,
+                replaces=supersede,
+                exception_to=exception_to,
+                exception_reason=exception_reason,
+                promoted_by=promoted_by or memory.promoted_by,
             )
             names: dict[str, str] = {}
             if imported is not None:
@@ -712,9 +766,10 @@ class Lifecycle:
 
             def audited() -> None:
                 where = location.project_id
+                excepted = {} if exception_to is None else {"exception_to": exception_to}
                 self._audit.memory(
                     caller, MEMORY_PROMOTED, str(new_path), project_id=where, level=target, was=str(location.path),
-                    **names,
+                    **names, **excepted,
                 )  # fmt: skip
                 if supersede is not None:
                     self._audit.memory(caller, MEMORY_SUPERSEDED, supersede, project_id=where, by=str(new_path))
@@ -727,6 +782,10 @@ class Lifecycle:
             change.also(audited)
             change.also(credited)
         return {"status": "promoted", "path": str(new_path)}
+
+    def _still_active(self, company: str, path: str) -> bool:
+        where = PurePosixPath(path)
+        return self._store.exists(company, where) and self._store.read(company, where).status == "active"
 
     @staticmethod
     def _active(change: Change, path: PurePosixPath) -> Memory:
@@ -795,6 +854,9 @@ class Lifecycle:
         by = "its author" if memory.author == caller.member_id else "a project lead"
         reason = "its department was removed." if orphaned else f"{by} retired it."
         self._challenges.close_all_against(caller.company, str(location.path), caller.member_id, reason)
+        for waiting in self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)]):
+            if waiting.kind == LEVEL_CONTRADICTION:
+                self._challenges.decide(waiting, "closed", caller.member_id, f"{location.path} was retired.")
         return {"status": "retired", "path": str(location.path)}
 
     def _orphaned(self, location: Location) -> bool:
@@ -828,19 +890,29 @@ class Lifecycle:
 
     # Deciding challenges
 
-    def decide_challenge(self, caller: Caller, challenge_id: int, decision: str) -> dict[str, Any]:
+    def decide_challenge(
+        self, caller: Caller, challenge_id: int, decision: str, reason: str | None = None
+    ) -> dict[str, Any]:
         caller.require_project()
-        if decision not in ("accept", "reject"):
-            raise Refused("Decide a challenge with 'accept' or 'reject'.")
+        if decision not in ("accept", "reject", *LEVEL_DECISIONS):
+            raise Refused("Decide a challenge with 'accept' or 'reject', a level contradiction with 'keep_exception' or 'follow'.")
         challenge = self._challenges.open_challenge(caller.company, challenge_id)
         if challenge is None:
             raise Refused(f"There is no open challenge {challenge_id} in your company.")
+        if (challenge.kind == LEVEL_CONTRADICTION) != (decision in LEVEL_DECISIONS):
+            if challenge.kind == LEVEL_CONTRADICTION:
+                raise Refused(
+                    f"{challenge_id} is a level contradiction: decide it with 'keep_exception' and a reason, or 'follow'."
+                )
+            raise Refused(f"Challenge {challenge_id} is decided with 'accept' or 'reject'.")
         caller.require_reach(challenge.target_path)
         caller.require_reach(challenge.challenger_path)
         # Who raised it, asked once: it settles who may decide, and who is told how it ended.
         raisers = self._challenges.raisers([challenge])[challenge.id]
         decides_as = self._challenges.require_decider(caller, challenge, raisers)
         decider = caller.member_id
+        if challenge.kind == LEVEL_CONTRADICTION:
+            return self._decide_level_contradiction(caller, challenge, decision, reason, raisers, decides_as)
 
         if decision == "reject":
             self._challenges.decide(challenge, "rejected", decider)
@@ -880,11 +952,69 @@ class Lifecycle:
         )
         return result
 
+    def _decide_level_contradiction(
+        self,
+        caller: Caller,
+        challenge: Challenge,
+        decision: str,
+        reason: str | None,
+        raisers: tuple[str, ...],
+        decides_as: DecidesAs,
+    ) -> dict[str, Any]:
+        """Keep the narrower memory as an exception to the broader one, recording why, or follow the broader one by
+        retiring the narrower. Neither changes what either memory says (ADR-0009)."""
+        assert challenge.challenger_path is not None
+        narrower = PurePosixPath(challenge.challenger_path)
+        why = (reason or "").strip()
+        if decision == "keep_exception":
+            if not why:
+                raise Refused("Keeping an exception needs a reason: say why this level differs from the broader memory.")
+            refuse_secret(why, "The reason", "into an exception")
+        if not self._still_active(caller.company, str(narrower)):
+            self._challenges.decide(challenge, "withdrawn", caller.member_id, "The narrower memory is no longer active.")
+            raise Refused("The narrower memory is no longer active, so the level contradiction has been withdrawn.")
+        areas = [area for area in [area_of(narrower)] if area is not None]
+        where = project_of(challenge)
+        if decision == "keep_exception":
+            title = self._store.read(caller.company, narrower).title
+            with self._store.change(caller.company, committer(caller), f"Keep exception: {title}", areas=areas) as change:
+                kept = self._active(change, narrower)
+                change.write(narrower, replace(kept, exception_to=challenge.target_path, exception_reason=why))
+            state, outcome, in_force = "kept_exception", "kept as an exception", str(narrower)
+        else:
+            with self._store.change(caller.company, committer(caller), f"Follow {challenge.target_path}", areas=areas) as change:
+                change.write(narrower, replace(self._active(change, narrower), status="retired"))
+                change.also(
+                    lambda: self._audit.memory(
+                        caller, MEMORY_RETIRED, str(narrower), project_id=where, challenge_id=challenge.id
+                    )
+                )
+            state, outcome, in_force = "followed", f"retired to follow {challenge.target_path}", challenge.target_path
+        self._challenges.decide(challenge, state, caller.member_id, why or None)
+        self._decided(caller, challenge, raisers, state, decides_as, why or None)
+        self._challenges.close_all_against(caller.company, str(narrower), caller.member_id, f"it was {outcome}.")
+        if challenge.raised_by != caller.member_id:
+            self._challenges.tell(
+                caller.company,
+                challenge.raised_by,
+                f"Your level contradiction {challenge.id} was decided by {caller.member_id}: {narrower} is {outcome}.",
+            )
+        return {"status": state, "challenge_id": challenge.id, "path": in_force}
+
     def _decided(
-        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...], decision: str, decides_as: DecidesAs
+        self,
+        caller: Caller,
+        challenge: Challenge,
+        raisers: tuple[str, ...],
+        decision: str,
+        decides_as: DecidesAs,
+        exception_reason: str | None = None,
     ) -> None:
         """Record a decision with the capacity it was made in, and tell the author when it wasn't theirs."""
-        named = {} if challenge.reason is None else {"reason": challenge.reason}
+        named: dict[str, str] = {} if challenge.reason is None else {"reason": challenge.reason}
+        if exception_reason is not None:
+            named["exception_reason"] = exception_reason
+
         self._audit.memory(
             caller, CHALLENGE_DECIDED, challenge.target_path, project_id=project_of(challenge),
             challenge_id=challenge.id, decision=decision, challenge=challenge.kind, **named, decided_as=decides_as,
@@ -954,10 +1084,14 @@ class Lifecycle:
             why = "Its project is no longer in that department."
             self._challenges.decide(challenge, "withdrawn", caller.member_id, why)
             raise Refused(f"{why} The challenge has been withdrawn, and the memory stays personal.")
+        broader = challenge.exception_to
+        if broader is not None and not self._still_active(caller.company, broader):
+            broader = None  # the company memory it contradicted is gone: nothing is left to contradict
         moved = self._move(
             caller,
             challenger_location,
             "department",
+            exception_to=broader,
             promoted_by=challenge.promoted_by,
             reason=f"Accept challenge {challenge.id}",
             department_id=department_id,
@@ -966,6 +1100,12 @@ class Lifecycle:
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
             f"your memory is now {now_in.name} department memory at {moved['path']}."
         )
+        if broader is not None:
+            moved["level_contradiction"] = self._raise_level_contradiction(
+                caller, moved["path"], broader, "department", challenge.reasoning, raised_by=challenge.raised_by
+            )
+            outcome += f" It contradicts {broader}, so its department leads now keep it as an exception or follow."
+
         return {"status": "accepted", "challenge_id": challenge.id, "path": moved["path"]}, outcome
 
     def _accept_retire(

@@ -404,7 +404,9 @@ function Margin({ memory, history, onChanged }: { memory: MemoryDetail; history:
           <>
             <dt>Exception to</dt>
             <dd>
-              <Link to={memoryUrl(memory.exception_to)}>a company memory</Link>, for this project only
+              <Link to={memoryUrl(memory.exception_to)}>a broader memory</Link>, for this{" "}
+              {memory.level === "department" ? "department" : "project"} only
+              {memory.exception_reason && <span data-testid="exception-reason">: {memory.exception_reason}</span>}
             </dd>
           </>
         )}

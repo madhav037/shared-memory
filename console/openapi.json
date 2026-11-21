@@ -5616,6 +5616,18 @@
             ],
             "title": "Exception To"
           },
+          "exception_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exception Reason"
+          },
           "tied_files": {
             "items": {
               "type": "string"
@@ -6391,7 +6403,9 @@
           "decision": {
             "enum": [
               "accepted",
-              "rejected"
+              "rejected",
+              "kept_exception",
+              "followed"
             ],
             "title": "Decision",
             "type": "string"
@@ -6446,15 +6460,29 @@
         "type": "object"
       },
       "Decision": {
-        "description": "Accept a challenge or reject it.",
+        "description": "Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by\nfollowing the broader memory, which retires the narrower one.",
         "properties": {
           "decision": {
             "enum": [
               "accept",
-              "reject"
+              "reject",
+              "keep_exception",
+              "follow"
             ],
             "title": "Decision",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           }
         },
         "required": [
