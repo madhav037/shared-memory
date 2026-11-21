@@ -20,6 +20,7 @@
   --accent-soft: #e2e9fb;
   --company: #7a3db8;
   --project: #1f7a5a;
+  --department: #a8326e;
   --personal: #b0621a;
   --bad: #c0392b;
   --ext: #eef1f5;
@@ -30,13 +31,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f141c; --panel: #171e29; --ink: #e3e8f0; --muted: #93a0b3; --line: #2b3545; --wire: #344052;
-    --accent: #7ea2ff; --accent-soft: #1f2d4d; --company: #c39af0; --project: #5cc79c; --personal: #e7a260; --bad: #ff7b6b; --ext: #1b2330;
+    --accent: #7ea2ff; --accent-soft: #1f2d4d; --company: #c39af0; --department: #f08bb8; --project: #5cc79c; --personal: #e7a260; --bad: #ff7b6b; --ext: #1b2330;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f141c; --panel: #171e29; --ink: #e3e8f0; --muted: #93a0b3; --line: #2b3545; --wire: #344052;
-  --accent: #7ea2ff; --accent-soft: #1f2d4d; --company: #c39af0; --project: #5cc79c; --personal: #e7a260; --bad: #ff7b6b; --ext: #1b2330;
+  --accent: #7ea2ff; --accent-soft: #1f2d4d; --company: #c39af0; --department: #f08bb8; --project: #5cc79c; --personal: #e7a260; --bad: #ff7b6b; --ext: #1b2330;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -196,7 +197,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">madhav037/shared-memory · dev @ 428f63b · 18 Nov 2026</div>
+    <div class="eyebrow">madhav037/shared-memory · dev @ 97f0d92 · 21 Nov 2026</div>
     <h1>Shared Memory Architecture</h1>
     <p class="cap">One server keeps the company's memory. Every coding agent reads and writes it. The console governs it. Every box, arrow and step on this page names the file in <code class="code">src/shared_memory/</code> that does it. The cloud platform (#468) lives in the private repository <code class="code">madhav037/shared-memory-platform</code>; where this page draws it, files are in <code class="code">src/shared_memory_platform/</code>. The platform is built and merged into its <code class="code">dev</code>, not yet live: its real Hetzner, Paddle and Storage Box paths are unverified until go-live (platform #13).</p>
     <nav class="toc" aria-label="Sections">
@@ -348,7 +349,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
   <section class="card" id="components">
     <div class="head"><h2>Components inside the server</h2><span class="cap">pick a module to see what it calls and what calls it</span></div>
     <div class="scroll">
-      <svg id="cm" class="cm w1000" viewBox="0 0 1000 530" role="group" aria-label="The server's modules in six layers. Select one to light up its calls."></svg>
+      <svg id="cm" class="cm w1000" viewBox="0 0 1000 618" role="group" aria-label="The server's modules in seven layers. Select one to light up its calls."></svg>
     </div>
     <div class="legend">
       <span><i style="--c:var(--accent)"></i>selected</span>
@@ -387,6 +388,8 @@ svg text { font-family: var(--body); fill: var(--ink); }
 └─ &lt;company code&gt;/
    ├─ company/&lt;type&gt;/&lt;memory&gt;.md   <span class="c">company memory</span>
    │       └─ &lt;topic&gt;/index.md …    <span class="c">a topic is a folder</span>
+   ├─ departments/&lt;department id&gt;/&lt;type&gt;/…
+   │                            <span class="c">department memory</span>
    └─ projects/&lt;project id&gt;/
       ├─ shared/&lt;type&gt;/…           <span class="c">project memory</span>
       ├─ shared/foundations/&lt;slug&gt;/…
@@ -397,7 +400,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
 <span class="c">&lt;type&gt; = conventions · decisions · architecture
          gotchas · known-issues (project only)</span>
 /data/models/                <span class="c">bge-small, fetched once</span></pre>
-        <p class="cap">A file is a YAML header (title, summary, type, author, status, replaces, tied_files…) plus a Markdown body of at most 600 words (<code class="code">memory.py</code>, <code class="code">validation.py</code>). Paths are decoded by <code class="code">memory.locate()</code>. The area a save takes a turn on is the folder above: company, one project's <code class="code">shared/</code>, or one member's <code class="code">people/&lt;id&gt;/</code>.</p>
+        <p class="cap">A file is a YAML header (title, summary, type, author, status, replaces, tied_files…) plus a Markdown body of at most 600 words (<code class="code">memory.py</code>, <code class="code">validation.py</code>). Paths are decoded by <code class="code">memory.locate()</code>. The area a save takes a turn on is the folder above: company, one department, one project's <code class="code">shared/</code>, or one member's <code class="code">people/&lt;id&gt;/</code>. The rename from team to company (ADR-0031) moved <code class="code">team/</code> to <code class="code">company/</code>; the database's table and column names still say <code class="code">team</code> (#664).</p>
       </div>
       <div style="display:grid;gap:8px;align-content:start;min-width:0">
         <h3 class="sub">If the server lost a store</h3>
@@ -415,13 +418,13 @@ svg text { font-family: var(--body); fill: var(--ink); }
         <tbody>
           <tr><td>Memory files</td><td>Every memory, as Markdown with a header</td><td><span class="pill k-truth">source of truth</span></td><td><code>store.py</code></td></tr>
           <tr><td>Git repository (same folder)</td><td>Every change as one commit in its member's name; main moves only forward, a failure is undone by a revert commit</td><td><span class="pill k-truth">history</span></td><td><code>store.py</code> writes · <code>history.py</code> reads</td></tr>
-          <tr><td>Postgres · who and where</td><td><code>teams</code> <code>members</code> <code>tokens</code> (SHA-256 only) <code>projects</code> <code>repositories</code> <code>project_leads</code> <code>project_access</code> <code>project_foundations</code> <code>foundation_keepers</code></td><td><span class="pill k-truth">source of truth</span></td><td><code>db.py</code> schema · <code>identity.py</code></td></tr>
-          <tr><td>Postgres · governing memory</td><td><code>pins</code> · <code>challenges</code> <code>notices</code> · <code>promotions</code> <code>imports</code> · <code>known_issue_saves</code> · <code>memory_uses</code></td><td><span class="pill k-truth">source of truth</span></td><td><code>briefing.py</code> · <code>challenges.py</code> · <code>lifecycle.py</code> · <code>known_issues.py</code> · <code>uses.py</code></td></tr>
+          <tr><td>Postgres · who and where</td><td><code>teams</code> <code>members</code> <code>tokens</code> (SHA-256 only) <code>projects</code> <code>repositories</code> <code>project_leads</code> <code>project_access</code> <code>project_foundations</code> <code>foundation_keepers</code> · <code>departments</code> <code>department_leads</code> <code>department_projects</code> <code>department_access</code> (a project in at most one department; a restricted department admits only its list, ADR-0032)</td><td><span class="pill k-truth">source of truth</span></td><td><code>db.py</code> schema · <code>identity.py</code> · <code>departments.py</code></td></tr>
+          <tr><td>Postgres · governing memory</td><td><code>pins</code> · <code>challenges</code> <code>challenge_evidence</code> <code>notices</code> · <code>promotions</code> <code>imports</code> · <code>known_issue_saves</code> · <code>memory_uses</code> · <code>tied_files</code> · <code>draft_learnings</code> (waiting for their member) · <code>onboarding_progress</code> (per repository and outside source). Pins, the index and tied files carry a <code>department_id</code> for department memory</td><td><span class="pill k-truth">source of truth</span></td><td><code>briefing.py</code> · <code>challenges.py</code> · <code>lifecycle.py</code> · <code>known_issues.py</code> · <code>uses.py</code> · <code>tied.py</code> · <code>draft_learnings.py</code> · <code>onboarding.py</code></td></tr>
           <tr><td>Postgres · board</td><td><code>boards</code> <code>cards</code> <code>card_links</code> <code>card_comments</code>. Cards are not memory (ADR-0014): a move is a row update, not a commit</td><td><span class="pill k-truth">source of truth</span></td><td><code>db.py</code> schema · <code>board.py</code></td></tr>
           <tr><td>Postgres · audit</td><td><code>audit_events</code>: who, what, which path. Append-only, no memory content</td><td><span class="pill k-truth">log</span></td><td><code>audit.py</code></td></tr>
           <tr><td>Postgres · console sign-in</td><td><code>console_sessions</code>, <code>console_sign_ins</code>: hashes of cookies and OAuth states; <code>handed_over_sign_ins</code>: one-time IDs of sign-ins the platform handed over, until they expire</td><td><span class="pill k-ops">short-lived</span></td><td><code>console_sessions.py</code></td></tr>
           <tr><td>Postgres · live sessions</td><td><code>sessions</code> (with its branch, the 20 files it touched last, and whether it is muted) <code>session_activities</code> <code>locks</code> <code>takeovers</code> <code>locks_ended_by_pattern</code> <code>recall_told</code> <code>activity_embeddings</code> <code>collision_warnings</code> <code>collisions</code> <code>recent_activities</code> <code>recent_work_reminders</code>, plus a project's <code>never_lock_patterns</code>. Active means "seen within 30 minutes", worked out from the clock on each read; nothing sweeps</td><td><span class="pill k-ops">operational</span></td><td><code>sessions.py</code> · <code>activity.py</code> · <code>locks.py</code> · <code>recall.py</code> · <code>collisions.py</code></td></tr>
-          <tr><td>Postgres · sessions that talk</td><td><code>gate_ends</code> <code>gate_answers</code> <code>gate_starts</code> <code>gate_waits</code> <code>gate_urgents</code> · <code>gate_hooked</code> <code>gate_told_unhooked</code> · <code>messages</code> (7 days) · <code>console_doings</code> · <code>handoff_notes</code> (7 days) · <code>standbys</code>. Cleared through <code>Sessions.on_gone</code> when a session ends or comes back from idle, or deleted past their days as rows are written or read. A project's own wait is in <code>project_waits</code></td><td><span class="pill k-ops">operational</span> · <span class="pill k-truth">source of truth</span> (the wait)</td><td><code>gates.py</code> · <code>unhooked.py</code> · <code>messages.py</code> · <code>talk.py</code> · <code>handoff.py</code> · <code>standby.py</code></td></tr>
+          <tr><td>Postgres · sessions that talk</td><td><code>gate_ends</code> <code>gate_answers</code> <code>gate_starts</code> <code>gate_waits</code> <code>gate_urgents</code> · <code>gate_hooked</code> <code>gate_told_unhooked</code> · <code>messages</code> (7 days) · <code>console_doings</code> · <code>handoff_notes</code> (7 days) · <code>standbys</code> · <code>refusal_headlines</code> (warnings a member is yet to be shown). Cleared through <code>Sessions.on_gone</code> when a session ends or comes back from idle, or deleted past their days as rows are written or read. A project's own wait is in <code>project_waits</code></td><td><span class="pill k-ops">operational</span> · <span class="pill k-truth">source of truth</span> (the wait)</td><td><code>gates.py</code> · <code>unhooked.py</code> · <code>messages.py</code> · <code>talk.py</code> · <code>handoff.py</code> · <code>standby.py</code></td></tr>
           <tr><td>Postgres · license and limits</td><td><code>license_settings</code>: the license key installed server-wide (else <code>SHARED_MEMORY_LICENSE_KEY</code>). <code>rate_limit_settings</code>, <code>rate_buckets</code>: the limits admins set and each caller's count this minute</td><td><span class="pill k-truth">source of truth</span> · <span class="pill k-ops">operational</span></td><td><code>licensing.py</code> · <code>ratelimit.py</code></td></tr>
           <tr><td>Postgres · search index</td><td><code>sections</code>: one row per section or chunk, a 384-number vector (HNSW index), keyword tokens (GIN), a content hash. No readable text (ADR-0002)</td><td><span class="pill k-derived">derived</span></td><td><code>index.py</code></td></tr>
           <tr><td>Postgres · turns</td><td>Advisory locks per area and for moving main (held, not stored); <code>save_markers</code> for crash recovery</td><td><span class="pill k-ops">operational</span></td><td><code>db.py</code> · <code>store.py</code></td></tr>
@@ -626,18 +629,21 @@ svg text { font-family: var(--body); fill: var(--ink); }
           <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
         </defs>
         <text x="20" y="22" class="flabel">LEVELS · WEIGHT</text>
-        <line x1="34" y1="178" x2="34" y2="48" style="stroke:var(--muted);stroke-width:1.5" marker-end="url(#ar)"/>
+        <line x1="34" y1="178" x2="34" y2="40" style="stroke:var(--muted);stroke-width:1.5" marker-end="url(#ar)"/>
         <text x="0" y="0" class="lbl" transform="translate(26 150) rotate(-90)">wins</text>
-        <rect x="52" y="38" width="300" height="40" rx="8" style="fill:var(--panel);stroke:var(--project);stroke-width:2"/>
-        <text x="68" y="63" style="font:600 14px var(--display);fill:var(--project)">Project</text><text x="340" y="63" class="lbl" text-anchor="end">one project · its foundations</text>
-        <rect x="52" y="88" width="300" height="40" rx="8" style="fill:var(--panel);stroke:var(--company);stroke-width:2"/>
-        <text x="68" y="113" style="font:600 14px var(--display);fill:var(--company)">Company</text><text x="340" y="113" class="lbl" text-anchor="end">every project</text>
-        <rect x="52" y="138" width="300" height="40" rx="8" style="fill:var(--panel);stroke:var(--personal);stroke-width:2"/>
-        <text x="68" y="163" style="font:600 14px var(--display);fill:var(--personal)">Personal</text><text x="340" y="163" class="lbl" text-anchor="end">one member · not accepted</text>
-        <rect x="52" y="200" width="300" height="36" rx="8" style="fill:none;stroke:var(--line);stroke-dasharray:4 4"/>
-        <text x="68" y="223" class="lbl">Local · the agent's own, never sent</text>
-        <path class="ants" d="M352 158 C 410 158, 410 108, 356 108" style="stroke:var(--accent)" marker-end="url(#arA)"/>
-        <path class="ants" d="M352 158 C 430 158, 430 58, 356 58" style="stroke:var(--accent)" marker-end="url(#arA)"/>
+        <rect x="52" y="34" width="300" height="32" rx="8" style="fill:var(--panel);stroke:var(--project);stroke-width:2"/>
+        <text x="68" y="55" style="font:600 14px var(--display);fill:var(--project)">Project</text><text x="340" y="55" class="lbl" text-anchor="end">one project · its foundations</text>
+        <rect x="52" y="72" width="300" height="32" rx="8" style="fill:var(--panel);stroke:var(--department);stroke-width:2"/>
+        <text x="68" y="93" style="font:600 14px var(--display);fill:var(--department)">Department</text><text x="340" y="93" class="lbl" text-anchor="end">its projects · leads promote</text>
+        <rect x="52" y="110" width="300" height="32" rx="8" style="fill:var(--panel);stroke:var(--company);stroke-width:2"/>
+        <text x="68" y="131" style="font:600 14px var(--display);fill:var(--company)">Company</text><text x="340" y="131" class="lbl" text-anchor="end">every project</text>
+        <rect x="52" y="148" width="300" height="32" rx="8" style="fill:var(--panel);stroke:var(--personal);stroke-width:2"/>
+        <text x="68" y="169" style="font:600 14px var(--display);fill:var(--personal)">Personal</text><text x="340" y="169" class="lbl" text-anchor="end">one member · not accepted</text>
+        <rect x="52" y="200" width="300" height="34" rx="8" style="fill:none;stroke:var(--line);stroke-dasharray:4 4"/>
+        <text x="68" y="222" class="lbl">Local · the agent's own, never sent</text>
+        <path class="ants" d="M352 164 C 400 164, 400 126, 356 126" style="stroke:var(--accent)" marker-end="url(#arA)"/>
+        <path class="ants" d="M352 164 C 415 164, 415 88, 356 88" style="stroke:var(--accent)" marker-end="url(#arA)"/>
+        <path class="ants" d="M352 164 C 430 164, 430 50, 356 50" style="stroke:var(--accent)" marker-end="url(#arA)"/>
         <text x="436" y="112" style="font:600 12.5px var(--body);fill:var(--accent)">promote</text>
         <text x="436" y="128" class="lbl">session checks</text>
         <text x="436" y="142" class="lbl">contradictions</text>
@@ -660,7 +666,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
         <text x="760" y="243" text-anchor="middle" class="lbl">old versions stay in history</text>
       </svg>
     </div>
-    <div class="chips"><span class="chip">convention</span><span class="chip">decision</span><span class="chip">architecture</span><span class="chip">gotcha</span><span class="chip">known_issue → project memory at once, with a card</span><span class="chip plain">foundations: architecture · product · glossary · decisions + extras</span><span class="chip plain">topic = folder + index</span><span class="chip plain">pin → in every briefing</span><span class="chip plain">possibly outdated: unused 60 days</span><span class="chip plain">fenced in every prompt · suspected instructions marked</span><span class="chip plain">read-only: a hosted server whose license key lapsed (ADR-0022)</span></div>
+    <div class="chips"><span class="chip">convention</span><span class="chip">decision</span><span class="chip">architecture</span><span class="chip">gotcha</span><span class="chip">known_issue → project memory at once, with a card</span><span class="chip plain">foundations: architecture · product · glossary · decisions + extras</span><span class="chip plain">topic = folder + index</span><span class="chip plain">pin → in every briefing</span><span class="chip plain">level contradiction: a narrower memory holds as an exception until its leads keep it or follow</span><span class="chip plain">a non-lead's department promotion → challenge to its leads</span><span class="chip plain">doubted · similar on save · tied files · draft learnings</span><span class="chip plain">possibly outdated: unused 60 days</span><span class="chip plain">fenced in every prompt · suspected instructions marked</span><span class="chip plain">read-only: a hosted server whose license key lapsed (ADR-0022)</span></div>
   </section>
 
   <div class="grid2" id="who">
@@ -668,11 +674,11 @@ svg text { font-family: var(--body); fill: var(--ink); }
     <section class="card">
       <h2>Who can change memory</h2>
       <div class="who">
-        <div><h3>A session</h3><div class="chips"><span class="chip">remember</span><span class="chip">edit own</span><span class="chip">delete own</span><span class="chip">promote</span><span class="chip">retire</span><span class="chip">add_to_foundation</span><span class="chip">save_known_issue</span><span class="chip">pin</span><span class="chip">decide</span></div></div>
-        <div><h3>The console</h3><div class="chips"><span class="chip">pin</span><span class="chip">unpin</span><span class="chip">decide</span><span class="chip">retire</span><span class="chip plain">cards (not memory)</span><span class="chip plain">messages + gate answers (not memory)</span><span class="chip no">write</span><span class="chip no">edit</span><span class="chip no">promote</span></div></div>
+        <div><h3>A session</h3><div class="chips"><span class="chip">remember</span><span class="chip">edit own</span><span class="chip">delete own</span><span class="chip">promote</span><span class="chip">retire</span><span class="chip">add_to_foundation</span><span class="chip">save_known_issue</span><span class="chip">pin</span><span class="chip">decide</span><span class="chip">challenge</span><span class="chip">tie</span><span class="chip">confirm a draft learning</span></div></div>
+        <div><h3>The console</h3><div class="chips"><span class="chip">pin</span><span class="chip">unpin</span><span class="chip">decide</span><span class="chip">keep exception · follow</span><span class="chip">retire</span><span class="chip plain">departments + leads (not memory)</span><span class="chip plain">cards (not memory)</span><span class="chip plain">messages + gate answers (not memory)</span><span class="chip no">write</span><span class="chip no">edit</span><span class="chip no">promote</span></div></div>
       </div>
-      <div class="chips"><span class="chip plain">owner ⊃ admin</span><span class="chip plain">project lead</span><span class="chip plain">keeper</span><span class="chip plain">member</span><span class="chip plain">restricted project → access list only</span></div>
-      <p class="cap">ADR-0009: the console's only saving routes are <code class="code">retire_at</code>, <code class="code">decide_challenge</code> and <code class="code">move_card</code>, the last because a card landing in Done retires the known issues it fixes (<code class="code">console_api.SAVING</code>). A test, <code class="code">test_console_never_writes_memory.py</code>, keeps it that way. ADR-0026 lets the console send a message and answer a gate (<code class="code">send_message</code>, <code class="code">answer_gate</code>), which are not memory and save nothing; handoff notes are written only by sessions or the server. On a read-only hosted server neither a session nor the console changes memory: every chip above is refused (<code class="code">app.unless_read_only</code>, <code class="code">console_api.REFUSED_WHILE_READ_ONLY</code>), and so are <code class="code">create_project</code>, <code class="code">add_foundation</code>, inviting members and adding cards. The platform never writes memory either (ADR-0023).</p>
+      <div class="chips"><span class="chip plain">owner ⊃ admin</span><span class="chip plain">department lead</span><span class="chip plain">project lead</span><span class="chip plain">keeper</span><span class="chip plain">member</span><span class="chip plain">restricted project → access list only</span><span class="chip plain">restricted department → its list only, walls beat project lists</span></div>
+      <p class="cap">ADR-0009: the console's only saving routes are <code class="code">retire_at</code>, <code class="code">decide_challenge</code>, <code class="code">move_card</code>, the last because a card landing in Done retires the known issues it fixes, and <code class="code">remove_department</code>, which retires the department's memory (<code class="code">console_api.SAVING</code>). Deciding a level contradiction from the console keeps the exception or follows by retiring it; rewriting it happens in a session (ADR-0032). A test, <code class="code">test_console_never_writes_memory.py</code>, keeps it that way. ADR-0026 lets the console send a message and answer a gate (<code class="code">send_message</code>, <code class="code">answer_gate</code>), which are not memory and save nothing; handoff notes are written only by sessions or the server. On a read-only hosted server neither a session nor the console changes memory: every chip above is refused (<code class="code">app.unless_read_only</code>, <code class="code">console_api.REFUSED_WHILE_READ_ONLY</code>), and so are <code class="code">create_project</code>, <code class="code">add_foundation</code>, inviting members and adding cards. The platform never writes memory either (ADR-0023).</p>
     </section>
 
     <!-- 11. Stack -->
@@ -745,15 +751,20 @@ svg text { font-family: var(--body); fill: var(--ink); }
       <span class="st"><span class="dot" style="--c:var(--project)"></span>Cloud platform · #468 built (public #469–#473, #480; platform #1–#12)</span>
       <span class="st"><span class="dot" style="--c:var(--project)"></span>Sessions that talk · #507 (v1.2, #520): gate, messages, mute, handoff notes</span>
       <span class="st"><span class="dot" style="--c:var(--project)"></span>Standby · #523 (#529)</span>
+      <span class="st"><span class="dot" style="--c:var(--project)"></span>Quality loop · #502 (#542): doubting memory, similar on save · project health #553</span>
+      <span class="st"><span class="dot" style="--c:var(--project)"></span>Capture · #503 (#556): tied files, draft learnings</span>
+      <span class="st"><span class="dot" style="--c:var(--project)"></span>Warnings the member can't miss · #585 (#593)</span>
+      <span class="st"><span class="dot" style="--c:var(--project)"></span>Brownfield onboarding · #614 (#616–#622); #623's landing lead waits on platform #48</span>
+      <span class="st"><span class="dot" style="--c:var(--project)"></span>Company, department and project memory · #624 (#625–#636): team renamed company, departments, level contradictions</span>
       <span class="st"><span class="dot" style="--c:var(--project)"></span>Security lane · #377 threat model, #380 alerts, #407 outages; #388, #390, #391, #485, #486 fixed</span>
       <span class="st"><span class="dot" style="--c:var(--personal)"></span>Go-live · platform #13 (hand-checks, domain, deploy) · unverified from here</span>
       <span class="st"><span class="dot" style="--c:var(--personal)"></span>The business is Raven · #496 (tests merged in #530)</span>
       <span class="st"><span class="dot" style="--c:var(--personal)"></span>Hand-checks · #268 · tests on pgvector 0.8 · #531</span>
-      <span class="st"><span class="dot" style="--c:var(--muted)"></span>Planned · specs #502 quality loop, #503 capture, #504 visibility, #505 cards in the briefing; #338 recall quality</span>
-      <span class="st"><span class="dot" style="--c:var(--muted)"></span>To triage · #519 waking an idle session, #492 deploy image check, #421–#425, #417, #354</span>
+      <span class="st"><span class="dot" style="--c:var(--muted)"></span>Planned · #504 visibility (PR #573 open), #505 cards in the briefing; #338 recall quality</span>
+      <span class="st"><span class="dot" style="--c:var(--muted)"></span>To triage · #662 department leads assign keepers, #663 a lead decides twice, #664 schema still says team, #519 waking an idle session, #492 deploy image check, #421–#425, #417, #354</span>
     </div>
     <details>
-      <summary>27 decisions (ADRs)</summary>
+      <summary>33 decisions (ADRs)</summary>
       <ol>
         <li>Memory lives on a central server</li>
         <li>Files on disk are the source of truth</li>
@@ -782,6 +793,12 @@ svg text { font-family: var(--body); fill: var(--ink); }
         <li>Sessions hear each other through their own hooks</li>
         <li>The console may answer messages</li>
         <li>A session awaiting an answer stands by</li>
+        <li>The console may ask and answer questions</li>
+        <li>An interviewee is the author of what their interview produced</li>
+        <li>Headless onboarding writes a proposals file, never memory</li>
+        <li>The top level is the company</li>
+        <li>Departments sit between company and project</li>
+        <li>Only a department lead promotes into department memory</li>
       </ol>
     </details>
   </section>
@@ -963,7 +980,7 @@ svg text { font-family: var(--body); fill: var(--ink); }
   /* ---------- 2. component map ---------- */
   // Each module: title, file, what it does. Taken from build_app() in app.py and each module's docstring.
   const COMPONENTS = {
-    mcp: ["MCP tools", "app.py", "39 tools and 2 prompts on /mcp. Each call resolves its caller from the personal token; refusals become tool errors. A tool that takes session answers with that session's news (waiting_for), for an agent with no hooks."],
+    mcp: ["MCP tools", "app.py", "46 tools and 2 prompts on /mcp. Each call resolves its caller from the personal token; refusals become tool errors. A tool that takes session answers with that session's news (waiting_for), for an agent with no hooks."],
     hooks: ["Hook endpoints", "app.py · hooks.py", "/hooks/session-start, prompt-submitted, before-edit (before every tool: branch, files, gate, lock), after-tool (news, for agents whose hook before a tool takes none), standby (held until news) and session-end, answered in each agent's own hook format. Never blocks a session, except an edit."],
     api: ["Console API", "console_api.py", "The /api/* JSON routes the console calls, described as OpenAPI (console_contract.py). Cookie sessions; a changing call needs the console header. The Sessions page's collisions, gates, standbys, messages and handoff notes come through SessionTalk, which may also send a reply and answer a gate (ADR-0026), never save memory."],
     signin: ["Console sign-in", "console_sessions.py", "GitHub OAuth and console session cookies. Stores hashes of states and cookies, never the values."],
@@ -1004,6 +1021,14 @@ svg text { font-family: var(--body); fill: var(--ink); }
     export: ["CompanyExport", "export.py", "An admin downloads all of the company's data as one archive: memory files, members, projects, board and audit log. Works while read-only."],
     monitoring: ["Error reports", "monitoring.py", "Sends server errors to Sentry with private data removed, only when SHARED_MEMORY_SENTRY_DSN is set."],
     database: ["Database", "db.py", "Connection pools (saves get half), the identity, board and audit schema, advisory locks for turns, save markers."],
+    departments: ["Departments", "departments.py", "Named groups of a company's projects, one level deep, with their department leads and, when restricted, an access list (ADR-0032). A project sits in at most one; a project in none sees no change."],
+    deptpage: ["Department page", "department_page.py", "A read model for the console: a department's projects and memory, and for its leads and admins a roll-up of how memory is doing in each project. Counts only, never names."],
+    onboarding: ["Onboarding", "onboarding.py", "Hands a member's coding agent the steps to import what the team already has: repository documents, git history, a code scan, outside sources, an interview. Records progress per repository and source. The session judges contradictions (ADR-0004); a headless run writes a proposals file, never memory (ADR-0030)."],
+    sources: ["Sources", "sources.py", "The forms an imported memory's source takes: repository:path, commit:repository@revision, or an outside source's kind and reference. Checks only the shape (ADR-0016)."],
+    health: ["Project health", "health.py", "A read model for a project's leads and admins: possibly outdated memory and memory in doubt."],
+    drafts: ["Draft learnings", "draft_learnings.py", "What a session's coding agent drafts from what it learned, kept until its member confirms it as personal memory or declines it."],
+    tied: ["Tied files", "tied.py", "Which memories are tied to which files, from each memory's header, so a session editing a file is told the memory tied to it."],
+    warning: ["Warnings", "warning.py", "Every warning a gate or standby shows the member themselves, word for word, in a box that keeps its shape in a narrow terminal, in the member's time zone."],
   };
   const DEPS = {
     mcp: ["identity", "licenses", "fence", "listing", "saves", "service", "lifecycle", "challenges", "briefing", "board", "known", "sessions", "activities", "locks", "collisions", "gates", "unhooked", "messages", "talk", "handoff", "standby", "uses", "audit"],
@@ -1038,13 +1063,27 @@ svg text { font-family: var(--body); fill: var(--ink); }
     audit: ["database", "identity"],
     store: ["database", "index", "briefing", "uses"],
     index: ["database", "embeddings"],
+    departments: ["database", "identity"],
+    deptpage: ["departments", "challenges", "identity", "store", "uses"],
+    onboarding: ["database", "identity", "store", "audit"],
+    sources: ["identity"],
+    health: ["identity", "challenges", "store", "uses"],
+    drafts: ["database", "identity", "service", "sessions", "fence", "validation"],
+    tied: ["database", "identity", "index", "locks", "store"],
   };
+  // Calls added with departments, onboarding, capture and warnings (#503, #585, #614, #624).
+  [["mcp", ["onboarding", "drafts", "tied", "departments"]], ["api", ["departments", "deptpage", "onboarding", "health"]],
+   ["lifecycle", ["departments", "sources"]], ["briefing", ["departments"]], ["challenges", ["departments"]],
+   ["recall", ["departments", "tied"]], ["service", ["departments", "tied"]], ["cmem", ["departments"]], ["export", ["departments"]],
+   ["gates", ["warning"]], ["messages", ["warning"]], ["standby", ["warning"]]]
+    .forEach(([a, bs]) => (DEPS[a] = (DEPS[a] || []).concat(bs)));
   const ROWS = [
     ["ENTRY POINTS", ["mcp", "hooks", "api", "signin", "psignin", "cli"]],
     ["GUARDS", ["identity", "licenses", "ratelimit", "listing", "saves", "validation", "fence", "suspected"]],
     ["MEMORY", ["service", "lifecycle", "challenges", "briefing", "recall", "uses", "cmem"]],
     ["WORK + SESSIONS", ["board", "known", "sessions", "activities", "locks", "collisions", "export", "audit"]],
-    ["SESSIONS TALK", ["gates", "unhooked", "messages", "talk", "handoff", "standby"]],
+    ["SESSIONS TALK", ["gates", "unhooked", "messages", "talk", "handoff", "standby", "warning"]],
+    ["LEVELS + CAPTURE", ["departments", "deptpage", "health", "onboarding", "sources", "drafts", "tied"]],
     ["STORAGE", ["store", "history", "index", "embeddings", "database", "monitoring"]],
   ];
   const cm = document.getElementById("cm");
