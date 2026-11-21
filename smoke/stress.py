@@ -4,10 +4,10 @@
     uv run python -m smoke.stress run --members 20 --subagents 3 --duration 60 [--races]
     uv run python -m smoke.stress down                 # stop it and delete its data
 
-Each run adds a fresh team with its own members and project, so runs against one stack don't disturb each other.
+Each run adds a fresh company with its own members and project, so runs against one stack don't disturb each other.
 Every subagent is a session of its own: one MCP connection, a session-start hook, then a mix of reads, saves and
 prompt hooks with a pause between calls. Afterwards the run reports latency per operation, failures, recall's hit
-rate, and whether the team's memory files, git and search index still agree.
+rate, and whether the company's memory files, git and search index still agree.
 
 Never part of CI or `uv run pytest`: it's for comparing the server under load before and after a change.
 """
@@ -75,7 +75,7 @@ PROMPTS = [
 
 @dataclass(frozen=True)
 class Stack:
-    """The server under test, and how to run a command beside it: to create a team, and to read its memory folder
+    """The server under test, and how to run a command beside it: to create a company, and to read its memory folder
     and database for the closing check."""
 
     url: str
@@ -94,24 +94,33 @@ class Stack:
         assert self.database_url is not None
         return dict(os.environ, SHARED_MEMORY_DATABASE_URL=self.database_url, SHARED_MEMORY_ROOT=self.memory_root)
 
-    def setup_team(self, team: str) -> str:
-        """Create a team with an owner; return the owner's personal token."""
+    def setup_company(self, company: str) -> str:
+        """Create a company with an owner; return the owner's personal token."""
         cli = ["shared-memory"] if self.compose_project else [sys.executable, "-c", "from shared_memory.cli import main; main()"]
         done = subprocess.run(
-            self._beside_server([*cli, "setup", "--team", team, "--owner-member-id", "owner", "--owner-name", "Owner"]),
-            capture_output=True, text=True, env=self._env(), check=False,
+            self._beside_server(
+                [*cli, "setup", "--company", company, "--owner-member-id", "owner", "--owner-name", "Owner"]
+            ),
+            capture_output=True,
+            text=True,
+            env=self._env(),
+            check=False,
         )
         for line in done.stdout.splitlines():
             if line.startswith("Owner personal token:"):
                 return line.split(":", 1)[1].strip()
-        raise SystemExit(f"Couldn't create team {team}:\n{done.stdout}{done.stderr}")
+        raise SystemExit(f"Couldn't create company {company}:\n{done.stdout}{done.stderr}")
 
-    def check(self, team: str) -> dict[str, Any]:
-        """Whether the team's memory files, git and search index agree (stress_check.py)."""
+    def check(self, company: str) -> dict[str, Any]:
+        """Whether the company's memory files, git and search index agree (stress_check.py)."""
         python = "python" if self.compose_project else sys.executable
         done = subprocess.run(
-            self._beside_server([python, "-", self.memory_root, team]),
-            input=CHECK_SCRIPT.read_text(), capture_output=True, text=True, env=self._env(), check=False,
+            self._beside_server([python, "-", self.memory_root, company]),
+            input=CHECK_SCRIPT.read_text(),
+            capture_output=True,
+            text=True,
+            env=self._env(),
+            check=False,
         )
         if done.returncode != 0:
             raise SystemExit(f"The consistency check failed to run:\n{done.stderr}")
@@ -214,7 +223,13 @@ class Results:
 
 
 async def subagent(
-    url: str, member_id: str, token: str, project: str, results: Results, until: float, pace: tuple[float, float],
+    url: str,
+    member_id: str,
+    token: str,
+    project: str,
+    results: Results,
+    until: float,
+    pace: tuple[float, float],
     http: httpx.AsyncClient,
 ) -> None:
     """One subagent working until the deadline: a realistic mix of what a coding agent does with memory."""
@@ -247,15 +262,25 @@ async def subagent(
                     elif roll < 0.80:
                         title, summary, kind, body = rng.choice(TOPICS)
                         tag = uuid.uuid4().hex[:6]
-                        saved = await results.timed("remember", session.call(
-                            "remember", title=f"{title} {tag}", summary=summary, type=kind,
-                            body=f"{body}\n\nNoted by {member_id} ({tag}).", topic=rng.choice([None, None, "backend"]),
-                        ))
+                        saved = await results.timed(
+                            "remember",
+                            session.call(
+                                "remember",
+                                title=f"{title} {tag}",
+                                summary=summary,
+                                type=kind,
+                                body=f"{body}\n\nNoted by {member_id} ({tag}).",
+                                topic=rng.choice([None, None, "backend"]),
+                            ),
+                        )
                         mine.append(saved["path"])
                     elif roll < 0.90 and mine:
-                        await results.timed("edit_memory", session.call(
-                            "edit_memory", path=rng.choice(mine), body=f"Edited at {time.time()} by {member_id}."
-                        ))
+                        await results.timed(
+                            "edit_memory",
+                            session.call(
+                                "edit_memory", path=rng.choice(mine), body=f"Edited at {time.time()} by {member_id}."
+                            ),
+                        )
                     elif roll < 0.94 and mine:
                         path = mine.pop(rng.randrange(len(mine)))
                         await results.timed("delete_memory", session.call("delete_memory", path=path))
@@ -263,10 +288,16 @@ async def subagent(
                         path = mine.pop(rng.randrange(len(mine)))
                         first = await results.timed("promote", session.call("promote", path=path, level="project"))
                         if first["status"] == "similar_memories":
-                            await results.timed("promote (resolved)", session.call(
-                                "promote", path=path, level="project", reference=first["reference"],
-                                resolutions={similar["path"]: "keep_both" for similar in first["similar"]},
-                            ))
+                            await results.timed(
+                                "promote (resolved)",
+                                session.call(
+                                    "promote",
+                                    path=path,
+                                    level="project",
+                                    reference=first["reference"],
+                                    resolutions={similar["path"]: "keep_both" for similar in first["similar"]},
+                                ),
+                            )
                     else:
                         await results.timed("hook: session start", session.hook(http, "session-start", source="resume"))
                 except Refusal:
@@ -296,8 +327,13 @@ async def races(url: str, token: str, project: str) -> dict[str, str]:
         first = sessions[0]
 
         async def remember(title: str, body: str = "original body") -> str:
-            saved = await first.call("remember", title=f"{title} {uuid.uuid4().hex[:8]}", summary="original summary",
-                                     type="convention", body=body)
+            saved = await first.call(
+                "remember",
+                title=f"{title} {uuid.uuid4().hex[:8]}",
+                summary="original summary",
+                type="convention",
+                body=body,
+            )
             path: str = saved["path"]
             return path
 
@@ -341,10 +377,12 @@ async def races(url: str, token: str, project: str) -> dict[str, str]:
         found["three promotes of one memory: promoted more than once"] = f"{twice}/10"
 
         title = f"Same title {uuid.uuid4().hex[:6]}"
-        saved = await asyncio.gather(*(
-            session.call("remember", title=title, summary="s", type="decision", body=f"body {n}")
-            for n, session in enumerate(sessions)
-        ))
+        saved = await asyncio.gather(
+            *(
+                session.call("remember", title=title, summary="s", type="decision", body=f"body {n}")
+                for n, session in enumerate(sessions)
+            )
+        )
         overwritten = 8 - len({memory["path"] for memory in saved})
         found["eight saves of one title: memories overwritten"] = f"{overwritten}/8"
     return found
@@ -358,12 +396,13 @@ def percentile(values: list[float], p: float) -> float:
     return ordered[min(len(ordered) - 1, int(p * len(ordered)))]
 
 
-async def run(stack: Stack, members: int, subagents: int, duration: float, pace: tuple[float, float],
-              with_races: bool) -> dict[str, Any]:
-    team = f"stress-{uuid.uuid4().hex[:6]}"
-    owner_token = stack.setup_team(team)
+async def run(
+    stack: Stack, members: int, subagents: int, duration: float, pace: tuple[float, float], with_races: bool
+) -> dict[str, Any]:
+    company = f"stress-{uuid.uuid4().hex[:6]}"
+    owner_token = stack.setup_company(company)
     async with Session(stack.url, owner_token, None) as owner:
-        project = (await owner.call("create_project", name=f"Stress {team}", repository=REPOSITORY))["project_id"]
+        project = (await owner.call("create_project", name=f"Stress {company}", repository=REPOSITORY))["project_id"]
         tokens: dict[str, str] = {}
         for n in range(1, members + 1):
             member_id = f"m{n:02d}"
@@ -372,18 +411,24 @@ async def run(stack: Stack, members: int, subagents: int, duration: float, pace:
     async with Session(stack.url, owner_token, project) as owner:
         # The server loads the search model on its first search; that shouldn't count against the first saves.
         await owner.call("search", query="warm up")
-    print(f"Team {team}: {members} members x {subagents} subagents = {members * subagents} sessions "
-          f"for {duration:.0f}s against {stack.url}", flush=True)
+    print(
+        f"Company {company}: {members} members x {subagents} subagents = {members * subagents} sessions "
+        f"for {duration:.0f}s against {stack.url}",
+        flush=True,
+    )
 
     results = Results()
     until = time.monotonic() + duration
     limits = httpx.Limits(max_connections=1000, max_keepalive_connections=1000)
     started = time.perf_counter()
     async with httpx.AsyncClient(timeout=120, limits=limits) as http:
-        await asyncio.gather(*(
-            subagent(stack.url, member_id, token, project, results, until, pace, http)
-            for member_id, token in tokens.items() for _ in range(subagents)
-        ))
+        await asyncio.gather(
+            *(
+                subagent(stack.url, member_id, token, project, results, until, pace, http)
+                for member_id, token in tokens.items()
+                for _ in range(subagents)
+            )
+        )
     wall = time.perf_counter() - started
 
     race_results = None
@@ -392,7 +437,7 @@ async def run(stack: Stack, members: int, subagents: int, duration: float, pace:
         race_results = await races(stack.url, next(iter(tokens.values())), project)
 
     return {
-        "team": team,
+        "company": company,
         "members": members,
         "subagents_per_member": subagents,
         "duration_seconds": duration,
@@ -412,13 +457,15 @@ async def run(stack: Stack, members: int, subagents: int, duration: float, pace:
         "refusals": dict(results.refusals.most_common()),
         "recall": {"prompts": results.prompts, "with_recalled_memories": results.prompts_with_recall},
         "races": race_results,
-        "consistency": stack.check(team),
+        "consistency": stack.check(company),
     }
 
 
 def consistent(report: dict[str, Any]) -> bool:
     check = report["consistency"]
-    return not (check["not_searchable"] or check["searchable_but_gone"] or check["uncommitted"]) and check["git_fsck_ok"]
+    return (
+        not (check["not_searchable"] or check["searchable_but_gone"] or check["uncommitted"]) and check["git_fsck_ok"]
+    )
 
 
 def race_problems(report: dict[str, Any]) -> int:
@@ -427,8 +474,10 @@ def race_problems(report: dict[str, Any]) -> int:
 
 def print_report(report: dict[str, Any]) -> None:
     calls = sum(op["count"] for op in report["operations"].values())
-    print(f"\n{calls} calls in {report['wall_seconds']:.0f}s ({calls / report['wall_seconds']:.1f}/s), "
-          f"{sum(report['failures'].values())} failures, {sum(report['refusals'].values())} refusals\n")
+    print(
+        f"\n{calls} calls in {report['wall_seconds']:.0f}s ({calls / report['wall_seconds']:.1f}/s), "
+        f"{sum(report['failures'].values())} failures, {sum(report['refusals'].values())} refusals\n"
+    )
     print(f"{'operation':24}{'count':>7}{'p50':>9}{'p95':>9}{'p99':>9}{'max':>9}")
     for name, op in report["operations"].items():
         print(f"{name:24}{op['count']:>7}" + "".join(f"{op[p]:>8.2f}s" for p in ("p50", "p95", "p99", "max")))
@@ -448,10 +497,15 @@ def print_report(report: dict[str, Any]) -> None:
             print(f"  {outcome:>6}  {what}")
 
     check = report["consistency"]
-    print(f"\nFiles, git and the search index {'agree' if consistent(report) else 'DISAGREE'}: "
-          f"{check['memory_files']} memory files, {check['indexed_memories']} searchable, {check['commits']} commits")
-    for label, key in (("on disk but not searchable", "not_searchable"),
-                       ("searchable but gone from disk", "searchable_but_gone"), ("uncommitted", "uncommitted")):
+    print(
+        f"\nFiles, git and the search index {'agree' if consistent(report) else 'DISAGREE'}: "
+        f"{check['memory_files']} memory files, {check['indexed_memories']} searchable, {check['commits']} commits"
+    )
+    for label, key in (
+        ("on disk but not searchable", "not_searchable"),
+        ("searchable but gone from disk", "searchable_but_gone"),
+        ("uncommitted", "uncommitted"),
+    ):
         if check[key]:
             print(f"  {len(check[key])} {label}: {check[key][:3]}")
     if not check["git_fsck_ok"]:
@@ -469,34 +523,56 @@ def pace_range(text: str) -> tuple[float, float]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m smoke.stress", description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, help in (("up", "Build and start the stress test's own stack."),
-                       ("down", "Stop the stress test's stack and delete its data."),
-                       ("run", "Run the load against a server, then check it.")):
+    for name, help in (
+        ("up", "Build and start the stress test's own stack."),
+        ("down", "Stop the stress test's stack and delete its data."),
+        ("run", "Run the load against a server, then check it."),
+    ):
         command = commands.add_parser(name, help=help)
-        command.add_argument("--compose-project", default=DEFAULT_COMPOSE_PROJECT,
-                             help=f"The stack's compose project name (default {DEFAULT_COMPOSE_PROJECT}).")
-        command.add_argument("--port", type=int, default=DEFAULT_PORT,
-                             help=f"The port the stack's server listens on, on 127.0.0.1 (default {DEFAULT_PORT}).")
-    commands.choices["up"].add_argument("--workers", type=int, default=2,
-                                        help="Server processes in the stack (SHARED_MEMORY_WORKERS, default 2).")
+        command.add_argument(
+            "--compose-project",
+            default=DEFAULT_COMPOSE_PROJECT,
+            help=f"The stack's compose project name (default {DEFAULT_COMPOSE_PROJECT}).",
+        )
+        command.add_argument(
+            "--port",
+            type=int,
+            default=DEFAULT_PORT,
+            help=f"The port the stack's server listens on, on 127.0.0.1 (default {DEFAULT_PORT}).",
+        )
+    commands.choices["up"].add_argument(
+        "--workers", type=int, default=2, help="Server processes in the stack (SHARED_MEMORY_WORKERS, default 2)."
+    )
     run_command = commands.choices["run"]
     run_command.add_argument("--members", type=int, default=20)
     run_command.add_argument("--subagents", type=int, default=3, help="Subagents per member, each its own session.")
     run_command.add_argument("--duration", type=float, default=60, help="Seconds of load.")
-    run_command.add_argument("--pace", type=pace_range, default=(0.05, 0.4), metavar="LOW-HIGH",
-                             help="Seconds a subagent pauses between calls, drawn uniformly (default 0.05-0.4).")
-    run_command.add_argument("--races", action="store_true",
-                             help="After the load, race one member's subagents on the same memory.")
-    run_command.add_argument("--server-url", help="A server this machine runs instead of the stack; needs "
-                             "--memory-root and --database-url for creating the team and the closing check.")
+    run_command.add_argument(
+        "--pace",
+        type=pace_range,
+        default=(0.05, 0.4),
+        metavar="LOW-HIGH",
+        help="Seconds a subagent pauses between calls, drawn uniformly (default 0.05-0.4).",
+    )
+    run_command.add_argument(
+        "--races", action="store_true", help="After the load, race one member's subagents on the same memory."
+    )
+    run_command.add_argument(
+        "--server-url",
+        help="A server this machine runs instead of the stack; needs "
+        "--memory-root and --database-url for creating the company and the closing check.",
+    )
     run_command.add_argument("--memory-root", help="That server's memory folder (SHARED_MEMORY_ROOT).")
     run_command.add_argument("--database-url", help="That server's database (SHARED_MEMORY_DATABASE_URL).")
     run_command.add_argument("--json", type=Path, help="Also write the report here, to compare runs.")
     args = parser.parse_args(argv)
 
     if args.command == "up":
-        subprocess.run([*compose(args.compose_project), "up", "-d", "--build", "--wait"], check=True,
-                       env={**os.environ, "STRESS_PORT": str(args.port), "STRESS_WORKERS": str(args.workers)})
+        subprocess.run(
+            [*compose(args.compose_project), "up", "-d", "--build", "--wait"],
+            check=True,
+            env={**os.environ, "STRESS_PORT": str(args.port), "STRESS_WORKERS": str(args.workers)},
+        )
         wait_until_answering(f"http://127.0.0.1:{args.port}")
         print(f"The stress test's stack answers at http://127.0.0.1:{args.port}.")
         return 0

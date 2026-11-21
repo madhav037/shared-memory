@@ -226,6 +226,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every department of the company, with its leads and the projects in it this member can reach. */
+        get: operations["departments"];
+        put?: never;
+        /** Create a department with no leads and no projects. Only the company's admins can. */
+        post: operations["create_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing. */
+        get: operations["department"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change a department's name. Its department ID stays as it is. */
+        post: operations["rename_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a department, leaving its projects in no department. */
+        post: operations["remove_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a member a lead of this department. */
+        post: operations["appoint_department_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/leads/{member_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a lead off this department. */
+        post: operations["remove_department_lead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a project in no department into this one. */
+        post: operations["move_project_in"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/projects/{project_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move a project out of this department, leaving it in no department. */
+        post: operations["move_project_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/restrict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a department to its access list, or open it to the whole company again. */
+        post: operations["restrict_department"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put a member on a department's access list. */
+        post: operations["grant_department_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}/access/{member_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a member off a department's access list. */
+        post: operations["revoke_department_access"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/restrict": {
         parameters: {
             query?: never;
@@ -235,7 +423,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Close a project to its access list, or open it to the whole team again. */
+        /** Close a project to its access list, or open it to the whole company again. */
         post: operations["restrict_project"];
         delete?: never;
         options?: never;
@@ -352,8 +540,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+        /** A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
         get: operations["project_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing. */
+        get: operations["onboarding_progress"];
         put?: never;
         post?: never;
         delete?: never;
@@ -523,7 +728,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The team's audit log, newest first. */
+        /** The company's audit log, newest first. */
         get: operations["audit"];
         put?: never;
         post?: never;
@@ -540,7 +745,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All of the team's data as one zip: the memory with its history, and the team's records. Admins only. */
+        /** All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
         get: operations["export"];
         put?: never;
         post?: never;
@@ -574,8 +779,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+        /** One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
         get: operations["files"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/interviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing. */
+        get: operations["interviewed"];
         put?: never;
         post?: never;
         delete?: never;
@@ -644,7 +866,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+        /** Pin a project, department or company memory, or a topic folder, into every briefing it belongs in. */
         post: operations["pin_at"];
         delete?: never;
         options?: never;
@@ -693,7 +915,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Memories that match, across team memory and every project this member can reach. */
+        /** Memories that match, across company memory, department memory and every project this member can reach. */
         get: operations["search_everywhere"];
         put?: never;
         post?: never;
@@ -779,7 +1001,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The server's license key: its status, team, member cap and expiry. */
+        /** The server's license key: its status, company, member cap and expiry. */
         get: operations["license_state"];
         put?: never;
         /** Install a license key on the server. Admins only. */
@@ -797,7 +1019,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Everyone in the team, with their role and GitHub account. */
+        /** Everyone in the company, with their role and GitHub account. */
         get: operations["members"];
         put?: never;
         /** Add a member and issue their first personal token. */
@@ -868,7 +1090,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Make another member the team's owner. */
+        /** Make another member the company's owner. */
         post: operations["hand_over_ownership"];
         delete?: never;
         options?: never;
@@ -937,7 +1159,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue a new personal token for a member of the team, revoking the one they had. */
+        /** Issue a new personal token for a member of the company, revoking the one they had. */
         post: operations["reissue_token"];
         delete?: never;
         options?: never;
@@ -975,8 +1197,8 @@ export interface components {
             member_id: string;
             /** Name */
             name: string;
-            /** Team */
-            team: string;
+            /** Company */
+            company: string;
             /**
              * Role
              * @enum {string}
@@ -1003,6 +1225,18 @@ export interface components {
             platform_url: string | null;
         };
         /**
+         * DepartmentRef
+         * @description The department a project is in (ADR-0032).
+         */
+        DepartmentRef: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+            /** Restricted */
+            restricted: boolean;
+        };
+        /**
          * ProjectMember
          * @description A member named on a project.
          */
@@ -1014,7 +1248,7 @@ export interface components {
         };
         /**
          * ProjectSummary
-         * @description A project the member can reach, and who looks after it.
+         * @description A project the member can reach, who looks after it, and the department it is in, if any.
          */
         ProjectSummary: {
             /** Project Id */
@@ -1027,6 +1261,7 @@ export interface components {
             leads: components["schemas"]["ProjectMember"][];
             /** You Lead */
             you_lead: boolean;
+            department: components["schemas"]["DepartmentRef"] | null;
         };
         /** Projects */
         Projects: {
@@ -1104,6 +1339,7 @@ export interface components {
             you_lead: boolean;
             /** You May Change */
             you_may_change: boolean;
+            department: components["schemas"]["DepartmentRef"] | null;
         };
         /**
          * ProjectName
@@ -1138,8 +1374,169 @@ export interface components {
             member_id: string;
         };
         /**
+         * DepartmentProject
+         * @description A project in a department.
+         */
+        DepartmentProject: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentSummary
+         * @description A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is
+         *     restricted and who is on its access list, and what they may change.
+         */
+        DepartmentSummary: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+            /** Leads */
+            leads: components["schemas"]["ProjectMember"][];
+            /** Projects */
+            projects: components["schemas"]["DepartmentProject"][];
+            /** You Lead */
+            you_lead: boolean;
+            /** You May Change */
+            you_may_change: boolean;
+            /** Restricted */
+            restricted: boolean;
+            /** Access */
+            access: components["schemas"]["ProjectMember"][];
+        };
+        /**
+         * Departments
+         * @description Every department of the company, by name, and whether this member may create one.
+         */
+        Departments: {
+            /** Departments */
+            departments: components["schemas"]["DepartmentSummary"][];
+            /** You May Create */
+            you_may_create: boolean;
+        };
+        /**
+         * DepartmentMemoryEntry
+         * @description One active department memory, as the department page lists it: no author, so the page names no member.
+         */
+        DepartmentMemoryEntry: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+        };
+        /**
+         * DepartmentRollUp
+         * @description How memory is doing across a department (spec #624), never per member: each project the member can reach, and
+         *     department memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's
+         *     setting.
+         */
+        DepartmentRollUp: {
+            /** Window Days */
+            window_days: number;
+            /** Outdated After Days */
+            outdated_after_days: number;
+            /** Projects */
+            projects: components["schemas"]["ProjectRollUp"][];
+            department_memory: components["schemas"]["MemoryCounts"];
+        };
+        /**
+         * MemoryCounts
+         * @description How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a
+         *     coding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the
+         *     level contradictions and other challenges waiting on it.
+         */
+        MemoryCounts: {
+            /** Memories */
+            memories: number;
+            /** Possibly Outdated */
+            possibly_outdated: number;
+            /** Used */
+            used: number;
+            /** Level Contradictions */
+            level_contradictions: number;
+            /** Challenges */
+            challenges: number;
+        };
+        /**
+         * ProjectRollUp
+         * @description One project of the department, with its counts.
+         */
+        ProjectRollUp: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            counts: components["schemas"]["MemoryCounts"];
+        };
+        /**
+         * DepartmentPage
+         * @description A department's page (#636): the projects in it this member can reach and its department memory, and for its
+         *     department leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing.
+         */
+        DepartmentPage: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+            /** Restricted */
+            restricted: boolean;
+            /** You Lead */
+            you_lead: boolean;
+            /** Projects */
+            projects: components["schemas"]["DepartmentProject"][];
+            /** Memory */
+            memory: components["schemas"]["DepartmentMemoryEntry"][];
+            roll_up: components["schemas"]["DepartmentRollUp"] | null;
+        };
+        /**
+         * DepartmentName
+         * @description What a department is called.
+         */
+        DepartmentName: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentAppointment
+         * @description The member being made a lead of this department.
+         */
+        DepartmentAppointment: {
+            /** Member Id */
+            member_id: string;
+        };
+        /**
+         * ProjectMove
+         * @description The project being moved into this department.
+         */
+        ProjectMove: {
+            /** Project Id */
+            project_id: string;
+        };
+        /**
+         * DepartmentRestriction
+         * @description Whether this department is closed to its access list, or open to the whole company.
+         */
+        DepartmentRestriction: {
+            /** Restricted */
+            restricted: boolean;
+        };
+        /**
+         * DepartmentAccessChange
+         * @description The member being put on this department's access list.
+         */
+        DepartmentAccessChange: {
+            /** Member Id */
+            member_id: string;
+        };
+        /**
          * Restriction
-         * @description Whether this project is closed to its access list, or open to the whole team.
+         * @description Whether this project is closed to its access list, or open to the whole company.
          */
         Restriction: {
             /** Restricted */
@@ -1354,7 +1751,7 @@ export interface components {
         };
         /**
          * ProjectHealth
-         * @description A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+         * @description A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory
          *     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
          *     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.
          */
@@ -1369,6 +1766,51 @@ export interface components {
             possibly_outdated: components["schemas"]["PossiblyOutdatedMemory"][];
             /** In Doubt */
             in_doubt: components["schemas"]["DoubtedMemory"][];
+        };
+        /**
+         * OnboardingEntry
+         * @description How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or
+         *     interview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a
+         *     session last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the
+         *     audit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it
+         *     left out.
+         */
+        OnboardingEntry: {
+            /** Repository */
+            repository: string | null;
+            /** Outside Source */
+            outside_source: string | null;
+            /** Status */
+            status: string;
+            /** Recorded By */
+            recorded_by: string;
+            /** Recorded By Name */
+            recorded_by_name: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Promoted */
+            promoted: number;
+            /** Waiting On Challenge */
+            waiting_on_challenge: number;
+            /** Left Out */
+            left_out: number;
+        };
+        /**
+         * OnboardingProgress
+         * @description A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its
+         *     leads and the company's admins see them, or only the ones the signed-in member recorded. Read-only: a session
+         *     records progress.
+         */
+        OnboardingProgress: {
+            /** Project Id */
+            project_id: string;
+            /** Everyone */
+            everyone: boolean;
+            /** Entries */
+            entries: components["schemas"]["OnboardingEntry"][];
         };
         /**
          * ActiveSession
@@ -1766,7 +2208,7 @@ export interface components {
         /**
          * CardFields
          * @description What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-         *     card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+         *     card's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,
          *     replace the card's links of that kind: memories by path, files as repository:path.
          */
         CardFields: {
@@ -1960,7 +2402,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message";
+            kind: "signed_in" | "sign_in_refused" | "token_issued" | "member_added" | "member_removed" | "member_changed" | "admin_granted" | "admin_revoked" | "ownership_handed_over" | "project_created" | "project_renamed" | "lead_appointed" | "lead_removed" | "keeper_assigned" | "keeper_removed" | "foundation_added" | "foundation_removed" | "repository_added" | "repository_removed" | "project_restricted" | "project_opened" | "access_granted" | "access_revoked" | "memory_saved" | "memory_edited" | "memory_deleted" | "memory_promoted" | "memory_superseded" | "memory_retired" | "memory_pinned" | "memory_unpinned" | "challenge_raised" | "challenge_decided" | "card_added" | "card_edited" | "card_moved" | "card_claimed" | "card_commented" | "card_deleted" | "card_returned" | "never_lock_pattern_added" | "never_lock_pattern_removed" | "rate_limits_changed" | "license_installed" | "token_limited" | "team_exported" | "gate_timed_out" | "different_work" | "project_wait_changed" | "gate_agreed" | "gate_refused" | "urgent_message" | "department_created" | "department_renamed" | "department_removed" | "department_lead_appointed" | "department_lead_removed" | "project_moved" | "department_restricted" | "department_opened" | "department_access_granted" | "department_access_revoked";
             /** Project Id */
             project_id: string | null;
             /** Target */
@@ -2099,7 +2541,7 @@ export interface components {
         };
         /**
          * Folder
-         * @description One folder of the team's memory: where it sits, the folders in it, and its memories.
+         * @description One folder of the company's memory: where it sits, the folders in it, and its memories.
          */
         Folder: {
             /** Folder */
@@ -2120,6 +2562,42 @@ export interface components {
             memories: components["schemas"]["FileEntry"][];
             /** Inside */
             inside: components["schemas"]["FolderSection"][];
+        };
+        /**
+         * InterviewMemory
+         * @description A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says
+         *     in brief, its level, the interview it came from (source), and who ran the interview and when its memory was
+         *     promoted.
+         */
+        InterviewMemory: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Level */
+            level: string;
+            /** Source */
+            source: string;
+            /** Interviewer */
+            interviewer: string;
+            /** Interviewer Name */
+            interviewer_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
+        };
+        /**
+         * InterviewMemories
+         * @description Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They
+         *     may retire any of it, with the same retire as any memory they author; nothing here edits one.
+         */
+        InterviewMemories: {
+            /** Memories */
+            memories: components["schemas"]["InterviewMemory"][];
         };
         /**
          * DoubtEvidence
@@ -2159,7 +2637,7 @@ export interface components {
             /** May Decide */
             may_decide: boolean;
             /** Decides As */
-            decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left") | null;
+            decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left" | "department_lead") | null;
             /** Count */
             count: number | null;
             /** Evidence */
@@ -2204,6 +2682,11 @@ export interface components {
             superseded_by: string | null;
             /** Exception To */
             exception_to: string | null;
+            /**
+             * Exception Reason
+             * @default null
+             */
+            exception_reason: string | null;
             /** Tied Files */
             tied_files: string[];
             /** Promoted By */
@@ -2344,7 +2827,7 @@ export interface components {
              * Decides As
              * @enum {string}
              */
-            decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left";
+            decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left" | "department_lead";
             /** Foundation */
             foundation: string | null;
             /** Foundation Name */
@@ -2467,7 +2950,7 @@ export interface components {
              * Decision
              * @enum {string}
              */
-            decision: "accepted" | "rejected";
+            decision: "accepted" | "rejected" | "kept_exception" | "followed";
             /** In Force */
             in_force: string | null;
         };
@@ -2484,14 +2967,20 @@ export interface components {
         };
         /**
          * Decision
-         * @description Accept a challenge or reject it.
+         * @description Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by
+         *     following the broader memory, which retires the narrower one.
          */
         Decision: {
             /**
              * Decision
              * @enum {string}
              */
-            decision: "accept" | "reject";
+            decision: "accept" | "reject" | "keep_exception" | "follow";
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /**
          * RateLimits
@@ -2535,8 +3024,8 @@ export interface components {
              * @enum {string}
              */
             status: "licensed" | "expiring" | "lapsed" | "read-only" | "unlicensed" | "invalid";
-            /** Team */
-            team: string | null;
+            /** Company */
+            company: string | null;
             /** Member Cap */
             member_cap: number | null;
             /** Issued */
@@ -2566,7 +3055,7 @@ export interface components {
         };
         /**
          * MemberSummary
-         * @description One member of the team, as an admin sees them.
+         * @description One member of the company, as an admin sees them.
          */
         MemberSummary: {
             /** Member Id */
@@ -2606,7 +3095,7 @@ export interface components {
         };
         /**
          * NewMember
-         * @description A member being added to the team.
+         * @description A member being added to the company.
          */
         NewMember: {
             /** Member Id */
@@ -3006,6 +3495,293 @@ export interface operations {
             };
         };
     };
+    departments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every department of the company, with its leads and the projects in it this member can reach. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    create_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentName"];
+            };
+        };
+        responses: {
+            /** @description Create a department with no leads and no projects. Only the company's admins can. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentPage"];
+                };
+            };
+        };
+    };
+    rename_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentName"];
+            };
+        };
+        responses: {
+            /** @description Change a department's name. Its department ID stays as it is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    remove_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove a department, leaving its projects in no department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    appoint_department_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentAppointment"];
+            };
+        };
+        responses: {
+            /** @description Make a member a lead of this department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    remove_department_lead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a lead off this department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    move_project_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMove"];
+            };
+        };
+        responses: {
+            /** @description Move a project in no department into this one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    move_project_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Move a project out of this department, leaving it in no department. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    restrict_department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentRestriction"];
+            };
+        };
+        responses: {
+            /** @description Close a department to its access list, or open it to the whole company again. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    grant_department_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentAccessChange"];
+            };
+        };
+        responses: {
+            /** @description Put a member on a department's access list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    revoke_department_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Take a member off a department's access list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
     restrict_project: {
         parameters: {
             query?: never;
@@ -3021,7 +3797,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Close a project to its access list, or open it to the whole team again. */
+            /** @description Close a project to its access list, or open it to the whole company again. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3193,13 +3969,35 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
+            /** @description A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectHealth"];
+                };
+            };
+        };
+    };
+    onboarding_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingProgress"];
                 };
             };
         };
@@ -3472,7 +4270,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The team's audit log, newest first. */
+            /** @description The company's audit log, newest first. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3492,7 +4290,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description All of the team's data as one zip: the memory with its history, and the team's records. Admins only. */
+            /** @description All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3537,13 +4335,33 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
+            /** @description One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Folder"];
+                };
+            };
+        };
+    };
+    interviewed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewMemories"];
                 };
             };
         };
@@ -3628,7 +4446,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Pin a project or team memory, or a topic folder, into every briefing it belongs in. */
+            /** @description Pin a project, department or company memory, or a topic folder, into every briefing it belongs in. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3701,7 +4519,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Memories that match, across team memory and every project this member can reach. */
+            /** @description Memories that match, across company memory, department memory and every project this member can reach. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3831,7 +4649,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The server's license key: its status, team, member cap and expiry. */
+            /** @description The server's license key: its status, company, member cap and expiry. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3875,7 +4693,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Everyone in the team, with their role and GitHub account. */
+            /** @description Everyone in the company, with their role and GitHub account. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3995,7 +4813,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Make another member the team's owner. */
+            /** @description Make another member the company's owner. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4105,7 +4923,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Issue a new personal token for a member of the team, revoking the one they had. */
+            /** @description Issue a new personal token for a member of the company, revoking the one they had. */
             200: {
                 headers: {
                     [name: string]: unknown;

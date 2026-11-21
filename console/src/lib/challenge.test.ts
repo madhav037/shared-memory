@@ -7,6 +7,7 @@ describe("what a challenge asks, in words", () => {
     expect(asks({ kind: "retire", reason: null })).toBe("retire it");
     expect(asks({ kind: "supersede", reason: null })).toBe("supersede it");
     expect(asks({ kind: "add", reason: null })).toBe("add a memory");
+    expect(asks({ kind: "promote", reason: null })).toBe("promote it into department memory");
     expect(asks({ kind: "add", reason: null, foundation_name: "Billing rules" })).toBe(
       "add it to the Billing rules foundation",
     );
@@ -20,6 +21,10 @@ describe("what a challenge asks, in words", () => {
   it("says what its raiser wants, after their name", () => {
     expect(says({ kind: "retire", reason: null })).toBe("wants to retire it");
     expect(says({ kind: "doubt", reason: "contradicts_code" })).toBe("doubts it: contradicts the code");
+  });
+
+  it("says a level contradiction asks to keep the narrower memory as an exception", () => {
+    expect(says({ kind: "level_contradiction", reason: null })).toBe("wants to keep theirs as an exception to it");
   });
 });
 

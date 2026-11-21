@@ -6,7 +6,7 @@ test("a project is restricted, its access list appears, a member is let in, and 
   await signInAs(page, 1, "olive");
 
   // Someone to let in, and a project to keep from everyone else.
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await page.getByTestId("new-member-id").fill("emp-ray");
   await page.getByTestId("new-name").fill("Ray Reader");
   await page.getByTestId("new-github").fill("ray-reader");
@@ -19,7 +19,7 @@ test("a project is restricted, its access list appears, a member is let in, and 
   const projectId = ((await page.getByTestId("project-id").textContent()) ?? "").trim();
 
   // While it is open to everyone there is no list to keep, only a line saying so.
-  await expect(page.getByTestId("reach")).toContainText("Every member of the team can reach its memory");
+  await expect(page.getByTestId("reach")).toContainText("Every member of the company can reach its memory");
   await expect(page.getByTestId("access")).toHaveCount(0);
   await page.getByTestId("restrict").click();
   await expect(page.getByTestId("restricted")).toBeVisible();

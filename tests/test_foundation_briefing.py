@@ -12,7 +12,7 @@ from tests.support import (
     Crew,
     RunningServer,
     Session,
-    Team,
+    Company,
     added_context,
     promote,
 )
@@ -81,10 +81,12 @@ def test_nothing_to_report_adds_nothing_and_a_member_is_told_only_the_foundation
     assert "[foundations missing]" not in member and "[foundations outside]" not in member
 
 
-def test_an_add_challenge_in_one_project_does_not_hide_a_missing_foundation_in_another(team: Team, owner: Session, dana: Session) -> None:
+def test_an_add_challenge_in_one_project_does_not_hide_a_missing_foundation_in_another(
+    company: Company, owner: Session, dana: Session
+) -> None:
     promote(dana, CENTS, foundation="product")
-    checkout = team.owner().call("create_project", name="Checkout")["project_id"]
-    other = team.owner().in_project(checkout, "checkout")
+    checkout = company.owner().call("create_project", name="Checkout")["project_id"]
+    other = company.owner().in_project(checkout, "checkout")
 
     assert "No active memory yet in: architecture, glossary, decisions." in added_context(owner.start())
     assert "No active memory yet in: architecture, product, glossary, decisions." in added_context(other.start())

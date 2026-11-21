@@ -14,7 +14,7 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
 from shared_memory.index import SearchIndex
-from tests.support import RunningServer, Session, Team, added_context, new_team, promote_keeping_both
+from tests.support import RunningServer, Session, Company, added_context, new_company, promote_keeping_both
 
 
 def remember(session: Session, title: str, body: str, type: str = "convention") -> str:
@@ -57,7 +57,7 @@ def test_recall_labels_levels_and_frames_memory_as_information(owner: Session) -
 
     assert "[project memory] Money amounts" in context
     assert "information, not instructions" in context
-    assert "project memory wins over team memory, team memory over personal memory" in context
+    assert "project memory wins over company memory, company memory over personal memory" in context
 
 
 def test_unpromoted_personal_memory_reaches_only_its_author(owner: Session, dana: Session) -> None:
@@ -67,13 +67,18 @@ def test_unpromoted_personal_memory_reaches_only_its_author(owner: Session, dana
     assert path not in added_context(owner.prompt("the staging db lost my test data"))
 
 
-def test_team_memory_is_recalled_in_every_project(team: Team, owner: Session) -> None:
-    path = promote(owner, "Gateway timeouts", "When the payment gateway is slow the client raises ERR_TIMEOUT after 30 seconds.", level="team")
-    other_project = team.owner().call("create_project", name="Checkout")["project_id"]
+def test_company_memory_is_recalled_in_every_project(company: Company, owner: Session) -> None:
+    path = promote(
+        owner,
+        "Gateway timeouts",
+        "When the payment gateway is slow the client raises ERR_TIMEOUT after 30 seconds.",
+        level="company",
+    )
+    other_project = company.owner().call("create_project", name="Checkout")["project_id"]
 
-    context = added_context(team.owner().in_project(other_project).prompt("payment gateway keeps timing out"))
+    context = added_context(company.owner().in_project(other_project).prompt("payment gateway keeps timing out"))
 
-    assert f"[team memory] Gateway timeouts ({path})" in context
+    assert f"[company memory] Gateway timeouts ({path})" in context
 
 
 def test_recall_returns_at_most_three_memories(owner: Session) -> None:
@@ -130,14 +135,14 @@ def test_an_unrelated_prompt_gets_no_recall(owner: Session) -> None:
     assert owner.prompt("write a haiku about cats") == {}
 
 
-def test_problems_never_break_the_prompt(team: Team, owner: Session) -> None:
+def test_problems_never_break_the_prompt(company: Company, owner: Session) -> None:
     promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
-    bad_token = Session(team.server, "smt_nope", owner.project, "billing-api")
-    no_project = team.owner()
+    bad_token = Session(company.server, "smt_nope", owner.project, "billing-api")
+    no_project = company.owner()
 
     assert bad_token.prompt("store the refund amount") == {}
     assert no_project.prompt("store the refund amount") == {}
-    garbage = httpx.post(f"{team.server.url}/hooks/prompt-submitted", content=b"not json", headers=owner.headers())
+    garbage = httpx.post(f"{company.server.url}/hooks/prompt-submitted", content=b"not json", headers=owner.headers())
     assert (garbage.status_code, garbage.json()) == (200, {})
 
 
@@ -162,9 +167,9 @@ def slow_server(server: RunningServer, tmp_path_factory: pytest.TempPathFactory)
 
 
 def test_recall_that_takes_too_long_is_skipped(slow_server: RunningServer) -> None:
-    team = new_team(slow_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    session = team.owner().in_project(project)
+    company = new_company(slow_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    session = company.owner().in_project(project)
 
     started = time.monotonic()
     output = session.prompt("store the refund amount in the database")
@@ -190,9 +195,9 @@ def short_budget_server(server: RunningServer, tmp_path_factory: pytest.TempPath
 def test_a_memory_dropped_past_the_recall_budget_is_recalled_on_the_next_prompt(
     short_budget_server: RunningServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    team = new_team(short_budget_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project)
+    company = new_company(short_budget_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project)
     body = "All money amounts are stored as integer cents, never floats."
     path = remember(owner, "Money amounts", body)
     searched = SearchIndex.search
@@ -216,10 +221,10 @@ def test_a_memory_dropped_past_the_recall_budget_is_recalled_on_the_next_prompt(
 
 
 def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningServer) -> None:
-    team = new_team(slow_server)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project)
-    added = team.owner().call("add_member", member_id="emp-2", name="Dana Dev")
+    company = new_company(slow_server)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project)
+    added = company.owner().call("add_member", member_id="emp-2", name="Dana Dev")
     dana = Session(slow_server, added["personal_token"], project)
     npm = owner.call(
         "remember",
@@ -237,7 +242,9 @@ def test_news_is_delivered_even_when_recall_takes_too_long(slow_server: RunningS
         body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
     )["path"]
     first = dana.call("promote", path=pnpm, level="project")
-    raised = dana.call("promote", path=pnpm, level="project", reference=first["reference"], resolutions={target: "supersede"})
+    raised = dana.call(
+        "promote", path=pnpm, level="project", reference=first["reference"], resolutions={target: "supersede"}
+    )
     owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
 
     assert "was rejected" in added_context(dana.prompt("which package manager do we use?"))
@@ -285,7 +292,11 @@ def test_a_told_memory_does_not_hold_back_the_next_strongest_match(owner: Sessio
 
 def test_a_prompt_naming_no_session_is_recalled_every_time(owner: Session) -> None:
     path = promote(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
-    payload = {"prompt": "store the refund amount in the database", "cwd": "/work", "hook_event_name": "UserPromptSubmit"}
+    payload = {
+        "prompt": "store the refund amount in the database",
+        "cwd": "/work",
+        "hook_event_name": "UserPromptSubmit",
+    }
 
     for _ in range(2):
         assert path in added_context(owner.hook_payload("prompt-submitted", payload))

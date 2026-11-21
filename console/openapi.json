@@ -404,10 +404,408 @@
         }
       }
     },
+    "/api/departments": {
+      "get": {
+        "operationId": "departments",
+        "summary": "Every department of the company, with its leads and the projects in it this member can reach.",
+        "responses": {
+          "200": {
+            "description": "Every department of the company, with its leads and the projects in it this member can reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "create_department",
+        "summary": "Create a department with no leads and no projects. Only the company's admins can.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Create a department with no leads and no projects. Only the company's admins can.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}": {
+      "get": {
+        "operationId": "department",
+        "summary": "A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/rename": {
+      "post": {
+        "operationId": "rename_department",
+        "summary": "Change a department's name. Its department ID stays as it is.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change a department's name. Its department ID stays as it is.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/remove": {
+      "post": {
+        "operationId": "remove_department",
+        "summary": "Remove a department, leaving its projects in no department.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remove a department, leaving its projects in no department.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/leads": {
+      "post": {
+        "operationId": "appoint_department_lead",
+        "summary": "Make a member a lead of this department.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentAppointment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Make a member a lead of this department.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/leads/{member_id}/remove": {
+      "post": {
+        "operationId": "remove_department_lead",
+        "summary": "Take a lead off this department.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a lead off this department.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/projects": {
+      "post": {
+        "operationId": "move_project_in",
+        "summary": "Move a project in no department into this one.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectMove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move a project in no department into this one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/projects/{project_id}/remove": {
+      "post": {
+        "operationId": "move_project_out",
+        "summary": "Move a project out of this department, leaving it in no department.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Move a project out of this department, leaving it in no department.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/restrict": {
+      "post": {
+        "operationId": "restrict_department",
+        "summary": "Close a department to its access list, or open it to the whole company again.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentRestriction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Close a department to its access list, or open it to the whole company again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/access": {
+      "post": {
+        "operationId": "grant_department_access",
+        "summary": "Put a member on a department's access list.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentAccessChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Put a member on a department's access list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/access/{member_id}/remove": {
+      "post": {
+        "operationId": "revoke_department_access",
+        "summary": "Take a member off a department's access list.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a member off a department's access list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/restrict": {
       "post": {
         "operationId": "restrict_project",
-        "summary": "Close a project to its access list, or open it to the whole team again.",
+        "summary": "Close a project to its access list, or open it to the whole company again.",
         "parameters": [
           {
             "name": "project_id",
@@ -430,7 +828,7 @@
         },
         "responses": {
           "200": {
-            "description": "Close a project to its access list, or open it to the whole team again.",
+            "description": "Close a project to its access list, or open it to the whole company again.",
             "content": {
               "application/json": {
                 "schema": {
@@ -697,7 +1095,7 @@
     "/api/projects/{project_id}/health": {
       "get": {
         "operationId": "project_health",
-        "summary": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+        "summary": "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
         "parameters": [
           {
             "name": "project_id",
@@ -710,11 +1108,39 @@
         ],
         "responses": {
           "200": {
-            "description": "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
+            "description": "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt, with each one's count and reasons. Changes nothing.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectHealth"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/onboarding": {
+      "get": {
+        "operationId": "onboarding_progress",
+        "summary": "A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing.",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A project's onboarding progress per repository and outside source: status, who recorded it and when, and how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; any other member sees their own. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingProgress"
                 }
               }
             }
@@ -1119,7 +1545,7 @@
     "/api/audit": {
       "get": {
         "operationId": "audit",
-        "summary": "The team's audit log, newest first.",
+        "summary": "The company's audit log, newest first.",
         "parameters": [
           {
             "name": "limit",
@@ -1180,7 +1606,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The team's audit log, newest first.",
+            "description": "The company's audit log, newest first.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1195,10 +1621,10 @@
     "/api/export": {
       "get": {
         "operationId": "export",
-        "summary": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        "summary": "All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         "responses": {
           "200": {
-            "description": "All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+            "description": "All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
             "content": {
               "application/zip": {
                 "schema": {
@@ -1242,7 +1668,7 @@
     "/api/files": {
       "get": {
         "operationId": "files",
-        "summary": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        "summary": "One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
         "parameters": [
           {
             "name": "folder",
@@ -1263,11 +1689,29 @@
         ],
         "responses": {
           "200": {
-            "description": "One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+            "description": "One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Folder"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/interviewed": {
+      "get": {
+        "operationId": "interviewed",
+        "summary": "The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing.",
+        "responses": {
+          "200": {
+            "description": "The memories written from the signed-in member's interviews, which they author: each with the interview, who ran it and when. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewMemories"
                 }
               }
             }
@@ -1370,7 +1814,7 @@
     "/api/memory/pin": {
       "post": {
         "operationId": "pin_at",
-        "summary": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        "summary": "Pin a project, department or company memory, or a topic folder, into every briefing it belongs in.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1383,7 +1827,7 @@
         },
         "responses": {
           "200": {
-            "description": "Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+            "description": "Pin a project, department or company memory, or a topic folder, into every briefing it belongs in.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1454,7 +1898,7 @@
     "/api/search": {
       "get": {
         "operationId": "search_everywhere",
-        "summary": "Memories that match, across team memory and every project this member can reach.",
+        "summary": "Memories that match, across company memory, department memory and every project this member can reach.",
         "parameters": [
           {
             "name": "query",
@@ -1491,7 +1935,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Memories that match, across team memory and every project this member can reach.",
+            "description": "Memories that match, across company memory, department memory and every project this member can reach.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1624,10 +2068,10 @@
     "/api/license": {
       "get": {
         "operationId": "license_state",
-        "summary": "The server's license key: its status, team, member cap and expiry.",
+        "summary": "The server's license key: its status, company, member cap and expiry.",
         "responses": {
           "200": {
-            "description": "The server's license key: its status, team, member cap and expiry.",
+            "description": "The server's license key: its status, company, member cap and expiry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1668,10 +2112,10 @@
     "/api/members": {
       "get": {
         "operationId": "members",
-        "summary": "Everyone in the team, with their role and GitHub account.",
+        "summary": "Everyone in the company, with their role and GitHub account.",
         "responses": {
           "200": {
-            "description": "Everyone in the team, with their role and GitHub account.",
+            "description": "Everyone in the company, with their role and GitHub account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1816,7 +2260,7 @@
     "/api/members/{member_id}/ownership": {
       "post": {
         "operationId": "hand_over_ownership",
-        "summary": "Make another member the team's owner.",
+        "summary": "Make another member the company's owner.",
         "parameters": [
           {
             "name": "member_id",
@@ -1829,7 +2273,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Make another member the team's owner.",
+            "description": "Make another member the company's owner.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1934,7 +2378,7 @@
     "/api/members/{member_id}/token": {
       "post": {
         "operationId": "reissue_token",
-        "summary": "Issue a new personal token for a member of the team, revoking the one they had.",
+        "summary": "Issue a new personal token for a member of the company, revoking the one they had.",
         "parameters": [
           {
             "name": "member_id",
@@ -1947,7 +2391,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Issue a new personal token for a member of the team, revoking the one they had.",
+            "description": "Issue a new personal token for a member of the company, revoking the one they had.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1991,8 +2435,8 @@
             "title": "Name",
             "type": "string"
           },
-          "team": {
-            "title": "Team",
+          "company": {
+            "title": "Company",
             "type": "string"
           },
           "role": {
@@ -2012,7 +2456,7 @@
         "required": [
           "member_id",
           "name",
-          "team",
+          "company",
           "role",
           "leads_a_project"
         ],
@@ -2071,6 +2515,30 @@
         "title": "Status",
         "type": "object"
       },
+      "DepartmentRef": {
+        "description": "The department a project is in (ADR-0032).",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "department_id",
+          "name",
+          "restricted"
+        ],
+        "title": "DepartmentRef",
+        "type": "object"
+      },
       "ProjectMember": {
         "description": "A member named on a project.",
         "properties": {
@@ -2091,7 +2559,7 @@
         "type": "object"
       },
       "ProjectSummary": {
-        "description": "A project the member can reach, and who looks after it.",
+        "description": "A project the member can reach, who looks after it, and the department it is in, if any.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2115,6 +2583,16 @@
           "you_lead": {
             "title": "You Lead",
             "type": "boolean"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepartmentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2122,7 +2600,8 @@
           "name",
           "restricted",
           "leads",
-          "you_lead"
+          "you_lead",
+          "department"
         ],
         "title": "ProjectSummary",
         "type": "object"
@@ -2294,6 +2773,16 @@
           "you_may_change": {
             "title": "You May Change",
             "type": "boolean"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepartmentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -2305,7 +2794,8 @@
           "access",
           "repositories",
           "you_lead",
-          "you_may_change"
+          "you_may_change",
+          "department"
         ],
         "title": "ProjectDetail",
         "type": "object"
@@ -2366,8 +2856,350 @@
         "title": "KeeperAssignment",
         "type": "object"
       },
+      "DepartmentProject": {
+        "description": "A project in a department.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name"
+        ],
+        "title": "DepartmentProject",
+        "type": "object"
+      },
+      "DepartmentSummary": {
+        "description": "A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is\nrestricted and who is on its access list, and what they may change.",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "you_lead": {
+            "title": "You Lead",
+            "type": "boolean"
+          },
+          "you_may_change": {
+            "title": "You May Change",
+            "type": "boolean"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
+          "access": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Access",
+            "type": "array"
+          }
+        },
+        "required": [
+          "department_id",
+          "name",
+          "leads",
+          "projects",
+          "you_lead",
+          "you_may_change",
+          "restricted",
+          "access"
+        ],
+        "title": "DepartmentSummary",
+        "type": "object"
+      },
+      "Departments": {
+        "description": "Every department of the company, by name, and whether this member may create one.",
+        "properties": {
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentSummary"
+            },
+            "title": "Departments",
+            "type": "array"
+          },
+          "you_may_create": {
+            "title": "You May Create",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "departments",
+          "you_may_create"
+        ],
+        "title": "Departments",
+        "type": "object"
+      },
+      "DepartmentMemoryEntry": {
+        "description": "One active department memory, as the department page lists it: no author, so the page names no member.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type"
+        ],
+        "title": "DepartmentMemoryEntry",
+        "type": "object"
+      },
+      "DepartmentRollUp": {
+        "description": "How memory is doing across a department (spec #624), never per member: each project the member can reach, and\ndepartment memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's\nsetting.",
+        "properties": {
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "outdated_after_days": {
+            "title": "Outdated After Days",
+            "type": "number"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRollUp"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "department_memory": {
+            "$ref": "#/components/schemas/MemoryCounts"
+          }
+        },
+        "required": [
+          "window_days",
+          "outdated_after_days",
+          "projects",
+          "department_memory"
+        ],
+        "title": "DepartmentRollUp",
+        "type": "object"
+      },
+      "MemoryCounts": {
+        "description": "How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a\ncoding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the\nlevel contradictions and other challenges waiting on it.",
+        "properties": {
+          "memories": {
+            "title": "Memories",
+            "type": "integer"
+          },
+          "possibly_outdated": {
+            "title": "Possibly Outdated",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          },
+          "level_contradictions": {
+            "title": "Level Contradictions",
+            "type": "integer"
+          },
+          "challenges": {
+            "title": "Challenges",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memories",
+          "possibly_outdated",
+          "used",
+          "level_contradictions",
+          "challenges"
+        ],
+        "title": "MemoryCounts",
+        "type": "object"
+      },
+      "ProjectRollUp": {
+        "description": "One project of the department, with its counts.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/MemoryCounts"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "counts"
+        ],
+        "title": "ProjectRollUp",
+        "type": "object"
+      },
+      "DepartmentPage": {
+        "description": "A department's page (#636): the projects in it this member can reach and its department memory, and for its\ndepartment leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing.",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
+          "you_lead": {
+            "title": "You Lead",
+            "type": "boolean"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "memory": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentMemoryEntry"
+            },
+            "title": "Memory",
+            "type": "array"
+          },
+          "roll_up": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepartmentRollUp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "department_id",
+          "name",
+          "restricted",
+          "you_lead",
+          "projects",
+          "memory",
+          "roll_up"
+        ],
+        "title": "DepartmentPage",
+        "type": "object"
+      },
+      "DepartmentName": {
+        "description": "What a department is called.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DepartmentName",
+        "type": "object"
+      },
+      "DepartmentAppointment": {
+        "description": "The member being made a lead of this department.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "DepartmentAppointment",
+        "type": "object"
+      },
+      "ProjectMove": {
+        "description": "The project being moved into this department.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "ProjectMove",
+        "type": "object"
+      },
+      "DepartmentRestriction": {
+        "description": "Whether this department is closed to its access list, or open to the whole company.",
+        "properties": {
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restricted"
+        ],
+        "title": "DepartmentRestriction",
+        "type": "object"
+      },
+      "DepartmentAccessChange": {
+        "description": "The member being put on this department's access list.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "DepartmentAccessChange",
+        "type": "object"
+      },
       "Restriction": {
-        "description": "Whether this project is closed to its access list, or open to the whole team.",
+        "description": "Whether this project is closed to its access list, or open to the whole company.",
         "properties": {
           "restricted": {
             "title": "Restricted",
@@ -2865,7 +3697,7 @@
         "type": "object"
       },
       "ProjectHealth": {
-        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
+        "description": "A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory\nthat is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:\nreading it is no use of any memory and changes nothing. outdated_after_days is the server's setting.",
         "properties": {
           "project_id": {
             "title": "Project Id",
@@ -2902,6 +3734,102 @@
           "in_doubt"
         ],
         "title": "ProjectHealth",
+        "type": "object"
+      },
+      "OnboardingEntry": {
+        "description": "How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or\ninterview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a\nsession last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the\naudit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it\nleft out.",
+        "properties": {
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "outside_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outside Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "recorded_by": {
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "recorded_by_name": {
+            "title": "Recorded By Name",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "integer"
+          },
+          "waiting_on_challenge": {
+            "title": "Waiting On Challenge",
+            "type": "integer"
+          },
+          "left_out": {
+            "title": "Left Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repository",
+          "outside_source",
+          "status",
+          "recorded_by",
+          "recorded_by_name",
+          "recorded_at",
+          "promoted",
+          "waiting_on_challenge",
+          "left_out"
+        ],
+        "title": "OnboardingEntry",
+        "type": "object"
+      },
+      "OnboardingProgress": {
+        "description": "A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its\nleads and the company's admins see them, or only the ones the signed-in member recorded. Read-only: a session\nrecords progress.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "everyone": {
+            "title": "Everyone",
+            "type": "boolean"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/OnboardingEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "everyone",
+          "entries"
+        ],
+        "title": "OnboardingProgress",
         "type": "object"
       },
       "ActiveSession": {
@@ -3776,7 +4704,7 @@
         "type": "object"
       },
       "CardFields": {
-        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,\nreplace the card's links of that kind: memories by path, files as repository:path.",
+        "description": "What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a\ncard's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,\nreplace the card's links of that kind: memories by path, files as repository:path.",
         "properties": {
           "title": {
             "anyOf": [
@@ -4284,7 +5212,17 @@
               "project_wait_changed",
               "gate_agreed",
               "gate_refused",
-              "urgent_message"
+              "urgent_message",
+              "department_created",
+              "department_renamed",
+              "department_removed",
+              "department_lead_appointed",
+              "department_lead_removed",
+              "project_moved",
+              "department_restricted",
+              "department_opened",
+              "department_access_granted",
+              "department_access_revoked"
             ],
             "title": "Kind",
             "type": "string"
@@ -4649,7 +5587,7 @@
         "type": "object"
       },
       "Folder": {
-        "description": "One folder of the team's memory: where it sits, the folders in it, and its memories.",
+        "description": "One folder of the company's memory: where it sits, the folders in it, and its memories.",
         "properties": {
           "folder": {
             "title": "Folder",
@@ -4712,6 +5650,73 @@
           "inside"
         ],
         "title": "Folder",
+        "type": "object"
+      },
+      "InterviewMemory": {
+        "description": "A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says\nin brief, its level, the interview it came from (source), and who ran the interview and when its memory was\npromoted.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "interviewer": {
+            "title": "Interviewer",
+            "type": "string"
+          },
+          "interviewer_name": {
+            "title": "Interviewer Name",
+            "type": "string"
+          },
+          "interviewed_at": {
+            "format": "date-time",
+            "title": "Interviewed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "level",
+          "source",
+          "interviewer",
+          "interviewer_name",
+          "interviewed_at"
+        ],
+        "title": "InterviewMemory",
+        "type": "object"
+      },
+      "InterviewMemories": {
+        "description": "Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They\nmay retire any of it, with the same retire as any memory they author; nothing here edits one.",
+        "properties": {
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/InterviewMemory"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "InterviewMemories",
         "type": "object"
       },
       "DoubtEvidence": {
@@ -4824,7 +5829,8 @@
                   "keeper",
                   "admin",
                   "fallback",
-                  "author_left"
+                  "author_left",
+                  "department_lead"
                 ],
                 "type": "string"
               },
@@ -4972,6 +5978,18 @@
               }
             ],
             "title": "Exception To"
+          },
+          "exception_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Exception Reason"
           },
           "tied_files": {
             "items": {
@@ -5363,7 +6381,8 @@
               "keeper",
               "admin",
               "fallback",
-              "author_left"
+              "author_left",
+              "department_lead"
             ],
             "title": "Decides As",
             "type": "string"
@@ -5747,7 +6766,9 @@
           "decision": {
             "enum": [
               "accepted",
-              "rejected"
+              "rejected",
+              "kept_exception",
+              "followed"
             ],
             "title": "Decision",
             "type": "string"
@@ -5802,15 +6823,29 @@
         "type": "object"
       },
       "Decision": {
-        "description": "Accept a challenge or reject it.",
+        "description": "Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by\nfollowing the broader memory, which retires the narrower one.",
         "properties": {
           "decision": {
             "enum": [
               "accept",
-              "reject"
+              "reject",
+              "keep_exception",
+              "follow"
             ],
             "title": "Decision",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           }
         },
         "required": [
@@ -5903,7 +6938,7 @@
             "title": "Status",
             "type": "string"
           },
-          "team": {
+          "company": {
             "anyOf": [
               {
                 "type": "string"
@@ -5912,7 +6947,7 @@
                 "type": "null"
               }
             ],
-            "title": "Team"
+            "title": "Company"
           },
           "member_cap": {
             "anyOf": [
@@ -6013,7 +7048,7 @@
         },
         "required": [
           "status",
-          "team",
+          "company",
           "member_cap",
           "issued",
           "expires",
@@ -6043,7 +7078,7 @@
         "type": "object"
       },
       "MemberSummary": {
-        "description": "One member of the team, as an admin sees them.",
+        "description": "One member of the company, as an admin sees them.",
         "properties": {
           "member_id": {
             "title": "Member Id",
@@ -6146,7 +7181,7 @@
         "type": "object"
       },
       "NewMember": {
-        "description": "A member being added to the team.",
+        "description": "A member being added to the company.",
         "properties": {
           "member_id": {
             "title": "Member Id",

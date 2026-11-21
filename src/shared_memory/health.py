@@ -1,4 +1,4 @@
-"""Project health (CONTEXT.md): what a project's memory is doing, for its leads and the team's admins.
+"""Project health (CONTEXT.md): what a project's memory is doing, for its leads and the company's admins.
 
 A read model only. It owns no table: it asks `Identity` who looks after the project, `Uses` which memory is possibly
 outdated (pinned memory left out, as the outdated-memory rule says) and when each was last used, and `Challenges`
@@ -28,10 +28,10 @@ from shared_memory.uses import Uses
 
 
 class NotALead(Refused):
-    """Project health is for the project's leads and the team's admins."""
+    """Project health is for the project's leads and the company's admins."""
 
     def __init__(self) -> None:
-        super().__init__("Only this project's leads and the team's admins can see its health.")
+        super().__init__("Only this project's leads and the company's admins can see its health.")
 
 
 @dataclass(frozen=True)
@@ -75,26 +75,26 @@ class ProjectHealth:
 
     def of(self, caller: Caller) -> Health:
         """The health of the project the caller was placed in, which already refused a member a restricted project
-        keeps out; this refuses anyone else who isn't one of its leads or the team's admins."""
+        keeps out; this refuses anyone else who isn't one of its leads or the company's admins."""
         project = caller.require_project()
         if not self._identity.looks_after(caller.member, project.project_id):
             raise NotALead()
-        memories = self._project_memory(caller.team, project.project_id)
-        return Health(project, self._possibly_outdated(caller.team, memories), self._in_doubt(caller.team, memories))
+        memories = self._project_memory(caller.company, project.project_id)
+        return Health(project, self._possibly_outdated(caller.company, memories), self._in_doubt(caller.company, memories))
 
-    def _project_memory(self, team: str, project_id: str) -> dict[str, Memory]:
+    def _project_memory(self, company: str, project_id: str) -> dict[str, Memory]:
         return {
             str(path): memory
-            for _, held in self._store.walk(team, PurePosixPath("projects", project_id, "shared"))
+            for _, held in self._store.walk(company, PurePosixPath("projects", project_id, "shared"))
             for path, memory in held
         }
 
-    def _possibly_outdated(self, team: str, memories: dict[str, Memory]) -> tuple[OutdatedMemory, ...]:
-        outdated = self._uses.possibly_outdated(team, {path: memory.status for path, memory in memories.items()})
-        listed = [OutdatedMemory(path, memories[path], self._uses.last_used(team, path)) for path in outdated]
+    def _possibly_outdated(self, company: str, memories: dict[str, Memory]) -> tuple[OutdatedMemory, ...]:
+        outdated = self._uses.possibly_outdated(company, {path: memory.status for path, memory in memories.items()})
+        listed = [OutdatedMemory(path, memories[path], self._uses.last_used(company, path)) for path in outdated]
         return tuple(sorted(listed, key=lambda one: (one.last_used or _NEVER, one.path)))
 
-    def _in_doubt(self, team: str, memories: dict[str, Memory]) -> tuple[DoubtedMemory, ...]:
-        doubted = self._challenges.in_doubt(team, memories)
+    def _in_doubt(self, company: str, memories: dict[str, Memory]) -> tuple[DoubtedMemory, ...]:
+        doubted = self._challenges.in_doubt(company, memories)
         listed = [DoubtedMemory(path, memories[path], in_doubt) for path, in_doubt in doubted.items()]
         return tuple(sorted(listed, key=lambda one: (-one.in_doubt.count, one.path)))

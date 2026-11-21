@@ -1,6 +1,6 @@
 """License keys (spec #416): a small document signed with Ed25519, checked offline.
 
-A key reads `sm<N>.<payload>.<signature>`. The payload is JSON, base64url-encoded, holding the team's name, the member
+A key reads `sm<N>.<payload>.<signature>`. The payload is JSON, base64url-encoded, holding the company's name, the member
 cap, the dates the key was issued and expires, a key ID and, for a hosted server's key only, `"hosted": true`. `<N>` says which signing key signed it, so the signing key
 can rotate: the server keeps one public key per version and accepts any of them. The signature covers `sm<N>.<payload>`.
 
@@ -43,7 +43,7 @@ class InvalidLicense(Exception):
 class License:
     """What a verified license key says."""
 
-    team: str
+    company: str
     member_cap: int
     issued: date
     expires: date
@@ -74,7 +74,7 @@ def _unb64(text: str) -> bytes:
 def sign(private_key: Ed25519PrivateKey, version: int, license: License) -> str:
     """A license key for this license, signed by the signing key of this version."""
     body: dict[str, object] = {
-        "team": license.team,
+        "team": license.company,
         "member_cap": license.member_cap,
         "issued": license.issued.isoformat(),
         "expires": license.expires.isoformat(),
@@ -109,7 +109,9 @@ def verify(text: str, public_keys: Mapping[int, bytes] = PUBLIC_KEYS) -> License
     try:
         body = json.loads(_unb64(parts[1]))
         return License(
-            team=str(body["team"]),
+            # A key names its company as `team` when issued before the rename (ADR-0031) and stays valid (ADR-0023);
+            # a key may name it as `company`.
+            company=str(body["company"] if "company" in body else body["team"]),
             member_cap=int(body["member_cap"]),
             issued=date.fromisoformat(body["issued"]),
             expires=date.fromisoformat(body["expires"]),

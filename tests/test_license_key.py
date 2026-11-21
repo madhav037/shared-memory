@@ -22,7 +22,7 @@ TODAY = date(2026, 11, 6)
 
 
 def test_a_valid_key_says_who_it_is_for_how_many_and_until_when() -> None:
-    found = verify(a_key(team="Acme", member_cap=10, key_id="k-7"), TEST_PUBLIC_KEYS)
+    found = verify(a_key(company="Acme", member_cap=10, key_id="k-7"), TEST_PUBLIC_KEYS)
 
     assert found == License("Acme", 10, date(2026, 9, 1), date(2027, 9, 1), "k-7")
 
@@ -125,7 +125,7 @@ def test_install_license_says_what_it_does_in_the_glossarys_words(capsys: pytest
         cli.run(["install-license", "--help"])
 
     said = " ".join(capsys.readouterr().out.split())
-    assert "Install a license key server-wide, as an admin does on the Team page" in said
+    assert "Install a license key server-wide, as an admin does on the Company page" in said
     assert "recorded in the audit log as installed by the vendor" in said
     assert "The platform runs it to renew a hosted server's license key" in said
 

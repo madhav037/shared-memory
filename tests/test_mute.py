@@ -14,7 +14,7 @@ from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
 from shared_memory.config import Settings
-from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
+from tests.support import REPO_ROOT, RunningServer, Session, Company, TestClock, added_context, fresh_database
 from tests.test_before_edit import ALLOWED, reason_in
 from tests.test_collisions import ChosenSimilarity
 from tests.test_gates import GATED, URGENT, after_warning, answer_gate, collide, heard, send_urgent
@@ -168,7 +168,7 @@ def test_a_member_with_one_session_not_muted_is_not_muted(owner: Session, dana: 
 
 
 def test_a_gated_later_session_is_told_the_earlier_session_is_muted_and_the_wait_still_runs(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
     assert "muted" not in reason_in(dana.edit(FILE))
@@ -180,6 +180,6 @@ def test_a_gated_later_session_is_told_the_earlier_session_is_muted_and_the_wait
     assert "Olive Owner (owner-1)" in reason and "muted" in reason
     assert "5 minutes left" in reason, "the wait runs the same"
 
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     assert dana.edit(FILE) == ALLOWED, "the wait lifts it while muted"

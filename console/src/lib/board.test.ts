@@ -85,7 +85,7 @@ describe("what an edited card changes", () => {
     labels: ["webhooks"],
     due_date: "2026-10-15",
     assignee: null,
-    memories: ["team/shared/conventions/use-pnpm.md"],
+    memories: ["company/conventions/use-pnpm.md"],
     files: ["billing-api:package.json"],
   } as Card;
 
@@ -101,7 +101,7 @@ describe("what an edited card changes", () => {
 
 describe("what an edited card changes about its links", () => {
   const card = { title: "", description: "", priority: "normal", labels: [], due_date: null, assignee: null } as unknown as Card;
-  const linked = { ...card, memories: ["team/shared/conventions/use-pnpm.md"], files: ["billing-api:package.json"] } as Card;
+  const linked = { ...card, memories: ["company/conventions/use-pnpm.md"], files: ["billing-api:package.json"] } as Card;
 
   it("sends the links of a kind whole when one was added or removed, and leaves the other kind alone", () => {
     const draft = { ...draftOf(linked), files: ["billing-api:package.json", "billing-api:README.md"] };

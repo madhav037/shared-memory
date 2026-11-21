@@ -61,7 +61,7 @@ def capped_at_places_left(console: Console, places: int) -> None:
     identity.member_cap = lambda: cap
 
 
-def team_page(client: ConsoleClient) -> dict[str, Any]:
+def company_page(client: ConsoleClient) -> dict[str, Any]:
     response = client.get("/api/members")
     assert response.status_code == 200, response.text
     page: dict[str, Any] = response.json()
@@ -75,7 +75,7 @@ def test_a_server_with_no_cap_adds_members_and_says_there_is_none(console: Conso
 
     add(client, "emp-2", "Dana Dev")
 
-    page = team_page(client)
+    page = company_page(client)
     assert page["member_cap"] is None
     assert page["members_used"] >= 2
 
@@ -102,7 +102,7 @@ def test_the_console_refuses_a_member_past_the_cap_and_shows_places_used(console
 
     assert refused.status_code == 403
     assert "member cap" in refused.json()["message"]
-    page = team_page(client)
+    page = company_page(client)
     assert page["member_cap"] == page["members_used"]
 
 
@@ -124,10 +124,10 @@ def test_the_cap_is_read_from_the_environment() -> None:
     assert Settings.from_env({}).member_cap is None
 
 
-def count_members(console: Console, team: str) -> tuple[int, str, str]:
+def count_members(console: Console, company: str) -> tuple[int, str, str]:
     """Run `shared-memory count-members` as the platform does; return its exit code, stdout and stderr."""
     out, err = io.StringIO(), io.StringIO()
-    code = cli.run(["count-members", "--team", team], settings=console.server.settings, out=out, err=err)
+    code = cli.run(["count-members", "--company", company], settings=console.server.settings, out=out, err=err)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -136,38 +136,38 @@ def uncapped(console: Console) -> None:
     console.server.app.state.identity.member_cap = lambda: None
 
 
-def test_count_members_prints_the_teams_members_as_a_number_alone(console: Console) -> None:
+def test_count_members_prints_the_companys_members_as_a_number_alone(console: Console) -> None:
     uncapped(console)
-    team, owner_token = console.a_team("olive-count")
+    company, owner_token = console.a_company("olive-count")
     owner = Session(console.server, owner_token)
     owner.call("add_member", member_id="emp-2", name="Dana Dev")
     owner.call("add_member", member_id="emp-3", name="Eve Eng")
 
-    assert count_members(console, team) == (0, "3\n", "")
+    assert count_members(console, company) == (0, "3\n", "")
 
 
 def test_count_members_leaves_out_removed_members_as_the_cap_does(console: Console) -> None:
     uncapped(console)
-    team, owner_token = console.a_team("olive-count-removed")
+    company, owner_token = console.a_company("olive-count-removed")
     owner = Session(console.server, owner_token)
     owner.call("add_member", member_id="emp-2", name="Dana Dev")
     owner.call("remove_member", member_id="emp-2")
 
-    assert count_members(console, team) == (0, "1\n", "")
+    assert count_members(console, company) == (0, "1\n", "")
 
 
-def test_count_members_counts_only_that_team(console: Console) -> None:
+def test_count_members_counts_only_that_company(console: Console) -> None:
     uncapped(console)
-    team, _ = console.a_team("olive-count-own")
-    _, other_owner = console.a_team("olive-count-other")
+    company, _ = console.a_company("olive-count-own")
+    _, other_owner = console.a_company("olive-count-other")
     Session(console.server, other_owner).call("add_member", member_id="emp-2", name="Dana Dev")
 
-    assert count_members(console, team) == (0, "1\n", "")
+    assert count_members(console, company) == (0, "1\n", "")
 
 
-def test_count_members_of_a_team_that_does_not_exist_fails_on_stderr(console: Console) -> None:
-    code, out, err = count_members(console, "no-such-team")
+def test_count_members_of_a_company_that_does_not_exist_fails_on_stderr(console: Console) -> None:
+    code, out, err = count_members(console, "no-such-company")
 
     assert code != 0
     assert out == ""
-    assert "no-such-team" in err
+    assert "no-such-company" in err

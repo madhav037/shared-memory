@@ -9,7 +9,7 @@ one minus `guide`, so it is covered."""
 from __future__ import annotations
 
 from shared_memory.briefing import estimate_tokens
-from tests.support import Session, Team, added_context, promote_keeping_both
+from tests.support import Session, Company, added_context, promote_keeping_both
 
 # The budgets, in tokens, each with the figure measured on 2026-10-18 once #303 to #309 had landed.
 BUDGETS = {
@@ -19,8 +19,11 @@ BUDGETS = {
     # Draft learnings (#551) add three tools (draft_learnings, confirm_draft_learning, decline_draft_learning), about
     # 560 tokens, nearly all the input schema of a draft learning and its edits, which every coding agent needs since
     # an agent without hooks drafts through them (ADR-0011). Their descriptions are one line each.
-    "member start": 8360,  # 8802 measured; was 7800 (8238 measured) before #551
-    "admin start": 8760,  # 9208 measured; was 8200 (8645 measured) before #551
+    # Onboarding a brownfield project (#614) adds record_onboarding_progress, which every onboarding run calls per
+    # repository and source so leads can steer it, and a one-line onboarding offer in the briefing of a project with no
+    # project memory, which goes once it has some. Both were cut to the line an agent needs; the rest is in the steps.
+    "member start": 8600,  # was 8360 (8802 measured) before #614
+    "admin start": 9000,  # was 8760 (9208 measured) before #614
     "one recall": 350,  # estimated after #427 (a fence value and the sentence naming it); was 218
 }
 MARGIN = 1.10
@@ -45,7 +48,7 @@ def start_cost(session: Session) -> int:
     return estimate_tokens(agent.tool_listing()) + estimate_tokens(instructions) + estimate_tokens(briefing)
 
 
-def test_a_session_starting_as_a_member_stays_within_its_budget(team: Team, dana: Session) -> None:
+def test_a_session_starting_as_a_member_stays_within_its_budget(company: Company, dana: Session) -> None:
     measured = start_cost(dana)
 
     within_budget("member start", measured)

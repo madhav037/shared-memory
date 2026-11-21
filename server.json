@@ -15,7 +15,7 @@
       "url": "https://{server_host}/mcp",
       "variables": {
         "server_host": {
-          "description": "Host name of your team's own Shared Memory server, without https://.",
+          "description": "Host name of your company's own Shared Memory server, without https://.",
           "placeholder": "memory.example.com",
           "isRequired": true
         }
@@ -23,7 +23,7 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Your personal token, from your team's owner or the console's Connect your agent page.",
+          "description": "Your personal token, from your company's owner or the console's Connect your agent page.",
           "value": "Bearer {personal_token}",
           "isRequired": true,
           "isSecret": true,

@@ -13,7 +13,7 @@ from tests.support import (
     SERVICES,
     SERVICES_TWO,
     Session,
-    Team,
+    Company,
     added_context,
     promote,
     remember,
@@ -98,17 +98,17 @@ def test_an_architecture_or_decision_memory_is_refused_any_other_foundation(owne
     )
 
 
-def test_team_memory_has_no_foundations(owner: Session) -> None:
-    refused = owner.refusal("promote", path=remember(owner, CENTS), level="team", foundation="product")
+def test_company_memory_has_no_foundations(owner: Session) -> None:
+    refused = owner.refusal("promote", path=remember(owner, CENTS), level="company", foundation="product")
 
     assert "no foundations" in refused
-    assert owner.refusal("promote", path=remember(owner, SERVICES), level="team", foundation="architecture")
+    assert owner.refusal("promote", path=remember(owner, SERVICES), level="company", foundation="architecture")
 
 
-def test_an_architecture_memory_promoted_to_team_memory_is_unchanged(owner: Session) -> None:
-    result = promote(owner, SERVICES, level="team")
+def test_an_architecture_memory_promoted_to_company_memory_is_unchanged(owner: Session) -> None:
+    result = promote(owner, SERVICES, level="company")
 
-    assert result["path"].startswith("team/architecture/")
+    assert result["path"].startswith("company/architecture/")
 
 
 def test_similar_memories_report_the_foundation_they_sit_in(owner: Session, dana: Session) -> None:
@@ -136,7 +136,7 @@ def test_search_and_the_folder_tree_mark_a_foundation_memory(owner: Session) -> 
     assert sorted(marked.values(), key=str) == [None, "architecture"]
 
 
-def test_recall_marks_a_foundation_memory(team: Team, owner: Session) -> None:
+def test_recall_marks_a_foundation_memory(company: Company, owner: Session) -> None:
     promote(owner, SERVICES)
 
     context = added_context(owner.prompt("how is billing split into services, api and ledger worker?"))

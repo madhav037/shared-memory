@@ -1,4 +1,4 @@
-"""An admin downloads all of the team's data as one archive: the memory folder's git history as a bundle, and JSON of the
+"""An admin downloads all of the company's data as one archive: the memory folder's git history as a bundle, and JSON of the
 members, projects, cards and audit log. Export only reads (ADR-0009), and every one is audited."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def download(client: ConsoleClient) -> zipfile.ZipFile:
     return opened(response.content)
 
 
-def test_an_admin_downloads_the_memory_with_its_history_and_the_teams_records(
+def test_an_admin_downloads_the_memory_with_its_history_and_the_companys_records(
     console: Console, signed_out: ConsoleClient, tmp_path: Path
 ) -> None:
     owner = signed_in_owner(console, signed_out, "olive-export-one", 1601)
@@ -40,6 +40,7 @@ def test_an_admin_downloads_the_memory_with_its_history_and_the_teams_records(
     assert sorted(archive.namelist()) == [
         "audit-log.json",
         "cards.json",
+        "departments.json",
         "members.json",
         "memory.bundle",
         "projects.json",
@@ -74,9 +75,9 @@ def test_an_admin_downloads_the_memory_with_its_history_and_the_teams_records(
 
 
 def test_a_member_who_is_not_an_admin_is_refused(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-export-two")
+    company, owner_token = console.a_company("olive-export-two")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-export-two")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-export-two")
     dana = signed_in(console, "dana-export-two", 1602)
 
     refused = dana.get("/api/export")
@@ -102,9 +103,9 @@ def test_every_export_is_recorded_in_the_audit_log(console: Console, signed_out:
 
 
 def test_a_refused_export_is_not_recorded(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-export-four")
+    company, owner_token = console.a_company("olive-export-four")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-export-four")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-export-four")
     dana = signed_in(console, "dana-export-four", 1604)
     dana.get("/api/export")
     dana.close()

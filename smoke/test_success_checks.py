@@ -7,22 +7,22 @@ from pathlib import Path
 import pytest
 
 from smoke.support import REPOSITORY, ask, member, promote
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 
 @pytest.fixture
-def project(team: Team) -> str:
-    project_id: str = team.owner().call("create_project", name="Billing")["project_id"]
+def project(company: Company) -> str:
+    project_id: str = company.owner().call("create_project", name="Billing")["project_id"]
     return project_id
 
 
 @pytest.fixture
-def olive(team: Team, project: str) -> Session:
-    return team.owner().in_project(project, REPOSITORY)
+def olive(company: Company, project: str) -> Session:
+    return company.owner().in_project(project, REPOSITORY)
 
 
 def test_a_promoted_memory_reaches_a_teammates_next_prompt_without_a_search(
-    team: Team, project: str, olive: Session, tmp_path: Path
+    company: Company, project: str, olive: Session, tmp_path: Path
 ) -> None:
     promote(
         olive,
@@ -32,7 +32,7 @@ def test_a_promoted_memory_reaches_a_teammates_next_prompt_without_a_search(
         "the next morning, so keep test data in fixtures.",
         type="gotcha",
     )
-    dana = member(team, project, "emp-2", "Dana Dev")
+    dana = member(company, project, "emp-2", "Dana Dev")
 
     run = ask(dana, tmp_path, "What time does the staging database reset each night?")
 
@@ -43,7 +43,7 @@ def test_a_promoted_memory_reaches_a_teammates_next_prompt_without_a_search(
 
 
 def test_a_new_members_first_session_answers_which_package_manager_from_the_briefing(
-    team: Team, project: str, olive: Session, tmp_path: Path
+    company: Company, project: str, olive: Session, tmp_path: Path
 ) -> None:
     path = promote(
         olive,
@@ -52,7 +52,7 @@ def test_a_new_members_first_session_answers_which_package_manager_from_the_brie
         body="We use pnpm for every package. npm creates a second lockfile and CI rejects it.",
     )
     olive.call("pin", path=path)
-    nia = member(team, project, "emp-3", "Nia New")
+    nia = member(company, project, "emp-3", "Nia New")
 
     run = ask(nia, tmp_path, "Which package manager do we use?")
 
@@ -61,14 +61,14 @@ def test_a_new_members_first_session_answers_which_package_manager_from_the_brie
     assert "pnpm" in run.answer.lower()
 
 
-def test_the_prompt_hook_adds_under_one_second(team: Team, project: str, olive: Session, tmp_path: Path) -> None:
+def test_the_prompt_hook_adds_under_one_second(company: Company, project: str, olive: Session, tmp_path: Path) -> None:
     promote(
         olive,
         title="Errors are returned, never thrown",
         summary="Billing services return Result values for expected errors instead of throwing.",
         body="Expected failures (validation, not found, duplicates) are returned as Result values. Throw only for bugs.",
     )
-    dana = member(team, project, "emp-2", "Dana Dev")
+    dana = member(company, project, "emp-2", "Dana Dev")
 
     run = ask(
         dana,

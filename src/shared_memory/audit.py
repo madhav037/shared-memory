@@ -4,8 +4,8 @@ It answers "who did this" for changes that leave no memory file behind — signi
 alongside the memory changes themselves. It is append-only and holds no memory content: it points at paths, and the
 memory folder's git history holds what they said.
 
-A sign-in that no member can be found for belongs to no team; those entries are shown to every team's readers, because a
-server holds one team in practice and nobody else could otherwise see that someone tried.
+A sign-in that no member can be found for belongs to no company; those entries are shown to every company's readers, because a
+server holds one company in practice and nobody else could otherwise see that someone tried.
 """
 
 from __future__ import annotations
@@ -76,6 +76,16 @@ Kind = Literal[
     "gate_agreed",
     "gate_refused",
     "urgent_message",
+    "department_created",
+    "department_renamed",
+    "department_removed",
+    "department_lead_appointed",
+    "department_lead_removed",
+    "project_moved",
+    "department_restricted",
+    "department_opened",
+    "department_access_granted",
+    "department_access_revoked",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -126,12 +136,12 @@ NEVER_LOCK_PATTERN_ADDED: Kind = "never_lock_pattern_added"
 NEVER_LOCK_PATTERN_REMOVED: Kind = "never_lock_pattern_removed"
 # An admin changed the server's rate limit; the entry's detail holds the limits now and the limits before.
 RATE_LIMITS_CHANGED: Kind = "rate_limits_changed"
-# An admin installed a license key; the entry's detail holds the team, member cap, expiry and key ID (never the key).
+# An admin installed a license key; the entry's detail holds the company, member cap, expiry and key ID (never the key).
 LICENSE_INSTALLED: Kind = "license_installed"
 # A personal token was limited, at most once an hour; the entry's target is its member.
 TOKEN_LIMITED: Kind = "token_limited"  # noqa: S105  # a name, not a secret
-# An admin downloaded all of the team's data (spec #409); the entry's detail holds the archive's size in bytes.
-TEAM_EXPORTED: Kind = "team_exported"
+# An admin downloaded all of the company's data (spec #409); the entry's detail holds the archive's size in bytes.
+COMPANY_EXPORTED: Kind = "team_exported"
 # A later session's gate ended (ADR-0024): its wait passed with no answer, or its member said it is different work. The
 # entry's actor is the later session's member, its target the earlier one's, and its detail holds the collision's score
 # and cause, never a prompt.
@@ -148,6 +158,25 @@ GATE_REFUSED: Kind = "gate_refused"
 URGENT_MESSAGE: Kind = "urgent_message"
 # A lead or an admin changed a project's wait; the entry's detail holds the minutes now.
 PROJECT_WAIT_CHANGED: Kind = "project_wait_changed"
+# A department (ADR-0032); the entry's target is its department ID and its detail its name. A removed department's
+# detail also lists the projects it left in no department.
+DEPARTMENT_CREATED: Kind = "department_created"
+DEPARTMENT_RENAMED: Kind = "department_renamed"
+DEPARTMENT_REMOVED: Kind = "department_removed"
+# A department's lead; the entry's target is the department ID and its detail names the member.
+DEPARTMENT_LEAD_APPOINTED: Kind = "department_lead_appointed"
+DEPARTMENT_LEAD_REMOVED: Kind = "department_lead_removed"
+# A project moved into or out of a department; the entry's detail holds the department it is in now and the one it
+# was in, either None for no department.
+PROJECT_MOVED: Kind = "project_moved"
+# A department closed to its access list or opened to the whole company again; the entry's target is its department ID
+# and its detail its name.
+DEPARTMENT_RESTRICTED: Kind = "department_restricted"
+DEPARTMENT_OPENED: Kind = "department_opened"
+# A member put on or taken off a department's access list; the entry's target is the department ID and its detail
+# names the member.
+DEPARTMENT_ACCESS_GRANTED: Kind = "department_access_granted"
+DEPARTMENT_ACCESS_REVOKED: Kind = "department_access_revoked"
 
 
 @dataclass(frozen=True)
@@ -159,6 +188,16 @@ class Event:
     project_id: str | None
     target: str | None
     detail: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Interviewed:
+    """A memory promoted from an interview: where it went, the member who ran the interview, when, and the source."""
+
+    path: str
+    interviewer: str
+    at: datetime
+    source: str
 
 
 @dataclass(frozen=True)
@@ -178,7 +217,7 @@ class Audit:
         kind: str,
         *,
         member: Member | None = None,
-        team_pk: int | None = None,
+        company_pk: int | None = None,
         actor: str | None = None,
         project_id: str | None = None,
         target: str | None = None,
@@ -191,7 +230,7 @@ class Audit:
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     self._clock(),
-                    member.team_pk if member else team_pk,
+                    member.company_pk if member else company_pk,
                     member.pk if member else None,
                     actor or (member.member_id if member else "unknown"),
                     kind,
@@ -224,9 +263,40 @@ class Audit:
             row = conn.execute(
                 "SELECT 1 FROM audit_events WHERE team_id = %s AND kind = %s AND actor_id = %s"
                 " AND split_part(detail->>'imported_from', ':', 1) = %s LIMIT 1",
-                (caller.member.team_pk, MEMORY_PROMOTED, caller.member.pk, repository),
+                (caller.member.company_pk, MEMORY_PROMOTED, caller.member.pk, repository),
             ).fetchone()
         return row is not None
+
+    def imports_in(self, company_pk: int, project_id: str) -> tuple[list[str], list[str]]:
+        """The sources of a project's imports: one per import promoted, and one per import still waiting on the
+        challenge its promotion raised, a challenge no decision has closed yet."""
+        with self._db.transaction() as conn:
+            promoted = conn.execute(
+                "SELECT detail->>'imported_from' AS source FROM audit_events WHERE team_id = %s AND project_id = %s"
+                " AND kind = %s AND detail ? 'imported_from'",
+                (company_pk, project_id, MEMORY_PROMOTED),
+            ).fetchall()
+            waiting = conn.execute(
+                "SELECT raised.detail->>'imported_from' AS source FROM audit_events raised"
+                " WHERE raised.team_id = %s AND raised.project_id = %s AND raised.kind = %s"
+                " AND raised.detail ? 'imported_from' AND NOT EXISTS (SELECT 1 FROM audit_events decided"
+                " WHERE decided.team_id = raised.team_id AND decided.kind = %s"
+                " AND decided.detail->>'challenge_id' = raised.detail->>'challenge_id')",
+                (company_pk, project_id, CHALLENGE_RAISED, CHALLENGE_DECIDED),
+            ).fetchall()
+        return [row["source"] for row in promoted], [row["source"] for row in waiting]
+
+    def interviews_of(self, member: Member) -> list[Interviewed]:
+        """Each promotion that named this member as author with an interview as its source, newest first: what was
+        written from their interview, by whom and when (ADR-0029)."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT target, actor, at, detail->>'imported_from' AS source FROM audit_events"
+                " WHERE team_id = %s AND kind = %s AND detail->>'author' = %s"
+                " AND detail->>'imported_from' LIKE 'interview:%%' ORDER BY id DESC",
+                (member.company_pk, MEMORY_PROMOTED, member.member_id),
+            ).fetchall()
+        return [Interviewed(row["target"], row["actor"], row["at"], row["source"]) for row in rows]
 
     def card(self, caller: Caller, change: str, project_id: str, number: int, **detail: object) -> None:
         """Note a change to one card on a project's board: who changed it, and which card. A card has no history but
@@ -247,17 +317,17 @@ class Audit:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> Page:
-        """The reader's team's log, newest first. One page, with where the next page starts.
+        """The reader's company's log, newest first. One page, with where the next page starts.
 
-        A project lead who doesn't run the team sees their own projects' events and nothing else.
+        A project lead who doesn't run the company sees their own projects' events and nothing else.
         """
         self.require_reader(reader)
         limit = max(1, min(limit, 200))
         wheres = ["(e.team_id = %s OR e.team_id IS NULL)"]
-        values: list[Any] = [reader.team_pk]
-        if not _runs_the_team(reader):
+        values: list[Any] = [reader.company_pk]
+        if not _runs_the_company(reader):
             wheres = ["e.team_id = %s", "e.project_id = ANY(%s)"]
-            values = [reader.team_pk, self._identity.leads_of(reader)]
+            values = [reader.company_pk, self._identity.leads_of(reader)]
         if before is not None:
             wheres.append("e.id < %s")
             values.append(before)
@@ -276,7 +346,7 @@ class Audit:
         with self._db.transaction() as conn:
             if member_id:
                 # An entry with a member is theirs by row id; one without, such as a refused sign-in, by its actor.
-                found = self._identity.in_team(conn, reader.team_pk, [member_id]).get(member_id)
+                found = self._identity.in_company(conn, reader.company_pk, [member_id]).get(member_id)
                 wheres.append("(e.actor_id = %s OR (e.actor_id IS NULL AND e.actor = %s))")
                 values += [found[0] if found else None, member_id]
             rows = conn.execute(
@@ -301,12 +371,12 @@ class Audit:
 
     def _may_read(self, member: Member) -> bool:
         """The owner and the admins read the whole log; a project lead reads their own projects'."""
-        return _runs_the_team(member) or bool(self._identity.leads_of(member))
+        return _runs_the_company(member) or bool(self._identity.leads_of(member))
 
     def require_reader(self, member: Member) -> None:
         if not self._may_read(member):
-            raise Refused("Only the team's owner, its admins and a project's leads can read the audit log.")
+            raise Refused("Only the company's owner, its admins and a project's leads can read the audit log.")
 
 
-def _runs_the_team(member: Member) -> bool:
+def _runs_the_company(member: Member) -> bool:
     return member.is_owner or member.is_admin

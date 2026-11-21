@@ -25,6 +25,7 @@ from shared_memory.clock import Clock
 from shared_memory.collisions import Collision, Collisions
 from shared_memory.gates import Gate, Gates
 from shared_memory import health
+from shared_memory import onboarding
 from shared_memory.handoff import HandoffNotes, Note
 from shared_memory.messages import TEXT_LIMIT, Exchanged, Messages
 from shared_memory.sessions import Session
@@ -51,13 +52,23 @@ from shared_memory.audit import (
     PROJECT_RESTRICTED,
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
-    TEAM_EXPORTED,
+    COMPANY_EXPORTED,
+    DEPARTMENT_ACCESS_GRANTED,
+    DEPARTMENT_ACCESS_REVOKED,
+    DEPARTMENT_CREATED,
+    DEPARTMENT_LEAD_APPOINTED,
+    DEPARTMENT_LEAD_REMOVED,
+    DEPARTMENT_REMOVED,
+    DEPARTMENT_OPENED,
+    DEPARTMENT_RENAMED,
+    DEPARTMENT_RESTRICTED,
+    PROJECT_MOVED,
     TOKEN_ISSUED,
     Audit,
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
+from shared_memory.challenges import PROMOTE, Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
@@ -78,9 +89,17 @@ from shared_memory.console_contract import (
     AwaitedMember, SessionStandby,
     GateAnswer, GateWait, MessageToSend, NamedSession, SessionCollision, SessionGate, SessionHandoffNote,
     SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
+    OnboardingEntry, OnboardingProgress,
+    InterviewMemories, InterviewMemory,
+    DepartmentAccessChange, DepartmentAppointment, DepartmentName, DepartmentProject, DepartmentRef,
+    DepartmentRestriction, Departments, DepartmentSummary,
+    DepartmentMemoryEntry, DepartmentPage, DepartmentRollUp, MemoryCounts, ProjectRollUp,
+    ProjectMember, ProjectMove,
 )
+from shared_memory import department_page
+from shared_memory.departments import Department, Departments as DepartmentStore
 from shared_memory.errors import Refused
-from shared_memory.export import TeamExport
+from shared_memory.export import CompanyExport
 from shared_memory.identity import Caller, Identity, Member
 from shared_memory.licensing import Licenses
 from shared_memory.ratelimit import Limits
@@ -97,10 +116,10 @@ from shared_memory.uses import Uses
 
 CONSOLE_HEADER = "x-shared-memory-console"
 
-# The calls that save memory (retiring, deciding a challenge, and moving a card, which retires the known issues it
-# fixes when it lands in Done). They wait for their turn with every other save, without holding a worker thread (see
-# `saves.py`).
-SAVING = frozenset({"retire_at", "decide_challenge", "move_card"})
+# The calls that save memory (retiring, deciding a challenge, moving a card, which retires the known issues it fixes
+# when it lands in Done, and removing a department, which retires its department memory). They wait for their turn
+# with every other save, without holding a worker thread (see `saves.py`).
+SAVING = frozenset({"retire_at", "decide_challenge", "move_card", "remove_department"})
 
 # The calls a read-only server refuses (a hosted server whose license key has lapsed, ADR-0022), the ones the memory
 # tools refuse too: every change to memory, inviting members and creating cards. Removing members, revoking personal
@@ -115,6 +134,7 @@ REFUSED_WHILE_READ_ONLY = frozenset(
         "add_foundation",
         "add_member",
         "add_card",
+        "remove_department",
     }
 )
 
@@ -168,7 +188,7 @@ def _plainly(wrong: Exception) -> str:
 
 
 def _project_in(path: str) -> str | None:
-    """The project a memory path belongs to, or nothing for team memory and anything unreadable."""
+    """The project a memory path belongs to, or nothing for company memory and anything unreadable."""
     try:
         return locate(path).project_id
     except Refused:
@@ -225,6 +245,22 @@ def _evidence(each: Evidence) -> DoubtEvidence:
     )
 
 
+def _department_ref(department: Department | None) -> DepartmentRef | None:
+    if department is None:
+        return None
+    return DepartmentRef(department_id=department.department_id, name=department.name, restricted=department.restricted)
+
+
+def _counted(counts: department_page.Counts) -> MemoryCounts:
+    return MemoryCounts(
+        memories=counts.memories,
+        possibly_outdated=counts.possibly_outdated,
+        used=counts.used,
+        level_contradictions=counts.level_contradictions,
+        challenges=counts.challenges,
+    )
+
+
 def _sign_in_first() -> Response:
     return JSONResponse({"message": "Sign in to the console first."}, status_code=401)
 
@@ -252,7 +288,7 @@ def _named(each: SessionActivity) -> NamedSession:
 
 
 def _standby_of(standby: Standby | None, names: dict[str, str]) -> SessionStandby | None:
-    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer on the team
+    """A session's standby as the Sessions page shows it, each member it awaits named; a member no longer in the company
     by their member ID."""
     if standby is None:
         return None
@@ -375,10 +411,16 @@ class ConsoleApi:
         uses: Uses,
         rate_limits: RateLimiter,
         licenses: Licenses,
-        export: TeamExport,
+        export: CompanyExport,
         talk: SessionTalk,
         project_health: health.ProjectHealth,
+        progress: onboarding.Progress,
+        departments: DepartmentStore,
+        department_pages: department_page.DepartmentPages,
     ) -> None:
+        self._departments = departments
+        self._department_pages = department_pages
+        self._progress = progress
         self._export_of = export
         self._health = project_health
         self._talk = talk
@@ -423,6 +465,7 @@ class ConsoleApi:
             "board_archive": self._board_archive,
             "project_sessions": self._project_sessions,
             "project_health": self._project_health,
+            "onboarding_progress": self._onboarding_progress,
             "send_message": self._send_message,
             "answer_gate": self._answer_gate,
             "card": self._card,
@@ -438,6 +481,7 @@ class ConsoleApi:
             "pins": self._pins,
             "files": self._files,
             "memory_at": self._memory_at,
+            "interviewed": self._interviewed,
             "history_at": self._history_at,
             "version_at": self._version_at,
             "pin_at": self._pin_at,
@@ -462,6 +506,18 @@ class ConsoleApi:
             "choose_my_time_zone": self._choose_my_time_zone,
             "report_my_time_zone": self._report_my_time_zone,
             "reissue_token": self._reissue_token,
+            "departments": self._departments_listed,
+            "department": self._department,
+            "create_department": self._create_department,
+            "rename_department": self._rename_department,
+            "remove_department": self._remove_department,
+            "appoint_department_lead": self._appoint_department_lead,
+            "remove_department_lead": self._remove_department_lead,
+            "move_project_in": self._move_project_in,
+            "move_project_out": self._move_project_out,
+            "restrict_department": self._restrict_department,
+            "grant_department_access": self._grant_department_access,
+            "revoke_department_access": self._revoke_department_access,
             "sign_out": self._sign_out,
         }
         assert SAVING <= handlers.keys()
@@ -576,7 +632,13 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        answer = Projects(projects=[ProjectSummary(**one) for one in self._identity.project_summaries(member)])
+        summaries = self._identity.project_summaries(member)
+        found = self._departments.of_projects([one["project_id"] for one in summaries])
+        answer = Projects(
+            projects=[
+                ProjectSummary(**one, department=_department_ref(found.get(one["project_id"]))) for one in summaries
+            ]
+        )
         return JSONResponse(answer.model_dump(mode="json"))
 
     def _create_project(self, request: Request) -> Response:
@@ -723,8 +785,201 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         server_url = str(request.base_url).rstrip("/")
         repositories = [self._repository(server_url, project_id, found["name"], name) for name in found["repositories"]]
-        detail = ProjectDetail(**{**found, "repositories": repositories})
+        department = _department_ref(self._departments.of_project(project_id))
+        detail = ProjectDetail(**{**found, "repositories": repositories, "department": department})
         return JSONResponse(detail.model_dump(mode="json"))
+
+    # --- departments (ADR-0032) ---
+
+    def _departments_listed(self, request: Request) -> Response:
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        return self._departments_now(member)
+
+    def _department(self, request: Request) -> Response:
+        """A department's page (#636): reading it changes nothing (ADR-0009), and its roll-up is counts only."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            found = self._department_pages.of(self._identity.caller_in(member, None), request.path_params["department_id"])
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        roll_up = None
+        if found.roll_up is not None:
+            roll_up = DepartmentRollUp(
+                window_days=department_page.WINDOW_DAYS,
+                outdated_after_days=self._settings.outdated_after_days,
+                projects=[
+                    ProjectRollUp(project_id=project.project_id, name=project.name, counts=_counted(counts))
+                    for project, counts in found.roll_up.projects
+                ],
+                department_memory=_counted(found.roll_up.department_memory),
+            )
+        answer = DepartmentPage(
+            department_id=found.department.department_id,
+            name=found.department.name,
+            restricted=found.restricted,
+            you_lead=found.you_lead,
+            projects=[DepartmentProject(project_id=one.project_id, name=one.name) for one in found.projects],
+            memory=[
+                DepartmentMemoryEntry(path=path, title=memory.title, summary=memory.summary, type=memory.type)
+                for path, memory in found.memory
+            ],
+            roll_up=roll_up,
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
+
+    def _create_department(self, request: Request) -> Response:
+        def create(member: Member, caller: Caller) -> None:
+            asked: DepartmentName = request.state.asked
+            made = self._departments.create(caller, asked.name)
+            self._audit.record(DEPARTMENT_CREATED, member=member, target=made.department_id, detail={"name": made.name})
+
+        return self._change_departments(request, create)
+
+    def _rename_department(self, request: Request) -> Response:
+        def rename(member: Member, caller: Caller) -> None:
+            asked: DepartmentName = request.state.asked
+            renamed = self._departments.rename(caller, request.path_params["department_id"], asked.name)
+            self._audit.record(
+                DEPARTMENT_RENAMED, member=member, target=renamed.department_id, detail={"name": renamed.name}
+            )
+
+        return self._change_departments(request, rename)
+
+    def _remove_department(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller) -> None:
+            removed, left = self._departments.remove(caller, request.path_params["department_id"])
+            self._audit.record(
+                DEPARTMENT_REMOVED,
+                member=member,
+                target=removed.department_id,
+                detail={"name": removed.name, "projects": left},
+            )
+            # Its department memory is retired the way the console retires any memory, each retiring audited and its
+            # history kept (ADR-0032, ADR-0009).
+            working = self._working_in(member, None)
+            for path in self._service.department_memory(caller, removed.department_id):
+                self._lifecycle.retire(working, path, "Its department was removed.")
+
+        return self._change_departments(request, remove)
+
+    def _appoint_department_lead(self, request: Request) -> Response:
+        def appoint(member: Member, caller: Caller) -> None:
+            asked: DepartmentAppointment = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.appoint_lead(caller, department_id, asked.member_id)
+            self._audit.record(
+                DEPARTMENT_LEAD_APPOINTED, member=member, target=department_id, detail={"member_id": asked.member_id}
+            )
+
+        return self._change_departments(request, appoint)
+
+    def _remove_department_lead(self, request: Request) -> Response:
+        def remove(member: Member, caller: Caller) -> None:
+            department_id, member_id = request.path_params["department_id"], request.path_params["member_id"]
+            self._departments.remove_lead(caller, department_id, member_id)
+            self._audit.record(
+                DEPARTMENT_LEAD_REMOVED, member=member, target=department_id, detail={"member_id": member_id}
+            )
+
+        return self._change_departments(request, remove)
+
+    def _move_project_in(self, request: Request) -> Response:
+        def move(member: Member, caller: Caller) -> None:
+            asked: ProjectMove = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.move_in(caller, department_id, asked.project_id)
+            self._audit.record(
+                PROJECT_MOVED,
+                member=member,
+                project_id=asked.project_id,
+                target=department_id,
+                detail={"department_id": department_id, "from_department_id": None},
+            )
+
+        return self._change_departments(request, move)
+
+    def _move_project_out(self, request: Request) -> Response:
+        def move(member: Member, caller: Caller) -> None:
+            department_id, project_id = request.path_params["department_id"], request.path_params["project_id"]
+            self._departments.move_out(caller, department_id, project_id)
+            self._audit.record(
+                PROJECT_MOVED,
+                member=member,
+                project_id=project_id,
+                target=department_id,
+                detail={"department_id": None, "from_department_id": department_id},
+            )
+
+        return self._change_departments(request, move)
+
+    def _restrict_department(self, request: Request) -> Response:
+        def restrict(member: Member, caller: Caller) -> None:
+            asked: DepartmentRestriction = request.state.asked
+            changed = self._departments.restrict(caller, request.path_params["department_id"], asked.restricted)
+            self._audit.record(
+                DEPARTMENT_RESTRICTED if asked.restricted else DEPARTMENT_OPENED,
+                member=member,
+                target=changed.department_id,
+                detail={"name": changed.name},
+            )
+
+        return self._change_departments(request, restrict)
+
+    def _grant_department_access(self, request: Request) -> Response:
+        def grant(member: Member, caller: Caller) -> None:
+            asked: DepartmentAccessChange = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.grant_access(caller, department_id, asked.member_id)
+            self._audit.record(
+                DEPARTMENT_ACCESS_GRANTED, member=member, target=department_id, detail={"member_id": asked.member_id}
+            )
+
+        return self._change_departments(request, grant)
+
+    def _revoke_department_access(self, request: Request) -> Response:
+        def revoke(member: Member, caller: Caller) -> None:
+            department_id, member_id = request.path_params["department_id"], request.path_params["member_id"]
+            self._departments.revoke_access(caller, department_id, member_id)
+            self._audit.record(
+                DEPARTMENT_ACCESS_REVOKED, member=member, target=department_id, detail={"member_id": member_id}
+            )
+
+        return self._change_departments(request, revoke)
+
+    def _change_departments(self, request: Request, change: Callable[[Member, Caller], None]) -> Response:
+        """Everything an admin or a department lead does to a department: the same guard, and every department as
+        it now stands."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            change(member, self._identity.caller_in(member, None))
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        return self._departments_now(member)
+
+    def _departments_now(self, member: Member) -> Response:
+        answer = Departments(
+            departments=[
+                DepartmentSummary(
+                    department_id=view.department.department_id,
+                    name=view.department.name,
+                    leads=[ProjectMember(member_id=lead.member_id, name=lead.name) for lead in view.leads],
+                    projects=[DepartmentProject(project_id=one.project_id, name=one.name) for one in view.projects],
+                    you_lead=view.you_lead,
+                    you_may_change=view.you_may_change,
+                    restricted=view.restricted,
+                    access=[ProjectMember(member_id=one.member_id, name=one.name) for one in view.access],
+                )
+                for view in self._departments.listed(member)
+            ],
+            you_may_create=member.is_owner or member.is_admin,
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _repository(self, server_url: str, project_id: str, project_name: str, name: str) -> ProjectRepository:
         files = self._service.connection_files(server_url, project_id, project_name, name)
@@ -734,12 +989,12 @@ class ConsoleApi:
         """One memory in full: what it says, its file as Claude reads it, whether it is pinned, and when a coding agent
         last used it. Reading it here is no use of it."""
         memory = self._service.read(caller, path)
-        memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.team)
-        memory["last_used"] = self._uses.last_used(caller.team, memory["path"])
+        memory["pinned"] = memory["path"] in self._briefing.pinned_paths(caller.company)
+        memory["last_used"] = self._uses.last_used(caller.company, memory["path"])
         memory["source"] = self._service.source(caller, path)
         memory["author_name"] = self._names(caller.member).get(memory["author"], memory["author"])
         memory["suspected_instructions"] = reasons_in(memory["title"], memory["summary"], memory["body"])
-        against = self._challenging.doubts_against(caller.team, [memory["path"]])[memory["path"]]
+        against = self._challenging.doubts_against(caller.company, [memory["path"]])[memory["path"]]
         doubts = {each.challenge.id: each for each in against}
         memory["open_challenges"] = [
             _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
@@ -817,6 +1072,33 @@ class ConsoleApi:
                 in_doubt=[
                     DoubtedMemory(**about(one.path, one.memory), in_doubt=_mark(one.in_doubt))
                     for one in found.in_doubt
+                ],
+            )
+
+        return self._browse(request, read)
+
+    # --- a project's onboarding progress, read: recording it is a session's (ADR-0009) ---
+
+    def _onboarding_progress(self, request: Request) -> Response:
+        def read(caller: Caller) -> OnboardingProgress:
+            everyone, entries = self._progress.entries(caller)
+            names = self._names(caller.member)
+            return OnboardingProgress(
+                project_id=caller.require_project().project_id,
+                everyone=everyone,
+                entries=[
+                    OnboardingEntry(
+                        repository=one.repository,
+                        outside_source=one.outside_source,
+                        status=one.status,
+                        recorded_by=one.recorded_by,
+                        recorded_by_name=names.get(one.recorded_by, one.recorded_by),
+                        recorded_at=one.recorded_at,
+                        promoted=one.promoted,
+                        waiting_on_challenge=one.waiting_on_challenge,
+                        left_out=one.left_out,
+                    )
+                    for one in entries
                 ],
             )
 
@@ -1057,7 +1339,7 @@ class ConsoleApi:
             )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        pinned = self._briefing.pinned_paths(caller.team)
+        pinned = self._briefing.pinned_paths(caller.company)
         for memory in [*found["memories"], *(one for section in found["inside"] for one in section["memories"])]:
             memory["pinned"] = memory["path"] in pinned
         found["pinnable"] = bool(found["folder"]) and _may_be_pinned(found["folder"])
@@ -1120,7 +1402,7 @@ class ConsoleApi:
     def _at(
         self, request: Request, look: Callable[[Caller, str], BaseModel], path: str | None = None
     ) -> Response:
-        """Anything done to one memory by its path, placed in the project it lives in (or any, for team memory)."""
+        """Anything done to one memory by its path, placed in the project it lives in (or any, for company memory)."""
         member = self._member(request)
         if member is None:
             return _sign_in_first()
@@ -1146,6 +1428,38 @@ class ConsoleApi:
         if member is None:
             return _sign_in_first()
         return self._disputes(self._identity.caller_in(member, None))
+
+    def _interviewed(self, request: Request) -> Response:
+        """What was written from the member's interviews, in the projects they can still reach. Only a read: retiring
+        one is the retire any author has (ADR-0009)."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        promoted = self._audit.interviews_of(member)
+        reachable = {project.project_id for project in self._identity.projects(member)}
+        theirs = self._explorer.still_authored(
+            member.company_code,
+            (one.path for one in promoted if _project_in(one.path) is None or _project_in(one.path) in reachable),
+            member.member_id,
+        )
+        names = self._names(member)
+        answer = InterviewMemories(
+            memories=[
+                InterviewMemory(
+                    path=one.path,
+                    title=theirs[one.path].title,
+                    summary=theirs[one.path].summary,
+                    level=locate(one.path).level,
+                    source=one.source,
+                    interviewer=one.interviewer,
+                    interviewer_name=names.get(one.interviewer, one.interviewer),
+                    interviewed_at=one.at,
+                )
+                for one in promoted
+                if one.path in theirs
+            ]
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _notices(self, request: Request) -> Response:
         """What the member has been told. Only a read: each notice still waits for their next briefing."""
@@ -1180,18 +1494,21 @@ class ConsoleApi:
             challenge_id = int(request.path_params["challenge_id"])
         except ValueError:
             return JSONResponse({"message": "That isn't a challenge."}, status_code=422)
-        challenge = self._challenging.open_challenge(member.team_code, challenge_id)
+        challenge = self._challenging.open_challenge(member.company_code, challenge_id)
         if challenge is None:
             return JSONResponse(
-                {"message": f"There is no open challenge {challenge_id} in your team."}, status_code=403
+                {"message": f"There is no open challenge {challenge_id} in your company."}, status_code=403
             )
         try:
             result = self._lifecycle.decide_challenge(
-                self._working_in(member, project_of(challenge)), challenge_id, asked.decision
+                self._working_in(member, project_of(challenge)), challenge_id, asked.decision, asked.reason
             )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        if result["status"] == "rejected":
+        if result["status"] in ("kept_exception", "followed"):
+            decided = Decided(challenge_id=challenge.id, decision=result["status"], in_force=result["path"])
+        elif result["status"] == "rejected":
+
             decided = Decided(challenge_id=challenge.id, decision="rejected", in_force=challenge.target_path)
         else:
             decided = Decided(challenge_id=challenge.id, decision="accepted", in_force=result.get("path"))
@@ -1207,7 +1524,7 @@ class ConsoleApi:
         found = self._challenging.waiting_for(caller)
         doubts = {
             doubt.challenge.id: doubt
-            for each in self._challenging.doubts_against(caller.team, [one.challenge.target_path for one in found]).values()
+            for each in self._challenging.doubts_against(caller.company, [one.challenge.target_path for one in found]).values()
             for doubt in each
         }
         waiting = [self._dispute(caller, one, doubts.get(one.challenge.id)) for one in found]
@@ -1245,7 +1562,14 @@ class ConsoleApi:
         return self._identity.foundation_name(project_id, challenge.foundation)
 
     def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:
-        """What a challenge is against: a memory, or for an "add" the foundation whose folder the path is."""
+        """What a challenge is against: a memory, for an "add" the foundation whose folder the path is, or for a
+        "promote" the department whose memory it asks to join."""
+        if kind == PROMOTE:
+            named = self._departments.named(path.rsplit("/", 1)[-1])
+            return ChallengedMemory(
+                path=path, title=path if named is None else named.name, summary="", body="", level="department", type="",
+                author="", status="department",
+            )  # fmt: skip
         if kind != "add" or foundation is None:
             return self._side(caller, path)
         parts = path.split("/")
@@ -1267,8 +1591,8 @@ class ConsoleApi:
     def _working_in(self, member: Member, project_id: str | None) -> Caller:
         """A caller placed in a project, as a session would be: the one asked for, or any the member can reach.
 
-        The console isn't in a project the way a session is, and team memory belongs to none, so anything about
-        team memory is done from a project its member can reach.
+        The console isn't in a project the way a session is, and company memory belongs to none, so anything about
+        company memory is done from a project its member can reach.
         """
         if project_id is None:
             reachable = self._identity.projects(member)
@@ -1295,7 +1619,7 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        return self._team(member)
+        return self._company(member)
 
     def _add_member(self, request: Request) -> Response:
         member = self._member(request)
@@ -1316,7 +1640,7 @@ class ConsoleApi:
     def _remove_member(self, request: Request) -> Response:
         def remove(member: Member, caller: Caller, member_id: str) -> None:
             self._identity.remove_member(caller, member_id)
-            self._sessions.end_all_for(member_id, member.team_pk)
+            self._sessions.end_all_for(member_id, member.company_pk)
             self._audit.record(MEMBER_REMOVED, member=member, target=member_id)
 
         return self._run_on_member(request, remove)
@@ -1372,7 +1696,7 @@ class ConsoleApi:
         held = current.license
         return LicenseState(
             status=current.status,  # type: ignore[arg-type]
-            team=held.team if held else None,
+            company=held.company if held else None,
             member_cap=held.member_cap if held else None,
             issued=held.issued.isoformat() if held else None,
             expires=held.expires.isoformat() if held else None,
@@ -1410,7 +1734,7 @@ class ConsoleApi:
         return self._run_on_member(request, hand_over)
 
     def _run_on_member(self, request: Request, change: Callable[[Member, Caller, str], None]) -> Response:
-        """Everything an admin does to one member: the same guard, the same answer, the team as it now stands."""
+        """Everything an admin does to one member: the same guard, the same answer, the company as it now stands."""
         member = self._member(request)
         if member is None:
             return _sign_in_first()
@@ -1418,9 +1742,9 @@ class ConsoleApi:
             change(member, self._identity.caller_in(member, None), request.path_params["member_id"])
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        return self._team(member)
+        return self._company(member)
 
-    def _team(self, member: Member) -> Response:
+    def _company(self, member: Member) -> Response:
         everyone = Members(
             members=[MemberSummary(**one) for one in self._identity.members(member)],
             member_cap=self._identity.member_cap(),
@@ -1506,7 +1830,7 @@ class ConsoleApi:
         except ValueError:
             return JSONResponse({"message": "That filter wasn't understood."}, status_code=422)
         titles = self._explorer.titles(
-            member.team_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
+            member.company_code, (event.target for event in page.events if event.target and event.target.endswith(".md"))
         )
         answer = AuditPage(
             events=[AuditEvent(**vars(event), title=titles.get(event.target or "")) for event in page.events],
@@ -1522,8 +1846,8 @@ class ConsoleApi:
             package = self._export_of.build(member)
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
-        self._audit.record(TEAM_EXPORTED, member=member, detail={"bytes": len(package)})
-        name = f"{member.team_code}-shared-memory-export.zip"
+        self._audit.record(COMPANY_EXPORTED, member=member, detail={"bytes": len(package)})
+        name = f"{member.company_code}-shared-memory-export.zip"
         return Response(
             package, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'}
         )
@@ -1551,7 +1875,7 @@ class ConsoleApi:
             else SignedInMember(
                 member_id=member.member_id,
                 name=member.name,
-                team=member.team_code,
+                company=member.company_code,
                 role=member.role,  # type: ignore[arg-type]
                 leads_a_project=bool(self._identity.leads_of(member)),
             ),

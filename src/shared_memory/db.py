@@ -232,6 +232,12 @@ CREATE TABLE IF NOT EXISTS license_settings (
 Conn = psycopg.Connection[dict[str, Any]]
 
 
+def moved_prefix(old: str, new: str) -> dict[str, object]:
+    """The parameters with which the owner of a table holding memory paths moves every path under the folder `old` to
+    the folder `new` (`company_move.py`): `SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s`."""
+    return {"old": f"{old}/%", "new": f"{new}/", "after": len(old) + 2}
+
+
 class SaveTransaction:
     """One save's transaction, holding the locks its turns are made of (ADR-0013). Which locks, and in what order, is
     decided by `store.Turns`.
@@ -275,14 +281,14 @@ class SaveTransaction:
             found.setdefault(row["turn"], []).extend(row["paths"])
         return found
 
-    def mark(self, team: str, paths: dict[int, list[str]]) -> None:
+    def mark(self, company: str, paths: dict[int, list[str]]) -> None:
         """Record, under each turn, the paths this save may touch there, committed at once and apart from the save,
         so the record outlives a save cut off before its transaction ends."""
         with self._apart() as conn:
             for turn, under in paths.items():
                 conn.execute(
                     "INSERT INTO save_markers (turn, save_id, team, paths) VALUES (%s, %s, %s, %s)",
-                    (turn, self._id, team, under),
+                    (turn, self._id, company, under),
                 )
 
     def unmark(self) -> None:

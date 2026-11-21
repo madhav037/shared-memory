@@ -32,7 +32,7 @@ from tests.support import (
     challenge,
     fresh_database,
     member,
-    new_team,
+    new_company,
     promote,
     remember,
     unfenced_in,
@@ -51,7 +51,7 @@ STALE_PRICES = {
 
 
 def hosted_key(expires: date = LAPSED_ON) -> str:
-    return a_key(team="acme", member_cap=1000, issued=date(2025, 9, 1), expires=expires, hosted=True)
+    return a_key(company="acme", member_cap=1000, issued=date(2025, 9, 1), expires=expires, hosted=True)
 
 
 def self_hosted_key(expires: date = LAPSED_ON) -> str:
@@ -94,8 +94,8 @@ def under(server: RunningServer, key: str, *, self_hosted: bool = False) -> None
 
 
 @dataclasses.dataclass
-class Team:
-    """A team with memory of every kind, made while its server was still licensed."""
+class Company:
+    """A company with memory of every kind, made while its server was still licensed."""
 
     owner: Session
     dana: Session
@@ -117,10 +117,10 @@ def saved_known_issue(session: Session, issue: dict[str, str]) -> dict[str, Any]
 
 
 @pytest.fixture
-def team(hosted: RunningServer) -> Iterator[Team]:
+def company(hosted: RunningServer) -> Iterator[Company]:
     hosted.clock.now = TestClock().now
     under(hosted, "")
-    made = new_team(hosted)
+    made = new_company(hosted)
     project = made.owner().call("create_project", name="Billing")["project_id"]
     owner = made.owner().in_project(project, "billing-api")
     dana = member(made, project, "emp-2", "Dana Dev")
@@ -129,7 +129,7 @@ def team(hosted: RunningServer) -> Iterator[Team]:
     pinned = promote(owner, CENTS)["path"]
     owner.call("pin", path=pinned)
     issue = saved_known_issue(owner, BUG)
-    yield Team(
+    yield Company(
         owner=owner,
         dana=dana,
         project_memory=project_memory,
@@ -147,24 +147,24 @@ def read_only_refusal(refusal: str) -> bool:
 
 
 def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
-    hosted: RunningServer, team: Team
+    hosted: RunningServer, company: Company
 ) -> None:
-    owner = team.owner
+    owner = company.owner
     before = unfenced_in(owner.call("tree"))
     under(hosted, hosted_key())
 
     changes: dict[str, dict[str, Any]] = {
         "remember": SERVICES,
-        "edit_memory": {"path": team.personal, "title": "Postgres and Redis"},
-        "tie": {"path": team.personal, "tied_files": ["billing-api:src/db/**"]},
-        "delete_memory": {"path": team.personal},
-        "promote": {"path": team.personal, "level": "project"},
-        "retire": {"path": team.project_memory},
-        "add_to_foundation": {"path": team.pinned, "foundation": "decisions"},
+        "edit_memory": {"path": company.personal, "title": "Postgres and Redis"},
+        "tie": {"path": company.personal, "tied_files": ["billing-api:src/db/**"]},
+        "delete_memory": {"path": company.personal},
+        "promote": {"path": company.personal, "level": "project"},
+        "retire": {"path": company.project_memory},
+        "add_to_foundation": {"path": company.pinned, "foundation": "decisions"},
         "save_known_issue": STALE_PRICES,
-        "decide_challenge": {"challenge_id": team.challenge_id, "decision": "accept"},
-        "pin": {"path": team.project_memory},
-        "unpin": {"path": team.pinned},
+        "decide_challenge": {"challenge_id": company.challenge_id, "decision": "accept"},
+        "pin": {"path": company.project_memory},
+        "unpin": {"path": company.pinned},
         "create_project": {"name": "Payments"},
         "add_foundation": {"name": "Runbooks"},
         "add_member": {"member_id": "emp-3", "name": "Eve Eng"},
@@ -174,37 +174,37 @@ def test_a_hosted_server_whose_key_has_lapsed_refuses_every_change_to_memory(
 
     assert {tool: refusal for tool, refusal in refusals.items() if not read_only_refusal(refusal)} == {}
     assert unfenced_in(owner.call("tree")) == before
-    assert owner.call("read", path=team.personal)["title"] == POSTGRES["title"]
-    assert owner.call("read", path=team.project_memory)["status"] == "active"
+    assert owner.call("read", path=company.personal)["title"] == POSTGRES["title"]
+    assert owner.call("read", path=company.project_memory)["status"] == "active"
 
 
-def test_tie_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
+def test_tie_is_refused_on_a_read_only_server(hosted: RunningServer, company: Company) -> None:
     under(hosted, hosted_key())
-    owner = team.owner
+    owner = company.owner
 
-    refusal = owner.refusal("tie", path=team.personal, tied_files=["billing-api:src/db/**"])
+    refusal = owner.refusal("tie", path=company.personal, tied_files=["billing-api:src/db/**"])
 
     assert read_only_refusal(refusal), refusal
-    assert owner.call("read", path=team.personal)["tied_files"] == []
+    assert owner.call("read", path=company.personal)["tied_files"] == []
     assert owner.call("tied_memories", file="billing-api:src/db/pool.py")["memories"] == []
 
 
-def test_a_read_only_server_still_serves_reading_search_and_the_briefing(hosted: RunningServer, team: Team) -> None:
+def test_a_read_only_server_still_serves_reading_search_and_the_briefing(hosted: RunningServer, company: Company) -> None:
     under(hosted, hosted_key())
-    owner = team.owner
+    owner = company.owner
 
-    assert owner.call("read", path=team.project_memory)["title"] == NPM["title"]
-    assert team.project_memory in [found["path"] for found in owner.call("search", query="npm install")["results"]]
+    assert owner.call("read", path=company.project_memory)["title"] == NPM["title"]
+    assert company.project_memory in [found["path"] for found in owner.call("search", query="npm install")["results"]]
     assert owner.call("tree")["folders"]
     assert CENTS["title"] in owner.call("briefing")
     assert owner.call("board")["columns"]
 
 
 def test_a_read_only_servers_hooks_still_brief_and_never_block_a_coding_agent(
-    hosted: RunningServer, team: Team
+    hosted: RunningServer, company: Company
 ) -> None:
     under(hosted, hosted_key())
-    owner = team.owner
+    owner = company.owner
 
     assert CENTS["title"] in added_context(owner.start())
     owner.prompt("How are money amounts stored?")
@@ -212,13 +212,13 @@ def test_a_read_only_servers_hooks_still_brief_and_never_block_a_coding_agent(
     assert owner.end() == {}
 
 
-def test_a_read_only_server_still_runs_the_team(hosted: RunningServer, team: Team) -> None:
+def test_a_read_only_server_still_runs_the_company(hosted: RunningServer, company: Company) -> None:
     under(hosted, hosted_key())
-    owner = team.owner
+    owner = company.owner
 
     assert owner.call("take_lock", path="src/ledger.py", session="s-1")["locked"] is True
     assert owner.call("set_activity", activity="Splitting the ledger", session="s-1")
-    moved = owner.call("update_card", number=team.card, column="done")
+    moved = owner.call("update_card", number=company.card, column="done")
     assert owner.call("reissue_token", member_id="emp-2")["personal_token"]
     assert owner.call("remove_member", member_id="emp-2") == {"removed": "emp-2"}
 
@@ -226,11 +226,11 @@ def test_a_read_only_server_still_runs_the_team(hosted: RunningServer, team: Tea
     assert moved["column"] == "done"
     assert not_retired["status"] == "not_retired"
     assert read_only_refusal(not_retired["reason"])
-    assert owner.call("read", path=team.known_issue)["status"] == "active"
+    assert owner.call("read", path=company.known_issue)["status"] == "active"
 
 
-def test_confirm_draft_learning_is_refused_on_a_read_only_server(hosted: RunningServer, team: Team) -> None:
-    owner = team.owner
+def test_confirm_draft_learning_is_refused_on_a_read_only_server(hosted: RunningServer, company: Company) -> None:
+    owner = company.owner
     drafted = {"moment": "session_end", **SERVICES}
     kept = owner.call("draft_learnings", session=owner.identifier, draft_learnings=[drafted])
     (draft_learning,) = [each["id"] for each in kept["draft_learnings"]]
@@ -246,53 +246,55 @@ def test_confirm_draft_learning_is_refused_on_a_read_only_server(hosted: Running
 
 
 def test_a_call_without_a_valid_personal_token_is_refused_for_that_not_for_read_only(
-    hosted: RunningServer, team: Team
+    hosted: RunningServer, company: Company
 ) -> None:
     under(hosted, hosted_key())
-    stranger = dataclasses.replace(team.owner, token="smt_not-a-real-token")
+    stranger = dataclasses.replace(company.owner, token="smt_not-a-real-token")
 
     assert "not recognised" in stranger.refusal("remember", **SERVICES)
 
 
-def test_installing_a_renewed_key_ends_read_only(hosted: RunningServer, team: Team) -> None:
+def test_installing_a_renewed_key_ends_read_only(hosted: RunningServer, company: Company) -> None:
     under(hosted, hosted_key())
-    assert read_only_refusal(team.owner.refusal("remember", **SERVICES))
+    assert read_only_refusal(company.owner.refusal("remember", **SERVICES))
 
     under(hosted, hosted_key(expires=RENEWED_UNTIL))
 
-    assert team.owner.call("remember", **SERVICES)["path"]
+    assert company.owner.call("remember", **SERVICES)["path"]
 
 
 def test_a_hosted_server_under_a_lapsed_self_hosted_servers_key_is_read_only_too(
-    hosted: RunningServer, team: Team
+    hosted: RunningServer, company: Company
 ) -> None:
     under(hosted, self_hosted_key())
 
-    assert read_only_refusal(team.owner.refusal("remember", **SERVICES))
+    assert read_only_refusal(company.owner.refusal("remember", **SERVICES))
 
 
-def test_a_self_hosted_server_under_a_lapsed_hosted_servers_key_still_saves(hosted: RunningServer, team: Team) -> None:
+def test_a_self_hosted_server_under_a_lapsed_hosted_servers_key_still_saves(
+    hosted: RunningServer, company: Company
+) -> None:
     under(hosted, hosted_key(), self_hosted=True)
 
-    assert remember(team.owner, SERVICES)
-    assert team.owner.call("add_card", title="Retry failed webhooks")["number"]
+    assert remember(company.owner, SERVICES)
+    assert company.owner.call("add_card", title="Retry failed webhooks")["number"]
 
 
-def test_a_self_hosted_server_whose_key_has_lapsed_still_saves(hosted: RunningServer, team: Team) -> None:
+def test_a_self_hosted_server_whose_key_has_lapsed_still_saves(hosted: RunningServer, company: Company) -> None:
     under(hosted, self_hosted_key(), self_hosted=True)
-    owner = team.owner
+    owner = company.owner
 
     saved = remember(owner, SERVICES)
     assert owner.call("edit_memory", path=saved, title="Billing is three services, still")["path"]
-    assert owner.call("decide_challenge", challenge_id=team.challenge_id, decision="reject")
-    assert owner.call("retire", path=team.project_memory)["status"] == "retired"
+    assert owner.call("decide_challenge", challenge_id=company.challenge_id, decision="reject")
+    assert owner.call("retire", path=company.project_memory)["status"] == "retired"
     assert owner.call("add_card", title="Retry failed webhooks")["number"]
 
 
 def test_a_lapsed_hosted_server_refuses_to_raise_a_doubt(hosted: RunningServer) -> None:
     hosted.clock.now = TestClock().now
     under(hosted, "")
-    made = new_team(hosted)
+    made = new_company(hosted)
     project = made.owner().call("create_project", name="Billing")["project_id"]
     owner = made.owner().in_project(project, "billing-api")
     dana = member(made, project, "emp-2", "Dana Dev")

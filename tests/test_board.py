@@ -8,7 +8,7 @@ from tests.support import (
     Console,
     ConsoleClient,
     Session,
-    Team,
+    Company,
     add,
     create,
     member,
@@ -35,9 +35,9 @@ def everywhere(board: dict[str, Any]) -> list[int]:
     return [number for cards in board["columns"].values() for number in numbers(cards)]
 
 
-def test_cards_are_numbered_within_their_project(team: Team, owner: Session) -> None:
-    payments = team.owner().call("create_project", name="Payments")["project_id"]
-    in_payments = team.owner().in_project(payments, "payments-api")
+def test_cards_are_numbered_within_their_project(company: Company, owner: Session) -> None:
+    payments = company.owner().call("create_project", name="Payments")["project_id"]
+    in_payments = company.owner().in_project(payments, "payments-api")
 
     added = [
         card(owner, "Retry failed webhooks")["number"],
@@ -208,14 +208,14 @@ def test_a_description_over_the_memory_word_limit_is_refused(owner: Session) -> 
     assert owner.call("board")["columns"]["to_do"][0]["description"] == ""
 
 
-def test_a_card_the_board_does_not_have_is_refused(team: Team, owner: Session) -> None:
-    payments = team.owner().call("create_project", name="Payments")["project_id"]
-    card(team.owner().in_project(payments, "payments-api"), "Refund partial charges")
+def test_a_card_the_board_does_not_have_is_refused(company: Company, owner: Session) -> None:
+    payments = company.owner().call("create_project", name="Payments")["project_id"]
+    card(company.owner().in_project(payments, "payments-api"), "Refund partial charges")
 
     assert "no card 1" in owner.refusal("update_card", number=1, title="Mine now")
 
 
-def test_an_assignee_must_be_a_member_of_the_team(owner: Session) -> None:
+def test_an_assignee_must_be_a_member_of_the_company(owner: Session) -> None:
     card(owner, "Retry failed webhooks")
 
     assert "No member with member ID 'emp-9'" in owner.refusal("update_card", number=1, assignee="emp-9")
@@ -230,8 +230,8 @@ def test_an_assignee_can_be_taken_off(owner: Session, dana: Session) -> None:
     assert taken_off["assignee"] is None
 
 
-def test_the_board_needs_a_project(team: Team) -> None:
-    unconnected = team.owner()
+def test_the_board_needs_a_project(company: Company) -> None:
+    unconnected = company.owner()
 
     assert "isn't connected to a project" in unconnected.refusal("board")
     assert "isn't connected to a project" in unconnected.refusal("add_card", title="Retry failed webhooks")
@@ -282,8 +282,8 @@ def test_each_change_to_a_card_is_in_the_audit_log(console: Console, signed_out:
     assert all(event["detail"]["agent"] == "Claude Code" for event in events)
 
 
-def test_a_member_of_the_project_changes_a_card_another_member_added(team: Team, owner: Session) -> None:
-    cole = member(team, owner.project or "", "emp-3", "Cole Coder")
+def test_a_member_of_the_project_changes_a_card_another_member_added(company: Company, owner: Session) -> None:
+    cole = member(company, owner.project or "", "emp-3", "Cole Coder")
     card(owner, "Retry failed webhooks")
 
     moved = cole.call("update_card", number=1, column="doing")

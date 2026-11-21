@@ -1,5 +1,5 @@
 """Each caller is listed only the tools they can use (#306): the member tools reach everyone, the admin tools only
-the team's admins and owner. Hiding is presentation; a tool still refuses a caller it isn't for."""
+the company's admins and owner. Hiding is presentation; a tool still refuses a caller it isn't for."""
 
 from __future__ import annotations
 
@@ -9,15 +9,18 @@ import httpx
 import psycopg
 
 from shared_memory import app as app_module
-from tests.support import RunningServer, Session, Team
+from tests.support import RunningServer, Session, Company
 
 MCP_HEADERS = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
 ADMIN_TOOLS = {"add_member", "remove_member", "reissue_token"}
 
 
-def made_admin(team: Team, dana: Session) -> Session:
-    with psycopg.connect(team.server.settings.database_url, autocommit=True) as conn:
-        conn.execute("UPDATE members SET is_admin = TRUE WHERE member_id = 'emp-2' AND team_id = (SELECT id FROM teams WHERE code = %s)", (team.code,))
+def made_admin(company: Company, dana: Session) -> Session:
+    with psycopg.connect(company.server.settings.database_url, autocommit=True) as conn:
+        conn.execute(
+            "UPDATE members SET is_admin = TRUE WHERE member_id = 'emp-2' AND team_id = (SELECT id FROM teams WHERE code = %s)",
+            (company.code,),
+        )
     return dana
 
 
@@ -32,21 +35,21 @@ def test_a_member_who_is_not_an_admin_is_not_listed_the_admin_tools(dana: Sessio
     assert {"briefing", "search", "remember", "create_project"} <= set(tools)
 
 
-def test_an_admin_and_the_owner_are_listed_the_admin_tools(team: Team, dana: Session) -> None:
-    assert ADMIN_TOOLS <= set(listed(team.owner()))
-    assert ADMIN_TOOLS <= set(listed(made_admin(team, dana)))
+def test_an_admin_and_the_owner_are_listed_the_admin_tools(company: Company, dana: Session) -> None:
+    assert ADMIN_TOOLS <= set(listed(company.owner()))
+    assert ADMIN_TOOLS <= set(listed(made_admin(company, dana)))
 
 
 def test_a_tool_the_caller_is_not_listed_still_refuses_them_as_before(dana: Session) -> None:
     refused = dana.refusal("add_member", member_id="emp-9", name="Eve")
 
-    assert "Only the team's owner and its admins can manage members and personal tokens." in refused
+    assert "Only the company's owner and its admins can manage members and personal tokens." in refused
 
 
-def test_a_tool_hidden_from_the_first_caller_still_works_for_an_admin_after(team: Team, dana: Session) -> None:
-    assert "Only the team's owner" in dana.refusal("add_member", member_id="emp-9", name="Eve")
+def test_a_tool_hidden_from_the_first_caller_still_works_for_an_admin_after(company: Company, dana: Session) -> None:
+    assert "Only the company's owner" in dana.refusal("add_member", member_id="emp-9", name="Eve")
 
-    assert team.owner().call("add_member", member_id="emp-9", name="Eve")["member_id"] == "emp-9"
+    assert company.owner().call("add_member", member_id="emp-9", name="Eve")["member_id"] == "emp-9"
 
 
 def test_a_hidden_tool_has_its_schema_looked_up_whoever_called_it_first(dana: Session) -> None:
@@ -55,9 +58,11 @@ def test_a_hidden_tool_has_its_schema_looked_up_whoever_called_it_first(dana: Se
     assert any(name == "add_member" for _, name in app_module._tool_schemas)
 
 
-def test_a_tool_listed_to_everyone_is_described_the_same_to_a_member_and_the_owner(team: Team, dana: Session) -> None:
+def test_a_tool_listed_to_everyone_is_described_the_same_to_a_member_and_the_owner(
+    company: Company, dana: Session
+) -> None:
     shown_to_dana = listed(dana)
-    shown_to_owner = listed(team.owner())
+    shown_to_owner = listed(company.owner())
 
     assert shown_to_dana == {name: text for name, text in shown_to_owner.items() if name not in ADMIN_TOOLS}
 
@@ -105,11 +110,11 @@ def test_the_tools_that_change_a_card_are_listed_once_the_project_has_one(owner:
     assert CARD_TOOLS <= set(listed(dana))
 
 
-def test_a_card_in_one_project_lists_no_card_tool_in_another(team: Team, owner: Session) -> None:
+def test_a_card_in_one_project_lists_no_card_tool_in_another(company: Company, owner: Session) -> None:
     owner.call("add_card", title="Tidy up")
-    payments = team.owner().call("create_project", name="Payments")["project_id"]
+    payments = company.owner().call("create_project", name="Payments")["project_id"]
 
-    assert CARD_TOOLS.isdisjoint(listed(team.owner().in_project(payments, "payments-api")))
+    assert CARD_TOOLS.isdisjoint(listed(company.owner().in_project(payments, "payments-api")))
 
 
 def test_an_unlisted_card_tool_refuses_as_it_always_did(owner: Session) -> None:
@@ -121,20 +126,14 @@ def test_a_member_who_has_not_imported_from_the_repository_is_listed_onboard(own
     assert "onboard" in prompts_of(owner)
 
 
-def test_onboard_is_not_listed_once_the_member_has_imported_from_the_repository(owner: Session, dana: Session) -> None:
+def test_onboard_is_still_listed_after_the_members_first_import_from_the_repository(
+    owner: Session, dana: Session
+) -> None:
+    # Outside sources and the project's other repositories remain to onboard after the first import (#618).
     imported_from(owner, "billing-api")
 
-    assert "onboard" not in listed(owner)
-    assert "onboard" not in prompts_of(owner)
-    assert "onboard" in listed(dana)  # another member has still to import
-
-
-def test_onboard_is_listed_again_in_another_repository_of_the_project(owner: Session, dana: Session, project: str) -> None:
-    imported_from(owner, "billing-api")
-
-    elsewhere = owner.in_project(project, "billing-web")
-    assert "onboard" in listed(elsewhere)
-    assert "onboard" in prompts_of(elsewhere)
+    assert "onboard" in listed(owner)
+    assert "onboard" in prompts_of(owner)
 
 
 def test_a_prompt_listing_without_a_personal_token_is_answered_as_it_always_was(server: RunningServer) -> None:

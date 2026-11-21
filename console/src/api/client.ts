@@ -39,6 +39,9 @@ export type Card = components["schemas"]["Card"];
 export type CardDetail = components["schemas"]["CardDetail"];
 export type ProjectSessions = components["schemas"]["ProjectSessions"];
 export type ProjectHealth = components["schemas"]["ProjectHealth"];
+export type OnboardingProgress = components["schemas"]["OnboardingProgress"];
+export type OnboardingEntry = components["schemas"]["OnboardingEntry"];
+export type InterviewMemories = components["schemas"]["InterviewMemories"];
 export type ActiveSession = components["schemas"]["ActiveSession"];
 export type NamedSession = components["schemas"]["NamedSession"];
 export type SessionCollision = components["schemas"]["SessionCollision"];
@@ -134,7 +137,7 @@ export function fetchProject(projectId: string, signal?: AbortSignal): Promise<P
 
 export type SearchAsked = { query: string; level?: string; type?: string; limit?: number };
 
-/** One folder of the team's memory: its folders, with what they hold, and its memories. "" is the top. */
+/** One folder of the company's memory: its folders, with what they hold, and its memories. "" is the top. */
 export function fetchFolder(folder: string, signal?: AbortSignal, deep = false): Promise<Folder> {
   return ask<Folder>(withQuery("/api/files", { folder, deep: deep ? "1" : undefined }), { signal });
 }
@@ -152,7 +155,7 @@ export function fetchVersionAt(path: string, commit: string, signal?: AbortSigna
   return ask<MemoryAtVersion>(withQuery("/api/memory/version", { path, commit }), { signal });
 }
 
-/** Pin a project or team memory, or a topic folder, by its path. */
+/** Pin a project or company memory, or a topic folder, by its path. */
 export function pinAt(path: string): Promise<PinState> {
   return change<PinState>("/api/memory/pin", { path });
 }
@@ -161,23 +164,33 @@ export function unpinAt(path: string): Promise<PinState> {
   return change<PinState>("/api/memory/unpin", { path });
 }
 
+/** The memories written from this member's interviews, which they author. */
+export function fetchInterviewed(signal?: AbortSignal): Promise<InterviewMemories> {
+  return ask<InterviewMemories>("/api/interviewed", { signal });
+}
+
 /** Retire a memory by its path; another author's raises a challenge they decide. */
 export function retireAt(path: string): Promise<Retired> {
   return change<Retired>("/api/memory/retire", { path });
 }
 
-/** Memories that match, across team memory and every project this member can reach. */
+/** Memories that match, across company memory and every project this member can reach. */
 export function searchEverywhere(asked: SearchAsked, signal?: AbortSignal): Promise<SearchResults> {
   return ask<SearchResults>(withQuery("/api/search", asked), { signal });
 }
 
-/** Issue a new personal token for a member of the team; theirs stops working. */
+/** Issue a new personal token for a member of the company; theirs stops working. */
 export function reissueToken(memberId: string): Promise<IssuedToken> {
   return change<IssuedToken>(`/api/members/${encodeURIComponent(memberId)}/token`);
 }
 
+/** A project's onboarding progress: every entry for its leads and the company's admins, the member's own otherwise. */
+export function fetchOnboarding(projectId: string, signal?: AbortSignal): Promise<OnboardingProgress> {
+  return ask<OnboardingProgress>(`/api/projects/${encodeURIComponent(projectId)}/onboarding`, { signal });
+}
+
 /** Everything pinned that this project's sessions are briefed with. */
-/** A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in doubt. */
+/** A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in doubt. */
 export function fetchHealth(projectId: string, signal?: AbortSignal): Promise<ProjectHealth> {
   return ask<ProjectHealth>(`/api/projects/${encodeURIComponent(projectId)}/health`, { signal });
 }
@@ -198,9 +211,14 @@ export function fetchNotices(signal?: AbortSignal): Promise<Notices> {
   return ask<Notices>("/api/notices", { signal });
 }
 
-/** Accept a challenge or reject it; the answer says what that did, and what is still waiting. */
-export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<DecidedChallenges> {
-  return change<DecidedChallenges>(`/api/challenges/${challengeId}/decide`, { decision });
+/** Decide a challenge, or a level contradiction by keeping an exception (with a reason) or following; the answer says
+ * what that did, and what is still waiting. */
+export function decideChallenge(
+  challengeId: number,
+  decision: "accept" | "reject" | "keep_exception" | "follow",
+  reason?: string,
+): Promise<DecidedChallenges> {
+  return change<DecidedChallenges>(`/api/challenges/${challengeId}/decide`, { decision, reason: reason ?? null });
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */
@@ -241,7 +259,7 @@ export function changeRateLimits(asked: RateLimitChange): Promise<RateLimits> {
   return change<RateLimits>("/api/rate-limits", asked);
 }
 
-/** The server's license key: its status, team, member cap and expiry. */
+/** The server's license key: its status, company, member cap and expiry. */
 export function fetchLicense(signal?: AbortSignal): Promise<LicenseState> {
   return ask<LicenseState>("/api/license", { signal });
 }
@@ -251,7 +269,7 @@ export function installLicense(key: string): Promise<LicenseState> {
   return change<LicenseState>("/api/license", { key });
 }
 
-/** Everyone in the team, with their role and GitHub account. */
+/** Everyone in the company, with their role and GitHub account. */
 export function fetchMembers(signal?: AbortSignal): Promise<Members> {
   return ask<Members>("/api/members", { signal });
 }
@@ -314,7 +332,7 @@ export function removeKeeper(projectId: string, foundation: string, memberId: st
   return change<ProjectDetail>(`/api/projects/${where}/remove`);
 }
 
-/** Close a project to its access list, or open it to the whole team again. */
+/** Close a project to its access list, or open it to the whole company again. */
 export function restrictProject(projectId: string, restricted: boolean): Promise<ProjectDetail> {
   return change<ProjectDetail>(`/api/projects/${encodeURIComponent(projectId)}/restrict`, { restricted });
 }
@@ -412,4 +430,64 @@ export function commentCard(projectId: string, number: number, text: string): Pr
 
 export function deleteCard(projectId: string, number: number): Promise<DeletedCard> {
   return change<DeletedCard>(cardPath(projectId, number, "delete"));
+}
+
+export type Departments = components["schemas"]["Departments"];
+export type DepartmentSummary = components["schemas"]["DepartmentSummary"];
+
+/** Every department of the company, with its leads and the projects in it this member can reach (ADR-0032). */
+export function fetchDepartments(signal?: AbortSignal): Promise<Departments> {
+  return ask<Departments>("/api/departments", { signal });
+}
+
+export type DepartmentPage = components["schemas"]["DepartmentPage"];
+export type MemoryCounts = components["schemas"]["MemoryCounts"];
+
+/** One department's page (#636): its projects and department memory, and for its leads and the admins its roll-up. */
+export function fetchDepartment(departmentId: string, signal?: AbortSignal): Promise<DepartmentPage> {
+  return ask<DepartmentPage>(`/api/departments/${encodeURIComponent(departmentId)}`, { signal });
+}
+
+export function createDepartment(name: string): Promise<Departments> {
+  return change<Departments>("/api/departments", { name });
+}
+
+export function renameDepartment(departmentId: string, name: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/rename`, { name });
+}
+
+export function removeDepartment(departmentId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/remove`);
+}
+
+export function appointDepartmentLead(departmentId: string, memberId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/leads`, { member_id: memberId });
+}
+
+export function removeDepartmentLead(departmentId: string, memberId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/leads/${encodeURIComponent(memberId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
+}
+
+export function moveProjectIn(departmentId: string, projectId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/projects`, { project_id: projectId });
+}
+
+export function moveProjectOut(departmentId: string, projectId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/projects/${encodeURIComponent(projectId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
+}
+
+/** Close a department to its access list, or open it to the whole company again. */
+export function restrictDepartment(departmentId: string, restricted: boolean): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/restrict`, { restricted });
+}
+
+export function grantDepartmentAccess(departmentId: string, memberId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/access`, { member_id: memberId });
+}
+
+export function revokeDepartmentAccess(departmentId: string, memberId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/access/${encodeURIComponent(memberId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
 }

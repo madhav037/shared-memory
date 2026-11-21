@@ -1,5 +1,5 @@
 """Saving a memory names the similar memories within the saving member's reach (#535): their own personal memory in
-the project, and the project and team memory they can read. The save itself always lands.
+the project, and the project and company memory they can read. The save itself always lands.
 
 The server here runs the real model for everything but the memories in `CHOSEN`, whose embeddings are picked so each
 one's similarity to `NEW` is a number the test chose, not one the model measured."""
@@ -84,8 +84,8 @@ def console(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Console]:
             github.stop()
 
 
-class ATeam:
-    """A team with a Billing project, its owner and a member, Dana, each with a session in Billing."""
+class ACompany:
+    """A company with a Billing project, its owner and a member, Dana, each with a session in Billing."""
 
     def __init__(self, console: Console, client: ConsoleClient, github: str, account: int) -> None:
         self.client = client
@@ -113,10 +113,10 @@ def named(saved: dict[str, Any]) -> list[tuple[str, str, float]]:
 def test_a_save_with_a_near_copy_in_reach_names_it_with_level_title_summary_path_and_similarity(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    team = ATeam(console, signed_out, "olive-similar-one", 1501)
-    near_copy = save(team.dana, COPY_96)["path"]
+    company = ACompany(console, signed_out, "olive-similar-one", 1501)
+    near_copy = save(company.dana, COPY_96)["path"]
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
     assert saved["similar"] == [
         {
@@ -129,33 +129,33 @@ def test_a_save_with_a_near_copy_in_reach_names_it_with_level_title_summary_path
     ]
 
 
-def test_a_save_names_near_copies_in_project_and_team_memory(console: Console, signed_out: ConsoleClient) -> None:
-    team = ATeam(console, signed_out, "olive-similar-two", 1502)
-    in_project = promote_keeping_both(team.owner, memory(COPY_92), "project")
-    in_team = promote_keeping_both(team.owner, memory(COPY_80), "team")
+def test_a_save_names_near_copies_in_project_and_company_memory(console: Console, signed_out: ConsoleClient) -> None:
+    company = ACompany(console, signed_out, "olive-similar-two", 1502)
+    in_project = promote_keeping_both(company.owner, memory(COPY_92), "project")
+    in_company = promote_keeping_both(company.owner, memory(COPY_80), "company")
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
-    assert [(each["path"], each["level"]) for each in saved["similar"]] == [(in_project, "project"), (in_team, "team")]
+    assert [(each["path"], each["level"]) for each in saved["similar"]] == [(in_project, "project"), (in_company, "company")]
 
 
 def test_at_most_three_similar_memories_are_named_most_similar_first(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    team = ATeam(console, signed_out, "olive-similar-three", 1503)
+    company = ACompany(console, signed_out, "olive-similar-three", 1503)
     for title in (COPY_71, COPY_80, COPY_96, BELOW, COPY_92):
-        save(team.dana, title)
+        save(company.dana, title)
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
     assert named(saved) == [(COPY_96, "personal", 0.96), (COPY_92, "personal", 0.923), (COPY_80, "personal", 0.8)]
 
 
 def test_another_members_personal_memory_is_never_named(console: Console, signed_out: ConsoleClient) -> None:
-    team = ATeam(console, signed_out, "olive-similar-four", 1504)
-    save(team.owner, COPY_96)
+    company = ACompany(console, signed_out, "olive-similar-four", 1504)
+    save(company.owner, COPY_96)
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
     assert "similar" not in saved
 
@@ -163,15 +163,17 @@ def test_another_members_personal_memory_is_never_named(console: Console, signed
 def test_a_memory_in_a_project_the_member_cant_reach_is_never_named(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    team = ATeam(console, signed_out, "olive-similar-five", 1505)
+    company = ACompany(console, signed_out, "olive-similar-five", 1505)
     vault = create(signed_out, "Vault")["project_id"]
     payments = create(signed_out, "Payments")["project_id"]
     restricting = signed_out.post_json(f"/api/projects/{vault}/restrict", {"restricted": True})
     assert restricting.status_code == 200, restricting.text
-    promote_keeping_both(team.owner_anywhere.in_project(vault, "vault-api"), memory(COPY_96), "project")
-    readable = promote_keeping_both(team.owner_anywhere.in_project(payments, "payments-api"), memory(COPY_80), "project")
+    promote_keeping_both(company.owner_anywhere.in_project(vault, "vault-api"), memory(COPY_96), "project")
+    readable = promote_keeping_both(
+        company.owner_anywhere.in_project(payments, "payments-api"), memory(COPY_80), "project"
+    )
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
     assert [each["path"] for each in saved["similar"]] == [readable], "open projects' memory is in reach; Vault's isn't"
 
@@ -179,24 +181,24 @@ def test_a_memory_in_a_project_the_member_cant_reach_is_never_named(
 def test_nothing_is_named_and_the_field_is_left_out_when_nothing_passes_the_bar(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    team = ATeam(console, signed_out, "olive-similar-six", 1506)
-    save(team.dana, BELOW)
+    company = ACompany(console, signed_out, "olive-similar-six", 1506)
+    save(company.dana, BELOW)
 
-    saved = save(team.dana, NEW)
+    saved = save(company.dana, NEW)
 
     assert "similar" not in saved
     assert saved["level"] == "personal"
 
 
 def test_the_save_succeeds_whatever_is_similar(console: Console, signed_out: ConsoleClient) -> None:
-    team = ATeam(console, signed_out, "olive-similar-seven", 1507)
-    first = save(team.dana, NEW)
+    company = ACompany(console, signed_out, "olive-similar-seven", 1507)
+    first = save(company.dana, NEW)
 
-    again = save(team.dana, NEW)
+    again = save(company.dana, NEW)
 
     assert again["path"] != first["path"]
     assert named(again) == [(NEW, "personal", 1.0)], "an exact copy is named, and still saved"
-    assert team.dana.call("read", path=again["path"])["title"] == NEW
+    assert company.dana.call("read", path=again["path"])["title"] == NEW
     assert not any(each["path"] == again["path"] for each in again["similar"]), "the memory just saved isn't named"
 
 
@@ -233,8 +235,8 @@ def test_the_tool_description_and_both_skills_name_as_many_similar_memories_as_a
 ) -> None:
     """A limit is named once: the description and the skills are static text, so this holds them to
     SAVE_SIMILAR_LIMIT."""
-    team = ATeam(console, signed_out, "olive-similar-limit", 1511)
-    _, descriptions = team.dana.on_connecting()
+    company = ACompany(console, signed_out, "olive-similar-limit", 1511)
+    _, descriptions = company.dana.on_connecting()
     up_to = f"up to {IN_WORDS[SAVE_SIMILAR_LIMIT]}"
 
     assert f"names {up_to} similar memories" in " ".join(descriptions["remember"].split())
@@ -242,10 +244,12 @@ def test_the_tool_description_and_both_skills_name_as_many_similar_memories_as_a
         assert f"names {up_to} in `similar`" in skill.read_text(encoding="utf-8"), skill
 
 
-def test_the_tool_description_says_what_to_do_about_a_similar_memory(console: Console, signed_out: ConsoleClient) -> None:
-    team = ATeam(console, signed_out, "olive-similar-eight", 1508)
+def test_the_tool_description_says_what_to_do_about_a_similar_memory(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    company = ACompany(console, signed_out, "olive-similar-eight", 1508)
 
-    _, descriptions = team.dana.on_connecting()
+    _, descriptions = company.dana.on_connecting()
 
     assert "similar" in descriptions["remember"]
     for choice in ("supersede", "promote", "leave both"):

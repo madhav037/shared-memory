@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from tests.support import Console, ConsoleClient, Session, Team, signed_in_owner
+from tests.support import Console, ConsoleClient, Session, Company, signed_in_owner
 
 NO_STORE = "no-store"
 
@@ -38,8 +38,8 @@ def test_a_hook_answer_is_never_kept_by_a_cache(owner: Session) -> None:
     assert response.headers["cache-control"] == NO_STORE
 
 
-def test_a_refused_request_is_never_kept_by_a_cache(team: Team) -> None:
-    stranger = Session(team.server, "not-a-token")
+def test_a_refused_request_is_never_kept_by_a_cache(company: Company) -> None:
+    stranger = Session(company.server, "not-a-token")
 
     hook = httpx.post(f"{stranger.server.url}/hooks/prompt-submitted", json={}, headers=stranger.headers(), timeout=30)
     tool = httpx.post(f"{stranger.server.url}/mcp", json={}, headers=stranger.headers(), timeout=30)

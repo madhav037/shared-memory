@@ -1,4 +1,4 @@
-"""Challenges and retiring from the console: deciding what the team no longer believes."""
+"""Challenges and retiring from the console: deciding what the company no longer believes."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from tests.support import (
 )
 
 
-def a_team(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
+def a_company(console: Console, client: ConsoleClient, github: str, account: int) -> tuple[Session, str, Session]:
     owner = signed_in_owner(console, client, github, account)
     project = owner.call("create_project", name="Billing")["project_id"]
     return owner, project, owner.in_project(project, "billing-api")
@@ -71,7 +71,7 @@ def a_member(console: Console, owner_client: ConsoleClient, member_id: str, gith
 def test_the_console_shows_the_challenges_waiting_for_my_decision(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-one", 1101)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-one", 1101)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -93,7 +93,7 @@ def test_the_console_shows_the_challenges_waiting_for_my_decision(
 
 
 def test_accepting_a_challenge_supersedes_the_memory(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-two", 1102)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-two", 1102)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -116,7 +116,7 @@ def test_accepting_a_challenge_supersedes_the_memory(console: Console, signed_ou
 
 
 def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-three", 1103)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-three", 1103)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -133,7 +133,7 @@ def test_rejecting_a_challenge_leaves_the_memory_alone(console: Console, signed_
 def test_accepting_a_retire_challenge_leaves_no_memory_in_force_in_its_place(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-retired", 1170)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-retired", 1170)
     theirs = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
     dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-retired", 1171)
     challenge_id = dana_console.post_json("/api/memory/retire", {"path": theirs}).json()["challenge_id"]
@@ -149,7 +149,7 @@ def test_accepting_a_retire_challenge_leaves_no_memory_in_force_in_its_place(
 def test_accepting_a_doubt_from_the_console_retires_the_memory_and_tells_its_raiser(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-doubt", 1180)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-doubt", 1180)
     mine = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -168,7 +168,7 @@ def test_accepting_a_doubt_from_the_console_retires_the_memory_and_tells_its_rai
 
 
 def test_rejecting_a_doubt_from_the_console_lets_the_memory_stand(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-doubt-two", 1181)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-doubt-two", 1181)
     mine = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -186,7 +186,7 @@ def test_rejecting_a_doubt_from_the_console_lets_the_memory_stand(console: Conso
 def test_several_challenges_against_one_memory_are_shown_together_and_accepting_one_closes_the_others(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-four", 1104)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-four", 1104)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -209,7 +209,7 @@ def test_several_challenges_against_one_memory_are_shown_together_and_accepting_
 def test_a_member_sees_the_challenges_they_raised_and_how_each_ended(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-five", 1105)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-five", 1105)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-five", 1106)
     dana = Session(console.server, signed_out.post("/api/members/emp-2/token").json()["personal_token"]).in_project(
@@ -229,7 +229,7 @@ def test_a_member_sees_the_challenges_they_raised_and_how_each_ended(
 
 
 def test_anyone_can_decide_once_the_fallback_has_passed(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-six", 1107)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-six", 1107)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     ash_console = a_member(console, signed_out, "emp-3", "ash-disputes-six", 1108)
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
@@ -253,7 +253,7 @@ def test_anyone_can_decide_once_the_fallback_has_passed(console: Console, signed
 
 
 def test_a_member_retires_their_own_memory_from_the_console(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-seven", 1109)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-seven", 1109)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
 
     retired = signed_out.post_json("/api/memory/retire", {"path": mine})
@@ -266,7 +266,7 @@ def test_a_member_retires_their_own_memory_from_the_console(console: Console, si
 def test_retiring_another_members_memory_raises_a_challenge_for_its_author(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-eight", 1110)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-eight", 1110)
     theirs = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-eight", 1111)
 
@@ -282,7 +282,7 @@ def test_retiring_another_members_memory_raises_a_challenge_for_its_author(
 
 
 def test_a_console_raised_retire_challenge_carries_no_reasoning(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-reasoning", 1140)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-reasoning", 1140)
     theirs = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console = a_member(console, signed_out, "emp-2", "dana-disputes-reasoning", 1141)
 
@@ -308,7 +308,7 @@ def danas_challenge(
     console: Console, owner_client: ConsoleClient, github: str, account: int, reasoning: str | None = None
 ) -> tuple[ConsoleClient, int, str]:
     """Dana offers npm in place of the owner's pnpm memory in Billing, saying why when given reasoning."""
-    owner, project, in_project = a_team(console, owner_client, f"olive-{github}", account)
+    owner, project, in_project = a_company(console, owner_client, f"olive-{github}", account)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana_console, dana = a_challenger(console, owner_client, project, github, account + 1)
     challenge_id = a_supersede_challenge(
@@ -394,7 +394,7 @@ def test_a_challenges_reasoning_survives_being_closed_by_another_challenges_acce
 
 
 def test_a_retire_challenges_reasoning_survives_being_decided(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-reasoning-retire", 1162)
+    owner, project, in_project = a_company(console, signed_out, "olive-reasoning-retire", 1162)
     theirs = promoted(in_project, remember(in_project, "Retry failed charges", "We retry failed charges twice."))
     dana_console, dana = a_challenger(console, signed_out, project, "dana-reasoning-retire", 1163)
     raised = dana.call("retire", path=theirs, reasoning="It's no longer true.")
@@ -409,7 +409,7 @@ def test_a_retire_challenges_reasoning_survives_being_decided(console: Console, 
 
 
 def test_a_member_who_may_not_decide_yet_is_refused(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-nine", 1112)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-nine", 1112)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     ash_console = a_member(console, signed_out, "emp-3", "ash-disputes-nine", 1113)
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
@@ -425,7 +425,7 @@ def test_a_member_who_may_not_decide_yet_is_refused(console: Console, signed_out
 
 
 def test_a_decision_from_the_console_is_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-ten", 1114)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-ten", 1114)
     promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
@@ -441,7 +441,7 @@ def test_a_decision_from_the_console_is_in_the_audit_log(console: Console, signe
     assert log[0]["detail"]["decided_as"] == "author"
 
 
-# Who else may decide: a lead of the challenged memory's project and the team's admins (ADR-0017)
+# Who else may decide: a lead of the challenged memory's project and the company's admins (ADR-0017)
 
 
 def a_dispute_between_members(
@@ -449,7 +449,7 @@ def a_dispute_between_members(
 ) -> tuple[str, str, int, Session]:
     """Billing, where Dana (emp-2) wrote a memory that Ash (emp-3) has challenged; the owner wrote neither.
     Returns the project, the challenged memory, the challenge and Ash's session."""
-    owner, project, in_project = a_team(console, owner_client, github, account)
+    owner, project, in_project = a_company(console, owner_client, github, account)
     dana = Session(console.server, add(owner_client, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
     )
@@ -516,13 +516,13 @@ def test_an_admin_is_shown_a_challenge_in_a_project_they_reach_and_decides_it(
     assert decided_as(signed_out, project) == [("E1001", "admin")]
 
 
-def test_a_challenge_against_team_memory_waits_for_an_admin_and_not_for_a_project_lead(
+def test_a_challenge_against_company_memory_waits_for_an_admin_and_not_for_a_project_lead(
     console: Console, signed_out: ConsoleClient
 ) -> None:
     project, target, challenge_id, _ = a_dispute_between_members(
-        console, signed_out, "olive-team-memory", 7904, level="team"
+        console, signed_out, "olive-company-memory", 7904, level="company"
     )
-    lee = a_lead(console, signed_out, project, "lee-team-memory", 7905)
+    lee = a_lead(console, signed_out, project, "lee-company-memory", 7905)
 
     for_the_lead = challenges(lee)["waiting"]
     refused = decide(lee, challenge_id, "accept")
@@ -530,7 +530,7 @@ def test_a_challenge_against_team_memory_waits_for_an_admin_and_not_for_a_projec
 
     assert for_the_lead == []
     assert refused.status_code == 403
-    assert "and the team's admins can decide this challenge" in refused.json()["message"]
+    assert "and the company's admins can decide this challenge" in refused.json()["message"]
     assert [(one["challenge_id"], one["decides_as"]) for one in for_the_admin] == [(challenge_id, "admin")]
     assert [one["decides_as"] for one in ask(lee, "/api/memory", path=target)["open_challenges"]] == [None]
     lee.close()
@@ -539,7 +539,7 @@ def test_a_challenge_against_team_memory_waits_for_an_admin_and_not_for_a_projec
 def test_a_lead_who_raised_the_challenge_is_not_shown_it_and_cant_decide_it(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-lead-raised", 7906)
+    owner, project, in_project = a_company(console, signed_out, "olive-lead-raised", 7906)
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"
     )
@@ -564,7 +564,7 @@ def test_a_lead_who_raised_the_challenge_is_not_shown_it_and_cant_decide_it(
 def test_the_author_reads_in_the_console_who_decided_their_challenge_and_in_what_capacity(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-author-told", 7908)
+    owner, project, in_project = a_company(console, signed_out, "olive-author-told", 7908)
     dana_console, dana = a_challenger(console, signed_out, project, "dana-author-told", 7909)
     target = promoted(dana, remember(dana, "Use pnpm, not npm", "We use pnpm for every package."))
     ash = Session(console.server, add(signed_out, "emp-3", "Ash Dev")["personal_token"]).in_project(
@@ -585,7 +585,7 @@ def test_the_author_reads_in_the_console_who_decided_their_challenge_and_in_what
 def test_a_challenged_memory_says_whether_this_member_is_the_one_to_decide(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-disputes-decider", 1130)
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-decider", 1130)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     ash = a_member(console, signed_out, "emp-3", "ash-disputes-decider", 1131)
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
@@ -604,7 +604,7 @@ def test_a_challenged_memory_says_whether_this_member_is_the_one_to_decide(
 def test_a_folder_counts_the_open_challenges_against_each_memory_in_it(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    owner, project, in_project = a_team(console, signed_out, "olive-counts", 1190)
+    owner, project, in_project = a_company(console, signed_out, "olive-counts", 1190)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
     dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
         project, "billing-api"

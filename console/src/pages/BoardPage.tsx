@@ -109,7 +109,7 @@ export function BoardPage() {
   );
   const inArchive = asked.get("view") === "archive";
   const opened = Number(asked.get("card")) || null;
-  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
+  const { answer: company } = useAsked((signal) => fetchMembers(signal), []);
   const {
     answer: board,
     refused,
@@ -200,7 +200,7 @@ export function BoardPage() {
     </>
   );
   const narrowed = FILTERS.some((name) => asked.get(name));
-  const people = new Map((team?.members ?? []).map((one) => [one.member_id, one.name]));
+  const people = new Map((company?.members ?? []).map((one) => [one.member_id, one.name]));
 
   if (refused)
     return (
@@ -254,7 +254,7 @@ export function BoardPage() {
           clearable
           searchable
           value={asked.get("assignee")}
-          data={(team?.members ?? []).map((one) => ({ value: one.member_id, label: one.name }))}
+          data={(company?.members ?? []).map((one) => ({ value: one.member_id, label: one.name }))}
           onChange={(value) => filter("assignee", value)}
           className="filter-assignee"
           data-testid="filter-assignee"

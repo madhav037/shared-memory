@@ -11,7 +11,7 @@ Every listing points at the GitHub repository, <https://github.com/madhav037/sha
 - [ ] `plugin/.claude-plugin/plugin.json` has the same release's version.
 - [ ] `uv run pytest tests/test_listing.py -q` passes. It checks `server.json` against the registry's JSON schema (vendored at `tests/schemas/mcp-registry-server.schema.json`, the 2025-12-11 version `server.json` names in `$schema`) and that both plugin manifests parse.
 
-Shared Memory is a **remote** MCP server: each team runs its own server and members connect over streamable HTTP at `https://<their server>/mcp`, with their **personal token** as a bearer token. `server.json` therefore lists a `remotes` entry with the server host name as a variable, and no `packages` entry: there is no published package or image to point at.
+Shared Memory is a **remote** MCP server: each company runs its own server and members connect over streamable HTTP at `https://<their server>/mcp`, with their **personal token** as a bearer token. `server.json` therefore lists a `remotes` entry with the server host name as a variable, and no `packages` entry: there is no published package or image to point at.
 
 ## The official MCP Registry
 
@@ -34,7 +34,7 @@ Before a release, run `claude plugin validate .` from the repository root. To be
 
 For each, sign in, add the GitHub repository, and paste the descriptions below. These directories change their forms often; follow the page each one shows you rather than this list.
 
-- [ ] **Smithery**: add the server as a remote (streamable HTTP) server. Because every team has its own address, say that members enter their own.
+- [ ] **Smithery**: add the server as a remote (streamable HTTP) server. Because every company has its own address, say that members enter their own.
 - [ ] **Glama**: claim or add the GitHub repository.
 - [ ] **mcp.so**: submit the GitHub repository.
 - [ ] **Cursor's MCP directory**: submit through the page Cursor documents for its directory.
@@ -49,6 +49,6 @@ For each, sign in, add the GitHub repository, and paste the descriptions below. 
 
 **Long**:
 
-> Shared Memory is a memory server that every member's coding agent reads and writes, so what one member's agent learns reaches every other member's agent and the team's ways of working stay consistent. Memory is plain Markdown files in a git history, with levels of weight: project memory over team memory over personal memory. A console lets members read memory like documentation, pin it, decide challenges and retire it; writing and promoting stay in the coding agent, where contradictions are checked. Each team runs its own server (Docker Compose, HTTPS and nightly backups included). Works with Claude Code through a plugin, and with Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop and Cline over MCP. Source-available under FSL-1.1-ALv2.
+> Shared Memory is a memory server that every member's coding agent reads and writes, so what one member's agent learns reaches every other member's agent and the company's ways of working stay consistent. Memory is plain Markdown files in a git history, with levels of weight: project memory over company memory over personal memory. A console lets members read memory like documentation, pin it, decide challenges and retire it; writing and promoting stay in the coding agent, where contradictions are checked. Each company runs its own server (Docker Compose, HTTPS and nightly backups included). Works with Claude Code through a plugin, and with Codex, GitHub Copilot, Gemini CLI, Cursor, Devin Desktop and Cline over MCP. Source-available under FSL-1.1-ALv2.
 
 **Tags**: memory, team, coding agents, MCP, knowledge sharing.

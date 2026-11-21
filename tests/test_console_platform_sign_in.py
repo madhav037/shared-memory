@@ -54,7 +54,7 @@ def test_each_sign_in_gets_its_own_nonce(hosted_console: HostedConsole, hosted: 
 def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    team, _ = hosted_console.a_team("hana-one")
+    company, _ = hosted_console.a_company("hana-one")
     hosted_console.platform.as_(201, "hana-one")
 
     hosted.sign_in()
@@ -67,7 +67,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
         "member": {
             "member_id": "E1001",
             "name": "Olive Owner",
-            "team": team,
+            "company": company,
             "role": "owner",
             "leads_a_project": False,
         },
@@ -79,7 +79,7 @@ def test_a_member_signs_in_by_the_sign_in_the_platform_hands_over(
 def test_a_sign_in_whose_signature_does_not_check_out_is_refused(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    hosted_console.a_team("hana-two")
+    hosted_console.a_company("hana-two")
     hosted_console.platform.as_(202, "hana-two")
     hosted_console.platform.go_wrong(forged=True)
 
@@ -90,18 +90,18 @@ def test_a_sign_in_whose_signature_does_not_check_out_is_refused(
 
 
 def test_a_sign_in_for_another_subdomain_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
-    hosted_console.a_team("hana-three")
+    hosted_console.a_company("hana-three")
     hosted_console.platform.as_(203, "hana-three")
     hosted_console.platform.go_wrong(subdomain="globex")
 
     landed = hosted.sign_in()
 
-    assert "for another team's server" in sign_in_error(landed)
+    assert "for another company's server" in sign_in_error(landed)
     assert hosted.status()["signed_in"] is False
 
 
 def test_a_sign_in_that_has_expired_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
-    hosted_console.a_team("hana-four")
+    hosted_console.a_company("hana-four")
     hosted_console.platform.as_(204, "hana-four")
     hosted_console.platform.go_wrong(expired=True)
 
@@ -112,7 +112,7 @@ def test_a_sign_in_that_has_expired_is_refused(hosted_console: HostedConsole, ho
 
 
 def test_a_sign_in_held_back_until_it_expires_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
-    hosted_console.a_team("hana-five")
+    hosted_console.a_company("hana-five")
     hosted_console.platform.as_(205, "hana-five")
     handed_back = handed_back_to(hosted)
     hosted_console.clock.advance(minutes=6)
@@ -127,7 +127,7 @@ def test_a_sign_in_held_back_until_it_expires_is_refused(hosted_console: HostedC
 
 
 def test_a_sign_in_expiring_too_far_ahead_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
-    hosted_console.a_team("hana-nine")
+    hosted_console.a_company("hana-nine")
     hosted_console.platform.as_(209, "hana-nine")
     hosted_console.platform.go_wrong(far_ahead=True)
 
@@ -140,7 +140,7 @@ def test_a_sign_in_expiring_too_far_ahead_is_refused(hosted_console: HostedConso
 def test_a_sign_in_handed_to_a_browser_that_did_not_start_it_is_refused(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    hosted_console.a_team("hana-ten")
+    hosted_console.a_company("hana-ten")
     hosted_console.platform.as_(210, "hana-ten")
     handed_back = handed_back_to(hosted)
     colleague = ConsoleClient(hosted_console.server)
@@ -157,7 +157,7 @@ def test_a_sign_in_handed_to_a_browser_that_did_not_start_it_is_refused(
 
 
 def test_a_sign_in_carrying_another_nonce_is_refused(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
-    hosted_console.a_team("hana-eleven")
+    hosted_console.a_company("hana-eleven")
     hosted_console.platform.as_(211, "hana-eleven")
     hosted_console.platform.go_wrong(nonce="someone-elses-nonce")
 
@@ -170,7 +170,7 @@ def test_a_sign_in_carrying_another_nonce_is_refused(hosted_console: HostedConso
 def test_a_sign_in_handed_back_a_second_time_is_refused(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    hosted_console.a_team("hana-twelve")
+    hosted_console.a_company("hana-twelve")
     hosted_console.platform.as_(212, "hana-twelve")
     hosted.sign_in()
     handed_back = hosted_console.platform.last
@@ -185,7 +185,7 @@ def test_a_sign_in_handed_back_a_second_time_is_refused(
 def test_a_sign_in_is_accepted_only_once_even_with_its_nonce(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    hosted_console.a_team("hana-six")
+    hosted_console.a_company("hana-six")
     hosted_console.platform.as_(206, "hana-six")
     hosted.sign_in()
     handed_back = hosted_console.platform.last
@@ -201,7 +201,7 @@ def test_a_sign_in_is_accepted_only_once_even_with_its_nonce(
 def test_a_github_account_nobody_has_linked_is_refused_as_github_sign_in_refuses_it(
     hosted_console: HostedConsole, hosted: ConsoleClient
 ) -> None:
-    hosted_console.a_team("hana-seven")
+    hosted_console.a_company("hana-seven")
     hosted_console.platform.as_(207, "a-stranger")
 
     landed = hosted.sign_in()
@@ -219,7 +219,7 @@ def test_a_sign_in_with_nothing_handed_over_is_refused(hosted: ConsoleClient) ->
 def test_a_server_with_its_own_github_app_takes_no_sign_in_from_the_platform(
     hosted_console: HostedConsole, console: Console, signed_out: ConsoleClient
 ) -> None:
-    console.a_team("hana-eight")
+    console.a_company("hana-eight")
     hosted_console.platform.as_(208, "hana-eight")
 
     landed = signed_out.get(handed_over(hosted_console, f"{console.server.url}/api/sign-in/platform/callback"))

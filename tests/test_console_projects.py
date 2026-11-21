@@ -22,7 +22,7 @@ def leads(project: dict[str, Any]) -> list[str]:
 def signed_in_member(
     console: Console, owner: ConsoleClient, member_id: str, github: str, account: int
 ) -> ConsoleClient:
-    """A second member of the team, added by the owner and signed in to their own console session."""
+    """A second member of the company, added by the owner and signed in to their own console session."""
     add(owner, member_id, f"Dana {member_id}", github)
     client = console.client()
     console.github.as_(account, github)
@@ -53,7 +53,7 @@ def test_creating_a_project_from_claude_makes_the_creator_its_lead(console: Cons
     dana.close()
 
 
-def test_every_project_in_the_team_is_listed_with_its_leads(console: Console, signed_out: ConsoleClient) -> None:
+def test_every_project_in_the_company_is_listed_with_its_leads(console: Console, signed_out: ConsoleClient) -> None:
     owner = signed_in_owner(console, signed_out, "olive-projects-three", 704)
     owner.call("create_project", name="Billing")
     create(signed_out, "Payments")
@@ -126,7 +126,7 @@ def test_a_lead_adds_and_removes_repositories_and_a_plain_member_cannot(
 
     assert [one["name"] for one in added_by_a_lead.json()["repositories"]] == ["billing-api"]
     assert added_by_a_member.status_code == 403
-    assert "leads and the team's admins" in added_by_a_member.json()["message"]
+    assert "leads and the company's admins" in added_by_a_member.json()["message"]
     assert removed_by_a_lead.json()["repositories"] == []
     dana.close()
     ash.close()
@@ -164,7 +164,7 @@ def test_a_project_lead_reads_the_audit_log_for_their_own_projects_only(
     assert log.status_code == 200, log.text
     assert {event["project_id"] for event in log.json()["events"]} == {billing}
     assert refused.status_code == 403
-    assert "Only the team's owner, its admins and a project's leads" in refused.json()["message"]
+    assert "Only the company's owner, its admins and a project's leads" in refused.json()["message"]
     dana.close()
     ash.close()
 
@@ -193,12 +193,12 @@ def test_every_change_to_a_project_is_in_the_audit_log(console: Console, signed_
     dana.close()
 
 
-def test_an_admin_sees_a_project_of_their_team_and_nothing_else(console: Console, signed_out: ConsoleClient) -> None:
+def test_an_admin_sees_a_project_of_their_company_and_nothing_else(console: Console, signed_out: ConsoleClient) -> None:
     signed_in_owner(console, signed_out, "olive-projects-eleven", 720)
 
     missing = signed_out.get("/api/projects/not-a-project")
     changing_a_missing_one = signed_out.post_json("/api/projects/not-a-project/rename", {"name": "Nope"})
 
     assert missing.status_code == 403
-    assert "not a project in your team" in missing.json()["message"]
+    assert "not a project in your company" in missing.json()["message"]
     assert changing_a_missing_one.status_code == 403

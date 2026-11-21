@@ -14,7 +14,7 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.embeddings import FastEmbedEmbedder
 from shared_memory.store import MemoryStore
-from tests.support import RunningServer, new_team, promote_now
+from tests.support import RunningServer, new_company, promote_now
 
 NOTE = {
     "title": "Refund rounding",
@@ -69,9 +69,9 @@ def test_remember_edit_and_promote_embed_nothing_inside_the_turn(
     watched_server: tuple[RunningServer, WatchingEmbedder],
 ) -> None:
     running, embedder = watched_server
-    team = new_team(running)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project, "billing-api")
+    company = new_company(running)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project, "billing-api")
 
     path = owner.call("remember", **NOTE)["path"]
     found = owner.call("search", query="how do refunds round?")

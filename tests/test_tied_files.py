@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from tests.support import Console, ConsoleClient, RunningServer, Session, Team, add, ask, create, signed_in_owner
+from tests.support import Console, ConsoleClient, RunningServer, Session, Company, add, ask, create, signed_in_owner
 
 KNOWN_ISSUE = {
     "title": "Uploads flake on staging",
@@ -16,9 +16,9 @@ KNOWN_ISSUE = {
 
 
 @pytest.fixture
-def member(team: Team) -> Session:
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    return team.owner().in_project(project, "billing-api")
+def member(company: Company) -> Session:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    return company.owner().in_project(project, "billing-api")
 
 
 def remember(session: Session, **overrides: object) -> str:
@@ -33,8 +33,8 @@ def remember(session: Session, **overrides: object) -> str:
     return path
 
 
-def file_of(server: RunningServer, team_code: str, path: str) -> Path:
-    return Path(server.settings.memory_root, team_code, *PurePosixPath(path).parts)
+def file_of(server: RunningServer, company_code: str, path: str) -> Path:
+    return Path(server.settings.memory_root, company_code, *PurePosixPath(path).parts)
 
 
 def header_says_related_files(file: Path) -> None:
@@ -53,14 +53,14 @@ def test_remember_takes_tied_files_written_as_repository_path(member: Session) -
 
 
 def test_a_memory_saved_with_related_files_is_read_with_tied_files(console: Console, signed_out: ConsoleClient) -> None:
-    team_code, owner_token = console.a_team("olive-tied-old")
+    company_code, owner_token = console.a_company("olive-tied-old")
     console.github.as_(371, "olive-tied-old")
     signed_out.sign_in()
     owner = Session(console.server, owner_token)
     project = owner.call("create_project", name="Billing")["project_id"]
     in_project = owner.in_project(project, "billing-api")
     path = remember(in_project, tied_files=["billing-api:src/tax.ts", "billing-web:src/invoice.ts"])
-    file = file_of(console.server, team_code, path)
+    file = file_of(console.server, company_code, path)
 
     header_says_related_files(file)
 
@@ -72,9 +72,9 @@ def test_a_memory_saved_with_related_files_is_read_with_tied_files(console: Cons
     ]
 
 
-def test_an_edited_memory_writes_tied_files_not_related_files(team: Team, member: Session) -> None:
+def test_an_edited_memory_writes_tied_files_not_related_files(company: Company, member: Session) -> None:
     path = remember(member, tied_files=["billing-api:src/tax.ts"])
-    file = file_of(team.server, team.code, path)
+    file = file_of(company.server, company.code, path)
     header_says_related_files(file)
 
     member.call("edit_memory", path=path, summary="Tax is rounded per line, always.")
@@ -227,16 +227,16 @@ def test_tied_memories_never_gives_memory_of_a_restricted_project_the_caller_can
     assert tied(dana.in_project(payments, "payments-api"), "shared-lib:src/keys.ts") == [readable]
 
 
-def test_tied_memories_gives_own_personal_project_and_team_memory(owner: Session, dana: Session) -> None:
+def test_tied_memories_gives_own_personal_project_and_company_memory(owner: Session, dana: Session) -> None:
     file = ["billing-api:src/tax.ts"]
-    in_team = promoted(owner, "team", title="Tax is per line everywhere", tied_files=file)
+    in_company = promoted(owner, "company", title="Tax is per line everywhere", tied_files=file)
     in_project = promoted(owner, "project", title="Billing rounds tax per line", tied_files=file)
     mine = remember(dana, title="My note on tax rounding", tied_files=file)
 
     found = dana.call("tied_memories", file="billing-api:src/tax.ts")["memories"]
 
     assert sorted((each["path"], each["level"]) for each in found) == sorted(
-        [(in_team, "team"), (in_project, "project"), (mine, "personal")]
+        [(in_company, "company"), (in_project, "project"), (mine, "personal")]
     )
 
 
@@ -303,14 +303,14 @@ def test_an_edit_that_changes_tied_files_moves_the_tie(member: Session) -> None:
     assert tied(member, "billing-api:src/tax/rounding.ts") == [path]
 
 
-def test_reindex_rebuilds_the_tied_file_index_from_memory_on_disk(team: Team, member: Session) -> None:
+def test_reindex_rebuilds_the_tied_file_index_from_memory_on_disk(company: Company, member: Session) -> None:
     path = remember(member, tied_files=["billing-api:src/tax.ts"])
-    file = file_of(team.server, team.code, path)
+    file = file_of(company.server, company.code, path)
     # Written on disk the way memory was before related files became tied files, and tied somewhere new.
     header_says_related_files(file)
     file.write_text(file.read_text(encoding="utf-8").replace("src/tax.ts", "src/tax/**"), encoding="utf-8")
 
-    team.server.run_cli("reindex")
+    company.server.run_cli("reindex")
 
     assert "related_files:\n- billing-api:src/tax/**" in file.read_text(encoding="utf-8")
     assert tied(member, "billing-api:src/tax.ts") == []
@@ -355,11 +355,11 @@ def test_tie_on_another_members_memory_is_refused(owner: Session, dana: Session)
     assert tied(owner, "billing-api:src/tax/vat.ts") == []
 
 
-def test_tie_on_project_or_team_memory_is_refused_until_it_is_superseded(owner: Session) -> None:
+def test_tie_on_project_or_company_memory_is_refused_until_it_is_superseded(owner: Session) -> None:
     in_project = promoted(owner, "project", title="Billing rounds tax per line", tied_files=["billing-api:src/tax.ts"])
-    in_team = promoted(owner, "team", title="Tax is per line everywhere", tied_files=["billing-api:src/tax.ts"])
+    in_company = promoted(owner, "company", title="Tax is per line everywhere", tied_files=["billing-api:src/tax.ts"])
 
-    refusals = [owner.refusal("tie", path=path, tied_files=["billing-api:src/tax/**"]) for path in (in_project, in_team)]
+    refusals = [owner.refusal("tie", path=path, tied_files=["billing-api:src/tax/**"]) for path in (in_project, in_company)]
 
     assert all("You can only tie your own personal memory" in refusal for refusal in refusals), refusals
     assert all("promoting a memory that supersedes it" in refusal for refusal in refusals), refusals

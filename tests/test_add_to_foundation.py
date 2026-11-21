@@ -85,13 +85,13 @@ def test_a_challenge_against_the_old_path_is_closed_when_the_memory_moves(consol
     assert "no open challenge" in refusal
 
 
-def test_personal_team_and_foundation_memory_are_refused(owner: Session) -> None:
+def test_personal_company_and_foundation_memory_are_refused(owner: Session) -> None:
     personal = owner.call("remember", **CENTS)["path"]
-    team = promote(owner, {**INVOICE, "title": "Team rule"}, level="team")["path"]
+    company = promote(owner, {**INVOICE, "title": "Company rule"}, level="company")["path"]
     held = project_memory(owner, SERVICES)
 
     assert "promote it with foundation" in owner.refusal("add_to_foundation", path=personal, foundation="product")
-    assert "Team memory has no foundations" in owner.refusal("add_to_foundation", path=team, foundation="product")
+    assert "Company memory has no foundations" in owner.refusal("add_to_foundation", path=company, foundation="product")
     assert "already in the architecture foundation" in owner.refusal("add_to_foundation", path=held, foundation="product")
 
 

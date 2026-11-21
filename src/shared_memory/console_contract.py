@@ -28,7 +28,8 @@ class SignedInMember(BaseModel):
 
     member_id: str
     name: str
-    team: str
+    # The company the member is in (ADR-0031).
+    company: str
     role: Literal["owner", "admin", "member"]
     leads_a_project: bool
 
@@ -77,7 +78,7 @@ class RateLimits(BaseModel):
     token_per_minute: int
     console_per_minute: int
     address_per_minute: int
-    # Whether the signed-in member may change them: the team's owner and its admins.
+    # Whether the signed-in member may change them: the company's owner and its admins.
     you_may_change: bool
 
 
@@ -96,7 +97,8 @@ class LicenseState(BaseModel):
     includes the key itself."""
 
     status: Literal["licensed", "expiring", "lapsed", "read-only", "unlicensed", "invalid"]
-    team: str | None
+    # The company the key is for (ADR-0031).
+    company: str | None
     member_cap: int | None
     issued: str | None
     expires: str | None
@@ -108,7 +110,7 @@ class LicenseState(BaseModel):
     reason: str | None
     # Where the key came from: installed in the console, or set in the server's environment.
     source: Literal["console", "environment"] | None
-    # Whether the signed-in member may install a key: the team's owner and its admins.
+    # Whether the signed-in member may install a key: the company's owner and its admins.
     you_may_change: bool
 
 
@@ -125,14 +127,24 @@ class ProjectMember(BaseModel):
     name: str
 
 
+class DepartmentRef(BaseModel):
+    """The department a project is in (ADR-0032)."""
+
+    department_id: str
+    name: str
+    # Closed to its access list: the project then reaches no one outside the department, and is never opened wider.
+    restricted: bool
+
+
 class ProjectSummary(BaseModel):
-    """A project the member can reach, and who looks after it."""
+    """A project the member can reach, who looks after it, and the department it is in, if any."""
 
     project_id: str
     name: str
     restricted: bool
     leads: list[ProjectMember]
     you_lead: bool
+    department: DepartmentRef | None
 
 
 class Projects(BaseModel):
@@ -178,6 +190,8 @@ class ProjectDetail(BaseModel):
     repositories: list[ProjectRepository]
     you_lead: bool
     you_may_change: bool
+    # The department the project is in, or None for a project in none (ADR-0032).
+    department: DepartmentRef | None
 
 
 class ProjectName(BaseModel):
@@ -211,7 +225,7 @@ class RepositoryName(BaseModel):
 
 
 class Restriction(BaseModel):
-    """Whether this project is closed to its access list, or open to the whole team."""
+    """Whether this project is closed to its access list, or open to the whole company."""
 
     restricted: bool
 
@@ -220,6 +234,119 @@ class AccessChange(BaseModel):
     """The member being let into this project."""
 
     member_id: str
+
+
+class DepartmentProject(BaseModel):
+    """A project in a department."""
+
+    project_id: str
+    name: str
+
+
+class DepartmentSummary(BaseModel):
+    """A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is
+    restricted and who is on its access list, and what they may change."""
+
+    department_id: str
+    name: str
+    leads: list[ProjectMember]
+    projects: list[DepartmentProject]
+    you_lead: bool
+    you_may_change: bool
+    # Restricted, its department memory and projects are invisible to everyone but its access list, its leads and the
+    # company's admins. The access list is kept while it is open, so restricting it again lets the same members back.
+    restricted: bool
+    access: list[ProjectMember]
+
+
+class Departments(BaseModel):
+    """Every department of the company, by name, and whether this member may create one."""
+
+    departments: list[DepartmentSummary]
+    you_may_create: bool
+
+
+class DepartmentMemoryEntry(BaseModel):
+    """One active department memory, as the department page lists it: no author, so the page names no member."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+
+
+class MemoryCounts(BaseModel):
+    """How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a
+    coding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the
+    level contradictions and other challenges waiting on it."""
+
+    memories: int
+    possibly_outdated: int
+    used: int
+    level_contradictions: int
+    challenges: int
+
+
+class ProjectRollUp(BaseModel):
+    """One project of the department, with its counts."""
+
+    project_id: str
+    name: str
+    counts: MemoryCounts
+
+
+class DepartmentRollUp(BaseModel):
+    """How memory is doing across a department (spec #624), never per member: each project the member can reach, and
+    department memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's
+    setting."""
+
+    window_days: int
+    outdated_after_days: float
+    projects: list[ProjectRollUp]
+    department_memory: MemoryCounts
+
+
+class DepartmentPage(BaseModel):
+    """A department's page (#636): the projects in it this member can reach and its department memory, and for its
+    department leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing."""
+
+    department_id: str
+    name: str
+    restricted: bool
+    you_lead: bool
+    projects: list[DepartmentProject]
+    memory: list[DepartmentMemoryEntry]
+    roll_up: DepartmentRollUp | None
+
+
+class DepartmentName(BaseModel):
+    """What a department is called."""
+
+    name: str
+
+
+class DepartmentAppointment(BaseModel):
+    """The member being made a lead of this department."""
+
+    member_id: str
+
+
+class DepartmentRestriction(BaseModel):
+    """Whether this department is closed to its access list, or open to the whole company."""
+
+    restricted: bool
+
+
+class DepartmentAccessChange(BaseModel):
+    """The member being put on this department's access list."""
+
+    member_id: str
+
+
+class ProjectMove(BaseModel):
+    """The project being moved into this department."""
+
+    project_id: str
 
 
 class PendingChallenge(BaseModel):
@@ -378,18 +505,21 @@ class ChallengeList(BaseModel):
 
 
 class Decision(BaseModel):
-    """Accept a challenge or reject it."""
+    """Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by
+    following the broader memory, which retires the narrower one."""
 
-    decision: Literal["accept", "reject"]
+    decision: Literal["accept", "reject", "keep_exception", "follow"]
+    reason: str | None = None
 
 
 class Decided(BaseModel):
     """What deciding a challenge did."""
 
     challenge_id: int
-    decision: Literal["accepted", "rejected"]
+    decision: Literal["accepted", "rejected", "kept_exception", "followed"]
     # The memory in force now: the one offered in its place, at the path promoting it gave it, when a supersede was
-    # accepted; the challenged memory when the challenge was rejected; none when a retire was accepted.
+    # accepted; the challenged memory when the challenge was rejected; none when a retire was accepted. For a level
+    # contradiction, the narrower memory when an exception was kept, the broader one when it was followed.
     in_force: str | None
 
 
@@ -423,6 +553,8 @@ class MemoryDetail(BaseModel):
     replaces: str | None
     superseded_by: str | None
     exception_to: str | None
+    # Why its lead keeps it as an exception to exception_to, once a level contradiction is decided that way.
+    exception_reason: str | None = None
     tied_files: list[str]
     promoted_by: str | None
     imported_by: str | None
@@ -514,7 +646,7 @@ class Crumb(BaseModel):
 
 
 class Folder(BaseModel):
-    """One folder of the team's memory: where it sits, the folders in it, and its memories."""
+    """One folder of the company's memory: where it sits, the folders in it, and its memories."""
 
     folder: str
     name: str
@@ -528,7 +660,7 @@ class Folder(BaseModel):
 
 
 class MemberSummary(BaseModel):
-    """One member of the team, as an admin sees them."""
+    """One member of the company, as an admin sees them."""
 
     member_id: str
     name: str
@@ -545,7 +677,7 @@ class Members(BaseModel):
 
 
 class NewMember(BaseModel):
-    """A member being added to the team."""
+    """A member being added to the company."""
 
     member_id: str
     name: str
@@ -716,7 +848,7 @@ class NewCard(BaseModel):
 
 class CardFields(BaseModel):
     """What to change about a card: only the fields given change. An empty due date or assignee takes it off; only a
-    card's assignee, the project's leads and the team's admins give it an assignee. Memories and files, when given,
+    card's assignee, the project's leads and the company's admins give it an assignee. Memories and files, when given,
     replace the card's links of that kind: memories by path, files as repository:path."""
 
     title: str | None = None
@@ -930,7 +1062,7 @@ class DoubtedMemory(BaseModel):
 
 
 class ProjectHealth(BaseModel):
-    """A project's health now (CONTEXT.md: Project health), for its leads and the team's admins: its project memory
+    """A project's health now (CONTEXT.md: Project health), for its leads and the company's admins: its project memory
     that is possibly outdated, the longest unused first, and its memory in doubt, the most doubted first. Read-only:
     reading it is no use of any memory and changes nothing. outdated_after_days is the server's setting."""
 
@@ -939,6 +1071,56 @@ class ProjectHealth(BaseModel):
     outdated_after_days: float
     possibly_outdated: list[PossiblyOutdatedMemory]
     in_doubt: list[DoubtedMemory]
+
+
+class OnboardingEntry(BaseModel):
+    """How far onboarding has got for one repository or one kind of outside source (wiki, ticket, pr-comment or
+    interview): exactly one of repository and outside_source is set. status is not_started, partly_done or done, as a
+    session last recorded it, by whom and when. promoted and waiting_on_challenge count the imports from it in the
+    audit log: promoted, and promoted into a challenge no one has decided yet. left_out is what the session said it
+    left out."""
+
+    repository: str | None
+    outside_source: str | None
+    status: str
+    recorded_by: str
+    recorded_by_name: str
+    recorded_at: datetime
+    promoted: int
+    waiting_on_challenge: int
+    left_out: int
+
+
+class OnboardingProgress(BaseModel):
+    """A project's onboarding progress, repositories first. everyone says whether these are all its entries, as its
+    leads and the company's admins see them, or only the ones the signed-in member recorded. Read-only: a session
+    records progress."""
+
+    project_id: str
+    everyone: bool
+    entries: list[OnboardingEntry]
+
+
+class InterviewMemory(BaseModel):
+    """A memory written from the signed-in member's interview, which they author (ADR-0029): where it is, what it says
+    in brief, its level, the interview it came from (source), and who ran the interview and when its memory was
+    promoted."""
+
+    path: str
+    title: str
+    summary: str
+    level: str
+    source: str
+    interviewer: str
+    interviewer_name: str
+    interviewed_at: datetime
+
+
+class InterviewMemories(BaseModel):
+    """Every memory written from the signed-in member's interviews that is still active and theirs, newest first. They
+    may retire any of it, with the same retire as any memory they author; nothing here edits one."""
+
+    memories: list[InterviewMemory]
 
 
 class ProjectSessions(BaseModel):
@@ -1107,10 +1289,113 @@ DECLARATIONS: tuple[Declaration, ...] = (
         changes=True,
     ),
     Declaration(
+        path="/departments",
+        method="GET",
+        operation_id="departments",
+        summary="Every department of the company, with its leads and the projects in it this member can reach.",
+        answers=Departments,
+    ),
+    Declaration(
+        path="/departments/{department_id}",
+        method="GET",
+        operation_id="department",
+        summary=(
+            "A department's page: its projects and department memory, and for its leads and the company's admins a "
+            "roll-up of each project's counts and department memory's use, never per member. Changes nothing."
+        ),
+        answers=DepartmentPage,
+    ),
+    Declaration(
+        path="/departments",
+        method="POST",
+        operation_id="create_department",
+        summary="Create a department with no leads and no projects. Only the company's admins can.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentName,
+    ),
+    Declaration(
+        path="/departments/{department_id}/rename",
+        method="POST",
+        operation_id="rename_department",
+        summary="Change a department's name. Its department ID stays as it is.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentName,
+    ),
+    Declaration(
+        path="/departments/{department_id}/remove",
+        method="POST",
+        operation_id="remove_department",
+        summary="Remove a department, leaving its projects in no department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/leads",
+        method="POST",
+        operation_id="appoint_department_lead",
+        summary="Make a member a lead of this department.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentAppointment,
+    ),
+    Declaration(
+        path="/departments/{department_id}/leads/{member_id}/remove",
+        method="POST",
+        operation_id="remove_department_lead",
+        summary="Take a lead off this department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/projects",
+        method="POST",
+        operation_id="move_project_in",
+        summary="Move a project in no department into this one.",
+        answers=Departments,
+        changes=True,
+        accepts=ProjectMove,
+    ),
+    Declaration(
+        path="/departments/{department_id}/projects/{project_id}/remove",
+        method="POST",
+        operation_id="move_project_out",
+        summary="Move a project out of this department, leaving it in no department.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
+        path="/departments/{department_id}/restrict",
+        method="POST",
+        operation_id="restrict_department",
+        summary="Close a department to its access list, or open it to the whole company again.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentRestriction,
+    ),
+    Declaration(
+        path="/departments/{department_id}/access",
+        method="POST",
+        operation_id="grant_department_access",
+        summary="Put a member on a department's access list.",
+        answers=Departments,
+        changes=True,
+        accepts=DepartmentAccessChange,
+    ),
+    Declaration(
+        path="/departments/{department_id}/access/{member_id}/remove",
+        method="POST",
+        operation_id="revoke_department_access",
+        summary="Take a member off a department's access list.",
+        answers=Departments,
+        changes=True,
+    ),
+    Declaration(
         path="/projects/{project_id}/restrict",
         method="POST",
         operation_id="restrict_project",
-        summary="Close a project to its access list, or open it to the whole team again.",
+        summary="Close a project to its access list, or open it to the whole company again.",
         answers=ProjectDetail,
         changes=True,
         accepts=Restriction,
@@ -1170,10 +1455,21 @@ DECLARATIONS: tuple[Declaration, ...] = (
         method="GET",
         operation_id="project_health",
         summary=(
-            "A project's health, for its leads and the team's admins: its possibly outdated memory and its memory in "
+            "A project's health, for its leads and the company's admins: its possibly outdated memory and its memory in "
             "doubt, with each one's count and reasons. Changes nothing."
         ),
         answers=ProjectHealth,
+    ),
+    Declaration(
+        path="/projects/{project_id}/onboarding",
+        method="GET",
+        operation_id="onboarding_progress",
+        summary=(
+            "A project's onboarding progress per repository and outside source: status, who recorded it and when, and "
+            "how many imports were promoted, wait on a challenge or were left out. Leads and admins see every entry; "
+            "any other member sees their own. Changes nothing."
+        ),
+        answers=OnboardingProgress,
     ),
     Declaration(
         path="/projects/{project_id}/sessions",
@@ -1273,7 +1569,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/audit",
         method="GET",
         operation_id="audit",
-        summary="The team's audit log, newest first.",
+        summary="The company's audit log, newest first.",
         answers=AuditPage,
         query=("limit", "before", "member", "kind", "project", "since", "until"),
     ),
@@ -1281,7 +1577,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/export",
         method="GET",
         operation_id="export",
-        summary="All of the team's data as one zip: the memory with its history, and the team's records. Admins only.",
+        summary="All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         answers=None,
         download="application/zip",
     ),
@@ -1296,9 +1592,19 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/files",
         method="GET",
         operation_id="files",
-        summary="One folder of the team's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
+        summary="One folder of the company's memory: its folders, with what they hold, and its memories; deep, everything beneath it.",
         answers=Folder,
         query=("folder", "deep"),
+    ),
+    Declaration(
+        path="/interviewed",
+        method="GET",
+        operation_id="interviewed",
+        summary=(
+            "The memories written from the signed-in member's interviews, which they author: each with the interview, "
+            "who ran it and when. Changes nothing."
+        ),
+        answers=InterviewMemories,
     ),
     Declaration(
         path="/memory",
@@ -1328,7 +1634,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/memory/pin",
         method="POST",
         operation_id="pin_at",
-        summary="Pin a project or team memory, or a topic folder, into every briefing it belongs in.",
+        summary="Pin a project, department or company memory, or a topic folder, into every briefing it belongs in.",
         answers=PinState,
         changes=True,
         accepts=MemoryPath,
@@ -1355,7 +1661,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/search",
         method="GET",
         operation_id="search_everywhere",
-        summary="Memories that match, across team memory and every project this member can reach.",
+        summary="Memories that match, across company memory, department memory and every project this member can reach.",
         answers=SearchResults,
         query=("query", "level", "type", "limit"),
     ),
@@ -1403,7 +1709,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/license",
         method="GET",
         operation_id="license_state",
-        summary="The server's license key: its status, team, member cap and expiry.",
+        summary="The server's license key: its status, company, member cap and expiry.",
         answers=LicenseState,
     ),
     Declaration(
@@ -1419,7 +1725,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members",
         method="GET",
         operation_id="members",
-        summary="Everyone in the team, with their role and GitHub account.",
+        summary="Everyone in the company, with their role and GitHub account.",
         answers=Members,
     ),
     Declaration(
@@ -1461,7 +1767,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members/{member_id}/ownership",
         method="POST",
         operation_id="hand_over_ownership",
-        summary="Make another member the team's owner.",
+        summary="Make another member the company's owner.",
         answers=Members,
         changes=True,
     ),
@@ -1502,7 +1808,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/members/{member_id}/token",
         method="POST",
         operation_id="reissue_token",
-        summary="Issue a new personal token for a member of the team, revoking the one they had.",
+        summary="Issue a new personal token for a member of the company, revoking the one they had.",
         answers=IssuedToken,
         changes=True,
     ),

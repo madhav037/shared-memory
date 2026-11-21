@@ -12,7 +12,7 @@ from tests.support import (
     Console,
     ConsoleClient,
     Session,
-    Team,
+    Company,
     ToolRefused,
     add,
     create,
@@ -28,11 +28,11 @@ def the_card(session: Session, number: int) -> dict[str, Any]:
     return next(one for cards in board["columns"].values() for one in cards if one["number"] == number)
 
 
-def led_by_dana(team: Team, dana: Session) -> tuple[Session, Session, Session]:
-    """A project Dana created, so she leads it, with Cole working in it and the team's owner, who doesn't lead it."""
+def led_by_dana(company: Company, dana: Session) -> tuple[Session, Session, Session]:
+    """A project Dana created, so she leads it, with Cole working in it and the company's owner, who doesn't lead it."""
     payments = dana.call("create_project", name="Payments")["project_id"]
-    cole = member(team, payments, "emp-3", "Cole Coder")
-    return dana.in_project(payments, "payments-api"), cole, team.owner().in_project(payments, "payments-api")
+    cole = member(company, payments, "emp-3", "Cole Coder")
+    return dana.in_project(payments, "payments-api"), cole, company.owner().in_project(payments, "payments-api")
 
 
 # Claiming
@@ -182,8 +182,8 @@ def test_the_assignee_edits_moves_hands_over_and_deletes_their_card(owner: Sessi
     assert column(owner, "doing") == []
 
 
-def test_a_project_lead_does_anything_to_any_card_on_the_board(team: Team, dana: Session) -> None:
-    lead, cole, _ = led_by_dana(team, dana)
+def test_a_project_lead_does_anything_to_any_card_on_the_board(company: Company, dana: Session) -> None:
+    lead, cole, _ = led_by_dana(company, dana)
     card(cole, "Retry failed webhooks")
     card(cole, "Split the invoice module")
     cole.call("claim_card", number=1)
@@ -201,8 +201,8 @@ def test_a_project_lead_does_anything_to_any_card_on_the_board(team: Team, dana:
     assert column(lead, "doing") == []
 
 
-def test_an_admin_who_does_not_lead_the_project_does_anything_to_any_card(team: Team, dana: Session) -> None:
-    _, cole, admin = led_by_dana(team, dana)
+def test_an_admin_who_does_not_lead_the_project_does_anything_to_any_card(company: Company, dana: Session) -> None:
+    _, cole, admin = led_by_dana(company, dana)
     card(cole, "Retry failed webhooks")
     card(cole, "Split the invoice module")
     cole.call("claim_card", number=1)

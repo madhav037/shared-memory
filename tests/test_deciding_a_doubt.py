@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Session, Team, added_context, member, promote_keeping_both
+from tests.support import Session, Company, added_context, member, promote_keeping_both
 
 TAX = {
     "title": "Sales tax is fifteen percent",
@@ -76,8 +76,10 @@ def test_rejecting_a_doubt_closes_it_and_the_memory_stands(owner: Session, dana:
     assert found(dana, path)["search"] is True
 
 
-def test_every_member_who_added_evidence_is_told_a_rejection_once(team: Team, owner: Session, dana: Session) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+def test_every_member_who_added_evidence_is_told_a_rejection_once(
+    company: Company, owner: Session, dana: Session
+) -> None:
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(owner, TAX)
     challenge_id = doubt(dana, path, reasoning="My invoices came out wrong.")
     doubt(cole, path)
@@ -90,8 +92,10 @@ def test_every_member_who_added_evidence_is_told_a_rejection_once(team: Team, ow
     assert "Your memory stays where it is" not in news(dana)
 
 
-def test_every_member_who_added_evidence_is_told_an_acceptance_once(team: Team, owner: Session, dana: Session) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+def test_every_member_who_added_evidence_is_told_an_acceptance_once(
+    company: Company, owner: Session, dana: Session
+) -> None:
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(owner, TAX)
     challenge_id = doubt(dana, path)
     doubt(cole, path)
@@ -104,9 +108,9 @@ def test_every_member_who_added_evidence_is_told_an_acceptance_once(team: Team, 
 
 
 def test_accepting_one_doubt_closes_the_other_reasons_doubt_and_tells_each_of_its_raisers(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(owner, TAX)
     accepted = doubt(dana, path, "contradicts_code", **TAX_LINE)
     other = doubt(dana, path)
@@ -121,9 +125,9 @@ def test_accepting_one_doubt_closes_the_other_reasons_doubt_and_tells_each_of_it
 
 
 def test_the_author_editing_the_memory_in_a_session_closes_its_open_doubts_as_resolved_and_tells_each_raiser(
-    team: Team, dana: Session
+    company: Company, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = dana.call("remember", **WEBHOOKS)["path"]
     misled = doubt(cole, path, reasoning="My webhook gave up after an hour.")
     contradicts = doubt(dana.as_session("another-session"), path, "contradicts_code", **TAX_LINE)
@@ -146,9 +150,9 @@ def test_the_author_editing_the_memory_in_a_session_closes_its_open_doubts_as_re
 
 
 def test_the_author_superseding_the_memory_in_a_session_closes_its_open_doubts_as_resolved_and_tells_each_raiser(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(owner, TAX)
     challenge_id = doubt(dana, path, "contradicts_code", **TAX_LINE)
     doubt(cole, path, "contradicts_code", **TAX_LINE)

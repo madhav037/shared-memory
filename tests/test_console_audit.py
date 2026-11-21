@@ -16,7 +16,7 @@ def read_log(client: ConsoleClient, **filters: Any) -> dict[str, Any]:
 
 
 def test_a_sign_in_is_recorded_with_who_signed_in(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-audit-one")
+    console.a_company("olive-audit-one")
     console.github.as_(201, "olive-audit-one")
     signed_out.sign_in()
 
@@ -27,7 +27,7 @@ def test_a_sign_in_is_recorded_with_who_signed_in(console: Console, signed_out: 
 
 
 def test_a_refused_sign_in_is_recorded_with_the_account_that_tried(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-audit-two")
+    console.a_company("olive-audit-two")
     console.github.as_(202, "a-stranger-audit")
     signed_out.sign_in()
 
@@ -40,16 +40,16 @@ def test_a_refused_sign_in_is_recorded_with_the_account_that_tried(console: Cons
 
 
 def test_a_member_who_is_not_the_owner_cannot_read_the_log(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-audit-three")
+    company, owner_token = console.a_company("olive-audit-three")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-audit")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-audit")
     console.github.as_(204, "dana-audit")
     signed_out.sign_in()
 
     refused = signed_out.get("/api/audit")
 
     assert refused.status_code == 403
-    assert "Only the team's owner" in refused.json()["message"]
+    assert "Only the company's owner" in refused.json()["message"]
 
 
 def test_the_log_cannot_be_read_without_signing_in(console: Console, signed_out: ConsoleClient) -> None:
@@ -60,7 +60,7 @@ def test_the_log_cannot_be_read_without_signing_in(console: Console, signed_out:
 
 
 def test_the_log_is_newest_first_and_comes_a_page_at_a_time(console: Console, signed_out: ConsoleClient) -> None:
-    console.a_team("olive-audit-four")
+    console.a_company("olive-audit-four")
     console.github.as_(205, "olive-audit-four")
     for _ in range(3):
         signed_out.sign_in()
@@ -76,9 +76,9 @@ def test_the_log_is_newest_first_and_comes_a_page_at_a_time(console: Console, si
 
 
 def test_the_log_can_be_filtered_by_member_kind_and_day(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-audit-five")
+    company, owner_token = console.a_company("olive-audit-five")
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
-    console.server.run_cli("link-github", "--team", team, "--member-id", "emp-2", "--github", "dana-audit-five")
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-audit-five")
     console.github.as_(206, "dana-audit-five")
     signed_out.sign_in()
     signed_out.sign_out()
@@ -97,7 +97,7 @@ def test_the_log_can_be_filtered_by_member_kind_and_day(console: Console, signed
 
 
 def test_the_log_holds_no_memory_content(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-audit-six")
+    company, owner_token = console.a_company("olive-audit-six")
     owner = Session(console.server, owner_token)
     project = owner.call("create_project", name="Billing")["project_id"]
     owner.in_project(project, "billing-api").call(
@@ -116,7 +116,7 @@ def test_the_log_holds_no_memory_content(console: Console, signed_out: ConsoleCl
 
 
 def test_the_log_names_each_memory_by_its_title_now_and_keeps_the_path(console: Console, signed_out: ConsoleClient) -> None:
-    team, owner_token = console.a_team("olive-audit-seven")
+    company, owner_token = console.a_company("olive-audit-seven")
     owner = Session(console.server, owner_token)
     project = owner.call("create_project", name="Billing")["project_id"]
     remembered = owner.in_project(project, "billing-api").call(

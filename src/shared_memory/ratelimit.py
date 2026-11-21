@@ -144,7 +144,7 @@ class RateLimits:
     def change(self, admin: Member, limits: Limits) -> Limits:
         """Set the limits server-wide, as an owner or an admin, and record who did it."""
         if not (admin.is_owner or admin.is_admin):
-            raise Refused("Only the team's owner and its admins can change the rate limits.")
+            raise Refused("Only the company's owner and its admins can change the rate limits.")
         for number in (limits.token_per_minute, limits.console_per_minute, limits.address_per_minute):
             if not MIN_PER_MINUTE <= number <= MAX_PER_MINUTE:
                 raise Refused(f"A rate limit is from {MIN_PER_MINUTE} to {MAX_PER_MINUTE:,} calls a minute.")

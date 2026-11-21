@@ -68,24 +68,27 @@ ALLOWED: tuple[Allow, ...] = (
     Allow("archive", "the board's Archive of done cards; avoided only for retiring a memory", BOARD),
     Allow(
         "setup",
-        "setting a new server's first team up; avoided only for onboarding",
+        "setting a new server's first company up; avoided only for onboarding",
         (SERVER + "app.py", SERVER + "cli.py", SERVER + "identity.py"),
     ),
-    Allow("input", "what a tool call is given; avoided only for an import's source", (SERVER + "app.py",), "tool input"),
+    Allow(
+        "input", "what a tool call is given; avoided only for an import's source", (SERVER + "app.py",), "tool input"
+    ),
     Allow(
         "owner",
-        "the team's Owner; avoided only for an author, an assignee or a lock's holder",
+        "the company's Owner; avoided only for an author, an assignee or a lock's holder",
         (
             SERVER + "identity.py",
             "console/src/App.tsx",
             PAGES + "AuditLog.tsx",
             PAGES + "ProjectSettings.tsx",
-            PAGES + "Team.tsx",
+            PAGES + "Company.tsx",
         ),
     ),
-    Allow("shared memory", "the product's name; avoided only for project memory and team memory"),
+    Allow("shared memory", "the product's name; avoided only for project memory and company memory"),
     Allow("share", "the product's name; avoided only for promoting", text="shared memory"),
     Allow("share", "the shared folders of the memory repository, not promoting", (SERVER + "store.py",)),
+    Allow("share", "the folder project memory lives in, not promoting", (PAGES + "FolderPage.tsx",), "/shared"),
     Allow(
         "activity",
         "a session's Activity, the glossary's own term; avoided only for the audit log",
@@ -93,7 +96,7 @@ ALLOWED: tuple[Allow, ...] = (
     ),
     # Words with another technical meaning.
     Allow("status", "an HTTP status, the server's status or a memory's status; avoided only for a session's activity"),
-    Allow("root", "the root of a folder tree or of the page; avoided only for the team's owner"),
+    Allow("root", "the root of a folder tree or of the page; avoided only for the company's owner"),
     Allow(
         "lock", "a lock between threads; avoided only for claiming a card", (SERVER + "index.py", SERVER + "store.py")
     ),
@@ -179,7 +182,11 @@ ALLOWED: tuple[Allow, ...] = (
         "sessions' handoff notes on the console's Sessions page, the glossary's Handoff note; never memories",
         (SERVER + "console_api.py", SERVER + "console_contract.py", PAGES + "SessionsPage.tsx", "console/e2e/"),
     ),
-    Allow("scope", "an ASGI scope and a cancel scope; avoided only for a level or an area", (SERVER + "app.py", SERVER + "ratelimit.py")),
+    Allow(
+        "scope",
+        "an ASGI scope and a cancel scope; avoided only for a level or an area",
+        (SERVER + "app.py", SERVER + "ratelimit.py"),
+    ),
     Allow(
         "context",
         "MCP's request context and the context a hook adds to a prompt",
@@ -199,13 +206,13 @@ ALLOWED: tuple[Allow, ...] = (
     Allow(
         "issue",
         "to issue a personal token, the verb",
-        (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Team.tsx"),
+        (SERVER + "identity.py", PAGES + "ConnectAgent.tsx", PAGES + "Company.tsx"),
     ),
     Allow("take", "saves take turns", (SERVER + "store.py",), "take turns"),
     Allow(
         "take",
         "taking access or a role away from a member, not claiming a card",
-        (PAGES + "ProjectSettings.tsx", PAGES + "Team.tsx"),
+        (PAGES + "ProjectSettings.tsx", PAGES + "Company.tsx", PAGES + "Departments.tsx"),
     ),
     Allow("take", "what a change takes out of a memory's text", (PAGES + "Challenges.tsx",), "takes out"),
     Allow("take", "what the pinned memories take up of a briefing", (PAGES + "FolderPage.tsx",)),
@@ -216,7 +223,7 @@ ALLOWED: tuple[Allow, ...] = (
         "every task starts with the briefing",
     ),
     Allow("manager", "an example search about a package manager", (PAGES + "SearchPage.tsx",), "package manager"),
-    Allow("dev", "a made-up member's name in a placeholder", (PAGES + "Team.tsx",), "dana dev"),
+    Allow("dev", "a made-up member's name in a placeholder", (PAGES + "Company.tsx",), "dana dev"),
     Allow("note", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
     Allow("notes", "the lines a briefing adds after its sections, not memories", (SERVER + "briefing.py",)),
     Allow(
@@ -224,11 +231,13 @@ ALLOWED: tuple[Allow, ...] = (
         "what promote offers when it finds a similar memory; no challenge is raised",
         (SERVER + "app.py", SERVER + "known_issues.py", SERVER + "lifecycle.py"),
     ),
-    Allow("owner", "the team's Owner, as the README names the person who sets the team up", ("README.md",)),
+    Allow("owner", "the company's Owner, as the README names the person who sets the company up", ("README.md",)),
     Allow("password", "Postgres's own password, not a personal token", ("README.md",), "database password"),
     Allow("collision", "two sessions on the same work, the glossary's Collision", ("README.md",), "avoid collisions"),
     # Breaches already on main when this test arrived, left for their own pull requests.
     Allow("replace", EXISTING),
+    Allow("team", "billing's plan names, the team plans a company pays for", (PAGES + "Company.tsx",), "team s plan"),
+    Allow("team", "billing's plan names: self-hosting is licensed per team plan", ("README.md",), "license for teams"),
     Allow("creator", EXISTING, (SERVER + "console_contract.py",)),
 )
 

@@ -3,7 +3,7 @@ import { IconPin, IconPinnedOff } from "@tabler/icons-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
-import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type SignedInMember } from "../api/client";
+import { fetchFolder, fetchPins, pinAt, unpinAt, type FileEntry, type Folder, type SignedInMember } from "../api/client";
 import {
   ChallengedMark,
   OutdatedMark,
@@ -22,11 +22,12 @@ import { useAsked } from "../lib/useAsked";
 
 /** What each folder holds, in the words CONTEXT.md defines them with. */
 const MEANING: Record<string, string> = {
-  team: "Memory that holds for every project in the team.",
+  company: "Memory that holds for every project in the company.",
+  department: "Department memory: ways of working that hold for every project in this department.",
   shared: "Memory that holds for everyone working on this project.",
-  people: "Each member’s personal memory in this project: readable by the team, but not accepted by it.",
-  member: "Personal memory: readable by the team, but not accepted by it.",
-  Conventions: "Rules for how the team works, followed every day.",
+  people: "Each member’s personal memory in this project: readable by the whole company, but not accepted by it.",
+  member: "Personal memory: readable by the whole company, but not accepted by it.",
+  Conventions: "Rules for how the company works, followed every day.",
   Decisions: "Choices made once, recorded with their reasons and the alternatives rejected.",
   Architecture: "How the system is built and how its parts relate.",
   Gotchas: "Surprising facts that waste time if you don’t know them.",
@@ -34,11 +35,48 @@ const MEANING: Record<string, string> = {
 };
 
 const TEACHING: Record<string, string> = {
-  team: "Team memory holds for every project. It arrives here when a member promotes one of their memories to team memory.",
+  company: "Company memory holds for every project. It arrives here when a member promotes one of their memories to company memory.",
+  department: "Department memory holds for every project in this department. It arrives here when a department lead promotes one of their memories to department memory.",
   project: "This project has no memory yet. Connect a repository from its settings; memory arrives when a member’s coding agent saves something there.",
   shared: "Project memory is what everyone on this project follows. It arrives when a member promotes one of their memories.",
   people: "Personal memory is what each member’s coding agent has saved in this project. Nobody has saved anything here yet.",
 };
+
+/** Whether a project's page lists any project memory beyond its foundations. */
+function holdsProjectMemory(projectId: string, folder: Folder): boolean {
+  const projectMemory = `projects/${projectId}/shared`;
+  const foundations = `${projectMemory}/foundations`;
+  const isProjectMemory = (path: string) =>
+    (path === projectMemory || path.startsWith(`${projectMemory}/`)) &&
+    path !== foundations &&
+    !path.startsWith(`${foundations}/`);
+  if (folder.kind === "shared" && folder.memories.length > 0) return true;
+  return folder.inside.some((section) => isProjectMemory(section.path) && section.memories.length > 0);
+}
+
+/** The words a member pastes into their coding agent to start onboarding. */
+const ONBOARDING_LINE = "Onboard this repository into Shared Memory.";
+
+/** An empty project's offer: fill it from what the company already has, through the member's own coding agent. */
+function OnboardingOffer() {
+  return (
+    <section aria-labelledby="onboarding-offer-heading" data-testid="onboarding-offer" style={{ marginTop: 28 }}>
+      <h2 className="section-heading" id="onboarding-offer-heading">
+        Bring what you already have
+      </h2>
+      <p>
+        This project has no project memory yet. Onboarding fills it from what your company already has written down: the
+        repository’s documents and rule files, its git history, and wiki pages, tickets and review comments your coding
+        agent can reach. Your agent proposes each memory; you approve every one before it is saved, and nothing in your
+        repository changes without your yes.
+      </p>
+      <p>Paste this into your coding agent, in one of the project’s repositories:</p>
+      <p>
+        <code data-testid="onboarding-line">{ONBOARDING_LINE}</code>
+      </p>
+    </section>
+  );
+}
 
 /** One folder, set out as a part of the contents: every folder beneath it, and every memory in each. */
 export function FolderPage({ member }: { member: SignedInMember }) {
@@ -64,6 +102,10 @@ export function FolderPage({ member }: { member: SignedInMember }) {
   const holding =
     (folder.memories.length > 0 ? 1 : 0) + folder.inside.filter((section) => section.memories.length > 0).length;
   const meaning = MEANING[folder.kind === "type" ? folder.name : folder.kind];
+  const offersOnboarding =
+    projectId !== undefined &&
+    (folder.kind === "project" || folder.kind === "shared") &&
+    !holdsProjectMemory(projectId, folder);
 
   const pinTopic = async (pin: boolean) => {
     try {
@@ -85,7 +127,7 @@ export function FolderPage({ member }: { member: SignedInMember }) {
       {folder.kind === "project" && project ? (
         <p className="standfirst">
           {project.leads.length === 0 ? "No project lead yet." : `Led by ${project.leads.map((lead) => lead.name).join(", ")}.`}{" "}
-          {project.restricted ? "Restricted to its access list." : "Open to the whole team."}
+          {project.restricted ? "Restricted to its access list." : "Open to the whole company."}
         </p>
       ) : (
         meaning && <p className="standfirst">{meaning}</p>
@@ -118,6 +160,8 @@ export function FolderPage({ member }: { member: SignedInMember }) {
       )}
 
       {folder.kind === "project" && projectId && <Briefing projectId={projectId} />}
+
+      {offersOnboarding && <OnboardingOffer />}
 
       {total === 0 ? (
         <>
@@ -227,7 +271,7 @@ function Briefing({ projectId }: { projectId: string }) {
       </h2>
       {answer.pins.length === 0 ? (
         <p className="empty">
-          Nothing is pinned. Pin a project or team memory, or a topic, from its page, and every session in this project
+          Nothing is pinned. Pin a project or company memory, or a topic, from its page, and every session in this project
           starts with it.
         </p>
       ) : (

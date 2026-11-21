@@ -1,4 +1,4 @@
-"""Running the team from the console: members, admins and ownership."""
+"""Running the company from the console: members, admins and ownership."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def test_adding_a_member_shows_their_token_once(console: Console, signed_out: Co
 
 
 def test_removing_a_member_ends_their_sessions_and_their_token(console: Console, signed_out: ConsoleClient) -> None:
-    team, _ = console.a_team("olive-members-three")
+    company, _ = console.a_company("olive-members-three")
     console.github.as_(603, "olive-members-three")
     signed_out.sign_in()
     added = add(signed_out, "emp-2", "Dana Dev", "dana-members-three")
@@ -104,7 +104,7 @@ def test_the_owner_grants_admin_and_takes_it_away(console: Console, signed_out: 
 
 
 def test_an_admin_can_manage_members_but_not_admins(console: Console, signed_out: ConsoleClient) -> None:
-    team, _ = console.a_team("olive-members-six")
+    company, _ = console.a_company("olive-members-six")
     console.github.as_(607, "olive-members-six")
     signed_out.sign_in()
     add(signed_out, "emp-2", "Dana Dev", "dana-members-six")
@@ -124,7 +124,7 @@ def test_an_admin_can_manage_members_but_not_admins(console: Console, signed_out
     assert removing_the_owner.status_code == 403
     assert "owner can't be removed" in removing_the_owner.json()["message"]
     assert granting_admin.status_code == 403
-    assert "Only the team's owner can grant admin" in granting_admin.json()["message"]
+    assert "Only the company's owner can grant admin" in granting_admin.json()["message"]
     ash.close()
 
 
@@ -142,7 +142,7 @@ def test_only_the_owner_removes_an_admin(console: Console, signed_out: ConsoleCl
     owner_removing_admin = signed_out.post("/api/members/emp-3/remove")
 
     assert admin_removing_admin.status_code == 403
-    assert "Only the team's owner can remove an admin" in admin_removing_admin.json()["message"]
+    assert "Only the company's owner can remove an admin" in admin_removing_admin.json()["message"]
     assert owner_removing_admin.status_code == 200
     ash.close()
 
@@ -158,8 +158,8 @@ def test_ownership_is_handed_over(console: Console, signed_out: ConsoleClient) -
     assert signed_out.status()["member"]["role"] == "admin"
 
 
-def test_a_plain_member_cannot_run_the_team(console: Console, signed_out: ConsoleClient) -> None:
-    team, _ = console.a_team("olive-members-nine")
+def test_a_plain_member_cannot_run_the_company(console: Console, signed_out: ConsoleClient) -> None:
+    company, _ = console.a_company("olive-members-nine")
     console.github.as_(612, "olive-members-nine")
     signed_out.sign_in()
     add(signed_out, "emp-2", "Dana Dev", "dana-members-nine")
@@ -176,7 +176,7 @@ def test_a_plain_member_cannot_run_the_team(console: Console, signed_out: Consol
     dana.close()
 
 
-def test_every_change_to_the_team_is_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
+def test_every_change_to_the_company_is_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
     signed_in_owner(console, signed_out, "olive-members-ten", 614)
 
     add(signed_out, "emp-2", "Dana Dev", "dana-members-ten")
@@ -196,7 +196,7 @@ def test_every_change_to_the_team_is_in_the_audit_log(console: Console, signed_o
 
 
 def test_an_admin_can_use_the_owners_memory_tools_in_claude(console: Console, signed_out: ConsoleClient) -> None:
-    _, owner_token = console.a_team("olive-members-eleven")
+    _, owner_token = console.a_company("olive-members-eleven")
     console.github.as_(615, "olive-members-eleven")
     signed_out.sign_in()
     added = add(signed_out, "emp-2", "Ash Admin")

@@ -1,5 +1,5 @@
 import { Button, TextInput } from "@mantine/core";
-import { IconBell, IconScale } from "@tabler/icons-react";
+import { IconBell, IconMicrophone, IconScale } from "@tabler/icons-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -7,7 +7,9 @@ import {
   createProject,
   fetchChallenges,
   fetchFolder,
+  fetchInterviewed,
   fetchNotices,
+  retireAt,
   type SignedInMember,
 } from "../api/client";
 import { Placeholder, Refusal, RestrictedMark } from "../components/Bits";
@@ -40,13 +42,14 @@ export function Front({ member }: { member: SignedInMember }) {
         </p>
       )}
       <p className="standfirst">
-        Everything the coding agents of team {member.team} read, set out folder by folder. Open a memory to read it
+        Everything the coding agents of company {member.company} read, set out folder by folder. Open a memory to read it
         exactly as they do, and to see who changed it and when.
       </p>
 
       <div style={{ marginTop: 32 }}>
         <Waiting />
         <Told />
+        <FromYourInterview />
       </div>
 
       {!root ? (
@@ -79,9 +82,9 @@ export function Front({ member }: { member: SignedInMember }) {
                     <Link to={`/projects/${encodeURIComponent(project.project_id)}/settings`}>Settings</Link>
                   </p>
                 )}
-                {part.kind === "team" && (
-                  <p className="toc-part-note" data-testid="team-note">
-                    Holds for every project in the team.
+                {part.kind === "company" && (
+                  <p className="toc-part-note" data-testid="company-note">
+                    Holds for every project in the company.
                     {part.memories === 0 &&
                       " It arrives when a member’s coding agent promotes a memory in a session; the console never writes it."}
                   </p>
@@ -97,7 +100,7 @@ export function Front({ member }: { member: SignedInMember }) {
 
       <footer className="colophon">
         <p>
-          Kept by the Shared Memory server in a git repository. Memory the team has accepted is never deleted: it is
+          Kept by the Shared Memory server in a git repository. Memory the company has accepted is never deleted: it is
           superseded or retired, and every version stays in its history.
         </p>
         <p>Set in Cooper Hewitt, Charis SIL and Source Code Pro.</p>
@@ -230,6 +233,66 @@ function Told() {
             </li>
           );
         })}
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * The memories written from this member's interviews, which they author though another member's coding agent wrote
+ * them down (ADR-0029). They may retire any of them here, as any author may; a correction is a new memory in a session.
+ */
+function FromYourInterview() {
+  const { answer, reload } = useAsked((signal) => fetchInterviewed(signal), []);
+  const { refresh } = useContents();
+  const [refused, setRefused] = useState<string | null>(null);
+  if (!answer || answer.memories.length === 0) return null;
+
+  const retire = async (path: string) => {
+    try {
+      await retireAt(path);
+      setRefused(null);
+      refresh();
+      reload();
+    } catch (problem) {
+      setRefused((problem as Error).message);
+    }
+  };
+
+  return (
+    <section className="notice told appear" aria-labelledby="interview-heading" data-testid="from-your-interview">
+      <h2 className="notice-title" id="interview-heading">
+        <IconMicrophone size={17} stroke={1.6} aria-hidden />
+        Written from your interview
+      </h2>
+      <p className="notice-text">
+        You are the author of these, from answers you gave in an interview. Retire any that is wrong; to correct one,
+        save a new memory from a session.
+      </p>
+      {refused && <Refusal testid="interview-refused">{refused}</Refusal>}
+      <ol>
+        {answer.memories.map((memory) => (
+          <li key={memory.path} data-testid="interview-memory">
+            <span className="notice-text">
+              <Link className="notice-memory" to={memoryUrl(memory.path)} title={memory.path}>
+                {memory.title}
+              </Link>
+            </span>
+            <span className="notice-when">
+              Interviewed by <span data-testid="interviewer">{memory.interviewer_name}</span>,{" "}
+              {day(memory.interviewed_at)}
+              {" · "}
+              <button
+                type="button"
+                className="quiet-link danger"
+                onClick={() => retire(memory.path)}
+                data-testid="retire-interview-memory"
+              >
+                Retire it
+              </button>
+            </span>
+          </li>
+        ))}
       </ol>
     </section>
   );

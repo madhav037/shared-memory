@@ -1,14 +1,14 @@
 """Which license key the server is running under, and what it sets (spec #416).
 
-The key comes from the server-wide settings an admin installed on the Team page (or the platform installed with
+The key comes from the server-wide settings an admin installed on the Company page (or the platform installed with
 `install-license`), or else from `SHARED_MEMORY_LICENSE_KEY`.
 A key whose signature checks out sets the member cap, even once it has lapsed. On a self-hosted server nothing else
 depends on it: a missing, lapsed or invalid key only shows admins a banner, and memory, MCP tools and hooks never look at
 it. A hosted server (its settings say so: the platform signs its members in) whose key has lapsed is read-only: every
 change to memory is refused, and reading keeps working (ADR-0022). A server takes only a key of its own kind, so a
 hosted server can't escape read-only with a self-hosted server's key, nor a self-hosted server be made read-only by a
-hosted server's. A hosted server takes only a key naming its own team, by its subdomain (`SHARED_MEMORY_SUBDOMAIN`), so
-it can't escape read-only with another hosted team's key either (#485). No network call is made, ever (license.py only verifies).
+hosted server's. A hosted server takes only a key naming its own company, by its subdomain (`SHARED_MEMORY_SUBDOMAIN`), so
+it can't escape read-only with another hosted company's key either (#485). No network call is made, ever (license.py only verifies).
 """
 
 from __future__ import annotations
@@ -108,24 +108,24 @@ class Licenses:
             raise Refused(
                 f"This hosted server's license key lapsed on {current.license.expires.isoformat()}, so the server is "
                 "read-only: memory can still be read and searched, but nothing can be saved or changed. Paying for "
-                "your team's plan restores it, with all its memory."
+                "your company's plan restores it, with all its memory."
             )
 
     def install(self, admin: Member, text: str) -> Current:
         """Keep this key server-wide, as an owner or an admin, and record who did it."""
         if not (admin.is_owner or admin.is_admin):
-            raise Refused("Only the team's owner and its admins can install a license key.")
+            raise Refused("Only the company's owner and its admins can install a license key.")
         return self._keep(text, member=admin)
 
     def install_as_vendor(self, text: str) -> Current:
         """Keep this key server-wide on the vendor's behalf, as the platform does from the host to renew a hosted
         server's key (`install-license`, #470). The key is the whole server's, so its audit entry names the vendor and
-        belongs to no team: every team's admins see it."""
+        belongs to no company: every company's admins see it."""
         return self._keep(text, actor=VENDOR)
 
     def _keep(self, text: str, *, member: Member | None = None, actor: str | None = None) -> Current:
         """Check the key, then keep it in place of any earlier one. A key that can't be trusted, is for the other
-        kind of server, or on a hosted server names another team, changes nothing."""
+        kind of server, or on a hosted server names another company, changes nothing."""
         try:
             held = verify(text, self._public_keys)
         except InvalidLicense as invalid:
@@ -138,14 +138,14 @@ class Licenses:
         if self.settings.hosted and not held.hosted:
             raise Refused(
                 "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed "
-                "here. A hosted server runs under its own license key, which the platform installs when your team's "
+                "here. A hosted server runs under its own license key, which the platform installs when your company's "
                 "plan is paid."
             )
-        if self.settings.hosted and held.team != self.settings.subdomain:
+        if self.settings.hosted and held.company != self.settings.subdomain:
             raise Refused(
-                f"That license key is for another team's hosted server ({held.team}), and this is "
+                f"That license key is for another company's hosted server ({held.company}), and this is "
                 f"{self.settings.subdomain}'s, so it can't be installed here. A hosted server runs under its own license "
-                "key, which the platform installs when your team's plan is paid."
+                "key, which the platform installs when your company's plan is paid."
             )
         with self._db.transaction() as conn:
             conn.execute(
@@ -158,7 +158,7 @@ class Licenses:
             member=member,
             actor=actor,
             detail={
-                "team": held.team,
+                "company": held.company,
                 "member_cap": held.member_cap,
                 "expires": held.expires.isoformat(),
                 "key_id": held.key_id,

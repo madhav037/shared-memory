@@ -9,6 +9,7 @@ import {
   appointLead,
   assignKeeper,
   fetchMembers,
+  fetchOnboarding,
   fetchProject,
   grantAccess,
   removeFoundation,
@@ -19,6 +20,7 @@ import {
   restrictProject,
   revokeAccess,
   type MemberSummary,
+  type OnboardingEntry,
   type ProjectDetail,
   type SignedInMember,
 } from "../api/client";
@@ -27,7 +29,7 @@ import { AgentSelect, useChosenAgent } from "../components/AgentChoice";
 import { ConnectionFiles } from "../components/ConnectionFiles";
 import { MemberPicker } from "../components/MemberPicker";
 import { useContents } from "../lib/contents";
-import { healthUrl } from "../lib/format";
+import { day, healthUrl } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
 
 /** Who looks after a project, who can reach it, and the repositories that belong to it. */
@@ -36,8 +38,8 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
   const { answer: project, refused: notFound, setAnswer } = useAsked((signal) => fetchProject(projectId, signal), [projectId]);
   const [refused, setRefused] = useState<string | null>(null);
   const { refresh } = useContents();
-  const { answer: team } = useAsked((signal) => fetchMembers(signal), []);
-  const current = (team?.members ?? []).filter((one) => !one.removed);
+  const { answer: company } = useAsked((signal) => fetchMembers(signal), []);
+  const current = (company?.members ?? []).filter((one) => !one.removed);
   const [agent, setAgent] = useChosenAgent();
 
   const attempt = async (what: () => Promise<ProjectDetail>) => {
@@ -59,7 +61,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
     );
   if (!project) return <Placeholder lines={10} />;
 
-  const runsTheTeam = me.role === "owner" || me.role === "admin";
+  const runsTheCompany = me.role === "owner" || me.role === "admin";
   const home = `projects/${project.project_id}`;
 
   return (
@@ -71,7 +73,18 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         is <code data-testid="project-id">{project.project_id}</code>; every repository commits it to connect.
       </p>
       <div className="page-meta">
-        {project.restricted ? <span data-testid="restricted"><RestrictedMark /></span> : <span>Open to the whole team</span>}
+        {project.restricted ? <span data-testid="restricted"><RestrictedMark /></span> : <span>Open to the whole company</span>}
+        <span data-testid="project-department">
+          {project.department ? (
+            <>
+              In the department <Link to="/departments">{project.department.name}</Link>
+            </>
+          ) : (
+            <>
+              In no <Link to="/departments">department</Link>
+            </>
+          )}
+        </span>
         {project.you_lead && (
           <span data-testid="you-lead">
             You lead this project
@@ -82,7 +95,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
 
       {!project.you_may_change && (
         <p className="empty" style={{ marginTop: 20 }} data-testid="read-only">
-          Only this project’s leads and the team’s admins can change it. You can read everything here.
+          Only this project’s leads and the company’s admins can change it. You can read everything here.
         </p>
       )}
       {refused && (
@@ -102,7 +115,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           </h2>
           <p className="section-lede">
             Its project memory that no coding agent has used for a long time, and the memory sessions doubt. Only its
-            leads and the team’s admins see it.
+            leads and the company’s admins see it.
           </p>
           <Link to={healthUrl(project.project_id)} data-testid="to-health">
             See its project health
@@ -116,19 +129,27 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         </h2>
         <p className="section-lede" data-testid="reach">
           {project.restricted
-            ? "Restricted: only the members below, this project’s leads and the team’s admins can reach its memory — in the console and in every coding agent session."
-            : project.access.length > 0
-              ? `Every member of the team can reach its memory. Restricting it again lets the ${project.access.length === 1 ? "member" : `${project.access.length} members`} on its access list straight back in.`
-              : "Every member of the team can reach its memory, in the console and in every coding agent session."}
+            ? "Restricted: only the members below, this project’s leads and the company’s admins can reach its memory — in the console and in every coding agent session."
+            : project.department?.restricted
+              ? `Everyone who can reach the restricted department ${project.department.name} can reach its memory; nobody outside it can.`
+              : project.access.length > 0
+              ? `Every member of the company can reach its memory. Restricting it again lets the ${project.access.length === 1 ? "member" : `${project.access.length} members`} on its access list straight back in.`
+              : "Every member of the company can reach its memory, in the console and in every coding agent session."}
         </p>
-        {project.you_may_change && (
+        {project.restricted && project.department?.restricted && (
+          <p className="section-lede" data-testid="reach-department">
+            It is in the restricted department {project.department.name}, so it can’t be opened to the whole company
+            until that department is opened or the project is moved out of it.
+          </p>
+        )}
+        {project.you_may_change && !(project.restricted && project.department?.restricted) && (
           <Button
             variant="default"
             leftSection={project.restricted ? <IconLockOpen size={16} stroke={1.6} /> : <IconLock size={16} stroke={1.6} />}
             onClick={() => attempt(() => restrictProject(project.project_id, !project.restricted))}
             data-testid="restrict"
           >
-            {project.restricted ? "Open it to the whole team" : "Restrict it to its access list"}
+            {project.restricted ? "Open it to the whole company" : "Restrict it to its access list"}
           </Button>
         )}
         {project.restricted && (
@@ -187,7 +208,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
               <span>
                 {lead.name}
               </span>
-              {runsTheTeam && (
+              {runsTheCompany && (
                 <button
                   type="button"
                   className="quiet-link danger"
@@ -287,7 +308,7 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           Repositories
         </h2>
         <p className="section-lede">
-          Each repository commits a few small files that connect it to this project, one set per coding agent your team
+          Each repository commits a few small files that connect it to this project, one set per coding agent your company
           uses. They name the project, never a token: each member sets theirs once in <code>SHARED_MEMORY_TOKEN</code>.
         </p>
         {project.repositories.length > 0 && <AgentSelect agent={agent} onChange={setAgent} />}
@@ -329,7 +350,62 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
           />
         )}
       </section>
+
+      <Onboarding projectId={project.project_id} />
     </div>
+  );
+}
+
+const STATUS_WORDS: Record<string, string> = { not_started: "Not started", partly_done: "Partly done", done: "Done" };
+
+/** How far onboarding has got per repository and outside source. Sessions record it; this only reads it. */
+function Onboarding({ projectId }: { projectId: string }) {
+  const { answer: progress } = useAsked((signal) => fetchOnboarding(projectId, signal), [projectId]);
+  if (!progress) return null;
+  const what = (entry: OnboardingEntry) => entry.repository ?? `${entry.outside_source} (outside source)`;
+  return (
+    <section aria-labelledby="onboarding-heading">
+      <h2 className="section-heading" id="onboarding-heading">
+        Onboarding
+      </h2>
+      <p className="section-lede">
+        {progress.everyone
+          ? "How far onboarding has got for each repository and outside source, as members’ coding agents recorded it."
+          : "How far the onboarding runs you recorded have got. The project’s leads and the company’s admins see every run."}
+      </p>
+      {progress.entries.length === 0 ? (
+        <p className="empty" data-testid="onboarding-empty">
+          No onboarding recorded yet. Ask your coding agent to onboard to import what this project already has.
+        </p>
+      ) : (
+        <table className="register" data-testid="onboarding">
+          <thead>
+            <tr>
+              <th scope="col">Repository or source</th>
+              <th scope="col">Status</th>
+              <th scope="col">Recorded</th>
+              <th scope="col">Promoted</th>
+              <th scope="col">Waiting on a challenge</th>
+              <th scope="col">Left out</th>
+            </tr>
+          </thead>
+          <tbody>
+            {progress.entries.map((entry) => (
+              <tr key={what(entry)} data-testid={`onboarding-${entry.repository ?? entry.outside_source}`}>
+                <td>{what(entry)}</td>
+                <td>{STATUS_WORDS[entry.status] ?? entry.status}</td>
+                <td>
+                  {entry.recorded_by_name}, {day(entry.recorded_at)}
+                </td>
+                <td>{entry.promoted}</td>
+                <td>{entry.waiting_on_challenge}</td>
+                <td>{entry.left_out}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
@@ -351,7 +427,7 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
         }}
       >
         <TextInput
-          label="What the team calls it"
+          label="What the company calls it"
           value={asked}
           error={tried ? missing : undefined}
           data-testid="project-new-name"
@@ -370,7 +446,7 @@ function Named({ name, onRenamed }: { name: string; onRenamed: (name: string) =>
 }
 
 /** Choose a member and send their member ID; sent with nobody chosen, it says so beside the field. */
-function Choosing({
+export function Choosing({
   members,
   missing,
   action,
@@ -417,7 +493,7 @@ function Choosing({
   );
 }
 
-function Adding({
+export function Adding({
   label,
   placeholder,
   missing,

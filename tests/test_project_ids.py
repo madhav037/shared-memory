@@ -7,7 +7,7 @@ from itertools import chain, repeat
 import pytest
 
 from shared_memory import identity
-from tests.support import Team
+from tests.support import Company
 
 
 class Suffixes:
@@ -21,9 +21,9 @@ class Suffixes:
         return next(self._next) or next(self._fresh)
 
 
-def test_two_projects_whose_suffixes_clash_both_get_created(monkeypatch: pytest.MonkeyPatch, team: Team) -> None:
+def test_two_projects_whose_suffixes_clash_both_get_created(monkeypatch: pytest.MonkeyPatch, company: Company) -> None:
     monkeypatch.setattr(identity, "secrets", Suffixes(["c0ffee00", "c0ffee00"]))
-    owner = team.owner()
+    owner = company.owner()
 
     first = owner.call("create_project", name="Clashing name")["project_id"]
     second = owner.call("create_project", name="Clashing name")["project_id"]

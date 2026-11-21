@@ -8,9 +8,9 @@ content, and like the search index it is kept in step with every save and rebuil
 
 What other modules stand on, all of it on `TiedFiles`:
 
-- `tied_to(team, repository, paths, reach)`: the active memories within a `Reach` tied to any of a repository's files,
+- `tied_to(company, repository, paths, reach)`: the active memories within a `Reach` tied to any of a repository's files,
   as `Tie`s, one per memory. The one place a file is matched against tied files.
-- `on_change(team, writes, deletes)`: the store's listener, so a save, edit, promote, supersede, retire or delete
+- `on_change(company, writes, deletes)`: the store's listener, so a save, edit, promote, supersede, retire or delete
   moves the ties with it.
 - `rebuild(store)` for `reindex`, and `catch_up(store)` to fill the index the first time a server has it.
 
@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, check_name
 from shared_memory.index import Reach
@@ -36,7 +36,7 @@ from shared_memory.store import MemoryStore
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tied_files (
     team TEXT NOT NULL,
-    -- The memory's path in the team's folder.
+    -- The memory's path in the company's folder.
     path TEXT NOT NULL,
     repository TEXT NOT NULL,
     -- From the repository's root, with forward slashes; a file or a glob.
@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS tied_files (
 );
 
 CREATE INDEX IF NOT EXISTS tied_files_by_repository ON tied_files (team, repository);
+-- Set on department memory alone (ADR-0032), so a lookup keeps it to the departments in reach.
+ALTER TABLE tied_files ADD COLUMN IF NOT EXISTS department_id TEXT;
 """
 
 
@@ -90,7 +92,7 @@ class RepositoryFile:
 class Tie:
     """A memory tied to a file, and the tied file that ties it."""
 
-    # The memory's path in the team's folder.
+    # The memory's path in the company's folder.
     memory_path: str
     repository: str
     glob: str
@@ -165,32 +167,41 @@ class TiedFiles:
             self._new = False
 
     @staticmethod
-    def _update(conn: Conn, team: str, path: PurePosixPath, memory: Memory) -> None:
-        conn.execute("DELETE FROM tied_files WHERE team = %s AND path = %s", (team, str(path)))
+    def _update(conn: Conn, company: str, path: PurePosixPath, memory: Memory) -> None:
+        conn.execute("DELETE FROM tied_files WHERE team = %s AND path = %s", (company, str(path)))
         tied = _tied_files_of(memory)
         if not tied:
             return
         location = locate(str(path))
         conn.cursor().executemany(
-            "INSERT INTO tied_files (team, path, repository, glob, level, project_id, member_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO tied_files (team, path, repository, glob, level, project_id, member_id, department_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             [
-                (team, str(path), each.repository, each.glob, location.level, location.project_id, location.member_id)
+                (
+                    company,
+                    str(path),
+                    each.repository,
+                    each.glob,
+                    location.level,
+                    location.project_id,
+                    location.member_id,
+                    location.department_id,
+                )
                 for each in sorted(tied)
             ],
         )
 
     @contextmanager
     def on_change(
-        self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
+        self, company: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
     ) -> Iterator[None]:
         """Move the ties with a save, in one transaction committed once the save has landed."""
         with self._db.transaction() as conn:
             gone = [str(path) for path in deletes]
             if gone:
-                conn.execute("DELETE FROM tied_files WHERE team = %s AND path = ANY(%s)", (team, gone))
+                conn.execute("DELETE FROM tied_files WHERE team = %s AND path = ANY(%s)", (company, gone))
             for path, memory in writes.items():
-                self._update(conn, team, path, memory)
+                self._update(conn, company, path, memory)
             yield
 
     def rebuild(self, store: MemoryStore) -> int:
@@ -198,14 +209,14 @@ class TiedFiles:
         count = 0
         with self._db.transaction() as conn:
             conn.execute("DELETE FROM tied_files")
-            for team in store.teams():
-                for _, memories in store.walk(team, PurePosixPath()):
+            for company in store.companies():
+                for _, memories in store.walk(company, PurePosixPath()):
                     for path, memory in memories:
-                        self._update(conn, team, path, memory)
+                        self._update(conn, company, path, memory)
                         count += 1
         return count
 
-    def tied_to(self, team: str, repository: str, paths: Iterable[str], reach: Reach) -> list[Tie]:
+    def tied_to(self, company: str, repository: str, paths: Iterable[str], reach: Reach) -> list[Tie]:
         """The active memories within reach tied to any of a repository's files, each by its path from the
         repository's root, in one lookup and in path order: one `Tie` for each memory, naming the first of its tied
         files that ties one of them."""
@@ -215,9 +226,9 @@ class TiedFiles:
         within, params = reach.where()
         with self._db.transaction() as conn:
             rows = conn.execute(
-                f"SELECT path, glob FROM tied_files WHERE team = %(team)s AND repository = %(repository)s AND {within}"  # noqa: S608  # values are bound as parameters; only the reach's clause is spliced in
+                f"SELECT path, glob FROM tied_files WHERE team = %(company)s AND repository = %(repository)s AND {within}"  # noqa: S608  # values are bound as parameters; only the reach's clause is spliced in
                 " ORDER BY path, glob",
-                {**params, "team": team, "repository": repository},
+                {**params, "company": company, "repository": repository},
             ).fetchall()
         globs: dict[str, list[str]] = {}
         for row in rows:
@@ -228,3 +239,16 @@ class TiedFiles:
             if glob is not None:
                 found.append(Tie(memory, repository, glob))
         return found
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the ties of the memories under the folder `old` at the folder `new`, where they moved (`company_move.py`)."""
+    conn.execute(
+        "UPDATE tied_files SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )
+
+
+def rename_level(conn: Conn, old: str, new: str) -> None:
+    """Say the level `old` as `new` in the tied files: company memory's level was `team` before the
+    rename (`company_move.py`)."""
+    conn.execute("UPDATE tied_files SET level = %s WHERE level = %s", (new, old))

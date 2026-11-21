@@ -1,8 +1,9 @@
-"""An admin's export of all the team's data, as one zip archive (spec #409).
+"""An admin's export of all the company's data, as one zip archive (spec #409).
 
 It holds the memory folder's git repository with its full history as a git bundle, and JSON of the members, projects
-(with their repositories, leads and access), the cards of every board and the audit log. It only reads, so it is
-consistent with ADR-0009: the console governs memory and never writes it.
+(with their repositories, leads and access), the departments (with their leads and projects), the cards of every
+board and the audit log. It only reads, so it is consistent with ADR-0009: the console governs memory and never
+writes it.
 """
 
 from __future__ import annotations
@@ -20,8 +21,10 @@ from typing import Any
 from shared_memory.audit import Audit
 from shared_memory.board import Board
 from shared_memory.config import Settings
+from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity, Member
+from shared_memory.memory import DEPARTMENTS_FOLDER
 from shared_memory.store import memory_folder, ordinary
 
 #: The audit log is read a page at a time; this is the most the log allows.
@@ -32,19 +35,22 @@ def _json(value: object) -> str:
     return json.dumps(value, indent=2, default=str)
 
 
-class TeamExport:
+class CompanyExport:
     """Everything one admin may take away, built from the services that own each table."""
 
-    def __init__(self, settings: Settings, identity: Identity, board: Board, audit: Audit) -> None:
+    def __init__(
+        self, settings: Settings, identity: Identity, board: Board, audit: Audit, departments: Departments
+    ) -> None:
         self._settings = settings
+        self._departments = departments
         self._identity = identity
         self._board = board
         self._audit = audit
 
     def build(self, member: Member) -> bytes:
-        """The archive for this member's team, or a refusal when the member is not an admin."""
+        """The archive for this member's company, or a refusal when the member is not an admin."""
         if not (member.is_owner or member.is_admin):
-            raise Refused("Only the team's owner and its admins can download all of the team's data.")
+            raise Refused("Only the company's owner and its admins can download all of the company's data.")
         projects = [
             self._identity.project_detail(member, project.project_id) for project in self._identity.projects(member)
         ]
@@ -52,6 +58,7 @@ class TeamExport:
             "members.json": _json(self._identity.members(member)),
             "projects.json": _json(projects),
             "cards.json": _json({one["project_id"]: self._cards(member, one["project_id"]) for one in projects}),
+            "departments.json": _json(self._departments_of(member)),
             "audit-log.json": _json(self._audit_log(member)),
         }
         package = io.BytesIO()
@@ -62,6 +69,20 @@ class TeamExport:
             if bundle is not None:
                 zipped.writestr("memory.bundle", bundle)
         return package.getvalue()
+
+    def _departments_of(self, member: Member) -> list[dict[str, Any]]:
+        """Every department with its leads and projects, by ID. Department memory itself is in the memory bundle, under
+        departments/<department ID>/."""
+        return [
+            {
+                "department_id": view.department.department_id,
+                "name": view.department.name,
+                "leads": [lead.member_id for lead in view.leads],
+                "projects": [project.project_id for project in view.projects],
+                "memory_folder": f"{DEPARTMENTS_FOLDER}/{view.department.department_id}",
+            }
+            for view in self._departments.listed(member)
+        ]
 
     def _cards(self, member: Member, project_id: str) -> dict[str, Any]:
         caller = self._identity.caller_in(member, project_id)

@@ -1,4 +1,4 @@
-"""The servers the browser journeys run against: a real server, a fake GitHub, and a team to sign in to; and a hosted
+"""The servers the browser journeys run against: a real server, a fake GitHub, and a company to sign in to; and a hosted
 server beside it, which signs members in by a sign-in a fake platform hands over (#471), and whose license key has
 lapsed, so it is read-only (#472)."""
 
@@ -78,6 +78,53 @@ MIRAS_QUESTION = "May I take the invoice tests while you split the module?"
 WAITED_ON_ACTIVITY = "Moving the currency formatting into one shared helper"
 # How long the stand-in gives a standby to be held, or to end once Mira moves on.
 STANDBY_SECONDS = 15
+# The memory Olive's session promotes into department memory when the department memory journey asks (#631).
+DEPARTMENT_WAY = {
+    "title": "Every change ships behind a flag",
+    "summary": "Every change in this department ships behind a feature flag first.",
+    "type": "convention",
+    "body": "Ship every change behind a feature flag, turned on for staff first, then for everyone.",
+}
+# The memory Mira's session asks to promote into department memory, which she doesn't lead, so its lead decides (#632).
+MIRAS_DEPARTMENT_WAY = {
+    "title": "Releases go out on Tuesdays",
+    "summary": "Every project in this department releases on Tuesday mornings.",
+    "type": "convention",
+    "body": "Release on Tuesday mornings, so the whole week is left to watch what shipped.",
+}
+MIRAS_DEPARTMENT_REASONING = "Every team here releases on Tuesdays already; writing it down saves each new member asking."
+# For the level contradiction journey (#634): a company memory of Olive's, and a project memory of Mira's contradicting
+# it, one pair for each way a lead decides.
+LEVEL_PAIRS = {
+    "keep": (
+        {
+            "title": "Kiln firings start at dawn",
+            "summary": "Every pottery kiln is fired from dawn.",
+            "type": "convention",
+            "body": "Fire every pottery kiln from dawn, so it has cooled by the evening shift.",
+        },
+        {
+            "title": "The glaze kiln fires at night",
+            "summary": "The glaze kiln is fired overnight, not from dawn.",
+            "type": "convention",
+            "body": "Fire the glaze kiln overnight, not from dawn: glazes craze when the morning draught cools them.",
+        },
+    ),
+    "follow": (
+        {
+            "title": "Clay is wedged by hand",
+            "summary": "Every batch of clay is wedged by hand.",
+            "type": "convention",
+            "body": "Wedge every batch of pottery clay by hand before it goes on the wheel.",
+        },
+        {
+            "title": "Porcelain clay is wedged by machine",
+            "summary": "Porcelain clay goes through the pug mill, not hand wedging.",
+            "type": "convention",
+            "body": "Wedge porcelain pottery clay in the pug mill, not by hand: hands trap air in porcelain.",
+        },
+    ),
+}
 
 
 def olives_token(settings: Settings, seeded: str) -> str:
@@ -101,7 +148,13 @@ class Teammates:
     states it too, so Mira's is gated on Olive's work; on `POST /ask-olive` Mira's second session sends Olive a
     question; `GET /heard` says what Mira's second session hears on its next tool call. On `POST /stand-by` a third
     session of Olive's and a third of Mira's state the same work, so Mira's is gated on Olive's, and Mira's stands by in
-    the background, held until `POST /move-on`, where her next prompt ends it. Each is the session's own call
+    the background, held until `POST /move-on`, where her next prompt ends it. On `POST /department-memory?project_id=...` a
+    session of Olive's in that project promotes a memory into its department's memory, as a department lead's session
+    does, and answers its path; on `POST /department-challenge?project_id=...` Mira's session there asks to promote one,
+    which raises a challenge to the department's leads; on `POST /level-contradiction?project_id=...&way=keep|follow`
+    Olive's session promotes a company memory and Mira's there a project memory contradicting it, a level contradiction
+    for the project's leads. Each is the session's own call
+
     over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
     personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
@@ -153,6 +206,38 @@ class Teammates:
             standing.append(held)
             return JSONResponse({"standing_by": True})
 
+        def department_memory(request: Request) -> Response:
+            olives = olive().in_project(request.query_params["project_id"])
+            return JSONResponse({"path": promote_keeping_both(olives, DEPARTMENT_WAY, "department")})
+
+        def department_challenge(request: Request) -> Response:
+            miras = mira.in_project(request.query_params["project_id"])
+            personal = miras.call("remember", **MIRAS_DEPARTMENT_WAY)["path"]
+            asked = miras.call("promote", path=personal, level="department", reasoning=MIRAS_DEPARTMENT_REASONING)
+            if asked["status"] == "similar_memories":
+                asked = miras.call(
+                    "promote",
+                    path=personal,
+                    level="department",
+                    reference=asked["reference"],
+                    resolutions={one["path"]: "keep_both" for one in asked["similar"]},
+                    reasoning=MIRAS_DEPARTMENT_REASONING,
+                )
+            return JSONResponse({"status": asked["status"], "challenge_id": asked.get("challenge_id")})
+
+        def level_contradiction(request: Request) -> Response:
+            project = request.query_params["project_id"]
+            broader_memory, narrower_memory = LEVEL_PAIRS[request.query_params["way"]]
+            broader = promote_keeping_both(olive().in_project(project), broader_memory, "company")
+            miras = mira.in_project(project)
+            personal = miras.call("remember", **narrower_memory)["path"]
+            first = miras.call("promote", path=personal, level="project")
+            resolutions = {one["path"]: "supersede" if one["path"] == broader else "keep_both" for one in first["similar"]}
+            raised = miras.call(
+                "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions
+            )
+            return JSONResponse({"contradiction": raised.get("level_contradiction"), "path": raised.get("path")})
+
         def move_on(request: Request) -> Response:
             mira_waiting.prompt("Leave that for now and write the changelog entry.")
             ended = standing.pop().result(timeout=STANDBY_SECONDS).json()["ended"]
@@ -167,6 +252,9 @@ class Teammates:
                 Route("/heard", heard, methods=["GET"]),
                 Route("/stand-by", stand_by, methods=["POST"]),
                 Route("/move-on", move_on, methods=["POST"]),
+                Route("/department-memory", department_memory, methods=["POST"]),
+                Route("/department-challenge", department_challenge, methods=["POST"]),
+                Route("/level-contradiction", level_contradiction, methods=["POST"]),
             ]
         )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)
@@ -227,7 +315,7 @@ def seeded(
         )
         running.callback(server.stop)
         printed = server.run_cli(
-            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--company", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
         token = next(
@@ -348,6 +436,31 @@ def seeded(
                 resolutions={one["path"]: "keep_both" for one in imported["similar"]},
             )
         assert imported["status"] == "promoted", imported
+        # Onboarding progress for the journey that shows it in project settings: Olive's run of billing-api, and
+        # Dana's run of the tickets, the only one she sees as a member who leads nothing.
+        in_project.call("record_onboarding_progress", status="done", repository="billing-api", left_out=2)
+        dana.call("record_onboarding_progress", status="partly_done", outside_source="ticket", left_out=1)
+        # A memory written from Olive's interview of Mira, for the journey where Mira sees and retires it.
+        answer = in_project.call(
+            "remember",
+            title="Webhook payloads are signed",
+            summary="Every webhook from the payment provider carries a signature to check.",
+            type="gotcha",
+            body="Check the signature header on every provider webhook before trusting its payload.",
+        )
+        interviewed = in_project.call(
+            "promote", path=answer["path"], level="project", author="emp-mira",
+            imported_from="interview:Payments with Mira",
+        )  # fmt: skip
+        if interviewed["status"] == "similar_memories":
+            interviewed = in_project.call(
+                "promote",
+                path=answer["path"],
+                level="project",
+                reference=interviewed["reference"],
+                resolutions={one["path"]: "keep_both" for one in interviewed["similar"]},
+            )
+        assert interviewed["status"] == "promoted", interviewed
         # A challenge for the journey where a project lead decides: in a project Lena leads, against a memory of
         # Wes's, whom no journey signs in as. Olive raises it, so it isn't hers to decide as an admin, and the
         # journeys that check she has nothing waiting still find nothing.
@@ -407,7 +520,7 @@ def seeded(
         # A doubt for the in-doubt journeys, in a project of its own that only Tess leads: a memory of Wes's that
         # Olive's session says contradicts the code, and Raj's joins as a +1 quoting a line of its own. Olive raised it,
         # so it isn't hers to decide as an admin, and the journeys that check she or Raj has nothing waiting still find
-        # nothing; Wes signs in to no journey. No member is added for it: the team is at the unlicensed member cap.
+        # nothing; Wes signs in to no journey. No member is added for it: the company is at the unlicensed member cap.
         payments = tess.call("create_project", name="Payments", repository="payments-api")["project_id"]
         refunds = promote_now(
             wes.in_project(payments, "payments-api"),
@@ -547,7 +660,7 @@ def seeded(
             teammates_port,
         )
         running.callback(teammates.stop)
-        # The hosted server, for the journeys that sign in through the platform: the team acme, whose owner is
+        # The hosted server, for the journeys that sign in through the platform: the company acme, whose owner is
         # Olive's GitHub account. It saves and searches nothing, so it loads no model.
         hosted_memory = memory.parent / "hosted-memory"
         hosted_clock = TestClock()
@@ -573,7 +686,7 @@ def seeded(
         )
         running.callback(hosted.stop)
         hosted_printed = hosted.run_cli(
-            "setup", "--team", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "setup", "--company", "acme", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
             "--owner-github", "olive",
         )  # fmt: skip
         hosted_token = next(
@@ -582,10 +695,10 @@ def seeded(
         hosted_owner = Session(hosted, hosted_token)
         # Raj, a member who isn't an admin, for the journey that shows members the read-only notice.
         hosted_owner.call("add_member", member_id="emp-dana", name="Raj Raiser", github="dana")
-        # The team stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
+        # The company stopped paying: its key's last day was the day before the journeys' clock (1 September 2026), so the
         # hosted server is read-only, and stops on 14 September. The platform installs keys as the vendor (#470).
         hosted.app.state.licenses.install_as_vendor(
-            a_key(team="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
+            a_key(company="acme", member_cap=15, issued=date(2026, 8, 1), expires=date(2026, 8, 31), hosted=True)
         )
 
         yield Seeded(server, github, hosted, platform, project, teammates)
@@ -604,7 +717,9 @@ if __name__ == "__main__":
             teammates_port=TEAMMATES_PORT,
         ) as seed,
     ):
-        print(f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True)
+        print(
+            f"console server on {seed.server.url}, fake GitHub on {seed.github.url}, project {seed.project}", flush=True
+        )
         print(f"hosted server on {seed.hosted.url}, fake platform on {seed.platform.url}", flush=True)
         try:
             seed.server.join()

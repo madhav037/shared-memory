@@ -57,7 +57,7 @@ test("the timeline walks a memory back to how it first stood, and forward again"
   await expect(margin.getByTestId("acts-on-current")).toHaveCount(0);
 });
 
-test("the contents say how current the team's memory is", async ({ page }) => {
+test("the contents say how current the company's memory is", async ({ page }) => {
   await signInAs(page, 1, "olive");
 
   await expect(page.getByTestId("current-to")).toContainText("Current to");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { curled, folderName, isTopic, noticeMemory, readableNotice, waitingFor } from "./format";
+import { curled, folderName, isTopic, levelName, levelOf, noticeMemory, readableNotice, waitingFor } from "./format";
 
 const names = new Map([
   ["emp-raj", "Raj Raiser"],
@@ -68,12 +68,25 @@ describe("a notice as a person reads it", () => {
 
 describe("a folder's name as the console shows it", () => {
   it("knows a topic from the folders around it", () => {
-    expect(isTopic("team/conventions/invoicing")).toBe(true);
-    expect(isTopic("team/conventions")).toBe(false);
+    expect(isTopic("company/conventions/invoicing")).toBe(true);
+    expect(isTopic("company/conventions")).toBe(false);
     expect(isTopic("projects/billing-1/shared/conventions/invoicing")).toBe(true);
     expect(isTopic("projects/billing-1/shared/conventions")).toBe(false);
     expect(isTopic("projects/billing-1/people/E1001/gotchas")).toBe(false);
     expect(isTopic("projects/billing-1/people/E1001/gotchas/webhooks")).toBe(true);
+    expect(isTopic("departments/payments-1/conventions")).toBe(false);
+    expect(isTopic("departments/payments-1/conventions/reviews")).toBe(true);
+  });
+
+  it("reads department memory's level from its path under departments/ and names it department memory", () => {
+    expect(levelOf("departments/payments-1/conventions/two-reviewers.md")).toBe("department");
+    expect(levelName("department")).toBe("Department memory");
+  });
+
+  it("reads company memory's level from its path under company/ and names it company memory", () => {
+    expect(levelOf("company/conventions/use-pnpm.md")).toBe("company");
+    expect(levelName("company")).toBe("Company memory");
+    expect(levelOf("projects/billing-1/shared/conventions/use-pnpm.md")).toBe("project");
   });
 
   it("puts a topic in sentence case and leaves every other name as the server gives it", () => {

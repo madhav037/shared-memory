@@ -1,12 +1,12 @@
 """The license key through the console JSON API and the Session driver (spec #416): an admin installs a key and sees the
-team, cap and expiry; a member who isn't an admin can't; the cap follows the key; memory works the same without one.
+company, cap and expiry; a member who isn't an admin can't; the cap follows the key; memory works the same without one.
 The `install-license` command installs a key the same way, as the platform does on a hosted server's host (#470).
 A hosted server whose key has lapsed is read-only in the console too: it says the day it will stop, refuses inviting
 members, creating cards and every change to memory, and still lets admins export, remove members and revoke personal
 tokens (#472, ADR-0022). A server takes only a key of its own kind: a hosted server (the platform signs its members in)
 refuses a self-hosted server's key, so it can't escape read-only with one, and a self-hosted server refuses a hosted
-server's, so it never turns read-only. A hosted server takes only a key naming its own team by its subdomain, so it
-can't escape read-only with another hosted team's key either (#485)."""
+server's, so it never turns read-only. A hosted server takes only a key naming its own company by its subdomain, so it
+can't escape read-only with another hosted company's key either (#485)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from shared_memory import cli
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import LazyEmbedder
-from tests.license_keys import TEST_PUBLIC_KEYS, a_key
+from tests.license_keys import TEST_PUBLIC_KEYS, a_key, a_key_saying
 from tests.support import (
     REPO_ROOT,
     Console,
@@ -113,9 +113,9 @@ def no_key_installed(console: Console, hosted: HostedConsole) -> None:
 
 
 def hosted_owner(hosted: HostedConsole, github: str, account: int) -> tuple[ConsoleClient, Session]:
-    """A team on the hosted server whose owner is signed in to its console through the platform, and that owner's
+    """A company on the hosted server whose owner is signed in to its console through the platform, and that owner's
     Claude session."""
-    _, owner_token = hosted.a_team(github)
+    _, owner_token = hosted.a_company(github)
     client = ConsoleClient(hosted.server)
     hosted.platform.as_(account, github)
     client.sign_in()
@@ -140,19 +140,19 @@ def test_a_server_with_no_key_is_unlicensed_and_says_so(console: Console) -> Non
     found = license_of(client)
 
     assert found["status"] == "unlicensed"
-    assert found["team"] is None
+    assert found["company"] is None
     assert found["you_may_change"] is True
 
 
-def test_an_admin_installs_a_key_and_sees_the_team_cap_and_expiry(console: Console) -> None:
+def test_an_admin_installs_a_key_and_sees_the_company_cap_and_expiry(console: Console) -> None:
     client = console.client()
     signed_in_owner(console, client, "olive-lic-install", 802)
 
-    installed = install(client, a_key(team="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-42"))
+    installed = install(client, a_key(company="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-42"))
 
     assert installed.status_code == 200, installed.text
     found = license_of(client)
-    assert (found["status"], found["team"], found["member_cap"], found["expires"], found["key_id"]) == (
+    assert (found["status"], found["company"], found["member_cap"], found["expires"], found["key_id"]) == (
         "licensed",
         "Acme",
         10,
@@ -242,12 +242,12 @@ def test_a_key_in_the_environment_is_read_when_none_is_installed(console: Consol
     client = console.client()
     signed_in_owner(console, client, "olive-lic-env", 810)
     licenses = console.server.app.state.licenses
-    environment = dataclasses.replace(licenses.settings, license_key=a_key(team="From env", member_cap=7))
+    environment = dataclasses.replace(licenses.settings, license_key=a_key(company="From env", member_cap=7))
     licenses.settings = environment
 
     try:
         found = license_of(client)
-        assert (found["team"], found["member_cap"], found["source"]) == ("From env", 7, "environment")
+        assert (found["company"], found["member_cap"], found["source"]) == ("From env", 7, "environment")
     finally:
         licenses.settings = dataclasses.replace(environment, license_key="")
 
@@ -277,12 +277,12 @@ def test_the_session_driver_is_unaffected_by_the_key_state(console: Console) -> 
 
 def test_a_hosted_key_that_has_lapsed_shows_read_only_until_a_renewed_key_is_installed(hosted: HostedConsole) -> None:
     client, owner = hosted_owner(hosted, "olive-lic-read-only", 813)
-    install(client, a_key(team="acme", member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
+    install(client, a_key(company="acme", member_cap=1000, issued=date(2025, 1, 1), expires=date(2026, 1, 1), hosted=True))
 
     assert license_of(client)["status"] == "read-only"
     assert "read-only" in owner.refusal("create_project", name="Late")
 
-    renewed = install(client, a_key(team="acme", member_cap=1000, expires=date(2027, 1, 1), hosted=True))
+    renewed = install(client, a_key(company="acme", member_cap=1000, expires=date(2027, 1, 1), hosted=True))
 
     assert renewed.status_code == 200, renewed.text
     assert license_of(client)["status"] == "licensed"
@@ -311,14 +311,14 @@ def test_install_license_installs_a_key_server_wide_without_a_restart(console: C
     assert license_of(client)["status"] == "unlicensed"
 
     code, printed, _ = install_license(
-        console, a_key(team="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-cli")
+        console, a_key(company="Acme", member_cap=10, expires=date(2027, 9, 1), key_id="k-cli")
     )
     console.clock.advance(seconds=5)  # how long a running server keeps the key it read before reading it again
 
     assert code == 0, printed
     assert "Acme" in printed
     found = license_of(client)
-    assert (found["status"], found["team"], found["member_cap"], found["key_id"], found["source"]) == (
+    assert (found["status"], found["company"], found["member_cap"], found["key_id"], found["source"]) == (
         "licensed",
         "Acme",
         10,
@@ -337,7 +337,9 @@ def test_install_license_is_in_the_audit_log_as_installed_by_the_vendor(console:
     assert vendor_installs(client)[0] == ("vendor", "k-cli-audit")
 
 
-def test_install_license_refuses_an_invalid_key_with_the_team_pages_answer_and_changes_nothing(console: Console) -> None:
+def test_install_license_refuses_an_invalid_key_with_the_company_pages_answer_and_changes_nothing(
+    console: Console,
+) -> None:
     client = console.client()
     signed_in_owner(console, client, "olive-lic-cli-bad", 816)
     install(client, a_key(key_id="k-before"))
@@ -368,7 +370,7 @@ def test_install_license_reads_the_key_from_standard_input_so_it_is_never_an_arg
 ) -> None:
     client = console.client()
     signed_in_owner(console, client, f"olive-lic-cli-stdin-{len(arguments)}", 818 + len(arguments))
-    key = a_key(team="Acme", key_id=f"k-stdin-{len(arguments)}")
+    key = a_key(company="Acme", key_id=f"k-stdin-{len(arguments)}")
     out, err = io.StringIO(), io.StringIO()
 
     code = cli.run(
@@ -405,8 +407,8 @@ LAPSED_ON = date(2026, 8, 31)
 
 
 def lapsed_hosted_key() -> str:
-    # A hosted server's key names its team by the server's subdomain: the hosted fixture's is acme.
-    return a_key(team="acme", member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON, hosted=True)
+    # A hosted server's key names its company by the server's subdomain: the hosted fixture's is acme.
+    return a_key(company="acme", member_cap=1000, issued=date(2025, 9, 1), expires=LAPSED_ON, hosted=True)
 
 
 def lapsed_self_hosted_key() -> str:
@@ -471,7 +473,9 @@ def test_a_read_only_server_refuses_every_console_change_to_memory_before_doing_
         read_only_refusal(client.post_json(path, body))
 
 
-def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_while_read_only(hosted: HostedConsole) -> None:
+def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_while_read_only(
+    hosted: HostedConsole,
+) -> None:
     client, _ = hosted_owner(hosted, "olive-ro-still", 824)
     add(client, "emp-2", "Dana Dev", "dana-ro-still")
     add(client, "emp-3", "Eve Eng", "eve-ro-still")
@@ -498,7 +502,9 @@ def test_a_stranger_is_told_to_sign_in_not_that_the_server_is_read_only(hosted: 
     owner, _ = hosted_owner(hosted, "olive-ro-stranger", 825)
     install(owner, lapsed_hosted_key())
 
-    refused = ConsoleClient(hosted.server).post_json("/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None})
+    refused = ConsoleClient(hosted.server).post_json(
+        "/api/members", {"member_id": "emp-2", "name": "Dana Dev", "github": None}
+    )
 
     assert refused.status_code == 401
     assert "read-only" not in refused.json()["message"]
@@ -527,7 +533,7 @@ def test_a_read_only_hosted_server_refuses_a_self_hosted_servers_key_and_stays_r
     assert refused.status_code == 403
     assert refused.json()["message"] == (
         "That license key is for a self-hosted server, and this is a hosted server, so it can't be installed here. "
-        "A hosted server runs under its own license key, which the platform installs when your team's plan is paid."
+        "A hosted server runs under its own license key, which the platform installs when your company's plan is paid."
     )
     found = license_of(client)
     assert (found["status"], found["expires"]) == ("read-only", LAPSED_ON.isoformat())
@@ -536,17 +542,19 @@ def test_a_read_only_hosted_server_refuses_a_self_hosted_servers_key_and_stays_r
     assert [k for k in vendor_installs(client) if k[1] == "k-self-hosted"] == []
 
 
-def test_a_read_only_hosted_server_refuses_another_teams_hosted_key_and_stays_read_only(hosted: HostedConsole) -> None:
-    client, owner = hosted_owner(hosted, "olive-team-escape", 835)
+def test_a_read_only_hosted_server_refuses_another_companys_hosted_key_and_stays_read_only(
+    hosted: HostedConsole,
+) -> None:
+    client, owner = hosted_owner(hosted, "olive-company-escape", 835)
     install(client, lapsed_hosted_key())
 
-    another_team = a_key(team="globex", member_cap=1000, expires=date(2027, 9, 1), key_id="k-globex", hosted=True)
-    refused = install(client, another_team)
+    another_company = a_key(company="globex", member_cap=1000, expires=date(2027, 9, 1), key_id="k-globex", hosted=True)
+    refused = install(client, another_company)
 
     assert refused.status_code == 403
     assert refused.json()["message"] == (
-        "That license key is for another team's hosted server (globex), and this is acme's, so it can't be installed "
-        "here. A hosted server runs under its own license key, which the platform installs when your team's plan is "
+        "That license key is for another company's hosted server (globex), and this is acme's, so it can't be installed "
+        "here. A hosted server runs under its own license key, which the platform installs when your company's plan is "
         "paid."
     )
     found = license_of(client)
@@ -585,7 +593,7 @@ def test_a_self_hosted_server_under_a_lapsed_hosted_key_in_its_environment_is_ne
         licenses.settings = dataclasses.replace(environment, license_key="")
 
 
-def test_install_license_refuses_a_key_of_the_other_kind_or_another_team_on_standard_error(
+def test_install_license_refuses_a_key_of_the_other_kind_or_another_company_on_standard_error(
     console: Console, hosted: HostedConsole
 ) -> None:
     owner_client = console.client()
@@ -595,7 +603,7 @@ def test_install_license_refuses_a_key_of_the_other_kind_or_another_team_on_stan
     for server, client, key in (
         (console, owner_client, a_key(key_id="k-hosted-on-self", hosted=True)),
         (hosted, hosted_client, a_key(key_id="k-self-on-hosted")),
-        (hosted, hosted_client, a_key(team="globex", key_id="k-other-team-on-hosted", hosted=True)),
+        (hosted, hosted_client, a_key(company="globex", key_id="k-other-company-on-hosted", hosted=True)),
     ):
         code, printed, complained = install_license(server, key)
         server.clock.advance(seconds=5)
@@ -604,3 +612,35 @@ def test_install_license_refuses_a_key_of_the_other_kind_or_another_team_on_stan
         assert printed == ""
         assert complained.strip() == install(client, key).json()["message"]
         assert license_of(client)["status"] == "unlicensed"
+
+
+def test_a_key_issued_before_the_rename_still_validates_and_names_the_company(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-before-rename", 835)
+    issued_before = {
+        "team": "Acme",
+        "member_cap": 10,
+        "issued": "2026-09-01",
+        "expires": "2027-09-01",
+        "key_id": "k-old",
+    }
+
+    installed = install(client, a_key_saying(issued_before))
+
+    assert installed.status_code == 200, installed.text
+    found = license_of(client)
+    assert (found["status"], found["company"], found["key_id"]) == ("licensed", "Acme", "k-old")
+    assert "team" not in found
+
+
+def test_a_key_naming_its_company_validates(console: Console) -> None:
+    client = console.client()
+    signed_in_owner(console, client, "olive-lic-company", 836)
+    naming = {"company": "Acme", "member_cap": 10, "issued": "2026-09-01", "expires": "2027-09-01", "key_id": "k-new"}
+
+    installed = install(client, a_key_saying(naming))
+
+    assert installed.status_code == 200, installed.text
+    found = license_of(client)
+    assert (found["status"], found["company"], found["key_id"]) == ("licensed", "Acme", "k-new")
+    assert "team" not in found

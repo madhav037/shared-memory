@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.support import NPM, PNPM, Session, Team, added_context, promote_now, promote_superseding
+from tests.support import NPM, PNPM, Session, Company, added_context, promote_now, promote_superseding
 
 
 RETRIES = {
@@ -13,13 +13,13 @@ RETRIES = {
 }
 
 
-def test_an_author_retires_their_memory_at_once_in_one_commit(team: Team, owner: Session) -> None:
+def test_an_author_retires_their_memory_at_once_in_one_commit(company: Company, owner: Session) -> None:
     path = promote_now(owner, RETRIES)
 
     result = owner.call("retire", path=path)
 
     subject = subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), "log", "-1", "--format=%s"],
+        ["git", "-C", str(company.server.settings.memory_root), "log", "-1", "--format=%s"],
         capture_output=True,
         text=True,
         check=True,

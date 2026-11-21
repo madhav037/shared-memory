@@ -7,7 +7,7 @@ import { fetchFolder, fetchMembers, fetchProjects, type Folder, type ProjectSumm
 export type ContentsState = {
   folders: Map<string, Folder>;
   projects: Map<string, ProjectSummary>;
-  /** A member's name by their member ID, and the ID itself for anyone not in the team. */
+  /** A member's name by their member ID, and the ID itself for anyone not in the company. */
   nameOf: (memberId: string) => string;
   expanded: Set<string>;
   load: (path: string) => void;
@@ -49,7 +49,7 @@ export function ContentsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => loadProjects(), [loadProjects]);
   useEffect(() => {
     fetchMembers()
-      .then((team) => setNames(new Map(team.members.map((one) => [one.member_id, one.name]))))
+      .then((company) => setNames(new Map(company.members.map((one) => [one.member_id, one.name]))))
       .catch(() => undefined);
   }, []);
   const nameOf = useCallback((memberId: string) => names.get(memberId) ?? memberId, [names]);

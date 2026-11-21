@@ -6,7 +6,7 @@ test("an admin creates a project, appoints a lead, and that lead sees it as thei
   await signInAs(page, 1, "olive");
 
   // The member who will lead the new project.
-  await page.getByTestId("to-team").click();
+  await page.getByTestId("to-company").click();
   await page.getByTestId("new-member-id").fill("emp-lead");
   await page.getByTestId("new-name").fill("Lee Lead");
   await page.getByTestId("new-github").fill("lee-lead");
@@ -44,4 +44,29 @@ test("an admin creates a project, appoints a lead, and that lead sees it as thei
   const rows = page.getByTestId("audit-table").locator("tbody tr");
   await expect(rows.first()).toContainText("Repository added");
   await expect(page.getByTestId("audit-table")).not.toContainText("Signed in");
+});
+
+test("an empty project's memory page offers onboarding with the line to paste into a coding agent", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("to-contents").click();
+  await page.getByTestId("new-project-name").fill("Tundra");
+  await page.getByTestId("create-project").click();
+  await expect(page.getByTestId("project-name")).toHaveText("Tundra");
+
+  await page.getByTestId("to-memory").click();
+
+  const offer = page.getByTestId("onboarding-offer");
+  await expect(offer).toContainText("you approve every one before it is saved");
+  await expect(offer).toContainText("nothing in your repository changes without your yes");
+  await expect(offer.getByTestId("onboarding-line")).toHaveText("Onboard this repository into Shared Memory.");
+});
+
+test("a project with project memory offers no onboarding on its memory page", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("project-card").filter({ hasText: "Billing" }).getByRole("link", { name: "Settings" }).click();
+
+  await page.getByTestId("to-memory").click();
+
+  await expect(page.getByTestId("folder")).toBeVisible();
+  await expect(page.getByTestId("onboarding-offer")).toHaveCount(0);
 });

@@ -12,7 +12,7 @@ from tests.support import (
     Console,
     ConsoleClient,
     Session,
-    Team,
+    Company,
     add,
     added_context,
     create,
@@ -73,18 +73,18 @@ def test_a_doubt_that_contradicts_the_code_without_a_repository_file_and_line_is
     assert dana.call("read", path=path)["open_challenges"] == []
 
 
-def test_a_member_raises_a_doubt_against_their_own_memory_and_against_project_and_team_memory(
+def test_a_member_raises_a_doubt_against_their_own_memory_and_against_project_and_company_memory(
     owner: Session, dana: Session
 ) -> None:
     own = dana.call("remember", **WEBHOOKS)["path"]
     project = promote_keeping_both(owner, TAX)
-    team = promote_keeping_both(owner, WEBHOOKS, level="team")
+    company = promote_keeping_both(owner, WEBHOOKS, level="company")
 
-    raised = [doubt(dana, path) for path in (own, project, team)]
+    raised = [doubt(dana, path) for path in (own, project, company)]
 
     assert [one["joined"] for one in raised] == [False, False, False]
     assert len({one["challenge_id"] for one in raised}) == 3
-    for path in (own, project, team):
+    for path in (own, project, company):
         assert [c["kind"] for c in dana.call("read", path=path)["open_challenges"]] == ["doubt"]
 
 
@@ -108,10 +108,10 @@ def test_raising_a_doubt_in_a_restricted_project_the_member_isnt_in_is_refused_w
 
 
 def test_the_same_memory_with_the_same_reason_joins_the_open_doubt_as_a_plus_one_from_each_other_member(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
-    frank = member(team, dana.project or "", "emp-5", "Frank Fixer")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
+    frank = member(company, dana.project or "", "emp-5", "Frank Fixer")
     path = promote_keeping_both(owner, TAX)
     first = doubt(dana, path, "contradicts_code", **TAX_LINE)
 
@@ -124,9 +124,9 @@ def test_the_same_memory_with_the_same_reason_joins_the_open_doubt_as_a_plus_one
 
 
 def test_a_member_raising_the_same_doubt_again_from_another_session_adds_evidence_but_not_to_the_count(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(owner, TAX)
     first = doubt(dana, path, reasoning="My invoices came out wrong.")
     doubt(cole, path)
@@ -142,9 +142,9 @@ def test_a_member_raising_the_same_doubt_again_from_another_session_adds_evidenc
 
 
 def test_two_sessions_raising_the_same_doubt_at_once_give_one_challenge_with_two_pieces_of_evidence(
-    team: Team, owner: Session, dana: Session, elsewhere: Callable[[Session], Session]
+    company: Company, owner: Session, dana: Session, elsewhere: Callable[[Session], Session]
 ) -> None:
-    cole = elsewhere(member(team, dana.project or "", "emp-3", "Cole Coder"))
+    cole = elsewhere(member(company, dana.project or "", "emp-3", "Cole Coder"))
     path = promote_keeping_both(owner, TAX)
 
     at_once = [
@@ -172,9 +172,9 @@ def test_a_different_reason_on_the_same_memory_opens_a_separate_doubt(owner: Ses
 
 
 def test_the_authors_next_briefing_names_the_doubted_memory_the_reason_and_the_evidence(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
-    cole = member(team, dana.project or "", "emp-3", "Cole Coder")
+    cole = member(company, dana.project or "", "emp-3", "Cole Coder")
     path = promote_keeping_both(dana, TAX)
     contradicts = doubt(owner, path, "contradicts_code", **TAX_LINE, reasoning="The code charges twenty percent.")
     doubt(cole, path, "contradicts_code", **TAX_LINE)

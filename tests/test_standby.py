@@ -29,7 +29,7 @@ from shared_memory.app import build_app
 from shared_memory.config import STAND_BY_TOOL_CAP_SECONDS, Settings
 from shared_memory.connection import connection_kit
 from shared_memory.standby import STAND_BY_SECONDS
-from tests.support import REPO_ROOT, RunningServer, Session, Team, TestClock, added_context, fresh_database
+from tests.support import REPO_ROOT, RunningServer, Session, Company, TestClock, added_context, fresh_database
 from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
 from tests.test_connection_kit import (
     POWERSHELLS,
@@ -194,15 +194,15 @@ def test_a_standby_ends_with_the_reply_when_the_earlier_member_replies(owner: Se
 
 
 def test_a_standby_ends_with_the_gate_lifting_at_the_projects_wait(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     collide(owner, dana)
-    team.server.clock.advance(minutes=2)
+    company.server.clock.advance(minutes=2)
     held = standing_by(dana)
-    team.server.clock.advance(minutes=2, seconds=59)
+    company.server.clock.advance(minutes=2, seconds=59)
     assert still_held(held), "the wait has a second to run"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     news = news_in(held)
     assert "[gate]" in news and "Olive Owner" in news and "wait" in news
@@ -220,15 +220,15 @@ def test_a_standby_ends_with_the_gate_lifting_when_the_earlier_session_ends(owne
 
 
 def test_a_standby_ends_with_the_gate_lifting_when_the_earlier_session_goes_idle(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     owner.call("project_wait", minutes=60)
     collide(owner, dana)
-    team.server.clock.advance(minutes=27)
+    company.server.clock.advance(minutes=27)
     assert GATED in reason_in(dana.edit(FILE)), "Dana's session stays active"
     held = standing_by(dana)
 
-    team.server.clock.advance(minutes=4)
+    company.server.clock.advance(minutes=4)
 
     news = news_in(held)
     assert "[gate]" in news and "Olive Owner" in news and "ended or went idle" in news
@@ -359,13 +359,13 @@ def test_standby_hook_news_without_a_warning_answers_member_null_and_the_news_as
 
 
 def test_standby_hook_nothing_yet_answers_member_with_the_hourglass_warning_and_the_time_left(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     owner.call("project_wait", minutes=12)
     owner.start()
     held = standing_by(owner)
 
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
 
     answer = answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -377,12 +377,12 @@ def test_standby_hook_nothing_yet_answers_member_with_the_hourglass_warning_and_
     assert "7 minutes" in answer["message"]
 
 
-def test_standby_hook_nothing_yet_after_the_projects_wait_says_the_wait_has_passed(team: Team, owner: Session) -> None:
+def test_standby_hook_nothing_yet_after_the_projects_wait_says_the_wait_has_passed(company: Company, owner: Session) -> None:
     owner.call("project_wait", minutes=2)
     owner.start()
     held = standing_by(owner)
 
-    team.server.clock.advance(minutes=2)
+    company.server.clock.advance(minutes=2)
 
     answer = answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -393,12 +393,12 @@ def test_standby_hook_nothing_yet_after_the_projects_wait_says_the_wait_has_pass
 
 
 def test_stand_by_tool_nothing_yet_answers_member_with_the_hourglass_warning_and_the_time_left(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     owner.start()
     held = standing_by_the_tool(owner, seconds=20)
 
-    team.server.clock.advance(seconds=20)
+    company.server.clock.advance(seconds=20)
 
     answer = tool_answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -443,15 +443,15 @@ def test_news_handed_over_by_a_standby_is_not_told_again_by_the_next_hook(owner:
 
 
 def test_a_standby_answers_nothing_yet_at_its_cap_with_the_time_left_of_the_projects_wait(
-    team: Team, owner: Session
+    company: Company, owner: Session
 ) -> None:
     owner.call("project_wait", minutes=12)
     owner.start()
     held = standing_by(owner)
-    team.server.clock.advance(minutes=4, seconds=59)
+    company.server.clock.advance(minutes=4, seconds=59)
     assert still_held(held), "a second short of its cap"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     answer = answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -460,12 +460,12 @@ def test_a_standby_answers_nothing_yet_at_its_cap_with_the_time_left_of_the_proj
     assert "nothing yet" in answer["message"].lower() and "7 minutes" in answer["message"]
 
 
-def test_a_standby_is_held_no_longer_than_the_projects_wait(team: Team, owner: Session) -> None:
+def test_a_standby_is_held_no_longer_than_the_projects_wait(company: Company, owner: Session) -> None:
     owner.call("project_wait", minutes=2)
     owner.start()
     held = standing_by(owner)
 
-    team.server.clock.advance(minutes=2)
+    company.server.clock.advance(minutes=2)
 
     answer = answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -581,13 +581,13 @@ def test_stand_by_ends_with_an_answer_given_meanwhile(owner: Session, dana: Sess
     assert "[gate] Olive Owner (owner-1) agreed" in answer["message"].removeprefix(f"{SHOW_FIRST}\n\n{member}")
 
 
-def test_stand_by_answers_nothing_yet_after_its_seconds(team: Team, owner: Session) -> None:
+def test_stand_by_answers_nothing_yet_after_its_seconds(company: Company, owner: Session) -> None:
     owner.start()
     held = standing_by_the_tool(owner, seconds=20)
-    team.server.clock.advance(seconds=19)
+    company.server.clock.advance(seconds=19)
     assert still_held(held), "a second short of its seconds"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     answer = tool_answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -596,26 +596,26 @@ def test_stand_by_answers_nothing_yet_after_its_seconds(team: Team, owner: Sessi
     assert "nothing yet" in answer["message"].lower() and "5 minutes" in answer["message"]
 
 
-def test_stand_by_seconds_above_the_servers_cap_are_held_only_to_the_cap(team: Team, owner: Session) -> None:
+def test_stand_by_seconds_above_the_servers_cap_are_held_only_to_the_cap(company: Company, owner: Session) -> None:
     owner.start()
     held = standing_by_the_tool(owner, seconds=600)
-    team.server.clock.advance(seconds=TOOL_CAP_SECONDS - 1)
+    company.server.clock.advance(seconds=TOOL_CAP_SECONDS - 1)
     assert still_held(held), "a second short of the cap"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     answer = tool_answer_of(held)
     assert answer["ended"] == "nothing_yet"
     assert answer["wait_left_seconds"] == 5 * 60 - TOOL_CAP_SECONDS
 
 
-def test_stand_by_is_held_45_seconds_by_default(team: Team, owner: Session) -> None:
+def test_stand_by_is_held_45_seconds_by_default(company: Company, owner: Session) -> None:
     owner.start()
     held = standing_by_the_tool(owner)
-    team.server.clock.advance(seconds=44)
+    company.server.clock.advance(seconds=44)
     assert still_held(held), "a second short of 45"
 
-    team.server.clock.advance(seconds=1)
+    company.server.clock.advance(seconds=1)
 
     answer = tool_answer_of(held)
     assert answer["ended"] == "nothing_yet"
@@ -676,10 +676,13 @@ def test_stand_by_says_to_call_it_again_until_the_projects_wait_has_passed(dana:
     said = described["stand_by"]
     assert "again" in said and "wait" in said and "once more" in said
 
+
 # Claude Code's background command (#526)
 
 
-@pytest.mark.skipif(shutil.which("curl") is None, reason="Claude Code's standby command runs curl, which isn't installed")
+@pytest.mark.skipif(
+    shutil.which("curl") is None, reason="Claude Code's standby command runs curl, which isn't installed"
+)
 def test_claude_codes_standby_command_run_in_a_posix_shell_hears_the_sessions_news(
     owner: Session, dana: Session, tmp_path: Path
 ) -> None:
@@ -687,7 +690,11 @@ def test_claude_codes_standby_command_run_in_a_posix_shell_hears_the_sessions_ne
     agent's command, like every command of Claude Code's agent, runs after the environment file is read."""
     assert dana.token is not None and dana.project is not None and dana.repository is not None
     # What `.claude/settings.json` gives every command in the repository.
-    repository = {**without_plugin_settings(), "SHARED_MEMORY_PROJECT": dana.project, "SHARED_MEMORY_REPOSITORY": dana.repository}
+    repository = {
+        **without_plugin_settings(),
+        "SHARED_MEMORY_PROJECT": dana.project,
+        "SHARED_MEMORY_REPOSITORY": dana.repository,
+    }
     env_file = tmp_path / "claude-env"
     started = subprocess.run(
         ["sh", "-c", claude_code_session_start_hook()],
@@ -781,14 +788,14 @@ def test_the_background_standby_command_run_in_a_posix_shell_hears_the_sessions_
 
 
 def test_a_session_with_no_hooks_that_stands_by_in_the_background_is_still_one_no_hook_reaches(
-    team: Team, owner: Session, dana: Session
+    company: Company, owner: Session, dana: Session
 ) -> None:
     """Copilot in VS Code stands by with the background command, but has no hook before an edit to refuse a gated
     one: a standby is not such a hook, so the session is still told its gate waits, in its tools' notices (#518)."""
     copilot = dana.as_agent("Visual Studio Code").as_session("copilot-session")
     copilot.call("set_activity", activity="Looking around", session=copilot.identifier)
     held = standing_by(copilot)
-    team.server.clock.advance(minutes=5)
+    company.server.clock.advance(minutes=5)
     assert answer_of(held)["ended"] == "nothing_yet"
     state(owner, WEBHOOKS)
 

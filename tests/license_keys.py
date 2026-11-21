@@ -5,12 +5,14 @@ The browser journeys sign with the same first seed (console/e2e/license.ts)."""
 
 from __future__ import annotations
 
+import base64
+import json
 from datetime import date
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from shared_memory.license import License, sign
+from shared_memory.license import PREFIX, License, sign
 
 TEST_SEED = bytes(range(32))
 OTHER_SEED = bytes(range(32, 64))
@@ -28,7 +30,7 @@ TEST_PUBLIC_KEYS = {1: public_of(TEST_PRIVATE), 2: public_of(OTHER_PRIVATE)}
 
 
 def a_key(
-    team: str = "Acme",
+    company: str = "Acme",
     member_cap: int = 5,
     issued: date = date(2026, 9, 1),
     expires: date = date(2027, 9, 1),
@@ -37,4 +39,14 @@ def a_key(
     hosted: bool = False,
 ) -> str:
     private = OTHER_PRIVATE if version == 2 else TEST_PRIVATE
-    return sign(private, version, License(team, member_cap, issued, expires, key_id, hosted))
+    return sign(private, version, License(company, member_cap, issued, expires, key_id, hosted))
+
+
+def a_key_saying(payload: dict[str, object], version: int = 1) -> str:
+    """A key signed over exactly this payload: one issued before the rename (ADR-0031) naming its company `team`, or
+    one naming it `company`."""
+    private = OTHER_PRIVATE if version == 2 else TEST_PRIVATE
+    encoded = base64.urlsafe_b64encode(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode())
+    signed = f"{PREFIX}{version}.{encoded.rstrip(b'=').decode('ascii')}"
+    signature = base64.urlsafe_b64encode(private.sign(signed.encode())).rstrip(b"=").decode("ascii")
+    return f"{signed}.{signature}"

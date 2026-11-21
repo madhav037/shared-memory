@@ -17,7 +17,7 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.embeddings import CachedQueries, FastEmbedEmbedder
 from shared_memory.store import MemoryStore
-from tests.support import RunningServer, Session, ToolRefused, new_team
+from tests.support import RunningServer, Session, ToolRefused, new_company
 
 
 class CountingEmbedder(FastEmbedEmbedder):
@@ -39,9 +39,9 @@ def counted(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -> 
     with start_blocking_portal() as portal:
         running = RunningServer(build_app(settings, clock=server.clock, embedder=embedder), settings, server.clock, portal)
         try:
-            team = new_team(running)
-            project = team.owner().call("create_project", name="Billing")["project_id"]
-            yield team.owner().in_project(project), embedder
+            company = new_company(running)
+            project = company.owner().call("create_project", name="Billing")["project_id"]
+            yield company.owner().in_project(project), embedder
         finally:
             running.stop()
 
@@ -116,8 +116,8 @@ def impatient(server: RunningServer, tmp_path_factory: pytest.TempPathFactory) -
 
 
 def test_a_stalled_database_fails_the_request_instead_of_freezing_it(impatient: RunningServer) -> None:
-    team = new_team(impatient)
-    owner = team.owner()
+    company = new_company(impatient)
+    owner = company.owner()
     stall = psycopg.connect(impatient.settings.database_url)
     stall.execute("LOCK TABLE tokens IN ACCESS EXCLUSIVE MODE")
     release = threading.Timer(8, stall.rollback)
@@ -139,8 +139,8 @@ def test_a_save_waiting_for_its_turn_longer_than_the_statement_timeout_still_lan
     impatient: RunningServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A turn is a lock in Postgres (ADR-0013), and waiting for it is not a stalled database."""
-    team = new_team(impatient)
-    owner = team.owner().in_project(team.owner().call("create_project", name="Billing")["project_id"])
+    company = new_company(impatient)
+    owner = company.owner().in_project(company.owner().call("create_project", name="Billing")["project_id"])
     owner.call("remember", title="Warm-up", summary="The folder exists.", type="gotcha", body="b")
     commit = MemoryStore._commit
 

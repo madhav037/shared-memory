@@ -1,6 +1,7 @@
 import { Button, CopyButton, Menu, NumberInput, Switch, TextInput, UnstyledButton } from "@mantine/core";
 import { IconCheck, IconCopy, IconDots, IconUserPlus } from "@tabler/icons-react";
 import { useState } from "react";
+import { Link } from "react-router";
 
 import {
   addMember,
@@ -31,8 +32,8 @@ type Editing =
   | { kind: "remove" | "ownership"; memberId: string }
   | null;
 
-/** Who is in the team, what each of them may do, and everything an admin does about that. */
-export function Team({ me }: { me: SignedInMember }) {
+/** Who is in the company, what each of them may do, and everything an admin does about that. */
+export function Company({ me }: { me: SignedInMember }) {
   const { answer, refused: notListed, setAnswer } = useAsked((signal) => fetchMembers(signal), []);
   const [refused, setRefused] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedToken | null>(null);
@@ -67,18 +68,22 @@ export function Team({ me }: { me: SignedInMember }) {
 
   return (
     <div className="column">
-      <h1 className="page-title wide">Team {me.team}</h1>
+      <h1 className="page-title wide">Company {me.company}</h1>
       <p className="standfirst">
-        {owner ? `${owner.name} owns the team` : "The team has an owner"}
+        {owner ? `${owner.name} owns the company` : "The company has an owner"}
         {admins.length > 0 ? `, with ${admins.map((one) => one.name).join(", ")} as admin${admins.length > 1 ? "s" : ""}` : ""}.{" "}
         {runs
           ? "Admins add and remove members and issue their tokens; only the owner decides who is an admin."
-          : "Ask them to add someone, change access or issue a token."}
+          : "Ask them to add someone, change access or issue a token."}{" "}
+        <Link to="/departments" data-testid="to-departments">
+          Departments
+        </Link>{" "}
+        group the company’s projects.
       </p>
 
       {refused && (
         <div style={{ marginTop: 20 }}>
-          <Refusal testid="team-refused">{refused}</Refusal>
+          <Refusal testid="company-refused">{refused}</Refusal>
         </div>
       )}
       {issued && (
@@ -165,7 +170,7 @@ export function Team({ me }: { me: SignedInMember }) {
             Downloading it is recorded in the audit log.
           </p>
           <Button component="a" href="/api/export" download data-testid="download-export">
-            Download all team data
+            Download all company data
           </Button>
         </section>
       )}
@@ -176,21 +181,21 @@ export function Team({ me }: { me: SignedInMember }) {
 /** Sent on the window when a license key is installed, so the banner above every page can ask again. */
 export const LICENSE_CHANGED = "shared-memory:license-changed";
 
-/** The words for where a license stands, shared by the Team page and the banner. */
+/** The words for where a license stands, shared by the Company page and the banner. */
 export function licenseSentence(license: LicenseState): string {
   switch (license.status) {
     case "licensed":
-      return `Licensed to ${license.team} until ${license.expires}.`;
+      return `Licensed to ${license.company} until ${license.expires}.`;
     case "expiring":
-      return `The license for ${license.team} expires on ${license.expires}, in ${license.days_left} days. Install a renewed key to keep the member cap.`;
+      return `The license for ${license.company} expires on ${license.expires}, in ${license.days_left} days. Install a renewed key to keep the member cap.`;
     case "lapsed":
-      return `The license for ${license.team} lapsed on ${license.expires}. Memory keeps working; install a renewed key to add members beyond the cap.`;
+      return `The license for ${license.company} lapsed on ${license.expires}. Memory keeps working; install a renewed key to add members beyond the cap.`;
     case "read-only":
-      return `This hosted server is read-only: the license for ${license.team} lapsed on ${license.expires}, so memory can be read and exported but not changed. The server stops on ${license.stops}; paying for your team’s plan restores it, with all its memory.`;
+      return `This hosted server is read-only: the license for ${license.company} lapsed on ${license.expires}, so memory can be read and exported but not changed. The server stops on ${license.stops}; paying for your team’s plan restores it, with all its memory.`;
     case "invalid":
       return `The license key can’t be used: ${license.reason}`;
     default:
-      return "This server has no license key. It works fully for evaluation; install a key to license it for your team.";
+      return "This server has no license key. It works fully for evaluation; install a key to license it for your company.";
   }
 }
 
@@ -231,10 +236,10 @@ function LicenseSection({
       <p className="standfirst" data-testid="license-status">
         {licenseSentence(answer)}
       </p>
-      {answer.team && (
+      {answer.company && (
         <dl style={{ margin: "14px 0" }}>
-          <dt>Team</dt>
-          <dd data-testid="license-team">{answer.team}</dd>
+          <dt>Company</dt>
+          <dd data-testid="license-company">{answer.company}</dd>
           <dt>Member cap</dt>
           <dd data-testid="license-cap">{answer.member_cap}</dd>
           <dt>Expires</dt>
@@ -460,7 +465,7 @@ function MemberRow({
                     onClick={() => setEditing({ kind: "remove", memberId: id })}
                     data-testid={`remove-${id}`}
                   >
-                    Remove from the team…
+                    Remove from the company…
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>

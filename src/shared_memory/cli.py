@@ -31,27 +31,29 @@ def run(
 ) -> int:
     parser = argparse.ArgumentParser(prog="shared-memory")
     commands = parser.add_subparsers(dest="command", required=True)
+    # `--team` is what `--company` was called before ADR-0031. The rename's contract step (#629) keeps it: the vendor's
+    # platform still runs setup, link-github and count-members with `--team` on servers released before `--company`.
 
-    setup = commands.add_parser("setup", help="Create the team and its owner, and print the owner's personal token.")
-    setup.add_argument("--team", required=True, help="Team ID")
+    setup = commands.add_parser("setup", help="Create the company and its owner, and print the owner's personal token.")
+    setup.add_argument("--company", "--team", required=True, help="Company ID")
     setup.add_argument("--owner-member-id", required=True)
     setup.add_argument("--owner-name", required=True)
     setup.add_argument("--owner-github", help="The owner's GitHub username, so they can sign in to the console.")
 
     link = commands.add_parser("link-github", help="Link a GitHub account to a member, so they can sign in to the console.")
-    link.add_argument("--team", required=True, help="Team ID")
+    link.add_argument("--company", "--team", required=True, help="Company ID")
     link.add_argument("--member-id", required=True)
     link.add_argument("--github", required=True, help="Their GitHub username")
 
     counts = (
-        "Print how many members a team has, as a number alone on one line: those the member cap counts, so not removed "
-        "members. The platform runs it before moving a hosted team to a smaller plan."
+        "Print how many members a company has, as a number alone on one line: those the member cap counts, so not removed "
+        "members. The platform runs it before moving a hosted company to a smaller plan."
     )
     counting = commands.add_parser("count-members", help=counts, description=counts)
-    counting.add_argument("--team", required=True, help="Team ID")
+    counting.add_argument("--company", "--team", required=True, help="Company ID")
 
     installs = (
-        "Install a license key server-wide, as an admin does on the Team page, recorded in the audit log as installed "
+        "Install a license key server-wide, as an admin does on the Company page, recorded in the audit log as installed "
         "by the vendor. The platform runs it to renew a hosted server's license key. A running server uses the new key "
         "within five seconds, with no restart."
     )
@@ -80,15 +82,15 @@ def run(
     if args.command == "setup":
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
-            token = Identity(db, system_clock).setup_team(
-                args.team, args.owner_member_id, args.owner_name, args.owner_github
+            token = Identity(db, system_clock).setup_company(
+                args.company, args.owner_member_id, args.owner_name, args.owner_github
             )
         except Refused as refused:
             print(refused, file=out)
             return 1
         finally:
             db.close()
-        print(f"Team: {args.team}", file=out)
+        print(f"Company: {args.company}", file=out)
         print(f"Owner personal token: {token}", file=out)
         print("Keep this token secret: it is shown only once.", file=out)
         return 0
@@ -96,7 +98,7 @@ def run(
     if args.command == "count-members":
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
-            members = Identity(db, system_clock).members_in_team(args.team)
+            members = Identity(db, system_clock).members_in_company(args.company)
         except Refused as refused:
             print(refused, file=err)
             return 1
@@ -129,7 +131,7 @@ def run(
             db.close()
         assert held is not None  # a key that verified when it was installed verifies when read back
         print(
-            f"Installed the license key for {held.team}: up to {held.member_cap} members, until "
+            f"Installed the license key for {held.company}: up to {held.member_cap} members, until "
             f"{held.expires.isoformat()} (key {held.key_id}).",
             file=out,
         )
@@ -155,13 +157,13 @@ def run(
     if args.command == "link-github":
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
-            Identity(db, system_clock).link_github(args.team, args.member_id, args.github)
+            Identity(db, system_clock).link_github(args.company, args.member_id, args.github)
         except Refused as refused:
             print(refused, file=out)
             return 1
         finally:
             db.close()
-        print(f"{args.member_id} in team {args.team} signs in to the console as @{args.github.lstrip('@')}.", file=out)
+        print(f"{args.member_id} in company {args.company} signs in to the console as @{args.github.lstrip('@')}.", file=out)
         return 0
 
     if args.command == "openapi":

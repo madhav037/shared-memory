@@ -12,7 +12,7 @@ import dataclasses
 import uuid
 from collections.abc import Callable
 
-from tests.support import RunningServer, Session, Team
+from tests.support import RunningServer, Session, Company
 from tests.test_failed_saves import uncommitted, word
 from tests.test_turns_per_area import SLOW_TURN, all_at_once, note, slow_turns
 
@@ -54,7 +54,7 @@ def test_saves_into_different_areas_on_different_workers_overlap(
 
 
 def test_a_memory_saved_on_one_worker_reads_fresh_on_the_other(
-    team: Team, owner: Session, second_server: RunningServer
+    company: Company, owner: Session, second_server: RunningServer
 ) -> None:
     other = on(second_server, owner)
     first, second = word(), word()  # words only this memory holds, so a search for one finds it
@@ -69,7 +69,7 @@ def test_a_memory_saved_on_one_worker_reads_fresh_on_the_other(
 
     owner.call("edit_memory", path=path, summary="Edited on the first.", body=f"Says {first} again.")
     assert reads(other, path, first) == ("Edited on the first.", f"Says {first} again.")
-    assert uncommitted(team) == []
+    assert uncommitted(company) == []
 
 
 def reads(session: Session, path: str, word: str) -> tuple[str, str]:

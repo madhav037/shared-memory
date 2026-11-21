@@ -371,16 +371,16 @@ class Sessions:
         return [BACK_FROM_END if told["back_from_end"] else BACK_FROM_IDLE]
 
     def end_unreachable(self, conn: Conn, caller: Caller) -> Callable[[], None]:
-        """End every session whose member can no longer reach its project: removed from the team, or shut out of a
+        """End every session whose member can no longer reach its project: removed from the company, or shut out of a
         restricted project. Identity calls this inside the transaction of any change that may have cost a member a
         project (`Identity.on_access_lost`), so the change and the sessions' end happen together or not at all."""
-        team_pk = caller.member.team_pk
-        # Only the not-ended sessions of this team's projects, which the not-ended index finds by project.
+        company_pk = caller.member.company_pk
+        # Only the not-ended sessions of this company's projects, which the not-ended index finds by project.
         open_pairs = conn.execute(
             "SELECT DISTINCT member_id, project_id FROM sessions WHERE ended_at IS NULL AND project_id = ANY(%s)",
-            (self._identity.team_projects(conn, team_pk),),
+            (self._identity.company_projects(conn, company_pk),),
         ).fetchall()
-        lost = self._identity.cannot_reach(conn, team_pk, [(row["member_id"], row["project_id"]) for row in open_pairs])
+        lost = self._identity.cannot_reach(conn, company_pk, [(row["member_id"], row["project_id"]) for row in open_pairs])
         if not lost:
             return lambda: None
         rows = conn.execute(

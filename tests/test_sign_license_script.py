@@ -28,7 +28,7 @@ def test_a_signed_key_is_accepted_by_the_servers_check(tmp_path: Path) -> None:
 
     assert done.returncode == 0, done.stderr
     found = verify(done.stdout.strip(), TEST_PUBLIC_KEYS)
-    assert (found.team, found.member_cap, found.expires, found.key_id) == ("Acme", 10, date(2027, 11, 6), "acme-1")
+    assert (found.company, found.member_cap, found.expires, found.key_id) == ("Acme", 10, date(2027, 11, 6), "acme-1")
 
 
 def test_the_script_signs_a_hosted_servers_key(tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ def test_generate_writes_a_private_key_once_and_prints_only_the_public_half(tmp_
     assert public_of(TEST_PRIVATE).hex() not in first.stdout
 
 
-def test_signing_without_a_team_or_cap_is_refused(tmp_path: Path) -> None:
+def test_signing_without_a_company_or_cap_is_refused(tmp_path: Path) -> None:
     private = tmp_path / "test-only.key"
     private.write_text(TEST_SEED.hex())
 

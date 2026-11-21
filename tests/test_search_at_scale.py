@@ -1,5 +1,5 @@
 """Vector search stays fast as memory grows: section embeddings carry an approximate-nearest-neighbour index, and a
-search or promote check read through it still finds a team's own memories under a crowd of other teams' sections.
+search or promote check read through it still finds a company's own memories under a crowd of other companies' sections.
 
 At the sizes a test builds, Postgres would rather read every section than the index, so this server's database is set
 to prefer the index, the way it does once memory has grown.
@@ -17,7 +17,7 @@ from pgvector.psycopg import register_vector
 from shared_memory.app import build_app
 from shared_memory.config import Settings
 from shared_memory.embeddings import FastEmbedEmbedder
-from tests.support import NPM, PNPM, REPO_ROOT, RunningServer, Session, TestClock, fresh_database, member, new_team
+from tests.support import NPM, PNPM, REPO_ROOT, RunningServer, Session, TestClock, fresh_database, member, new_company
 
 CROWD = 1000
 
@@ -45,13 +45,13 @@ def grown(tmp_path_factory: pytest.TempPathFactory, embedder: FastEmbedEmbedder)
 
 
 def crowd(server: RunningServer, far: list[float], near: list[float]) -> None:
-    """Fill other teams with active team memories whose sections lie between two embeddings, each nearer the second
+    """Fill other companies with active company memories whose sections lie between two embeddings, each nearer the second
     than the first is."""
     with psycopg.connect(server.settings.database_url, autocommit=True) as conn:
         conn.execute(
             "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type, author,"
             " status, content_hash, embedding, tokens)"
-            " SELECT 'crowd-' || md5(random()::text), 'team/conventions/crowd-' || g || '.md', 0, 0, 'team', NULL,"
+            " SELECT 'crowd-' || md5(random()::text), 'company/conventions/crowd-' || g || '.md', 0, 0, 'company', NULL,"
             " NULL, 'convention', 'someone', 'active', md5(g::text),"
             " (SELECT array_agg((1 - t) * f + t * n + (random() - 0.5) * 0.1 ORDER BY i)"
             " FROM unnest(%(far)s::float8[], %(near)s::float8[]) WITH ORDINALITY AS u(f, n, i))::vector, ''::tsvector"
@@ -80,12 +80,12 @@ def test_the_section_embeddings_carry_an_approximate_nearest_neighbour_index(gro
     assert any("USING hnsw (embedding vector_cosine_ops)" in definition for definition in definitions), definitions
 
 
-def test_search_finds_a_teams_memory_under_a_crowd_of_nearer_sections(
+def test_search_finds_a_companys_memory_under_a_crowd_of_nearer_sections(
     grown: RunningServer, embedder: FastEmbedEmbedder
 ) -> None:
-    team = new_team(grown)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner = team.owner().in_project(project, "billing-api")
+    company = new_company(grown)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner = company.owner().in_project(project, "billing-api")
     path = owner.call(
         "remember",
         title="Charge retries",
@@ -102,10 +102,10 @@ def test_search_finds_a_teams_memory_under_a_crowd_of_nearer_sections(
 
 
 def test_promote_finds_a_similar_memory_under_a_crowd_of_nearer_sections(grown: RunningServer) -> None:
-    team = new_team(grown)
-    project = team.owner().call("create_project", name="Billing")["project_id"]
-    owner: Session = team.owner().in_project(project, "billing-api")
-    dana = member(team, project, "emp-2", "Dana Dev")
+    company = new_company(grown)
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    owner: Session = company.owner().in_project(project, "billing-api")
+    dana = member(company, project, "emp-2", "Dana Dev")
     existing = dana.call("promote", path=dana.call("remember", **NPM)["path"], level="project")["path"]
     personal = owner.call("remember", **PNPM)["path"]
     crowd(grown, section_embedding(grown, existing), section_embedding(grown, personal))

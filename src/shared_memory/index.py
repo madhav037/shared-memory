@@ -11,7 +11,7 @@ import hashlib
 import re
 import threading
 from collections import OrderedDict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -19,7 +19,7 @@ from typing import Any
 
 from pgvector import Vector
 
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, CachedQueries, QuerySource
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
@@ -55,13 +55,17 @@ CREATE TABLE IF NOT EXISTS sections (
     PRIMARY KEY (team, path, section_no, chunk_no)
 );
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
+-- Set on department memory alone (ADR-0032), so a search keeps it to the departments of the projects it reaches.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id TEXT;
+-- The broader memory an exception overrides (#634), so sessions where the exception holds are not told that one.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS exception_to TEXT;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 CREATE INDEX IF NOT EXISTS sections_content_hash ON sections (team, content_hash);
 """
 # Nearest sections by meaning come from an approximate-nearest-neighbour index rather than a comparison with every one.
 _EMBEDDING_INDEX = "CREATE INDEX IF NOT EXISTS sections_embedding ON sections USING hnsw (embedding vector_cosine_ops)"
-# The index hands out the nearest sections and a query's filters (team, status, level, project) drop the ones it can't
-# see. Scanning on until enough have passed keeps a team's memories findable among every other team's. The scan may
+# The index hands out the nearest sections and a query's filters (company, status, level, project) drop the ones it can't
+# see. Scanning on until enough have passed keeps a company's memories findable among every other company's. The scan may
 # hand them out a little out of order (a stricter order skips sections it reaches late), so a query sorts them again.
 _NEAREST = "SET LOCAL hnsw.iterative_scan = relaxed_order; SET LOCAL hnsw.ef_search = {ef}"
 
@@ -83,15 +87,18 @@ class Hit:
 
 @dataclass(frozen=True)
 class Reach:
-    """The memory a search for similar memories may name: team memory if `team_memory`; the project memory of
-    `projects`, or of every project but `unreachable` when `projects` is None; and the personal memory of `member_id`
-    in `personal_in`, never any other member's."""
+    """The memory a search for similar memories may name: company memory if `company_memory`; the department memory of
+    `departments`, or of every department but `unreachable_departments` when `departments` is None; the project memory
+    of `projects`, or of every project but `unreachable` when `projects` is None; and the personal memory of
+    `member_id` in `personal_in`, never any other member's."""
 
-    team_memory: bool = False
+    company_memory: bool = False
     projects: tuple[str, ...] | None = ()
     unreachable: frozenset[str] = frozenset()
     member_id: str | None = None
     personal_in: str | None = None
+    departments: tuple[str, ...] | None = ()
+    unreachable_departments: frozenset[str] = frozenset()
 
     @classmethod
     def project_memory_of(cls, project_id: str) -> Reach:
@@ -99,16 +106,38 @@ class Reach:
         return cls(projects=(project_id,))
 
     @classmethod
-    def of_member(cls, member_id: str, project_id: str, unreachable: frozenset[str]) -> Reach:
+    def of_member(
+        cls,
+        member_id: str,
+        project_id: str,
+        unreachable: frozenset[str],
+        unreachable_departments: frozenset[str] = frozenset(),
+    ) -> Reach:
         """What a member's save is compared with: their own personal memory in the project they work in, plus the
-        team memory and the project memory of every project they can reach."""
-        return cls(team_memory=True, projects=None, unreachable=unreachable, member_id=member_id, personal_in=project_id)
+        company memory, and the department memory and project memory of every department and project they can reach."""
+        return cls(
+            company_memory=True,
+            projects=None,
+            unreachable=unreachable,
+            member_id=member_id,
+            personal_in=project_id,
+            departments=None,
+            unreachable_departments=unreachable_departments,
+        )
 
     @classmethod
-    def of_recall(cls, member_id: str, project_id: str) -> Reach:
-        """What recall searches for a member's session: team memory, the project memory of the project the session
-        works in, and the member's own personal memory there."""
-        return cls(team_memory=True, projects=(project_id,), member_id=member_id, personal_in=project_id)
+    def of_recall(cls, member_id: str, project_id: str, department_id: str | None = None) -> Reach:
+        """What recall searches for a member's session: company memory, the department memory of the project's
+        department if it has one, the project memory of the project the session works in, and the member's own
+        personal memory there."""
+        departments = () if department_id is None else (department_id,)
+        return cls(
+            company_memory=True,
+            projects=(project_id,),
+            member_id=member_id,
+            personal_in=project_id,
+            departments=departments,
+        )
 
     def where(self) -> tuple[str, dict[str, object]]:
         """This reach as a condition on `sections`, with the parameters it binds."""
@@ -116,14 +145,20 @@ class Reach:
             projects = "NOT (project_id = ANY(%(reach_unreachable)s))"
         else:
             projects = "project_id = ANY(%(reach_projects)s)"
+        if self.departments is None:
+            departments = "(level = 'department' AND NOT (department_id = ANY(%(reach_unreachable_departments)s)))"
+        else:
+            departments = "(level = 'department' AND department_id = ANY(%(reach_departments)s))"
         condition = (
-            f"((level = 'team' AND %(reach_team)s) OR (level = 'project' AND {projects})"
+            f"((level = 'company' AND %(reach_company)s) OR {departments} OR (level = 'project' AND {projects})"
             " OR (level = 'personal' AND member_id = %(reach_member)s AND project_id = %(reach_personal_in)s))"
         )
         return condition, {
-            "reach_team": self.team_memory,
+            "reach_company": self.company_memory,
+            "reach_departments": list(self.departments or ()),
             "reach_projects": list(self.projects or ()),
             "reach_unreachable": sorted(self.unreachable),
+            "reach_unreachable_departments": sorted(self.unreachable_departments),
             "reach_member": self.member_id,
             "reach_personal_in": self.personal_in,
         }
@@ -144,6 +179,31 @@ def split_sections(memory: Memory) -> list[tuple[str, str]]:
     return [sections[0], *(section for section in sections[1:] if section[1])]
 
 
+def _lacks_exception_to(conn: Conn) -> bool:
+    """Whether the sections table is there but was built before it named the memory an exception overrides."""
+    columns = {
+        row["column_name"]
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema()"
+            " AND table_name = 'sections'"
+        )
+    }
+    return bool(columns) and "exception_to" not in columns
+
+
+def overridden(db: Database, company: str, project_id: str, department_id: str | None) -> set[str]:
+    """The broader memories an active exception overrides where a project's sessions work: an exception in its own
+    project memory, or in its department's memory. Sessions there are told the exception instead."""
+    with db.transaction() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT exception_to FROM sections WHERE team = %s AND status = 'active'"
+            " AND exception_to IS NOT NULL AND ((level = 'project' AND project_id = %s)"
+            " OR (level = 'department' AND department_id = %s))",
+            (company, project_id, department_id),
+        ).fetchall()
+    return {str(row["exception_to"]) for row in rows}
+
+
 class SearchIndex:
     def __init__(self, db: Database, embedder: CachedQueries) -> None:
         self._db = db
@@ -151,8 +211,11 @@ class SearchIndex:
         self._prepared: OrderedDict[str, list[float]] = OrderedDict()
         self._prepared_lock = threading.Lock()
         self._unchunked = False
+        self._unexcepted = False
         if db.sets_up:
             with db.transaction() as conn:
+                # Built before sections named the memory an exception overrides: catch_up fills it in.
+                self._unexcepted = _lacks_exception_to(conn)
                 conn.execute(SCHEMA)
                 # Indexing a database that already holds many sections takes longer than any request is allowed.
                 conn.execute("SET LOCAL statement_timeout = 0")
@@ -179,9 +242,9 @@ class SearchIndex:
 
         Sections short enough to have been read whole keep their embeddings; only long ones are embedded again.
         """
-        if self._unchunked:
+        if self._unchunked or self._unexcepted:
             self._update_all(store)
-            self._unchunked = False
+            self._unchunked = self._unexcepted = False
 
     def _chunks(self, title: str, heading: str, text: str) -> list[str]:
         """The texts embedded for one section: the whole of it, or overlapping chunks the model reads whole."""
@@ -207,9 +270,9 @@ class SearchIndex:
                 start -= 1
                 overlap += counts[start]
 
-    def update(self, team: str, path: PurePosixPath, memory: Memory) -> None:
+    def update(self, company: str, path: PurePosixPath, memory: Memory) -> None:
         with self._db.transaction() as conn:
-            self._update(conn, team, path, memory)
+            self._update(conn, company, path, memory)
 
     def _plan(self, memory: Memory) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
         """The texts embedded for a memory and the content hash of each, by (section, chunk)."""
@@ -221,22 +284,22 @@ class SearchIndex:
         return texts, {key: hashlib.sha256(text.encode()).hexdigest() for key, text in texts.items()}
 
     @staticmethod
-    def _stored_vectors(conn: Conn, team: str, hashes: Iterable[str]) -> dict[str, list[float]]:
-        """The vectors sections in this team already hold for text with these content hashes."""
+    def _stored_vectors(conn: Conn, company: str, hashes: Iterable[str]) -> dict[str, list[float]]:
+        """The vectors sections in this company already hold for text with these content hashes."""
         wanted = list(set(hashes))
         if not wanted:
             return {}
         rows = conn.execute(
             "SELECT DISTINCT ON (content_hash) content_hash, embedding FROM sections"
             " WHERE team = %s AND content_hash = ANY(%s)",
-            (team, wanted),
+            (company, wanted),
         )
         return {row["content_hash"]: row["embedding"].to_list() for row in rows}
 
-    def prepare(self, team: str, memory: Memory) -> None:
+    def prepare(self, company: str, memory: Memory) -> None:
         """Embed a memory's text ahead of the save that will index it, so the save's turn runs no model.
 
-        Text the team's index already holds vectors for is left alone. What is computed waits, bounded, for the save.
+        Text the company's index already holds vectors for is left alone. What is computed waits, bounded, for the save.
         """
         texts, hashes = self._plan(memory)
         with self._prepared_lock:
@@ -244,7 +307,7 @@ class SearchIndex:
         if not wanted:
             return
         with self._db.transaction() as conn:
-            wanted = {d: t for d, t in wanted.items() if d not in self._stored_vectors(conn, team, wanted)}
+            wanted = {d: t for d, t in wanted.items() if d not in self._stored_vectors(conn, company, wanted)}
         if not wanted:
             return
         vectors = self._embedder.passages(list(wanted.values()))
@@ -258,19 +321,28 @@ class SearchIndex:
     def _update(
         self,
         conn: Conn,
-        team: str,
+        company: str,
         path: PurePosixPath,
         memory: Memory,
         known: dict[str, list[float]] | None = None,
     ) -> None:
         location = locate(str(path))
         texts, hashes = self._plan(memory)
-        details = (location.level, location.project_id, location.member_id, memory.type, memory.author, memory.status)
+        details = (
+            location.level,
+            location.project_id,
+            location.member_id,
+            location.department_id,
+            memory.type,
+            memory.author,
+            memory.status,
+            memory.exception_to,
+        )
         existing = {
             (row["section_no"], row["chunk_no"]): row["content_hash"]
             for row in conn.execute(
                 "SELECT section_no, chunk_no, content_hash FROM sections WHERE team = %s AND path = %s",
-                (team, str(path)),
+                (company, str(path)),
             )
         }
         changed = [key for key, digest in hashes.items() if existing.get(key) != digest]
@@ -283,7 +355,7 @@ class SearchIndex:
                     found[digest] = self._prepared[digest]
                     self._prepared.move_to_end(digest)
         if known is None:
-            known = self._stored_vectors(conn, team, [d for d in by_hash if d not in found])
+            known = self._stored_vectors(conn, company, [d for d in by_hash if d not in found])
         found.update({d: v for d, v in known.items() if d in by_hash and d not in found})
         missing = [d for d in by_hash if d not in found]
         if missing:
@@ -293,21 +365,23 @@ class SearchIndex:
         for section_no, chunk_no in existing.keys() - texts.keys():
             conn.execute(
                 "DELETE FROM sections WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
-                (team, str(path), section_no, chunk_no),
+                (company, str(path), section_no, chunk_no),
             )
         for (section_no, chunk_no), text in texts.items():
             if (section_no, chunk_no) in vectors:
                 conn.execute(
-                    "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type,"
-                    " author, status, content_hash, embedding, tokens)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                    "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id,"
+                    " department_id, type, author, status, exception_to, content_hash, embedding, tokens)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                     " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
                     " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
-                    " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id, type = EXCLUDED.type,"
-                    " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
+                    " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id,"
+                    " department_id = EXCLUDED.department_id, type = EXCLUDED.type,"
+                    " author = EXCLUDED.author, status = EXCLUDED.status, exception_to = EXCLUDED.exception_to,"
+                    " content_hash = EXCLUDED.content_hash,"
                     " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
                     (
-                        team,
+                        company,
                         str(path),
                         section_no,
                         chunk_no,
@@ -320,25 +394,25 @@ class SearchIndex:
                 )
             else:
                 conn.execute(
-                    "UPDATE sections SET level = %s, project_id = %s, member_id = %s, type = %s, author = %s,"
-                    " status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
-                    (*details, team, str(path), section_no, chunk_no),
+                    "UPDATE sections SET level = %s, project_id = %s, member_id = %s, department_id = %s, type = %s,"
+                    " author = %s, status = %s, exception_to = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                    (*details, company, str(path), section_no, chunk_no),
                 )
 
     @contextmanager
     def on_change(
-        self, team: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
+        self, company: str, writes: dict[PurePosixPath, Memory], deletes: Iterable[PurePosixPath]
     ) -> Iterator[None]:
         """Index a save in one transaction, which commits only once the save has landed everywhere else."""
         with self._db.transaction() as conn:
             # Read before the deletes: a memory that moved keeps its text, so its old rows hold the vectors it needs.
             known = self._stored_vectors(
-                conn, team, (digest for memory in writes.values() for digest in self._plan(memory)[1].values())
+                conn, company, (digest for memory in writes.values() for digest in self._plan(memory)[1].values())
             )
             for path in deletes:
-                conn.execute("DELETE FROM sections WHERE team = %s AND path = %s", (team, str(path)))
+                conn.execute("DELETE FROM sections WHERE team = %s AND path = %s", (company, str(path)))
             for path, memory in writes.items():
-                self._update(conn, team, path, memory, known)
+                self._update(conn, company, path, memory, known)
             yield
 
     def rebuild(self, store: MemoryStore) -> int:
@@ -348,19 +422,20 @@ class SearchIndex:
 
     def _update_all(self, store: MemoryStore) -> int:
         count = 0
-        for team in store.teams():
-            for _, memories in store.walk(team, PurePosixPath()):
+        for company in store.companies():
+            for _, memories in store.walk(company, PurePosixPath()):
                 for path, memory in memories:
-                    self.update(team, path, memory)
+                    self.update(company, path, memory)
                     count += 1
         return count
 
     def search(
         self,
-        team: str,
+        company: str,
         query: str,
         *,
         project_id: str | list[str],
+        departments: Iterable[str] = (),
         member_id: str | None = None,
         levels: Iterable[str] | None = None,
         type: str | None = None,
@@ -371,12 +446,22 @@ class SearchIndex:
 
         limit None returns every candidate, for a caller that ranks them again before it cuts them: at most
         `_CANDIDATES` found by meaning and `_CANDIDATES` by exact words, so never more than twice that. member_id, when
-        given, limits personal memory to that member's own. `source` is where the query came from,
-        for the query cache's counts.
+        given, limits personal memory to that member's own. Department memory is searched only for `departments`, the
+        departments of those projects. `source` is where the query came from, for the query cache's counts.
         """
         projects = [project_id] if isinstance(project_id, str) else list(project_id)
-        conditions = ["team = %(team)s", "status = 'active'", "(level = 'team' OR project_id = ANY(%(projects)s))"]
-        params: dict[str, object] = {"team": team, "projects": projects, "text": query}
+        conditions = [
+            "team = %(company)s",
+            "status = 'active'",
+            "(level = 'company' OR (level = 'department' AND department_id = ANY(%(departments)s))"
+            " OR project_id = ANY(%(projects)s))",
+        ]
+        params: dict[str, object] = {
+            "company": company,
+            "projects": projects,
+            "departments": list(departments),
+            "text": query,
+        }
         if member_id is not None:
             conditions.append("(level <> 'personal' OR member_id = %(member)s)")
             params["member"] = member_id
@@ -426,25 +511,47 @@ class SearchIndex:
             for key in ordered[:limit]
         ]
 
-    def similar(self, team: str, path: PurePosixPath, *, project_id: str, threshold: float) -> list[tuple[str, float]]:
-        """Active project and team memories whose sections come close in meaning to any section of this memory."""
+    def similar(
+        self,
+        company: str,
+        path: PurePosixPath,
+        *,
+        project_id: str,
+        threshold: float,
+        department_id: str | None = None,
+        projects: Sequence[str] = (),
+        everywhere: bool = False,
+    ) -> list[tuple[str, float]]:
+        """Active project, department and company memories whose sections come close in meaning to any section of this
+        memory: company memory, the department memory of `department_id` and the project memory of `project_id` and of
+        `projects`. `everywhere` adds every department's and project's memory, for a promotion into company memory."""
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             rows = conn.execute(
                 "SELECT c.path, MAX(c.similarity) AS similarity FROM sections s CROSS JOIN LATERAL ("  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
                 " SELECT n.path, 1 - (n.embedding <=> s.embedding) AS similarity FROM sections n"
                 " WHERE n.team = s.team AND n.path <> s.path AND n.status = 'active'"
-                " AND (n.level = 'team' OR (n.level = 'project' AND n.project_id = %(project)s))"
+                " AND (n.level = 'company' OR (n.level = 'project' AND (n.project_id = %(project)s"
+                " OR n.project_id = ANY(%(projects)s) OR %(everywhere)s))"
+                " OR (n.level = 'department' AND (n.department_id = %(department)s OR %(everywhere)s)))"
                 f" ORDER BY n.embedding <=> s.embedding LIMIT {_SIMILAR_CANDIDATES}) c"
-                " WHERE s.team = %(team)s AND s.path = %(path)s"
+                " WHERE s.team = %(company)s AND s.path = %(path)s"
                 " GROUP BY c.path HAVING MAX(c.similarity) >= %(threshold)s"
                 f" ORDER BY similarity DESC LIMIT {_SIMILAR_LIMIT}",
-                {"team": team, "path": str(path), "project": project_id, "threshold": threshold},
+                {
+                    "company": company,
+                    "path": str(path),
+                    "project": project_id,
+                    "department": department_id,
+                    "projects": list(projects),
+                    "everywhere": everywhere,
+                    "threshold": threshold,
+                },
             ).fetchall()
         return [(str(row["path"]), float(row["similarity"])) for row in rows]
 
     def similar_to(
-        self, team: str, memory: Memory, *, reach: Reach, threshold: float, excluding: PurePosixPath | None = None
+        self, company: str, memory: Memory, *, reach: Reach, threshold: float, excluding: PurePosixPath | None = None
     ) -> list[tuple[str, float]]:
         """Active memories within a reach whose sections come close in meaning to any section of a memory, most
         similar first: one not yet saved, such as a known issue about to land, or one just saved, left out by
@@ -456,19 +563,19 @@ class SearchIndex:
                 if digest in self._prepared:
                     found[digest] = self._prepared[digest]
         with self._db.transaction() as conn:
-            found.update(self._stored_vectors(conn, team, [d for d in hashes.values() if d not in found]))
+            found.update(self._stored_vectors(conn, company, [d for d in hashes.values() if d not in found]))
         missing = {digest: texts[key] for key, digest in hashes.items() if digest not in found}
         if missing:
             found.update(zip(missing, self._embedder.passages(list(missing.values())), strict=True))
         within, params = reach.where()
-        params = {**params, "team": team, "excluding": None if excluding is None else str(excluding)}
+        params = {**params, "company": company, "excluding": None if excluding is None else str(excluding)}
         best: dict[str, float] = {}
         with self._db.transaction() as conn:
             conn.execute(_NEAREST.format(ef=_SIMILAR_CANDIDATES))
             for vector in {digest: found[digest] for digest in hashes.values()}.values():
                 rows = conn.execute(
                     "SELECT path, 1 - (embedding <=> %(vector)s) AS similarity FROM sections"  # noqa: S608  # values are bound as parameters; only clauses the code builds are spliced in
-                    f" WHERE team = %(team)s AND status = 'active' AND {within}"
+                    f" WHERE team = %(company)s AND status = 'active' AND {within}"
                     " AND path IS DISTINCT FROM %(excluding)s"
                     f" ORDER BY embedding <=> %(vector)s LIMIT {_SIMILAR_CANDIDATES}",
                     {**params, "vector": Vector(vector)},
@@ -486,3 +593,17 @@ class SearchIndex:
             f" WHERE {where} AND tokens @@ q.tq ORDER BY rank DESC LIMIT {_CANDIDATES}",
             params,
         ).fetchall()
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Index the memories under the folder `old` at the folder `new`, where they moved (`company_move.py`): their
+    sections are the same, so nothing is embedded again."""
+    conn.execute(
+        "UPDATE sections SET path = %(new)s || substr(path, %(after)s) WHERE path LIKE %(old)s", moved_prefix(old, new)
+    )
+
+
+def rename_level(conn: Conn, old: str, new: str) -> None:
+    """Say the level `old` as `new` in the indexed sections: company memory's level was `team` before the
+    rename (`company_move.py`)."""
+    conn.execute("UPDATE sections SET level = %s WHERE level = %s", (new, old))

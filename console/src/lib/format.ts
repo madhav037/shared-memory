@@ -38,7 +38,7 @@ export function waitingFor(names: string[]): string {
 }
 
 /** Where a memory sits. The server's vocabulary, so anything naming levels is exhaustive against this. */
-export const LEVEL_KEYS = ["team", "project", "personal"] as const;
+export const LEVEL_KEYS = ["company", "department", "project", "personal"] as const;
 export type Level = (typeof LEVEL_KEYS)[number];
 
 /** What a memory is. The server's vocabulary, so anything naming types is exhaustive against this. */
@@ -46,7 +46,8 @@ export const TYPE_KEYS = ["convention", "decision", "architecture", "gotcha"] as
 export type MemoryType = (typeof TYPE_KEYS)[number];
 
 const LEVELS: Record<Level, string> = {
-  team: "Team memory",
+  company: "Company memory",
+  department: "Department memory",
   project: "Project memory",
   personal: "Personal memory",
 };
@@ -96,9 +97,11 @@ export function headerOf(source: string): Map<string, string> {
   return fields;
 }
 
-/** Which level a memory path sits at: team memory, a project's accepted memory, or a member's personal memory. */
+/** Which level a memory path sits at: company memory, a department's memory, a project's accepted memory, or a
+ * member's personal memory. */
 export function levelOf(path: string): string {
-  if (path.startsWith("team/")) return "team";
+  if (path.startsWith("company/")) return "company";
+  if (path.startsWith("departments/")) return "department";
   return path.split("/")[2] === "people" ? "personal" : "project";
 }
 
@@ -110,7 +113,7 @@ export function memoryUrl(path: string): string {
   return `/memory?path=${encodeURIComponent(path)}`;
 }
 
-/** Where a project's health is shown, to its leads and the team's admins. */
+/** Where a project's health is shown, to its leads and the company's admins. */
 export function healthUrl(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}/health`;
 }
@@ -123,7 +126,8 @@ export function sessionsUrl(projectId: string): string {
 /** Whether a folder is a topic: a folder of its own inside a type, as the server's console_memory.folder_kind has it. */
 export function isTopic(path: string): boolean {
   const parts = path.split("/").filter(Boolean);
-  if (parts[0] === "team") return parts.length > 2;
+  if (parts[0] === "company") return parts.length > 2;
+  if (parts[0] === "departments") return parts.length > 3;
   if (parts[0] !== "projects" || parts.length < 4) return false;
   return parts[2] === "shared" ? parts.length > 4 : parts.length > 5;
 }
@@ -135,7 +139,7 @@ export function folderName(path: string, name: string): string {
   return isTopic(path) ? name.charAt(0).toUpperCase() + name.slice(1) : name;
 }
 
-/** The project a memory path or folder lives in, or nothing for team memory. */
+/** The project a memory path or folder lives in, or nothing for company memory. */
 export function projectIn(path: string): string | null {
   const parts = path.split("/");
   return parts[0] === "projects" && parts[1] ? parts[1] : null;

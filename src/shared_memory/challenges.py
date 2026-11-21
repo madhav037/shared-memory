@@ -12,7 +12,8 @@ from typing import Any, Literal
 from shared_memory.audit import CHALLENGE_RAISED, KEEPER_REMOVED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Conn, Database
+from shared_memory.db import Conn, Database, moved_prefix
+from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, project_in
 from shared_memory.memory import locate
@@ -45,6 +46,8 @@ ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reasoning TEXT;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS foundation TEXT;
 -- The reason a doubt names (spec #502): misled or contradicts_code. Other kinds name none.
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reason TEXT;
+-- The company memory a promotion into department memory contradicts (#634): accepting it raises a level contradiction.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS exception_to TEXT;
 -- One open doubt per memory and reason, so a second raise joins it, even when two sessions raise it at once.
 CREATE UNIQUE INDEX IF NOT EXISTS challenges_one_open_doubt ON challenges (team, target_path, reason)
     WHERE kind = 'doubt' AND state = 'open';
@@ -76,6 +79,13 @@ CREATE TABLE IF NOT EXISTS notices (
 DOUBT = "doubt"
 Reason = Literal["misled", "contradicts_code"]
 REASONS: tuple[Reason, ...] = ("misled", "contradicts_code")
+# The challenge kind a promotion into department memory by anyone but its department leads raises (ADR-0033). It has
+# no challenged memory: it stands against the department's folder, departments/<department ID>.
+PROMOTE = "promote"
+# A level contradiction (CONTEXT.md): the narrower memory, already promoted and holding where it applies, against the
+# broader memory it contradicts. Its challenger_path is the narrower memory, its target_path the broader, its level the
+# narrower level, whose leads decide: keep an exception, or follow.
+LEVEL_CONTRADICTION = "level_contradiction"
 # What a reason says, after "N say(s)".
 _REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
 # The longest line of code a contradicts_code doubt may quote.
@@ -166,6 +176,8 @@ class Challenge:
     foundation: str | None = None
     # The reason a doubt names; None for every other kind.
     reason: Reason | None = None
+    # For a promotion into department memory, the company memory it contradicts; None otherwise.
+    exception_to: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Challenge:
@@ -182,6 +194,7 @@ class Challenge:
             row["reasoning"],
             row.get("foundation"),
             row.get("reason"),
+            row.get("exception_to"),
         )
 
 
@@ -259,8 +272,9 @@ def ranked(score: float, in_doubt: InDoubt | None, penalty: float) -> float:
 
 
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
-# of the team's admins (the owner is one), because the fallback period has passed, or because its author has left.
-DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left"]
+# of the company's admins (the owner is one), because the fallback period has passed, or because its author has left;
+# for a promotion into department memory, as one of the department's leads.
+DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left", "department_lead"]
 
 
 @dataclass(frozen=True)
@@ -271,8 +285,15 @@ class Waiting:
     decides_as: DecidesAs
 
 
+def department_of(challenge: Challenge) -> str | None:
+    """The department a promotion into department memory asks to join; None for every other kind."""
+    if challenge.kind != PROMOTE:
+        return None
+    return PurePosixPath(challenge.target_path).name
+
+
 def project_of(challenge: Challenge) -> str | None:
-    """The project a challenge is about: the challenging memory's, or the challenged one's. Team memory has none."""
+    """The project a challenge is about: the challenging memory's, or the challenged one's. Company memory has none."""
     for path in (challenge.challenger_path, challenge.target_path):
         if path is None:
             continue
@@ -285,9 +306,17 @@ def project_of(challenge: Challenge) -> str | None:
 
 class Challenges:
     def __init__(
-        self, settings: Settings, db: Database, store: MemoryStore, identity: Identity, audit: Audit, clock: Clock
+        self,
+        settings: Settings,
+        db: Database,
+        store: MemoryStore,
+        identity: Identity,
+        audit: Audit,
+        clock: Clock,
+        departments: Departments,
     ) -> None:
         self._settings = settings
+        self._departments = departments
         self._db = db
         self._store = store
         self._identity = identity
@@ -311,20 +340,29 @@ class Challenges:
         promoted_by: str | None = None,
         reasoning: str | None = None,
         foundation: str | None = None,
+        imported_from: str | None = None,
+        exception_to: str | None = None,
+        raised_by: str | None = None,
     ) -> int:
+        """Open a challenge. imported_from is the source of an import whose promotion raised it, kept in the audit log
+        so onboarding progress counts the import as waiting on a challenge. raised_by is the caller unless named."""
         with self._db.transaction() as conn:
             row = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, challenger_path, level, raised_by,"
-                " promoted_by, raised_at, state, reasoning, foundation) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)"
-                " RETURNING id",
+                " promoted_by, raised_at, state, reasoning, foundation, exception_to)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s, %s) RETURNING id",
                 (
-                    caller.team, kind, target_path, target_author, challenger_path, level, caller.member_id,
-                    promoted_by, self._clock(), reasoning, foundation,
+                    caller.company, kind, target_path, target_author, challenger_path, level,
+                    raised_by or caller.member_id, promoted_by, self._clock(), reasoning, foundation, exception_to,
                 ),  # fmt: skip
             ).fetchone()
         assert row is not None
         challenge_id: int = row["id"]
         about = {} if foundation is None else {"foundation": foundation}
+        if imported_from is not None:
+            about["imported_from"] = imported_from
+        if kind == LEVEL_CONTRADICTION and challenger_path is not None:
+            about["narrower"] = challenger_path  # the memory that holds, as an exception, until it is decided
         self._audit.memory(
             caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author,
             **about,
@@ -352,7 +390,7 @@ class Challenges:
         if written is not None:
             refuse_secret(written, "This reasoning", "into a challenge")
         location = locate(path)
-        memory = self._store.read(caller.team, location.path)
+        memory = self._store.read(caller.company, location.path)
         if memory.status != "active":
             raise Refused(f"{location.path} is already {memory.status}, so there is nothing left to doubt.")
         evidence = Evidence(caller.member_id, usable(session), written, reference, self._clock())
@@ -402,7 +440,7 @@ class Challenges:
                 "INSERT INTO challenges (team, kind, target_path, target_author, level, raised_by, raised_at, state,"
                 " reason) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open', %s) ON CONFLICT (team, target_path, reason)"
                 " WHERE kind = 'doubt' AND state = 'open' DO NOTHING RETURNING id",
-                (caller.team, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
+                (caller.company, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
             ).fetchone()
             if opened is not None:
                 return int(opened["id"]), False
@@ -412,12 +450,12 @@ class Challenges:
             found = conn.execute(
                 "SELECT id FROM challenges WHERE team = %s AND kind = 'doubt' AND state = 'open' AND target_path = %s"
                 " AND reason = %s FOR UPDATE",
-                (caller.team, target_path, reason),
+                (caller.company, target_path, reason),
             ).fetchone()
             if found is not None:
                 return int(found["id"]), True
 
-    def doubts_against(self, team: str, paths: Iterable[str]) -> dict[str, list[Doubt]]:
+    def doubts_against(self, company: str, paths: Iterable[str]) -> dict[str, list[Doubt]]:
         """For each memory path, its open challenges that name a reason, each with all its evidence: what makes a
         memory in doubt (CONTEXT.md). A path with none maps to an empty list."""
         wanted = list(dict.fromkeys(paths))
@@ -426,7 +464,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT * FROM challenges WHERE team = %s AND state = 'open' AND reason IS NOT NULL"
                 " AND target_path = ANY(%s) ORDER BY id",
-                (team, wanted),
+                (company, wanted),
             ).fetchall()
         evidence = self._evidence([row["id"] for row in rows])
         for row in rows:
@@ -435,12 +473,12 @@ class Challenges:
             doubts[challenge.target_path].append(Doubt(challenge, challenge.reason, evidence.get(challenge.id, ())))
         return doubts
 
-    def in_doubt(self, team: str, paths: Iterable[str]) -> dict[str, InDoubt]:
+    def in_doubt(self, company: str, paths: Iterable[str]) -> dict[str, InDoubt]:
         """Those of these memories that are in doubt, each with what marks it so. One batch, however many paths."""
         wanted = list(paths)
         if not wanted:
             return {}
-        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(team, wanted).items() if doubts}
+        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(company, wanted).items() if doubts}
 
     def _evidence(self, challenge_ids: list[int]) -> dict[int, tuple[Evidence, ...]]:
         """Each challenge's evidence, first raised first."""
@@ -455,18 +493,18 @@ class Challenges:
             found.setdefault(row["challenge_id"], []).append(Evidence.from_row(row))
         return {challenge_id: tuple(each) for challenge_id, each in found.items()}
 
-    def open_challenge(self, team: str, challenge_id: int) -> Challenge | None:
+    def open_challenge(self, company: str, challenge_id: int) -> Challenge | None:
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT * FROM challenges WHERE id = %s AND team = %s AND state = 'open'", (challenge_id, team)
+                "SELECT * FROM challenges WHERE id = %s AND team = %s AND state = 'open'", (challenge_id, company)
             ).fetchone()
         return None if row is None else Challenge.from_row(row)
 
     def open_challenges(
-        self, team: str, *, target_path: str | None = None, challenger_paths: Iterable[str] | None = None
+        self, company: str, *, target_path: str | None = None, challenger_paths: Iterable[str] | None = None
     ) -> list[Challenge]:
         conditions: list[str] = ["team = %s", "state = 'open'"]
-        params: list[Any] = [team]
+        params: list[Any] = [company]
         if target_path is not None:
             conditions.append("target_path = %s")
             params.append(target_path)
@@ -486,22 +524,22 @@ class Challenges:
                 (state, decider, self._clock(), explanation, challenge.id),
             )
 
-    def close_all_against(self, team: str, target_path: str, decider: str, explanation: str) -> None:
+    def close_all_against(self, company: str, target_path: str, decider: str, explanation: str) -> None:
         """Close every open challenge against a memory, telling each member who raised one why."""
-        self._close(team, self.open_challenges(team, target_path=target_path), decider, explanation)
+        self._close(company, self.open_challenges(company, target_path=target_path), decider, explanation)
 
-    def resolve_doubts(self, team: str, target_path: str, decider: str, explanation: str) -> None:
+    def resolve_doubts(self, company: str, target_path: str, decider: str, explanation: str) -> None:
         """Close every open doubt against a memory as resolved, its author having put the memory right in a session,
         telling each member who added evidence how."""
-        doubts = [one for one in self.open_challenges(team, target_path=target_path) if one.kind == DOUBT]
-        self._close(team, doubts, decider, f"resolved, {explanation}")
+        doubts = [one for one in self.open_challenges(company, target_path=target_path) if one.kind == DOUBT]
+        self._close(company, doubts, decider, f"resolved, {explanation}")
 
-    def _close(self, team: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
+    def _close(self, company: str, challenges: list[Challenge], decider: str, explanation: str) -> None:
         raisers = self.raisers(challenges)
         for challenge in challenges:
             self.decide(challenge, "closed", decider, explanation)
             self.tell_raisers(
-                team,
+                company,
                 raisers[challenge.id],
                 f"Your challenge {challenge.id} against {challenge.target_path} was closed: {explanation}",
             )
@@ -526,24 +564,24 @@ class Challenges:
         raised.update({challenge_id: tuple(members) for challenge_id, members in found.items()})
         return raised
 
-    def tell_raisers(self, team: str, raisers: tuple[str, ...], text: str) -> None:
+    def tell_raisers(self, company: str, raisers: tuple[str, ...], text: str) -> None:
         """Tell every member who raised a challenge, each once: its `raisers`, for a doubt everyone who added evidence
         to it."""
         for member_id in raisers:
-            self.tell(team, member_id, text)
+            self.tell(company, member_id, text)
 
-    def tell(self, team: str, member_id: str, text: str) -> None:
+    def tell(self, company: str, member_id: str, text: str) -> None:
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO notices (team, member_id, text, created_at) VALUES (%s, %s, %s, %s)",
-                (team, member_id, text, self._clock()),
+                (company, member_id, text, self._clock()),
             )
 
-    def pending(self, team: str, paths: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
+    def pending(self, company: str, paths: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
         """For each personal memory path, the open challenges it is waiting on."""
         wanted = list(paths)
         labels: dict[str, list[dict[str, Any]]] = {path: [] for path in wanted}
-        for challenge in self.open_challenges(team, challenger_paths=wanted):
+        for challenge in self.open_challenges(company, challenger_paths=wanted):
             assert challenge.challenger_path is not None
             labels[challenge.challenger_path].append(
                 {"challenge_id": challenge.id, "kind": challenge.kind, "replaces": challenge.target_path}
@@ -553,7 +591,7 @@ class Challenges:
     def against(self, caller: Caller, path: str) -> list[dict[str, Any]]:
         """Every open challenge against one memory, and whether this member may decide it and in what capacity."""
         listed = []
-        challenges = self.open_challenges(caller.team, target_path=path)
+        challenges = self.open_challenges(caller.company, target_path=path)
         raisers = self.raisers(challenges)
         for c in challenges:
             decides_as = self.decides_as(caller, c, raisers[c.id])
@@ -575,7 +613,11 @@ class Challenges:
         theirs in."""
         reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
         waiting = []
-        reached = [one for one in self.open_challenges(caller.team) if project_of(one) in reachable]
+        reached = [
+            one
+            for one in self.open_challenges(caller.company)
+            if project_of(one) in reachable and caller.reaches(one.target_path)
+        ]
         raisers = self.raisers(reached)
         for challenge in reached:
             decides_as = self.decides_as(caller, challenge, raisers[challenge.id])
@@ -589,7 +631,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT id, kind, reason, target_path, challenger_path, raised_at, state, decided_by, decided_at,"
                 " explanation, reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
-                (caller.team, caller.member_id),
+                (caller.company, caller.member_id),
             ).fetchall()
         return [
             {
@@ -610,7 +652,7 @@ class Challenges:
         ]
 
     def drop_keepers(self, conn: Conn, caller: Caller) -> Callable[[], None]:
-        """Drop the keepers who can no longer reach their project: removed from the team, or shut out of a restricted
+        """Drop the keepers who can no longer reach their project: removed from the company, or shut out of a restricted
         project. Identity calls this inside the transaction of any change that may have cost a member a project
         (`Identity.on_access_lost`). What it gives back notes each drop in the audit log once that has committed."""
         dropped = self._identity.drop_keepers(conn, caller)
@@ -633,13 +675,25 @@ class Challenges:
         """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
-        the team's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); team
+        the company's admins, unless they raised the challenge themselves (for a doubt, added evidence to it); company
         memory has no project, so only admins stand there. Once the author has left, or after the fallback period,
         any member may. `raisers` is the challenge's, from `raisers`, fetched once however many are decided.
 
         A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
-        decides it, and never whoever raised it. No author, admin or fallback standing applies.
+        decides it, and never whoever raised it. No author, admin or fallback standing applies. So is a promotion into
+        department memory: only the department's leads decide it, or the company's admins once it has no lead left.
         """
+        if challenge.kind == LEVEL_CONTRADICTION:
+            return self._decides_level_contradiction(caller, challenge)
+        department_id = department_of(challenge)
+        if department_id is not None:
+            if challenge.raised_by == caller.member_id:
+                return None
+            if self._departments.leads(caller.member, department_id):
+                return "department_lead"
+            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(department_id):
+                return "admin"
+            return None
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 return None
@@ -656,11 +710,26 @@ class Challenges:
                 return "lead"
             if caller.member.is_owner or caller.member.is_admin:
                 return "admin"
-        if self._identity.is_removed(caller.team, challenge.target_author):
+        if self._identity.is_removed(caller.company, challenge.target_author):
             return "author_left"
         if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
             return "fallback"
         return None
+
+    def _decides_level_contradiction(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
+        """Only the narrower level's leads decide a level contradiction: its project's leads, or its department's,
+        and the company's admins once a department has no lead left."""
+        assert challenge.challenger_path is not None
+        narrower = locate(challenge.challenger_path)
+        if narrower.department_id is not None:
+            if self._departments.leads(caller.member, narrower.department_id):
+                return "department_lead"
+            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(
+                narrower.department_id
+            ):
+                return "admin"
+            return None
+        return "lead" if narrower.project_id in self._identity.leads_of(caller.member) else None
 
     def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
         """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
@@ -674,6 +743,14 @@ class Challenges:
         decides_as = self.decides_as(caller, challenge, raisers)
         if decides_as is not None:
             return decides_as
+        if challenge.kind == LEVEL_CONTRADICTION:
+            whose = "the department, or an admin once it has no lead left" if challenge.level == "department" else "the project"
+            raise Refused(f"Only a lead of {whose} whose memory it is decides level contradiction {challenge.id}.")
+        if department_of(challenge) is not None:
+            raise Refused(
+                f"Only a department lead decides challenge {challenge.id}, a promotion into its department memory: not "
+                "the member who raised it, and an admin only once the department has no lead left."
+            )
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 raise Refused(
@@ -695,7 +772,7 @@ class Challenges:
                 f"{'another project lead or an admin' if in_project else 'or another admin'} can; "
                 f"anyone may once it has been open for {days} days."
             )
-        others = "a lead of its project and the team's admins" if in_project else "and the team's admins"
+        others = "a lead of its project and the company's admins" if in_project else "and the company's admins"
         raise Refused(
             f"Only {challenge.target_author}, the author of the challenged memory, {others} can decide this challenge "
             f"until it has been open for {days} days."
@@ -709,12 +786,14 @@ class Challenges:
         `raisers`, who is told as a raiser."""
         if decides_as in ("author", "author_left") or challenge.target_author in raisers:
             return
+        if challenge.kind == LEVEL_CONTRADICTION:
+            return  # the broader memory stays as it is, whichever way it is decided
         if decision == "rejected":
             outcome = "your memory stands as it is"
         else:
             outcome = "your memory is now retired" if challenge.challenger_path is None else "your memory is now superseded"
         self.tell(
-            caller.team,
+            caller.company,
             challenge.target_author,
             f"Challenge {challenge.id} by {challenge.raised_by} against your memory {challenge.target_path} was "
             f"{decision} by {caller.member_id}, deciding {self._capacity(decides_as)}: {outcome}.",
@@ -729,7 +808,8 @@ class Challenges:
             "lead": "as a project lead",
             "keeper": "as a keeper of the foundation",
             "admin": "as an admin",
-            "author_left": "as any member may once its author has left the team",
+            "author_left": "as any member may once its author has left the company",
+            "department_lead": "as a department lead",
         }[decides_as]
 
     # What sessions are told
@@ -742,7 +822,9 @@ class Challenges:
         """Challenges against the member's memories not yet shown on a prompt (with the others against the same
         memory), and news not yet delivered."""
         mine = [
-            c for c in self.open_challenges(caller.team) if c.target_author == caller.member_id and c.foundation is None
+            c
+            for c in self.open_challenges(caller.company)
+            if c.target_author == caller.member_id and c.foundation is None and c.kind not in (PROMOTE, LEVEL_CONTRADICTION)
         ]
         with self._db.transaction() as conn:
             fresh_targets = {
@@ -762,11 +844,19 @@ class Challenges:
         return f"<shared-memory-notices>\n{text}\n</shared-memory-notices>" if text else None
 
     def _render(self, caller: Caller, waiting: list[Waiting]) -> str | None:
-        ordinary = [one for one in waiting if one.challenge.foundation is None]
+        ordinary = [
+            one
+            for one in waiting
+            if one.challenge.foundation is None and one.challenge.kind not in (PROMOTE, LEVEL_CONTRADICTION)
+        ]
         foundations = [one for one in waiting if one.challenge.foundation is not None]
+        departments = [one for one in waiting if one.challenge.kind == PROMOTE]
+        levels = [one.challenge for one in waiting if one.challenge.kind == LEVEL_CONTRADICTION]
         parts = [
             self._render_group(caller, ordinary, "[challenges waiting for your decision]"),
             self._render_group(caller, foundations, "[foundation challenges waiting for your decision]"),
+            self._render_group(caller, departments, "[department challenges waiting for your decision]"),
+            self._render_levels(caller, levels),
         ]
         return "\n\n".join(part for part in parts if part) or None
 
@@ -779,10 +869,12 @@ class Challenges:
             first = next(one.challenge for one in waiting if one.challenge.target_path == target_path)
             if first.foundation is not None and first.kind == "add":
                 lines.append(f"The {first.foundation} foundation ({target_path}):")
+            elif first.kind == PROMOTE:
+                lines.append(f"{self.department_name(first)} department memory ({target_path}):")
             elif first.foundation is not None:
-                lines.append(f"{self._title(caller.team, target_path)} ({target_path}), in the {first.foundation} foundation:")
+                lines.append(f"{self._title(caller.company, target_path)} ({target_path}), in the {first.foundation} foundation:")
             else:
-                lines.append(f"{self._title(caller.team, target_path)} ({target_path}):")
+                lines.append(f"{self._title(caller.company, target_path)} ({target_path}):")
             for one in (one for one in waiting if one.challenge.target_path == target_path):
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
@@ -792,6 +884,9 @@ class Challenges:
                     continue
                 if c.kind == "add":
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c)} to the {c.foundation} foundation"
+                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                elif c.kind == PROMOTE:
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: promote {self._replacement(caller, c)}"
                     line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 elif c.challenger_path is None:
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: retire it"
@@ -813,18 +908,43 @@ class Challenges:
             )
         return "\n".join(lines)
 
+    def _render_levels(self, caller: Caller, waiting: list[Challenge]) -> str | None:
+        """Each waiting level contradiction with its age, as a reminder: present only while one waits."""
+        if not waiting:
+            return None
+        lines = ["[level contradictions waiting for your decision]"]
+        for c in waiting:
+            assert c.challenger_path is not None
+            days = (self._clock() - c.raised_at).days
+            age = "today" if days < 1 else "1 day" if days == 1 else f"{days} days"
+            narrower, broader = locate(c.challenger_path).level, locate(c.target_path).level
+            lines.append(
+                f'- Level contradiction {c.id}, waiting {age}: "{self._title(caller.company, c.challenger_path)}" '
+                f'({c.challenger_path}, {narrower} memory) holds over "{self._title(caller.company, c.target_path)}" '
+                f"({c.target_path}, {broader} memory)."
+            )
+        lines.append("Show the member both. decide_challenge: keep_exception with a reason, or follow (retires the narrower).")
+        return "\n".join(lines)
+
     def _replacement(self, caller: Caller, challenge: Challenge) -> str:
+
         """The challenging memory, titled and summarised when it can still be read."""
         assert challenge.challenger_path is not None
         try:
-            challenger = self._store.read(caller.team, PurePosixPath(challenge.challenger_path))
+            challenger = self._store.read(caller.company, PurePosixPath(challenge.challenger_path))
         except Refused:
             return challenge.challenger_path
         return f'"{challenger.title}" ({challenge.challenger_path}): {challenger.summary}'
 
-    def _title(self, team: str, path: str) -> str:
+    def department_name(self, challenge: Challenge) -> str:
+        """The name of the department a promotion into department memory asks to join, or its ID once removed."""
+        department_id = department_of(challenge) or challenge.target_path
+        found = self._departments.named(department_id)
+        return department_id if found is None else found.name
+
+    def _title(self, company: str, path: str) -> str:
         try:
-            return self._store.read(team, PurePosixPath(path)).title
+            return self._store.read(company, PurePosixPath(path)).title
         except Refused:
             return path
 
@@ -833,7 +953,7 @@ class Challenges:
             rows = conn.execute(
                 "UPDATE notices SET delivered_at = %s WHERE team = %s AND member_id = %s AND delivered_at IS NULL"
                 " RETURNING id, text",
-                (self._clock(), caller.team, caller.member_id),
+                (self._clock(), caller.company, caller.member_id),
             ).fetchall()
         texts = [row["text"] for row in sorted(rows, key=lambda row: row["id"])]
         return "[shared memory news]\n" + "\n".join(f"- {text}" for text in texts) if texts else None
@@ -846,7 +966,7 @@ class Challenges:
             rows = conn.execute(
                 "SELECT id, text, created_at FROM notices WHERE team = %s AND member_id = %s"
                 " AND (delivered_at IS NULL OR created_at >= %s) ORDER BY id DESC LIMIT %s",
-                (caller.team, caller.member_id, self._clock() - timedelta(days=days), limit),
+                (caller.company, caller.member_id, self._clock() - timedelta(days=days), limit),
             ).fetchall()
         return [{"notice_id": row["id"], "text": row["text"], "created_at": row["created_at"]} for row in rows]
 
@@ -884,3 +1004,21 @@ def _members(evidence: Iterable[Evidence]) -> tuple[str, ...]:
 def _show_the_author_again(conn: Conn, challenge_id: int) -> None:
     """Ask the author's next prompt to show a doubt again, a raise having joined it with new evidence."""
     conn.execute("UPDATE challenges SET author_notified_at = NULL WHERE id = %s", (challenge_id,))
+
+
+def move_paths(conn: Conn, old: str, new: str) -> None:
+    """Keep the challenges to and from the memories under the folder `old` on them at the folder `new`, where they
+    moved (`company_move.py`)."""
+    moved = moved_prefix(old, new)
+    conn.execute("UPDATE challenges SET target_path = %(new)s || substr(target_path, %(after)s) WHERE target_path LIKE %(old)s", moved)
+    conn.execute(
+        "UPDATE challenges SET challenger_path = %(new)s || substr(challenger_path, %(after)s)"
+        " WHERE challenger_path LIKE %(old)s",
+        moved,
+    )
+
+
+def rename_level(conn: Conn, old: str, new: str) -> None:
+    """Say the level `old` as `new` in the challenges: company memory's level was `team` before the
+    rename (`company_move.py`)."""
+    conn.execute("UPDATE challenges SET level = %s WHERE level = %s", (new, old))

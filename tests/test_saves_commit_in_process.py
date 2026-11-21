@@ -14,19 +14,19 @@ import pygit2
 import pytest
 
 import shared_memory.store as store
-from tests.support import Session, Team
+from tests.support import Session, Company
 
 # The real Popen, so git the test runs itself is unaffected while saving is watched.
 _Popen = subprocess.Popen
 
 
-def git(team: Team, *args: str) -> str:
+def git(company: Company, *args: str) -> str:
     return subprocess.run(
-        ["git", "-C", str(team.server.settings.memory_root), *args], capture_output=True, text=True, check=True
+        ["git", "-C", str(company.server.settings.memory_root), *args], capture_output=True, text=True, check=True
     ).stdout
 
 
-def test_saving_runs_no_git_process(team: Team, owner: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_saving_runs_no_git_process(company: Company, owner: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     started: list[list[str]] = []
 
     class Recording(_Popen):  # type: ignore[type-arg]
@@ -41,9 +41,9 @@ def test_saving_runs_no_git_process(team: Team, owner: Session, monkeypatch: pyt
     monkeypatch.undo()
 
     assert not [args for args in started if any("git" in arg for arg in args[:1])]
-    assert f"{team.code}/{path}" in git(team, "show", "--name-only", "--format=", "HEAD").split()
+    assert f"{company.code}/{path}" in git(company, "show", "--name-only", "--format=", "HEAD").split()
     email, committer, trailer = git(
-        team, "log", "-1", "--format=%ae%n%cn%n%(trailers:key=Coding-Agent,valueonly)"
+        company, "log", "-1", "--format=%ae%n%cn%n%(trailers:key=Coding-Agent,valueonly)"
     ).splitlines()[:3]
     assert email.endswith("@members.shared-memory.invalid")
     assert committer == "Shared Memory"
@@ -51,7 +51,7 @@ def test_saving_runs_no_git_process(team: Team, owner: Session, monkeypatch: pyt
 
 
 def test_a_save_that_finds_main_moved_builds_again_on_it_and_both_land(
-    team: Team, owner: Session, monkeypatch: pytest.MonkeyPatch
+    company: Company, owner: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     elsewhere = f"elsewhere-{uuid.uuid4().hex[:8]}/note.md"
     move_main = store._move_main
@@ -74,9 +74,9 @@ def test_a_save_that_finds_main_moved_builds_again_on_it_and_both_land(
     title = f"Retried {uuid.uuid4().hex[:6]}"
     path = owner.call("remember", title=title, summary="Lands on the new main.", type="gotcha", body="b")["path"]
 
-    assert git(team, "rev-parse", "HEAD~1").strip() == str(intruded[0])
-    assert git(team, "log", "-1", "--format=%s").strip() == f"Remember: {title}"
-    committed = git(team, "ls-tree", "-r", "--name-only", "HEAD").split("\n")
-    assert f"{team.code}/{path}" in committed
+    assert git(company, "rev-parse", "HEAD~1").strip() == str(intruded[0])
+    assert git(company, "log", "-1", "--format=%s").strip() == f"Remember: {title}"
+    committed = git(company, "ls-tree", "-r", "--name-only", "HEAD").split("\n")
+    assert f"{company.code}/{path}" in committed
     assert elsewhere in committed
     assert owner.call("read", path=path)["title"] == title
