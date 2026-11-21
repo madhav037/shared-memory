@@ -266,6 +266,59 @@ class Departments(BaseModel):
     you_may_create: bool
 
 
+class DepartmentMemoryEntry(BaseModel):
+    """One active department memory, as the department page lists it: no author, so the page names no member."""
+
+    path: str
+    title: str
+    summary: str
+    type: str
+
+
+class MemoryCounts(BaseModel):
+    """How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a
+    coding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the
+    level contradictions and other challenges waiting on it."""
+
+    memories: int
+    possibly_outdated: int
+    used: int
+    level_contradictions: int
+    challenges: int
+
+
+class ProjectRollUp(BaseModel):
+    """One project of the department, with its counts."""
+
+    project_id: str
+    name: str
+    counts: MemoryCounts
+
+
+class DepartmentRollUp(BaseModel):
+    """How memory is doing across a department (spec #624), never per member: each project the member can reach, and
+    department memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's
+    setting."""
+
+    window_days: int
+    outdated_after_days: float
+    projects: list[ProjectRollUp]
+    department_memory: MemoryCounts
+
+
+class DepartmentPage(BaseModel):
+    """A department's page (#636): the projects in it this member can reach and its department memory, and for its
+    department leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing."""
+
+    department_id: str
+    name: str
+    restricted: bool
+    you_lead: bool
+    projects: list[DepartmentProject]
+    memory: list[DepartmentMemoryEntry]
+    roll_up: DepartmentRollUp | None
+
+
 class DepartmentName(BaseModel):
     """What a department is called."""
 
@@ -1241,6 +1294,16 @@ DECLARATIONS: tuple[Declaration, ...] = (
         operation_id="departments",
         summary="Every department of the company, with its leads and the projects in it this member can reach.",
         answers=Departments,
+    ),
+    Declaration(
+        path="/departments/{department_id}",
+        method="GET",
+        operation_id="department",
+        summary=(
+            "A department's page: its projects and department memory, and for its leads and the company's admins a "
+            "roll-up of each project's counts and department memory's use, never per member. Changes nothing."
+        ),
+        answers=DepartmentPage,
     ),
     Declaration(
         path="/departments",

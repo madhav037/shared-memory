@@ -120,7 +120,9 @@ function OneDepartment({
     <section aria-label={department.name} data-testid="department" style={{ marginTop: 32 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
         <h2 className="section-heading" data-testid="department-name">
-          {department.name}
+          <Link to={`/departments/${encodeURIComponent(id)}`} data-testid="to-department-page">
+            {department.name}
+          </Link>
         </h2>
         {runsTheCompany && (
           <button

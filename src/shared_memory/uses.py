@@ -10,6 +10,7 @@ The interface:
 - `used(company, paths)`: those memories were used now.
 - `possibly_outdated(company, statuses)`: which of these memories (path to status) are possibly outdated.
 - `last_used(company, path)`: when one memory was last used, or None.
+- `used_within(company, paths, days)`: which of these memories were used within the last `days` days.
 - `check(company, path)`: what an agent is told to do about a possibly outdated memory.
 - `check_any()`: the same, told once beside recall or search results when any of them is possibly outdated.
 """
@@ -95,6 +96,18 @@ class Uses:
             ).fetchall()
         unused = {row["path"] for row in rows}
         return unused - self._pinned_among(company, unused) if unused else set()
+
+    def used_within(self, company: str, paths: Iterable[str], days: int) -> set[str]:
+        """Which of these memories were used within the last `days` days (saving one counts, as it starts its clock)."""
+        wanted = list(paths)
+        if not wanted:
+            return set()
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT path FROM memory_uses WHERE team = %s AND path = ANY(%s) AND last_used_at >= %s",
+                (company, wanted, self._clock() - timedelta(days=days)),
+            ).fetchall()
+        return {row["path"] for row in rows}
 
     def check(self, company: str, path: str) -> str:
         """What a coding agent is told about a possibly outdated memory: how long it has gone unused, and what to do."""

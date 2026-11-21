@@ -440,6 +440,14 @@ export function fetchDepartments(signal?: AbortSignal): Promise<Departments> {
   return ask<Departments>("/api/departments", { signal });
 }
 
+export type DepartmentPage = components["schemas"]["DepartmentPage"];
+export type MemoryCounts = components["schemas"]["MemoryCounts"];
+
+/** One department's page (#636): its projects and department memory, and for its leads and the admins its roll-up. */
+export function fetchDepartment(departmentId: string, signal?: AbortSignal): Promise<DepartmentPage> {
+  return ask<DepartmentPage>(`/api/departments/${encodeURIComponent(departmentId)}`, { signal });
+}
+
 export function createDepartment(name: string): Promise<Departments> {
   return change<Departments>("/api/departments", { name });
 }

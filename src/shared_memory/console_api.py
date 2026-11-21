@@ -93,8 +93,10 @@ from shared_memory.console_contract import (
     InterviewMemories, InterviewMemory,
     DepartmentAccessChange, DepartmentAppointment, DepartmentName, DepartmentProject, DepartmentRef,
     DepartmentRestriction, Departments, DepartmentSummary,
+    DepartmentMemoryEntry, DepartmentPage, DepartmentRollUp, MemoryCounts, ProjectRollUp,
     ProjectMember, ProjectMove,
 )
+from shared_memory import department_page
 from shared_memory.departments import Department, Departments as DepartmentStore
 from shared_memory.errors import Refused
 from shared_memory.export import CompanyExport
@@ -247,6 +249,16 @@ def _department_ref(department: Department | None) -> DepartmentRef | None:
     if department is None:
         return None
     return DepartmentRef(department_id=department.department_id, name=department.name, restricted=department.restricted)
+
+
+def _counted(counts: department_page.Counts) -> MemoryCounts:
+    return MemoryCounts(
+        memories=counts.memories,
+        possibly_outdated=counts.possibly_outdated,
+        used=counts.used,
+        level_contradictions=counts.level_contradictions,
+        challenges=counts.challenges,
+    )
 
 
 def _sign_in_first() -> Response:
@@ -404,8 +416,10 @@ class ConsoleApi:
         project_health: health.ProjectHealth,
         progress: onboarding.Progress,
         departments: DepartmentStore,
+        department_pages: department_page.DepartmentPages,
     ) -> None:
         self._departments = departments
+        self._department_pages = department_pages
         self._progress = progress
         self._export_of = export
         self._health = project_health
@@ -493,6 +507,7 @@ class ConsoleApi:
             "report_my_time_zone": self._report_my_time_zone,
             "reissue_token": self._reissue_token,
             "departments": self._departments_listed,
+            "department": self._department,
             "create_department": self._create_department,
             "rename_department": self._rename_department,
             "remove_department": self._remove_department,
@@ -781,6 +796,40 @@ class ConsoleApi:
         if member is None:
             return _sign_in_first()
         return self._departments_now(member)
+
+    def _department(self, request: Request) -> Response:
+        """A department's page (#636): reading it changes nothing (ADR-0009), and its roll-up is counts only."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        try:
+            found = self._department_pages.of(self._identity.caller_in(member, None), request.path_params["department_id"])
+        except Refused as refused:
+            return JSONResponse({"message": str(refused)}, status_code=403)
+        roll_up = None
+        if found.roll_up is not None:
+            roll_up = DepartmentRollUp(
+                window_days=department_page.WINDOW_DAYS,
+                outdated_after_days=self._settings.outdated_after_days,
+                projects=[
+                    ProjectRollUp(project_id=project.project_id, name=project.name, counts=_counted(counts))
+                    for project, counts in found.roll_up.projects
+                ],
+                department_memory=_counted(found.roll_up.department_memory),
+            )
+        answer = DepartmentPage(
+            department_id=found.department.department_id,
+            name=found.department.name,
+            restricted=found.restricted,
+            you_lead=found.you_lead,
+            projects=[DepartmentProject(project_id=one.project_id, name=one.name) for one in found.projects],
+            memory=[
+                DepartmentMemoryEntry(path=path, title=memory.title, summary=memory.summary, type=memory.type)
+                for path, memory in found.memory
+            ],
+            roll_up=roll_up,
+        )
+        return JSONResponse(answer.model_dump(mode="json"))
 
     def _create_department(self, request: Request) -> Response:
         def create(member: Member, caller: Caller) -> None:

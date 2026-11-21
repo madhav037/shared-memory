@@ -448,6 +448,34 @@
         }
       }
     },
+    "/api/departments/{department_id}": {
+      "get": {
+        "operationId": "department",
+        "summary": "A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/departments/{department_id}/rename": {
       "post": {
         "operationId": "rename_department",
@@ -2925,6 +2953,179 @@
           "you_may_create"
         ],
         "title": "Departments",
+        "type": "object"
+      },
+      "DepartmentMemoryEntry": {
+        "description": "One active department memory, as the department page lists it: no author, so the page names no member.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "title",
+          "summary",
+          "type"
+        ],
+        "title": "DepartmentMemoryEntry",
+        "type": "object"
+      },
+      "DepartmentRollUp": {
+        "description": "How memory is doing across a department (spec #624), never per member: each project the member can reach, and\ndepartment memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's\nsetting.",
+        "properties": {
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "outdated_after_days": {
+            "title": "Outdated After Days",
+            "type": "number"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRollUp"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "department_memory": {
+            "$ref": "#/components/schemas/MemoryCounts"
+          }
+        },
+        "required": [
+          "window_days",
+          "outdated_after_days",
+          "projects",
+          "department_memory"
+        ],
+        "title": "DepartmentRollUp",
+        "type": "object"
+      },
+      "MemoryCounts": {
+        "description": "How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a\ncoding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the\nlevel contradictions and other challenges waiting on it.",
+        "properties": {
+          "memories": {
+            "title": "Memories",
+            "type": "integer"
+          },
+          "possibly_outdated": {
+            "title": "Possibly Outdated",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          },
+          "level_contradictions": {
+            "title": "Level Contradictions",
+            "type": "integer"
+          },
+          "challenges": {
+            "title": "Challenges",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memories",
+          "possibly_outdated",
+          "used",
+          "level_contradictions",
+          "challenges"
+        ],
+        "title": "MemoryCounts",
+        "type": "object"
+      },
+      "ProjectRollUp": {
+        "description": "One project of the department, with its counts.",
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/MemoryCounts"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "counts"
+        ],
+        "title": "ProjectRollUp",
+        "type": "object"
+      },
+      "DepartmentPage": {
+        "description": "A department's page (#636): the projects in it this member can reach and its department memory, and for its\ndepartment leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing.",
+        "properties": {
+          "department_id": {
+            "title": "Department Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
+          "you_lead": {
+            "title": "You Lead",
+            "type": "boolean"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentProject"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "memory": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentMemoryEntry"
+            },
+            "title": "Memory",
+            "type": "array"
+          },
+          "roll_up": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepartmentRollUp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "department_id",
+          "name",
+          "restricted",
+          "you_lead",
+          "projects",
+          "memory",
+          "roll_up"
+        ],
+        "title": "DepartmentPage",
         "type": "object"
       },
       "DepartmentName": {
