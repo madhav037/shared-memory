@@ -112,8 +112,9 @@ def test_while_it_waits_sessions_in_the_project_receive_the_narrower_memory_and_
 
     in_billing = added_context(made["dana"].prompt("how does the billing service write its logs?"))
 
+    # The exception's label names the company memory; the company memory itself is not told, as an entry "(path)".
     assert narrower in in_billing
-    assert company not in in_billing
+    assert f"({company})" not in in_billing
     assert "structured JSON logs" not in added_context(made["dana"].start())
     assert "structured JSON logs" in added_context(made["checkout"].start())
     assert company in added_context(made["checkout"].prompt("how should services write their logs?"))
@@ -174,7 +175,7 @@ def test_keeping_an_exception_from_a_session_records_its_reason_and_the_narrower
     assert (read["status"], read["exception_to"], read["exception_reason"]) == ("active", company, REASON)
     assert HEADING not in added_context(olive.start())
     in_billing = added_context(made["dana"].prompt("how does the billing service write its logs?"))
-    assert narrower in in_billing and company not in in_billing
+    assert narrower in in_billing and f"({company})" not in in_billing
     decided = [e for e in ask(signed_out, "/api/audit")["events"] if e["kind"] == "challenge_decided"]
     assert decided[0]["detail"]["decision"] == "kept_exception"
 
@@ -199,8 +200,9 @@ def test_following_from_a_session_retires_the_narrower_memory_and_sessions_recei
 
     assert followed["status"] == "followed", followed
     assert made["olive"].call("read", path=narrower)["status"] == "retired"
-    assert company in added_context(made["dana"].prompt("how should services write their logs?"))
     assert f"level contradiction {made['raised']['level_contradiction']}" in added_context(made["dana"].start())
+    assert company in added_context(made["dana"].prompt("how should services write their logs?"))
+
 
 
 def test_only_the_narrower_levels_lead_decides_a_level_contradiction(console: Console, signed_out: ConsoleClient) -> None:
