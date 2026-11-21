@@ -143,6 +143,29 @@ def test_a_department_memory_against_company_memory_raises_a_level_contradiction
     assert HEADING not in added_context(owner.in_project(billing).start())
 
 
+def test_promoting_a_project_memory_against_department_memory_raises_a_level_contradiction_to_the_projects_leads(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-level-over-department", 6359)
+    billing = create(signed_out, "Billing")["project_id"]
+    lena = member(console, signed_out, "emp-lena", "Lena Lead", billing)
+    department(signed_out, "Payments", billing, lead="emp-lena")
+    broader = promoted_now(lena, JSON_LOGS, "department")
+    dana = member(console, signed_out, "emp-dana", "Dana Developer", billing)
+
+    raised = contradicting(dana, PLAIN_LOGS, broader)
+
+    assert raised["status"] == "promoted", raised
+    assert "level_contradiction" in raised
+    narrower = dana.call("read", path=raised["path"])
+    assert (narrower["level"], narrower["exception_to"]) == ("project", broader)
+    assert lena.call("read", path=broader)["status"] == "active"
+    briefed = added_context(owner.in_project(billing).start())  # the owner leads Billing
+    assert HEADING in briefed
+    assert f"Level contradiction {raised['level_contradiction']}, waiting today" in briefed
+    assert HEADING not in added_context(dana.start())
+
+
 def test_a_department_leads_own_promotion_against_company_memory_is_an_exception_at_once(
     console: Console, signed_out: ConsoleClient
 ) -> None:
