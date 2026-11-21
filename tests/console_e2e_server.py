@@ -93,6 +93,38 @@ MIRAS_DEPARTMENT_WAY = {
     "body": "Release on Tuesday mornings, so the whole week is left to watch what shipped.",
 }
 MIRAS_DEPARTMENT_REASONING = "Every team here releases on Tuesdays already; writing it down saves each new member asking."
+# For the level contradiction journey (#634): a company memory of Olive's, and a project memory of Mira's contradicting
+# it, one pair for each way a lead decides.
+LEVEL_PAIRS = {
+    "keep": (
+        {
+            "title": "Kiln firings start at dawn",
+            "summary": "Every pottery kiln is fired from dawn.",
+            "type": "convention",
+            "body": "Fire every pottery kiln from dawn, so it has cooled by the evening shift.",
+        },
+        {
+            "title": "The glaze kiln fires at night",
+            "summary": "The glaze kiln is fired overnight, not from dawn.",
+            "type": "convention",
+            "body": "Fire the glaze kiln overnight, not from dawn: glazes craze when the morning draught cools them.",
+        },
+    ),
+    "follow": (
+        {
+            "title": "Clay is wedged by hand",
+            "summary": "Every batch of clay is wedged by hand.",
+            "type": "convention",
+            "body": "Wedge every batch of pottery clay by hand before it goes on the wheel.",
+        },
+        {
+            "title": "Porcelain clay is wedged by machine",
+            "summary": "Porcelain clay goes through the pug mill, not hand wedging.",
+            "type": "convention",
+            "body": "Wedge porcelain pottery clay in the pug mill, not by hand: hands trap air in porcelain.",
+        },
+    ),
+}
 
 
 def olives_token(settings: Settings, seeded: str) -> str:
@@ -119,7 +151,10 @@ class Teammates:
     the background, held until `POST /move-on`, where her next prompt ends it. On `POST /department-memory?project_id=...` a
     session of Olive's in that project promotes a memory into its department's memory, as a department lead's session
     does, and answers its path; on `POST /department-challenge?project_id=...` Mira's session there asks to promote one,
-    which raises a challenge to the department's leads. Each is the session's own call
+    which raises a challenge to the department's leads; on `POST /level-contradiction?project_id=...&way=keep|follow`
+    Olive's session promotes a company memory and Mira's there a project memory contradicting it, a level contradiction
+    for the project's leads. Each is the session's own call
+
     over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
     personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
@@ -190,6 +225,19 @@ class Teammates:
                 )
             return JSONResponse({"status": asked["status"], "challenge_id": asked.get("challenge_id")})
 
+        def level_contradiction(request: Request) -> Response:
+            project = request.query_params["project_id"]
+            broader_memory, narrower_memory = LEVEL_PAIRS[request.query_params["way"]]
+            broader = promote_keeping_both(olive().in_project(project), broader_memory, "company")
+            miras = mira.in_project(project)
+            personal = miras.call("remember", **narrower_memory)["path"]
+            first = miras.call("promote", path=personal, level="project")
+            resolutions = {one["path"]: "supersede" if one["path"] == broader else "keep_both" for one in first["similar"]}
+            raised = miras.call(
+                "promote", path=personal, level="project", reference=first["reference"], resolutions=resolutions
+            )
+            return JSONResponse({"contradiction": raised.get("level_contradiction"), "path": raised.get("path")})
+
         def move_on(request: Request) -> Response:
             mira_waiting.prompt("Leave that for now and write the changelog entry.")
             ended = standing.pop().result(timeout=STANDBY_SECONDS).json()["ended"]
@@ -206,6 +254,7 @@ class Teammates:
                 Route("/move-on", move_on, methods=["POST"]),
                 Route("/department-memory", department_memory, methods=["POST"]),
                 Route("/department-challenge", department_challenge, methods=["POST"]),
+                Route("/level-contradiction", level_contradiction, methods=["POST"]),
             ]
         )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)

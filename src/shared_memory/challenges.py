@@ -46,6 +46,8 @@ ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reasoning TEXT;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS foundation TEXT;
 -- The reason a doubt names (spec #502): misled or contradicts_code. Other kinds name none.
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS reason TEXT;
+-- The company memory a promotion into department memory contradicts (#634): accepting it raises a level contradiction.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS exception_to TEXT;
 -- One open doubt per memory and reason, so a second raise joins it, even when two sessions raise it at once.
 CREATE UNIQUE INDEX IF NOT EXISTS challenges_one_open_doubt ON challenges (team, target_path, reason)
     WHERE kind = 'doubt' AND state = 'open';
@@ -80,6 +82,10 @@ REASONS: tuple[Reason, ...] = ("misled", "contradicts_code")
 # The challenge kind a promotion into department memory by anyone but its department leads raises (ADR-0033). It has
 # no challenged memory: it stands against the department's folder, departments/<department ID>.
 PROMOTE = "promote"
+# A level contradiction (CONTEXT.md): the narrower memory, already promoted and holding where it applies, against the
+# broader memory it contradicts. Its challenger_path is the narrower memory, its target_path the broader, its level the
+# narrower level, whose leads decide: keep an exception, or follow.
+LEVEL_CONTRADICTION = "level_contradiction"
 # What a reason says, after "N say(s)".
 _REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
 # The longest line of code a contradicts_code doubt may quote.
@@ -170,6 +176,8 @@ class Challenge:
     foundation: str | None = None
     # The reason a doubt names; None for every other kind.
     reason: Reason | None = None
+    # For a promotion into department memory, the company memory it contradicts; None otherwise.
+    exception_to: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Challenge:
@@ -186,6 +194,7 @@ class Challenge:
             row["reasoning"],
             row.get("foundation"),
             row.get("reason"),
+            row.get("exception_to"),
         )
 
 
@@ -332,17 +341,19 @@ class Challenges:
         reasoning: str | None = None,
         foundation: str | None = None,
         imported_from: str | None = None,
+        exception_to: str | None = None,
+        raised_by: str | None = None,
     ) -> int:
         """Open a challenge. imported_from is the source of an import whose promotion raised it, kept in the audit log
-        so onboarding progress counts the import as waiting on a challenge."""
+        so onboarding progress counts the import as waiting on a challenge. raised_by is the caller unless named."""
         with self._db.transaction() as conn:
             row = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, challenger_path, level, raised_by,"
-                " promoted_by, raised_at, state, reasoning, foundation) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)"
-                " RETURNING id",
+                " promoted_by, raised_at, state, reasoning, foundation, exception_to)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s, %s) RETURNING id",
                 (
-                    caller.company, kind, target_path, target_author, challenger_path, level, caller.member_id,
-                    promoted_by, self._clock(), reasoning, foundation,
+                    caller.company, kind, target_path, target_author, challenger_path, level,
+                    raised_by or caller.member_id, promoted_by, self._clock(), reasoning, foundation, exception_to,
                 ),  # fmt: skip
             ).fetchone()
         assert row is not None
@@ -666,6 +677,8 @@ class Challenges:
         decides it, and never whoever raised it. No author, admin or fallback standing applies. So is a promotion into
         department memory: only the department's leads decide it, or the company's admins once it has no lead left.
         """
+        if challenge.kind == LEVEL_CONTRADICTION:
+            return self._decides_level_contradiction(caller, challenge)
         department_id = department_of(challenge)
         if department_id is not None:
             if challenge.raised_by == caller.member_id:
@@ -697,6 +710,21 @@ class Challenges:
             return "fallback"
         return None
 
+    def _decides_level_contradiction(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
+        """Only the narrower level's leads decide a level contradiction: its project's leads, or its department's,
+        and the company's admins once a department has no lead left."""
+        assert challenge.challenger_path is not None
+        narrower = locate(challenge.challenger_path)
+        if narrower.department_id is not None:
+            if self._departments.leads(caller.member, narrower.department_id):
+                return "department_lead"
+            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(
+                narrower.department_id
+            ):
+                return "admin"
+            return None
+        return "lead" if narrower.project_id in self._identity.leads_of(caller.member) else None
+
     def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
         """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
         nobody standing."""
@@ -709,6 +737,9 @@ class Challenges:
         decides_as = self.decides_as(caller, challenge, raisers)
         if decides_as is not None:
             return decides_as
+        if challenge.kind == LEVEL_CONTRADICTION:
+            whose = "the department, or an admin once it has no lead left" if challenge.level == "department" else "the project"
+            raise Refused(f"Only a lead of {whose} whose memory it is decides level contradiction {challenge.id}.")
         if department_of(challenge) is not None:
             raise Refused(
                 f"Only a department lead decides challenge {challenge.id}, a promotion into its department memory: not "
@@ -749,6 +780,8 @@ class Challenges:
         `raisers`, who is told as a raiser."""
         if decides_as in ("author", "author_left") or challenge.target_author in raisers:
             return
+        if challenge.kind == LEVEL_CONTRADICTION:
+            return  # the broader memory stays as it is, whichever way it is decided
         if decision == "rejected":
             outcome = "your memory stands as it is"
         else:
@@ -785,7 +818,7 @@ class Challenges:
         mine = [
             c
             for c in self.open_challenges(caller.company)
-            if c.target_author == caller.member_id and c.foundation is None and c.kind != PROMOTE
+            if c.target_author == caller.member_id and c.foundation is None and c.kind not in (PROMOTE, LEVEL_CONTRADICTION)
         ]
         with self._db.transaction() as conn:
             fresh_targets = {
@@ -805,13 +838,19 @@ class Challenges:
         return f"<shared-memory-notices>\n{text}\n</shared-memory-notices>" if text else None
 
     def _render(self, caller: Caller, waiting: list[Waiting]) -> str | None:
-        ordinary = [one for one in waiting if one.challenge.foundation is None and one.challenge.kind != PROMOTE]
+        ordinary = [
+            one
+            for one in waiting
+            if one.challenge.foundation is None and one.challenge.kind not in (PROMOTE, LEVEL_CONTRADICTION)
+        ]
         foundations = [one for one in waiting if one.challenge.foundation is not None]
         departments = [one for one in waiting if one.challenge.kind == PROMOTE]
+        levels = [one.challenge for one in waiting if one.challenge.kind == LEVEL_CONTRADICTION]
         parts = [
             self._render_group(caller, ordinary, "[challenges waiting for your decision]"),
             self._render_group(caller, foundations, "[foundation challenges waiting for your decision]"),
             self._render_group(caller, departments, "[department challenges waiting for your decision]"),
+            self._render_levels(caller, levels),
         ]
         return "\n\n".join(part for part in parts if part) or None
 
@@ -863,7 +902,26 @@ class Challenges:
             )
         return "\n".join(lines)
 
+    def _render_levels(self, caller: Caller, waiting: list[Challenge]) -> str | None:
+        """Each waiting level contradiction with its age, as a reminder: present only while one waits."""
+        if not waiting:
+            return None
+        lines = ["[level contradictions waiting for your decision]"]
+        for c in waiting:
+            assert c.challenger_path is not None
+            days = (self._clock() - c.raised_at).days
+            age = "today" if days < 1 else "1 day" if days == 1 else f"{days} days"
+            narrower, broader = locate(c.challenger_path).level, locate(c.target_path).level
+            lines.append(
+                f'- Level contradiction {c.id}, waiting {age}: "{self._title(caller.company, c.challenger_path)}" '
+                f'({c.challenger_path}, {narrower} memory) holds over "{self._title(caller.company, c.target_path)}" '
+                f"({c.target_path}, {broader} memory)."
+            )
+        lines.append("Show the member both. decide_challenge: keep_exception with a reason, or follow (retires the narrower).")
+        return "\n".join(lines)
+
     def _replacement(self, caller: Caller, challenge: Challenge) -> str:
+
         """The challenging memory, titled and summarised when it can still be read."""
         assert challenge.challenger_path is not None
         try:

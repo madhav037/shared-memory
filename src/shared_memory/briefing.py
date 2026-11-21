@@ -16,6 +16,7 @@ from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
+from shared_memory.index import overridden
 from shared_memory.memory import COMPANY_FOLDER, DEPARTMENTS_FOLDER, FOLDER_TYPES, Memory, locate
 from shared_memory.fence import escape, fenced, new_token
 from shared_memory.recall import framing
@@ -336,7 +337,10 @@ class Briefing:
         sections: list[str] = []
         left_out: list[str] = []
         project_id = caller.project.project_id
-        for path, text in self._pinned_texts(caller.company, project_id, self._department_of(project_id), token):
+        department_id = self._department_of(project_id)
+        # A broader memory an exception overrides here is left out in favour of the exception.
+        left_for_exceptions = overridden(self._db, caller.company, project_id, department_id)
+        for path, text in self._pinned_texts(caller.company, project_id, department_id, token, left_for_exceptions):
             if estimate_tokens(text) <= budget:
                 sections.append(text)
                 budget -= estimate_tokens(text)
@@ -377,13 +381,19 @@ class Briefing:
         ]
 
     def _pinned_texts(
-        self, company: str, project_id: str | None, department_id: str | None, token: str
+        self,
+        company: str,
+        project_id: str | None,
+        department_id: str | None,
+        token: str,
+        leaving_out: set[str] | None = None,
     ) -> list[tuple[str, str]]:
-        """(path, rendered text) for each pin visible from a project in a department, oldest first."""
+        """(path, rendered text) for each pin visible from a project in a department, oldest first, leaving out the
+        memories in `leaving_out`."""
         targets = self._rows(company, project_id, department_id)
         return [
             (target.path, rendered)
-            for target, rendered in zip(targets, self._rendered(company, targets, token), strict=True)
+            for target, rendered in zip(targets, self._rendered(company, targets, token, leaving_out), strict=True)
             if rendered is not None
         ]
 
@@ -405,10 +415,13 @@ class Briefing:
         memories, _ = self._store.list_folder(company, PurePosixPath(target.path))
         return [(str(path), memory) for path, memory in memories if memory.status == "active"]
 
-    def _rendered(self, company: str, targets: list[PinTarget], token: str | None = None) -> list[str | None]:
+    def _rendered(
+        self, company: str, targets: list[PinTarget], token: str | None = None, leaving_out: set[str] | None = None
+    ) -> list[str | None]:
         """Each pin as the briefing shows it, or None for one with nothing active to show. Which of their memories are
         in doubt is asked once for them all."""
-        shown = [self._shown(company, target) for target in targets]
+        out = leaving_out or set()
+        shown = [[(path, memory) for path, memory in self._shown(company, target) if path not in out] for target in targets]
         in_doubt = self._challenges.in_doubt(company, [path for memories in shown for path, _ in memories])
         return [
             _render(target, memories, token or new_token(), in_doubt)

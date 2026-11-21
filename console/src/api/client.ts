@@ -211,9 +211,14 @@ export function fetchNotices(signal?: AbortSignal): Promise<Notices> {
   return ask<Notices>("/api/notices", { signal });
 }
 
-/** Accept a challenge or reject it; the answer says what that did, and what is still waiting. */
-export function decideChallenge(challengeId: number, decision: "accept" | "reject"): Promise<DecidedChallenges> {
-  return change<DecidedChallenges>(`/api/challenges/${challengeId}/decide`, { decision });
+/** Decide a challenge, or a level contradiction by keeping an exception (with a reason) or following; the answer says
+ * what that did, and what is still waiting. */
+export function decideChallenge(
+  challengeId: number,
+  decision: "accept" | "reject" | "keep_exception" | "follow",
+  reason?: string,
+): Promise<DecidedChallenges> {
+  return change<DecidedChallenges>(`/api/challenges/${challengeId}/decide`, { decision, reason: reason ?? null });
 }
 
 /** Issue a new personal token for the signed-in member; the one they had stops working. */

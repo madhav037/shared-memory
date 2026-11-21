@@ -1253,7 +1253,7 @@ def build_app(
     @saving
     @_refusals_as_tool_errors
     @unless_read_only
-    def decide_challenge(challenge_id: int, decision: str, ctx: Context) -> dict[str, Any]:
+    def decide_challenge(challenge_id: int, decision: str, ctx: Context, reason: str | None = None) -> dict[str, Any]:
         """Accept or reject a challenge against a memory (decision: accept or reject).
 
         Accepting a supersede challenge promotes the challenging memory over the old one; every other open challenge
@@ -1263,8 +1263,10 @@ def build_app(
         company memory, the admins only), unless they raised the challenge themselves; its author is then told who
         decided and in what capacity. Any member may once it has been open 3 days or its author has left the company.
         A promotion into department memory is decided by its department leads only, or admins when it has none.
+        A level contradiction: its level's leads keep_exception (with reason) or follow (retires the narrower memory).
         """
-        return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
+        return lifecycle.decide_challenge(caller(ctx), challenge_id, decision, reason)
+
 
     @_refusals_as_tool_errors
     @unless_read_only

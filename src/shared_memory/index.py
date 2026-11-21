@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS sections (
 ALTER TABLE sections DROP COLUMN IF EXISTS heading;
 -- Set on department memory alone (ADR-0032), so a search keeps it to the departments of the projects it reaches.
 ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id TEXT;
+-- The broader memory an exception overrides (#634), so sessions where the exception holds are not told that one.
+ALTER TABLE sections ADD COLUMN IF NOT EXISTS exception_to TEXT;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 CREATE INDEX IF NOT EXISTS sections_content_hash ON sections (team, content_hash);
 """
@@ -168,6 +170,31 @@ def split_sections(memory: Memory) -> list[tuple[str, str]]:
     return [sections[0], *(section for section in sections[1:] if section[1])]
 
 
+def _lacks_exception_to(conn: Conn) -> bool:
+    """Whether the sections table is there but was built before it named the memory an exception overrides."""
+    columns = {
+        row["column_name"]
+        for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema()"
+            " AND table_name = 'sections'"
+        )
+    }
+    return bool(columns) and "exception_to" not in columns
+
+
+def overridden(db: Database, company: str, project_id: str, department_id: str | None) -> set[str]:
+    """The broader memories an active exception overrides where a project's sessions work: an exception in its own
+    project memory, or in its department's memory. Sessions there are told the exception instead."""
+    with db.transaction() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT exception_to FROM sections WHERE team = %s AND status = 'active'"
+            " AND exception_to IS NOT NULL AND ((level = 'project' AND project_id = %s)"
+            " OR (level = 'department' AND department_id = %s))",
+            (company, project_id, department_id),
+        ).fetchall()
+    return {str(row["exception_to"]) for row in rows}
+
+
 class SearchIndex:
     def __init__(self, db: Database, embedder: CachedQueries) -> None:
         self._db = db
@@ -175,8 +202,11 @@ class SearchIndex:
         self._prepared: OrderedDict[str, list[float]] = OrderedDict()
         self._prepared_lock = threading.Lock()
         self._unchunked = False
+        self._unexcepted = False
         if db.sets_up:
             with db.transaction() as conn:
+                # Built before sections named the memory an exception overrides: catch_up fills it in.
+                self._unexcepted = _lacks_exception_to(conn)
                 conn.execute(SCHEMA)
                 # Indexing a database that already holds many sections takes longer than any request is allowed.
                 conn.execute("SET LOCAL statement_timeout = 0")
@@ -203,9 +233,9 @@ class SearchIndex:
 
         Sections short enough to have been read whole keep their embeddings; only long ones are embedded again.
         """
-        if self._unchunked:
+        if self._unchunked or self._unexcepted:
             self._update_all(store)
-            self._unchunked = False
+            self._unchunked = self._unexcepted = False
 
     def _chunks(self, title: str, heading: str, text: str) -> list[str]:
         """The texts embedded for one section: the whole of it, or overlapping chunks the model reads whole."""
@@ -297,6 +327,7 @@ class SearchIndex:
             memory.type,
             memory.author,
             memory.status,
+            memory.exception_to,
         )
         existing = {
             (row["section_no"], row["chunk_no"]): row["content_hash"]
@@ -331,13 +362,14 @@ class SearchIndex:
             if (section_no, chunk_no) in vectors:
                 conn.execute(
                     "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id,"
-                    " department_id, type, author, status, content_hash, embedding, tokens)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                    " department_id, type, author, status, exception_to, content_hash, embedding, tokens)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                     " strip(to_tsvector('simple', %s) || to_tsvector('english', %s)))"
                     " ON CONFLICT (team, path, section_no, chunk_no) DO UPDATE SET level = EXCLUDED.level,"
                     " project_id = EXCLUDED.project_id, member_id = EXCLUDED.member_id,"
                     " department_id = EXCLUDED.department_id, type = EXCLUDED.type,"
-                    " author = EXCLUDED.author, status = EXCLUDED.status, content_hash = EXCLUDED.content_hash,"
+                    " author = EXCLUDED.author, status = EXCLUDED.status, exception_to = EXCLUDED.exception_to,"
+                    " content_hash = EXCLUDED.content_hash,"
                     " embedding = EXCLUDED.embedding, tokens = EXCLUDED.tokens",
                     (
                         company,
@@ -354,7 +386,7 @@ class SearchIndex:
             else:
                 conn.execute(
                     "UPDATE sections SET level = %s, project_id = %s, member_id = %s, department_id = %s, type = %s,"
-                    " author = %s, status = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
+                    " author = %s, status = %s, exception_to = %s WHERE team = %s AND path = %s AND section_no = %s AND chunk_no = %s",
                     (*details, company, str(path), section_no, chunk_no),
                 )
 

@@ -140,6 +140,7 @@ def describe(path: PurePosixPath, memory: Memory) -> dict[str, Any]:
         "replaces": memory.replaces,
         "superseded_by": memory.superseded_by,
         "exception_to": memory.exception_to,
+        "exception_reason": memory.exception_reason,
         "tied_files": memory.tied_files,
         "promoted_by": memory.promoted_by,
         "imported_by": memory.imported_by,

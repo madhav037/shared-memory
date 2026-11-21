@@ -2514,6 +2514,11 @@ export interface components {
             superseded_by: string | null;
             /** Exception To */
             exception_to: string | null;
+            /**
+             * Exception Reason
+             * @default null
+             */
+            exception_reason: string | null;
             /** Tied Files */
             tied_files: string[];
             /** Promoted By */
@@ -2777,7 +2782,7 @@ export interface components {
              * Decision
              * @enum {string}
              */
-            decision: "accepted" | "rejected";
+            decision: "accepted" | "rejected" | "kept_exception" | "followed";
             /** In Force */
             in_force: string | null;
         };
@@ -2794,14 +2799,20 @@ export interface components {
         };
         /**
          * Decision
-         * @description Accept a challenge or reject it.
+         * @description Accept a challenge or reject it; a level contradiction is decided by keeping an exception, with a reason, or by
+         *     following the broader memory, which retires the narrower one.
          */
         Decision: {
             /**
              * Decision
              * @enum {string}
              */
-            decision: "accept" | "reject";
+            decision: "accept" | "reject" | "keep_exception" | "follow";
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /**
          * RateLimits
