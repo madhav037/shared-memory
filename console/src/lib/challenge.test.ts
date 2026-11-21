@@ -7,6 +7,7 @@ describe("what a challenge asks, in words", () => {
     expect(asks({ kind: "retire", reason: null })).toBe("retire it");
     expect(asks({ kind: "supersede", reason: null })).toBe("supersede it");
     expect(asks({ kind: "add", reason: null })).toBe("add a memory");
+    expect(asks({ kind: "promote", reason: null })).toBe("promote it into department memory");
     expect(asks({ kind: "add", reason: null, foundation_name: "Billing rules" })).toBe(
       "add it to the Billing rules foundation",
     );

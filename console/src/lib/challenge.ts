@@ -13,6 +13,7 @@ const KINDS: Record<string, string> = {
   retire: "retire it",
   supersede: "supersede it",
   add: "add a memory",
+  promote: "promote it into department memory",
 };
 
 /** Enough of a challenge to say what it asks. */

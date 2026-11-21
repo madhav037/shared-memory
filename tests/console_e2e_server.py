@@ -85,6 +85,14 @@ DEPARTMENT_WAY = {
     "type": "convention",
     "body": "Ship every change behind a feature flag, turned on for staff first, then for everyone.",
 }
+# The memory Mira's session asks to promote into department memory, which she doesn't lead, so its lead decides (#632).
+MIRAS_DEPARTMENT_WAY = {
+    "title": "Releases go out on Tuesdays",
+    "summary": "Every project in this department releases on Tuesday mornings.",
+    "type": "convention",
+    "body": "Release on Tuesday mornings, so the whole week is left to watch what shipped.",
+}
+MIRAS_DEPARTMENT_REASONING = "Every team here releases on Tuesdays already; writing it down saves each new member asking."
 
 
 def olives_token(settings: Settings, seeded: str) -> str:
@@ -110,7 +118,8 @@ class Teammates:
     session of Olive's and a third of Mira's state the same work, so Mira's is gated on Olive's, and Mira's stands by in
     the background, held until `POST /move-on`, where her next prompt ends it. On `POST /department-memory?project_id=...` a
     session of Olive's in that project promotes a memory into its department's memory, as a department lead's session
-    does, and answers its path. Each is the session's own call
+    does, and answers its path; on `POST /department-challenge?project_id=...` Mira's session there asks to promote one,
+    which raises a challenge to the department's leads. Each is the session's own call
     over HTTP, as its coding agent makes it. Olive's second session is asked for afresh on each call (`olive`), with a
     personal token that works then: the journeys may replace hers in between, which revokes the one she had."""
 
@@ -166,6 +175,21 @@ class Teammates:
             olives = olive().in_project(request.query_params["project_id"])
             return JSONResponse({"path": promote_keeping_both(olives, DEPARTMENT_WAY, "department")})
 
+        def department_challenge(request: Request) -> Response:
+            miras = mira.in_project(request.query_params["project_id"])
+            personal = miras.call("remember", **MIRAS_DEPARTMENT_WAY)["path"]
+            asked = miras.call("promote", path=personal, level="department", reasoning=MIRAS_DEPARTMENT_REASONING)
+            if asked["status"] == "similar_memories":
+                asked = miras.call(
+                    "promote",
+                    path=personal,
+                    level="department",
+                    reference=asked["reference"],
+                    resolutions={one["path"]: "keep_both" for one in asked["similar"]},
+                    reasoning=MIRAS_DEPARTMENT_REASONING,
+                )
+            return JSONResponse({"status": asked["status"], "challenge_id": asked.get("challenge_id")})
+
         def move_on(request: Request) -> Response:
             mira_waiting.prompt("Leave that for now and write the changelog entry.")
             ended = standing.pop().result(timeout=STANDBY_SECONDS).json()["ended"]
@@ -181,6 +205,7 @@ class Teammates:
                 Route("/stand-by", stand_by, methods=["POST"]),
                 Route("/move-on", move_on, methods=["POST"]),
                 Route("/department-memory", department_memory, methods=["POST"]),
+                Route("/department-challenge", department_challenge, methods=["POST"]),
             ]
         )
         self._server = RunningServer(app, settings, TestClock(), portal, port=port)

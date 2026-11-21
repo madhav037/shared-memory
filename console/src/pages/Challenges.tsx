@@ -60,7 +60,8 @@ export function Challenges({
       <h1 className="page-title wide">Challenges</h1>
       <p className="standfirst">
         A challenge asks for a memory to be superseded or retired, says a session doubts it, or asks for one to join a
-        foundation. You decide the ones waiting here as their author, or for the reason each one gives.
+        foundation or department memory. You decide the ones waiting here as their author, or for the reason each one
+        gives.
       </p>
 
       {refused && <Refusal>{refused}</Refusal>}
@@ -103,14 +104,23 @@ function DecidedSlip({ slip, readsAudit, onDismiss }: { slip: Slip; readsAudit: 
   useEffect(() => here.current?.focus(), [slip]);
 
   const { decided, challenge, others } = slip;
-  const adding = challenge.kind === "add";
-  // An "add" has no challenged memory: its target stands for the foundation.
+  const promoting = challenge.kind === "promote";
+  const adding = challenge.kind === "add" || promoting;
+  // An "add" or a "promote" has no challenged memory: its target stands for the foundation or the department.
   const foundation = adding ? challenge.target.title : "";
   const replaced = challenge.target.title;
   const offered = challenge.challenger?.title;
   const rejected = decided.decision === "rejected";
   const readable = adding ? (challenge.challenger?.path ?? challenge.target.path) : challenge.target.path;
   const what = () => {
+    if (promoting) {
+      return (
+        <>
+          <b>You {rejected ? "rejected" : "accepted"} it.</b> <span className="decided-name">‘{offered}’</span>{" "}
+          {rejected ? "stays personal memory." : `is now ${foundation} department memory.`}
+        </>
+      );
+    }
     if (adding) {
       return (
         <>
@@ -209,8 +219,10 @@ function Waiting({
   };
 
   // Challenges to a foundation are shown apart: a keeper or project lead decides them, not a memory's author.
-  const ordinary = waiting.filter((one) => one.foundation === null);
+  // So are promotions into department memory: its department leads decide them.
+  const ordinary = waiting.filter((one) => one.foundation === null && one.kind !== "promote");
   const foundations = waiting.filter((one) => one.foundation !== null);
+  const departments = waiting.filter((one) => one.kind === "promote");
   // Several challenges can be against one memory; they are decided together, so they are shown together.
   const memories = new Map<string, ChallengeDetail[]>();
   for (const one of ordinary) memories.set(one.target.path, [...(memories.get(one.target.path) ?? []), one]);
@@ -293,6 +305,33 @@ function Waiting({
         </div>
       </>
     )}
+    {departments.length > 0 && (
+      <>
+        <h2 className="section-heading">Department challenges</h2>
+        {ordinary.length === 0 && foundations.length === 0 && <ViewSwitch view={view} onChange={setView} />}
+        <div className="waiting" data-testid="department-challenges">
+          {departments.map((challenge) => (
+            <section
+              className="dispute"
+              key={challenge.challenge_id}
+              aria-label={`Department challenge to ${challenge.target.title} department memory`}
+            >
+              <div className="dispute-head">
+                <h3>
+                  {challenge.challenger && (
+                    <Link to={memoryUrl(challenge.challenger.path)}>{challenge.challenger.title}</Link>
+                  )}
+                </h3>
+                <span className="mark strong" data-testid="department-mark">
+                  {challenge.target.title} department
+                </span>
+              </div>
+              {proposal(challenge, 0)}
+            </section>
+          ))}
+        </div>
+      </>
+    )}
     </>
   );
 }
@@ -304,6 +343,7 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
   admin: "yours to decide as an admin",
   fallback: "nobody has decided in time, so anyone may",
   author_left: "its author has left the company, so anyone may",
+  department_lead: "yours to decide as a department lead",
 };
 
 type Choice = "accept" | "reject";
@@ -331,8 +371,10 @@ function Proposal({
   // Busy, not disabled: a disabled button drops the focus it holds, and the guard in decide refuses a second send.
   const busy = deciding ? { "data-disabled": true, "aria-disabled": true } : {};
   const offered = challenge.challenger;
-  // An "add" brings a memory into a foundation: there is nothing in it to compare the memory with.
-  const adding = challenge.kind === "add";
+  // An "add" brings a memory into a foundation, and a "promote" into department memory: there is nothing there to
+  // compare the memory with.
+  const promoting = challenge.kind === "promote";
+  const adding = challenge.kind === "add" || promoting;
   const pieces = offered && marked && !adding ? offerDiff(challenge.target.body, offered.body) : null;
   const changes = offered && !adding ? whatChanges(challenge.target.body, offered.body) : null;
   return (
@@ -392,7 +434,9 @@ function Proposal({
       <div className="facing" data-testid="facing">
         {adding ? (
           <div>
-            <span className="title">{challenge.target.title} foundation</span>
+            <span className="title">
+              {challenge.target.title} {promoting ? "department memory" : "foundation"}
+            </span>
             <p className="by">Where it would be added</p>
           </div>
         ) : (
@@ -417,7 +461,8 @@ function Proposal({
                 {offered.title}
               </Link>
               <p className="by">
-                {adding ? "Offered for the foundation" : "Offered in its place"} by {who(offered.author)}
+                {promoting ? "Offered for department memory" : adding ? "Offered for the foundation" : "Offered in its place"}{" "}
+                by {who(offered.author)}
               </p>
               <div className="body">
                 {view === "source" ? (
@@ -457,8 +502,10 @@ function Proposal({
         <Button size="sm" {...busy} onClick={() => onDecide("accept")} data-testid={`accept-${challenge.challenge_id}`}>
           {pressed("accept")
             ? "Deciding…"
-            : adding
-              ? "Accept: add it to the foundation"
+            : promoting
+              ? "Accept: promote it into department memory"
+              : adding
+                ? "Accept: add it to the foundation"
               : offered
                 ? "Accept: supersede it"
                 : "Accept: retire it"}
@@ -470,7 +517,13 @@ function Proposal({
           onClick={() => onDecide("reject")}
           data-testid={`reject-${challenge.challenge_id}`}
         >
-          {pressed("reject") ? "Deciding…" : adding ? "Reject: keep it out" : "Reject: keep it as it is"}
+          {pressed("reject")
+            ? "Deciding…"
+            : promoting
+              ? "Reject: it stays personal"
+              : adding
+                ? "Reject: keep it out"
+                : "Reject: keep it as it is"}
         </Button>
       </div>
       {refused && <Refusal testid="decide-refused">{refused}</Refusal>}
@@ -594,8 +647,10 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
                 <tr key={one.challenge_id}>
                   <td className="aside" style={{ whiteSpace: "nowrap" }}>{day(one.raised_at)}</td>
                   <td className="primary">
-                    {one.kind === "add" ? (
-                      <>{one.target_title} foundation</>
+                    {one.kind === "add" || one.kind === "promote" ? (
+                      <>
+                        {one.target_title} {one.kind === "add" ? "foundation" : "department memory"}
+                      </>
                     ) : (
                       <Link to={memoryUrl(one.target_path)} style={{ color: "inherit" }}>
                         {one.target_title}

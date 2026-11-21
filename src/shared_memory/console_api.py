@@ -64,7 +64,7 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
+from shared_memory.challenges import PROMOTE, Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
@@ -1464,7 +1464,14 @@ class ConsoleApi:
         return self._identity.foundation_name(project_id, challenge.foundation)
 
     def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:
-        """What a challenge is against: a memory, or for an "add" the foundation whose folder the path is."""
+        """What a challenge is against: a memory, for an "add" the foundation whose folder the path is, or for a
+        "promote" the department whose memory it asks to join."""
+        if kind == PROMOTE:
+            named = self._departments.named(path.rsplit("/", 1)[-1])
+            return ChallengedMemory(
+                path=path, title=path if named is None else named.name, summary="", body="", level="department", type="",
+                author="", status="department",
+            )  # fmt: skip
         if kind != "add" or foundation is None:
             return self._side(caller, path)
         parts = path.split("/")

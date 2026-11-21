@@ -5466,7 +5466,8 @@
                   "keeper",
                   "admin",
                   "fallback",
-                  "author_left"
+                  "author_left",
+                  "department_lead"
                 ],
                 "type": "string"
               },
@@ -6005,7 +6006,8 @@
               "keeper",
               "admin",
               "fallback",
-              "author_left"
+              "author_left",
+              "department_lead"
             ],
             "title": "Decides As",
             "type": "string"

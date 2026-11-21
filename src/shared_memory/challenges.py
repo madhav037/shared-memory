@@ -13,6 +13,7 @@ from shared_memory.audit import CHALLENGE_RAISED, KEEPER_REMOVED, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
+from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, project_in
 from shared_memory.memory import locate
@@ -76,6 +77,9 @@ CREATE TABLE IF NOT EXISTS notices (
 DOUBT = "doubt"
 Reason = Literal["misled", "contradicts_code"]
 REASONS: tuple[Reason, ...] = ("misled", "contradicts_code")
+# The challenge kind a promotion into department memory by anyone but its department leads raises (ADR-0033). It has
+# no challenged memory: it stands against the department's folder, departments/<department ID>.
+PROMOTE = "promote"
 # What a reason says, after "N say(s)".
 _REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
 # The longest line of code a contradicts_code doubt may quote.
@@ -259,8 +263,9 @@ def ranked(score: float, in_doubt: InDoubt | None, penalty: float) -> float:
 
 
 # In what capacity a member decides a challenge: as the challenged memory's author, as a lead of its project, as one
-# of the company's admins (the owner is one), because the fallback period has passed, or because its author has left.
-DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left"]
+# of the company's admins (the owner is one), because the fallback period has passed, or because its author has left;
+# for a promotion into department memory, as one of the department's leads.
+DecidesAs = Literal["author", "lead", "keeper", "admin", "fallback", "author_left", "department_lead"]
 
 
 @dataclass(frozen=True)
@@ -269,6 +274,13 @@ class Waiting:
 
     challenge: Challenge
     decides_as: DecidesAs
+
+
+def department_of(challenge: Challenge) -> str | None:
+    """The department a promotion into department memory asks to join; None for every other kind."""
+    if challenge.kind != PROMOTE:
+        return None
+    return PurePosixPath(challenge.target_path).name
 
 
 def project_of(challenge: Challenge) -> str | None:
@@ -285,9 +297,17 @@ def project_of(challenge: Challenge) -> str | None:
 
 class Challenges:
     def __init__(
-        self, settings: Settings, db: Database, store: MemoryStore, identity: Identity, audit: Audit, clock: Clock
+        self,
+        settings: Settings,
+        db: Database,
+        store: MemoryStore,
+        identity: Identity,
+        audit: Audit,
+        clock: Clock,
+        departments: Departments,
     ) -> None:
         self._settings = settings
+        self._departments = departments
         self._db = db
         self._store = store
         self._identity = identity
@@ -643,8 +663,18 @@ class Challenges:
         any member may. `raisers` is the challenge's, from `raisers`, fetched once however many are decided.
 
         A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
-        decides it, and never whoever raised it. No author, admin or fallback standing applies.
+        decides it, and never whoever raised it. No author, admin or fallback standing applies. So is a promotion into
+        department memory: only the department's leads decide it, or the company's admins once it has no lead left.
         """
+        department_id = department_of(challenge)
+        if department_id is not None:
+            if challenge.raised_by == caller.member_id:
+                return None
+            if self._departments.leads(caller.member, department_id):
+                return "department_lead"
+            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(department_id):
+                return "admin"
+            return None
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 return None
@@ -679,6 +709,11 @@ class Challenges:
         decides_as = self.decides_as(caller, challenge, raisers)
         if decides_as is not None:
             return decides_as
+        if department_of(challenge) is not None:
+            raise Refused(
+                f"Only a department lead decides challenge {challenge.id}, a promotion into its department memory: not "
+                "the member who raised it, and an admin only once the department has no lead left."
+            )
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 raise Refused(
@@ -735,6 +770,7 @@ class Challenges:
             "keeper": "as a keeper of the foundation",
             "admin": "as an admin",
             "author_left": "as any member may once its author has left the company",
+            "department_lead": "as a department lead",
         }[decides_as]
 
     # What sessions are told
@@ -747,7 +783,9 @@ class Challenges:
         """Challenges against the member's memories not yet shown on a prompt (with the others against the same
         memory), and news not yet delivered."""
         mine = [
-            c for c in self.open_challenges(caller.company) if c.target_author == caller.member_id and c.foundation is None
+            c
+            for c in self.open_challenges(caller.company)
+            if c.target_author == caller.member_id and c.foundation is None and c.kind != PROMOTE
         ]
         with self._db.transaction() as conn:
             fresh_targets = {
@@ -767,11 +805,13 @@ class Challenges:
         return f"<shared-memory-notices>\n{text}\n</shared-memory-notices>" if text else None
 
     def _render(self, caller: Caller, waiting: list[Waiting]) -> str | None:
-        ordinary = [one for one in waiting if one.challenge.foundation is None]
+        ordinary = [one for one in waiting if one.challenge.foundation is None and one.challenge.kind != PROMOTE]
         foundations = [one for one in waiting if one.challenge.foundation is not None]
+        departments = [one for one in waiting if one.challenge.kind == PROMOTE]
         parts = [
             self._render_group(caller, ordinary, "[challenges waiting for your decision]"),
             self._render_group(caller, foundations, "[foundation challenges waiting for your decision]"),
+            self._render_group(caller, departments, "[department challenges waiting for your decision]"),
         ]
         return "\n\n".join(part for part in parts if part) or None
 
@@ -784,6 +824,8 @@ class Challenges:
             first = next(one.challenge for one in waiting if one.challenge.target_path == target_path)
             if first.foundation is not None and first.kind == "add":
                 lines.append(f"The {first.foundation} foundation ({target_path}):")
+            elif first.kind == PROMOTE:
+                lines.append(f"{self.department_name(first)} department memory ({target_path}):")
             elif first.foundation is not None:
                 lines.append(f"{self._title(caller.company, target_path)} ({target_path}), in the {first.foundation} foundation:")
             else:
@@ -797,6 +839,9 @@ class Challenges:
                     continue
                 if c.kind == "add":
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c)} to the {c.foundation} foundation"
+                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                elif c.kind == PROMOTE:
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: promote {self._replacement(caller, c)}"
                     line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 elif c.challenger_path is None:
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: retire it"
@@ -826,6 +871,12 @@ class Challenges:
         except Refused:
             return challenge.challenger_path
         return f'"{challenger.title}" ({challenge.challenger_path}): {challenger.summary}'
+
+    def department_name(self, challenge: Challenge) -> str:
+        """The name of the department a promotion into department memory asks to join, or its ID once removed."""
+        department_id = department_of(challenge) or challenge.target_path
+        found = self._departments.named(department_id)
+        return department_id if found is None else found.name
 
     def _title(self, company: str, path: str) -> str:
         try:

@@ -2469,7 +2469,7 @@ export interface components {
             /** May Decide */
             may_decide: boolean;
             /** Decides As */
-            decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left") | null;
+            decides_as: ("author" | "lead" | "keeper" | "admin" | "fallback" | "author_left" | "department_lead") | null;
             /** Count */
             count: number | null;
             /** Evidence */
@@ -2654,7 +2654,7 @@ export interface components {
              * Decides As
              * @enum {string}
              */
-            decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left";
+            decides_as: "author" | "lead" | "keeper" | "admin" | "fallback" | "author_left" | "department_lead";
             /** Foundation */
             foundation: string | null;
             /** Foundation Name */
