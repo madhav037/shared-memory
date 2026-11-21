@@ -22,7 +22,6 @@ from tests.support import (
     Console,
     ConsoleClient,
     Session,
-    add,
     added_context,
     ask,
     create,
@@ -90,23 +89,6 @@ def test_a_department_lead_promotes_into_department_memory_readable_at_its_depar
     assert read["status"] == "active"
     assert read["promoted_by"] is None
     assert ask(signed_out, "/api/memory", path=path)["level"] == "department"
-
-
-def test_a_member_who_does_not_lead_the_department_is_refused_and_the_memory_stays_personal(
-    console: Console, signed_out: ConsoleClient
-) -> None:
-    owner = signed_in_owner(console, signed_out, "olive-dept-memory-two", 1902)
-    billing = create(signed_out, "Billing")["project_id"]
-    department(signed_out, "Payments", billing)
-    token = add(signed_out, "emp-2", "Dana Developer")["personal_token"]
-    dana = Session(console.server, token, billing, "app")
-    personal = dana.call("remember", **REVIEWS)["path"]
-
-    refused = dana.refusal("promote", path=personal, level="department")
-
-    assert "department lead" in refused
-    assert dana.call("read", path=personal)["level"] == "personal"
-    assert owner.in_project(billing).call("tree", level="department")["folders"] == []
 
 
 def test_promoting_into_department_memory_from_a_project_in_no_department_is_refused(

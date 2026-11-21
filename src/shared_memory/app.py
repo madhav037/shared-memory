@@ -348,7 +348,7 @@ def build_app(
     index.catch_up(store)
     tied.catch_up(store)
     history = MemoryHistory(settings.memory_root)
-    challenges = Challenges(settings, db, store, identity, audit, clock)
+    challenges = Challenges(settings, db, store, identity, audit, clock, departments)
     briefing = Briefing(settings, db, store, audit, clock, challenges, departments)
     store.subscribe(briefing)
     uses = Uses(settings, db, store, briefing.pinned_among, clock)
@@ -1262,6 +1262,7 @@ def build_app(
         The challenged memory's author may decide. So may a lead of the project it is in and the company's admins (for
         company memory, the admins only), unless they raised the challenge themselves; its author is then told who
         decided and in what capacity. Any member may once it has been open 3 days or its author has left the company.
+        A promotion into department memory is decided by its department leads only, or admins when it has none.
         """
         return lifecycle.decide_challenge(caller(ctx), challenge_id, decision)
 
@@ -1301,8 +1302,8 @@ def build_app(
         imported_from: str | None = None,
         foundation: str | None = None,
     ) -> dict[str, Any]:
-        """Promote your personal memory to level project, department (its leads only; ways of working its projects
-        share) or company (policy). Suggest the fitting one.
+        """Promote your personal memory to level project, department (ways of working its projects share; from a
+        non-lead, a challenge its leads decide) or company (policy). Suggest the fitting one.
 
         Call it first without a reference. If similar memories exist, nothing changes yet: you get them back with a
         reference. Judge whether each contradicts this one, ask the member, then call again with the reference and

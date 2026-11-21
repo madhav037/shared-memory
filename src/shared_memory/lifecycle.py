@@ -16,16 +16,17 @@ from shared_memory.audit import (
     MEMORY_SUPERSEDED,
     Audit,
 )
-from shared_memory.challenges import DOUBT, Challenge, Challenges, DecidesAs, project_of
+from shared_memory.challenges import DOUBT, PROMOTE, Challenge, Challenges, DecidesAs, department_of, project_of
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
-from shared_memory.departments import Department, Departments
+from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
+    DEPARTMENTS_FOLDER,
     FOUNDATION_TYPE,
     KNOWN_ISSUE,
     LEVEL_ORDER,
@@ -69,7 +70,8 @@ RESOLUTIONS = ("supersede", "keep_both", "cancel")
 @dataclass(frozen=True)
 class Promotable:
     """A promotion that can happen: where the memory is, its new level, who promotes it (when not its author), the
-    project, the foundation it goes into, if any, and the project's department, if it is in one."""
+    project, the foundation it goes into, if any, and the project's department, if it is in one. asks_leads is a
+    promotion into department memory by a member who doesn't lead the department: a challenge its leads decide."""
 
     location: Location
     target: Level
@@ -77,6 +79,7 @@ class Promotable:
     project: Project
     foundation: str | None
     department_id: str | None = None
+    asks_leads: bool = False
 
 
 @dataclass(frozen=True)
@@ -137,6 +140,8 @@ class Lifecycle:
         if reference is None:
             proposal = self._similar(caller, path, location, level, project, department_id)
             if proposal is None:
+                if promotable.asks_leads:
+                    return self._ask_department_leads(caller, location, promoted_by, department_id, reasoning)
                 if into is not None and not self._changes_at_once(caller, project.project_id, into, self._leads(caller, project.project_id)):
                     return self._ask_to_add(caller, location, promoted_by, into, reasoning)
                 return self._move(
@@ -202,6 +207,14 @@ class Lifecycle:
                 "A promotion that challenges another author's memory can't also supersede or be an exception. "
                 "Challenge first; once it's accepted, promote the rest."
             )
+        if promotable.asks_leads:
+            if challenged is not None or supersede is not None or exception_to is not None:
+                raise Refused(
+                    "Only a department lead promotes a memory into department memory that supersedes or is an "
+                    "exception to another. Keep both, or ask one of its leads."
+                )
+            self._forget(reference)
+            return self._ask_department_leads(caller, location, promoted_by, department_id, reasoning)
         challenged_foundation = None if challenged is None else locate(challenged[0]).foundation
         if into is not None and not self._changes_at_once(caller, project.project_id, into, leads):
             if (challenged is not None and challenged_foundation is None) or supersede is not None or exception_to is not None:
@@ -374,26 +387,52 @@ class Lifecycle:
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
         target: Level = "company" if level == "company" else "department" if level == "department" else "project"
         department = self._departments.of_project(project.project_id)
+        asks_leads = False
         if target == "department":
-            self._require_department_lead(caller, project, department)
+            if department is None:
+                raise Refused(
+                    f"Project {project.name!r} is in no department, so it has no department memory. Promote into "
+                    "'project' or 'company' memory instead."
+                )
+            # Only a department lead promotes into department memory; anyone else asks its leads (ADR-0033).
+            asks_leads = not self._departments.leads(caller.member, department.department_id)
         into = self._foundation_for(memory, target, foundation, project.project_id)
-        return Promotable(location, target, promoted_by, project, into, None if department is None else department.department_id)
+        department_id = None if department is None else department.department_id
+        return Promotable(location, target, promoted_by, project, into, department_id, asks_leads)
 
-    def _require_department_lead(self, caller: Caller, project: Project, department: Department | None) -> None:
-        """Refuse a promotion into department memory from a project in no department, or by anyone but a lead of the
-        project's department (ADR-0033). Until a non-lead's promotion becomes a challenge to the leads (#632), it is
-        refused, and the memory stays personal."""
-        if department is None:
-            raise Refused(
-                f"Project {project.name!r} is in no department, so it has no department memory. Promote into "
-                "'project' or 'company' memory instead."
-            )
-        if not self._departments.leads(caller.member, department.department_id):
-            raise Refused(
-                f"Only a department lead promotes into department memory, and you don't lead {department.name!r}. "
-                "Ask one of its leads to promote it, or promote it into 'project' memory. It stays your personal "
-                "memory."
-            )
+    def _ask_department_leads(
+        self,
+        caller: Caller,
+        location: Location,
+        promoted_by: str | None,
+        department_id: str | None,
+        reasoning: str | None,
+    ) -> dict[str, Any]:
+        """A promotion into department memory by a member who doesn't lead the department: a challenge its leads
+        decide, or the company's admins once it has none (ADR-0033). It has no challenged memory, so it stands against
+        the department's folder, and the memory stays the member's personal memory until it is decided."""
+        assert department_id is not None
+        folder = str(PurePosixPath(DEPARTMENTS_FOLDER, department_id))
+        kept = self._kept_import(caller.company, location.path)
+        challenge_id = self._challenges.raise_challenge(
+            caller,
+            kind=PROMOTE,
+            target_path=folder,
+            target_author=caller.member_id,
+            level="department",
+            challenger_path=str(location.path),
+            promoted_by=promoted_by,
+            reasoning=reasoning,
+            imported_from=None if kept is None else kept.source,
+        )
+        return {
+            "status": "challenge_raised",
+            "challenge_id": challenge_id,
+            "challenges": folder,
+            "author": caller.member_id,
+            "next": "Only a department lead promotes into department memory, so one of its leads decides (an admin "
+            "when it has none). Until then it stays your personal memory.",
+        }
 
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
@@ -814,8 +853,10 @@ class Lifecycle:
             )
             return {"status": "rejected", "challenge_id": challenge.id}
 
-        if challenge.kind == "add":
-            result, outcome = self._accept_add(caller, challenge)
+        if challenge.kind in ("add", PROMOTE):
+            result, outcome = (
+                self._accept_add(caller, challenge) if challenge.kind == "add" else self._accept_promote(caller, challenge)
+            )
             self._challenges.decide(challenge, "accepted", decider)
             self._decided(caller, challenge, raisers, "accepted", decides_as)
             self._challenges.tell(caller.company, challenge.raised_by, outcome)
@@ -896,6 +937,34 @@ class Lifecycle:
         outcome = (
             f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
             f"your memory is now in the {challenge.foundation} foundation at {moved['path']}."
+        )
+        return {"status": "accepted", "challenge_id": challenge.id, "path": moved["path"]}, outcome
+
+    def _accept_promote(self, caller: Caller, challenge: Challenge) -> tuple[dict[str, Any], str]:
+        """Move the challenging personal memory into the department memory it asked to join, in its author's name."""
+        department_id = department_of(challenge)
+        assert challenge.challenger_path is not None and department_id is not None
+        challenger_location = locate(challenge.challenger_path)
+        if not self._store.exists(caller.company, challenger_location.path):
+            self._challenges.decide(challenge, "withdrawn", caller.member_id, "The challenging memory was deleted.")
+            raise Refused("The challenging memory no longer exists, so the challenge has been withdrawn.")
+        project_id = challenger_location.project_id
+        now_in = None if project_id is None else self._departments.of_project(project_id)
+        if now_in is None or now_in.department_id != department_id:
+            why = "Its project is no longer in that department."
+            self._challenges.decide(challenge, "withdrawn", caller.member_id, why)
+            raise Refused(f"{why} The challenge has been withdrawn, and the memory stays personal.")
+        moved = self._move(
+            caller,
+            challenger_location,
+            "department",
+            promoted_by=challenge.promoted_by,
+            reason=f"Accept challenge {challenge.id}",
+            department_id=department_id,
+        )
+        outcome = (
+            f"Your challenge {challenge.id} was accepted by {caller.member_id}: "
+            f"your memory is now {now_in.name} department memory at {moved['path']}."
         )
         return {"status": "accepted", "challenge_id": challenge.id, "path": moved["path"]}, outcome
 

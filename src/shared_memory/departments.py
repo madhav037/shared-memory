@@ -117,6 +117,23 @@ class Departments:
             ).fetchone()
         return found is not None
 
+    def named(self, department_id: str) -> Department | None:
+        """The department with this ID, or None once it has been removed."""
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "SELECT department_id, name FROM departments WHERE department_id = %s", (department_id,)
+            ).fetchone()
+        return None if row is None else Department(row["department_id"], row["name"])
+
+    def has_leads(self, department_id: str) -> bool:
+        """Whether any member still in the company leads this department. One with none left is decided for by the
+        company's admins (ADR-0033)."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT member_id FROM department_leads WHERE department_id = %s", (department_id,)
+            ).fetchall()
+            return any(self._identity.present(conn, row["member_id"]) is not None for row in rows)
+
     def listed(self, member: Member) -> list[DepartmentView]:
         """Every department of the member's company by name, each with the projects in it this member can reach."""
         reachable = {project.project_id: project for project in self._identity.projects(member)}
