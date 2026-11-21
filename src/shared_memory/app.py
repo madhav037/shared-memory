@@ -44,6 +44,7 @@ from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
+from shared_memory.department_page import DepartmentPages
 from shared_memory.departments import Departments
 from shared_memory.draft_learnings import ASKING as DRAFT_LEARNINGS_ASKING
 from shared_memory.draft_learnings import DraftLearning, DraftLearnings, Edits, Moment, asked_for_card
@@ -1768,6 +1769,7 @@ def build_app(
             ProjectHealth(identity, store, uses, challenges),
             progress,
             departments,
+            DepartmentPages(departments, store, uses, challenges),
         ).routes()
     )
     # Added first, so inside NeverCached: a refusal is never cached either.

@@ -244,6 +244,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/departments/{department_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing. */
+        get: operations["department"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/departments/{department_id}/rename": {
         parameters: {
             query?: never;
@@ -1398,6 +1415,84 @@ export interface components {
             departments: components["schemas"]["DepartmentSummary"][];
             /** You May Create */
             you_may_create: boolean;
+        };
+        /**
+         * DepartmentMemoryEntry
+         * @description One active department memory, as the department page lists it: no author, so the page names no member.
+         */
+        DepartmentMemoryEntry: {
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+            /** Type */
+            type: string;
+        };
+        /**
+         * DepartmentRollUp
+         * @description How memory is doing across a department (spec #624), never per member: each project the member can reach, and
+         *     department memory's own use. window_days is how far back `used` counts; outdated_after_days is the server's
+         *     setting.
+         */
+        DepartmentRollUp: {
+            /** Window Days */
+            window_days: number;
+            /** Outdated After Days */
+            outdated_after_days: number;
+            /** Projects */
+            projects: components["schemas"]["ProjectRollUp"][];
+            department_memory: components["schemas"]["MemoryCounts"];
+        };
+        /**
+         * MemoryCounts
+         * @description How one area's memory is doing, as counts only: its active memories, how many are possibly outdated, how many a
+         *     coding agent recalled or read within the window (saving one counts too, as it starts its clock again), and the
+         *     level contradictions and other challenges waiting on it.
+         */
+        MemoryCounts: {
+            /** Memories */
+            memories: number;
+            /** Possibly Outdated */
+            possibly_outdated: number;
+            /** Used */
+            used: number;
+            /** Level Contradictions */
+            level_contradictions: number;
+            /** Challenges */
+            challenges: number;
+        };
+        /**
+         * ProjectRollUp
+         * @description One project of the department, with its counts.
+         */
+        ProjectRollUp: {
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            counts: components["schemas"]["MemoryCounts"];
+        };
+        /**
+         * DepartmentPage
+         * @description A department's page (#636): the projects in it this member can reach and its department memory, and for its
+         *     department leads and the company's admins the roll-up, which is None for anyone else. Reading it changes nothing.
+         */
+        DepartmentPage: {
+            /** Department Id */
+            department_id: string;
+            /** Name */
+            name: string;
+            /** Restricted */
+            restricted: boolean;
+            /** You Lead */
+            you_lead: boolean;
+            /** Projects */
+            projects: components["schemas"]["DepartmentProject"][];
+            /** Memory */
+            memory: components["schemas"]["DepartmentMemoryEntry"][];
+            roll_up: components["schemas"]["DepartmentRollUp"] | null;
         };
         /**
          * DepartmentName
@@ -3440,6 +3535,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Departments"];
+                };
+            };
+        };
+    };
+    department: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A department's page: its projects and department memory, and for its leads and the company's admins a roll-up of each project's counts and department memory's use, never per member. Changes nothing. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentPage"];
                 };
             };
         };

@@ -45,6 +45,7 @@ import { SignIn } from "./pages/SignIn";
 import { YourSettings } from "./pages/YourSettings";
 import { Company, LICENSE_CHANGED, licenseSentence } from "./pages/Company";
 import { Departments } from "./pages/Departments";
+import { DepartmentPage } from "./pages/DepartmentPage";
 
 type Connection = { state: "asking" } | { state: "reached"; status: Status } | { state: "unreachable" };
 
@@ -274,6 +275,7 @@ function SignedIn({
             <Route path="/projects/:projectId" element={<OldProjectAddress />} />
             <Route path="/company" element={<Company me={member} />} />
             <Route path="/departments" element={<Departments />} />
+            <Route path="/departments/:departmentId" element={<DepartmentPage />} />
             <Route path="/team" element={<Navigate to="/company" replace />} />
             <Route path="/audit" element={readsAudit ? <AuditLog member={member} /> : <Navigate to="/" replace />} />
             <Route path="/connect" element={<ConnectAgent serverUrl={serverUrl} />} />
