@@ -196,6 +196,20 @@ def test_an_outsider_cant_reach_its_memory_by_path_from_another_project_nor_see_
     assert "SECRET" not in str(found)
 
 
+def test_an_outsider_promoting_to_company_isnt_shown_its_memory_as_similar(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-fourteen", 2719)
+    from_payments = it.dana.in_project(it.payments, "payments-api")
+    personal = from_payments.call("remember", **REVIEWS)["path"]
+
+    done = from_payments.call("promote", path=personal, level="company")
+
+    assert it.department_memory not in str(done), done
+    assert it.project_memory not in str(done), done
+    assert f"departments/{it.treasury}" not in str(done), done
+
+
 def test_an_outsider_never_sees_it_in_the_console(console: Console, signed_out: ConsoleClient) -> None:
     it = restricted(console, signed_out, "olive-closed-dept-five", 2707)
     dana = signed_in(console, "dana-olive-closed-dept-five", 2708)
