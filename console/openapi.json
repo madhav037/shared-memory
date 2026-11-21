@@ -662,6 +662,118 @@
         }
       }
     },
+    "/api/departments/{department_id}/restrict": {
+      "post": {
+        "operationId": "restrict_department",
+        "summary": "Close a department to its access list, or open it to the whole company again.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentRestriction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Close a department to its access list, or open it to the whole company again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/access": {
+      "post": {
+        "operationId": "grant_department_access",
+        "summary": "Put a member on a department's access list.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentAccessChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Put a member on a department's access list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/access/{member_id}/remove": {
+      "post": {
+        "operationId": "revoke_department_access",
+        "summary": "Take a member off a department's access list.",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Take a member off a department's access list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Departments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/restrict": {
       "post": {
         "operationId": "restrict_project",
@@ -2385,11 +2497,16 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
           }
         },
         "required": [
           "department_id",
-          "name"
+          "name",
+          "restricted"
         ],
         "title": "DepartmentRef",
         "type": "object"
@@ -2731,7 +2848,7 @@
         "type": "object"
       },
       "DepartmentSummary": {
-        "description": "A department (ADR-0032): its department leads, the projects in it this member can reach, and what they may\nchange.",
+        "description": "A department (ADR-0032): its department leads, the projects in it this member can reach, whether it is\nrestricted and who is on its access list, and what they may change.",
         "properties": {
           "department_id": {
             "title": "Department Id",
@@ -2762,6 +2879,17 @@
           "you_may_change": {
             "title": "You May Change",
             "type": "boolean"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
+          "access": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectMember"
+            },
+            "title": "Access",
+            "type": "array"
           }
         },
         "required": [
@@ -2770,7 +2898,9 @@
           "leads",
           "projects",
           "you_lead",
-          "you_may_change"
+          "you_may_change",
+          "restricted",
+          "access"
         ],
         "title": "DepartmentSummary",
         "type": "object"
@@ -2837,6 +2967,34 @@
           "project_id"
         ],
         "title": "ProjectMove",
+        "type": "object"
+      },
+      "DepartmentRestriction": {
+        "description": "Whether this department is closed to its access list, or open to the whole company.",
+        "properties": {
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restricted"
+        ],
+        "title": "DepartmentRestriction",
+        "type": "object"
+      },
+      "DepartmentAccessChange": {
+        "description": "The member being put on this department's access list.",
+        "properties": {
+          "member_id": {
+            "title": "Member Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id"
+        ],
+        "title": "DepartmentAccessChange",
         "type": "object"
       },
       "Restriction": {
@@ -4859,7 +5017,11 @@
               "department_removed",
               "department_lead_appointed",
               "department_lead_removed",
-              "project_moved"
+              "project_moved",
+              "department_restricted",
+              "department_opened",
+              "department_access_granted",
+              "department_access_revoked"
             ],
             "title": "Kind",
             "type": "string"

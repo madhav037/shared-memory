@@ -88,9 +88,9 @@ class Hit:
 @dataclass(frozen=True)
 class Reach:
     """The memory a search for similar memories may name: company memory if `company_memory`; the department memory of
-    `departments`, or of every department when `departments` is None; the project memory of `projects`, or of every
-    project but `unreachable` when `projects` is None; and the personal memory of `member_id` in `personal_in`, never
-    any other member's."""
+    `departments`, or of every department but `unreachable_departments` when `departments` is None; the project memory
+    of `projects`, or of every project but `unreachable` when `projects` is None; and the personal memory of
+    `member_id` in `personal_in`, never any other member's."""
 
     company_memory: bool = False
     projects: tuple[str, ...] | None = ()
@@ -98,6 +98,7 @@ class Reach:
     member_id: str | None = None
     personal_in: str | None = None
     departments: tuple[str, ...] | None = ()
+    unreachable_departments: frozenset[str] = frozenset()
 
     @classmethod
     def project_memory_of(cls, project_id: str) -> Reach:
@@ -105,9 +106,15 @@ class Reach:
         return cls(projects=(project_id,))
 
     @classmethod
-    def of_member(cls, member_id: str, project_id: str, unreachable: frozenset[str]) -> Reach:
+    def of_member(
+        cls,
+        member_id: str,
+        project_id: str,
+        unreachable: frozenset[str],
+        unreachable_departments: frozenset[str] = frozenset(),
+    ) -> Reach:
         """What a member's save is compared with: their own personal memory in the project they work in, plus the
-        company memory, every department's memory and the project memory of every project they can reach."""
+        company memory, and the department memory and project memory of every department and project they can reach."""
         return cls(
             company_memory=True,
             projects=None,
@@ -115,6 +122,7 @@ class Reach:
             member_id=member_id,
             personal_in=project_id,
             departments=None,
+            unreachable_departments=unreachable_departments,
         )
 
     @classmethod
@@ -138,7 +146,7 @@ class Reach:
         else:
             projects = "project_id = ANY(%(reach_projects)s)"
         if self.departments is None:
-            departments = "level = 'department'"
+            departments = "(level = 'department' AND NOT (department_id = ANY(%(reach_unreachable_departments)s)))"
         else:
             departments = "(level = 'department' AND department_id = ANY(%(reach_departments)s))"
         condition = (
@@ -150,6 +158,7 @@ class Reach:
             "reach_departments": list(self.departments or ()),
             "reach_projects": list(self.projects or ()),
             "reach_unreachable": sorted(self.unreachable),
+            "reach_unreachable_departments": sorted(self.unreachable_departments),
             "reach_member": self.member_id,
             "reach_personal_in": self.personal_in,
         }

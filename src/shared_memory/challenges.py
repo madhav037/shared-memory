@@ -611,7 +611,11 @@ class Challenges:
         theirs in."""
         reachable = {project.project_id for project in self._identity.projects(caller.member)} | {None}
         waiting = []
-        reached = [one for one in self.open_challenges(caller.company) if project_of(one) in reachable]
+        reached = [
+            one
+            for one in self.open_challenges(caller.company)
+            if project_of(one) in reachable and caller.reaches(one.target_path)
+        ]
         raisers = self.raisers(reached)
         for challenge in reached:
             decides_as = self.decides_as(caller, challenge, raisers[challenge.id])

@@ -319,6 +319,7 @@ def build_app(
     licenses = Licenses(settings, db, audit, clock, license_keys)
     identity.member_cap = licenses.member_cap
     departments = Departments(db, identity, clock)
+    identity.walled_by(departments)
 
     def unless_read_only(step: F) -> F:
         """A tool, or a step of one, that changes memory: refused while the server is read-only (a hosted server whose

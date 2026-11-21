@@ -130,11 +130,19 @@ export function ProjectSettings({ me }: { me: SignedInMember }) {
         <p className="section-lede" data-testid="reach">
           {project.restricted
             ? "Restricted: only the members below, this project’s leads and the company’s admins can reach its memory — in the console and in every coding agent session."
-            : project.access.length > 0
+            : project.department?.restricted
+              ? `Everyone who can reach the restricted department ${project.department.name} can reach its memory; nobody outside it can.`
+              : project.access.length > 0
               ? `Every member of the company can reach its memory. Restricting it again lets the ${project.access.length === 1 ? "member" : `${project.access.length} members`} on its access list straight back in.`
               : "Every member of the company can reach its memory, in the console and in every coding agent session."}
         </p>
-        {project.you_may_change && (
+        {project.restricted && project.department?.restricted && (
+          <p className="section-lede" data-testid="reach-department">
+            It is in the restricted department {project.department.name}, so it can’t be opened to the whole company
+            until that department is opened or the project is moved out of it.
+          </p>
+        )}
+        {project.you_may_change && !(project.restricted && project.department?.restricted) && (
           <Button
             variant="default"
             leftSection={project.restricted ? <IconLockOpen size={16} stroke={1.6} /> : <IconLock size={16} stroke={1.6} />}

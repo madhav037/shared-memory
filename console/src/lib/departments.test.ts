@@ -23,8 +23,8 @@ describe("the top of the contents, grouped by department", () => {
       folder("projects/site", "Site"),
     ];
     const projects = new Map([
-      ["billing", project("billing", { department_id: "payments-1", name: "Payments" })],
-      ["ledger", project("ledger", { department_id: "accounts-1", name: "Accounts" })],
+      ["billing", project("billing", { department_id: "payments-1", name: "Payments", restricted: false })],
+      ["ledger", project("ledger", { department_id: "accounts-1", name: "Accounts", restricted: false })],
       ["site", project("site", null)],
     ]);
 
@@ -47,7 +47,7 @@ describe("the top of the contents, grouped by department", () => {
       folder("projects/site", "Site"),
     ];
     const projects = new Map([
-      ["billing", project("billing", { department_id: "payments-1", name: "Payments" })],
+      ["billing", project("billing", { department_id: "payments-1", name: "Payments", restricted: false })],
       ["site", project("site", null)],
     ]);
 

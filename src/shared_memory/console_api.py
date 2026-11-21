@@ -53,11 +53,15 @@ from shared_memory.audit import (
     REPOSITORY_ADDED,
     REPOSITORY_REMOVED,
     COMPANY_EXPORTED,
+    DEPARTMENT_ACCESS_GRANTED,
+    DEPARTMENT_ACCESS_REVOKED,
     DEPARTMENT_CREATED,
     DEPARTMENT_LEAD_APPOINTED,
     DEPARTMENT_LEAD_REMOVED,
     DEPARTMENT_REMOVED,
+    DEPARTMENT_OPENED,
     DEPARTMENT_RENAMED,
+    DEPARTMENT_RESTRICTED,
     PROJECT_MOVED,
     TOKEN_ISSUED,
     Audit,
@@ -87,7 +91,8 @@ from shared_memory.console_contract import (
     SessionMessage, ChosenTimeZone, DetectedTimeZone, YourTimeZone, YourTimeZoneChoices,
     OnboardingEntry, OnboardingProgress,
     InterviewMemories, InterviewMemory,
-    DepartmentAppointment, DepartmentName, DepartmentProject, DepartmentRef, Departments, DepartmentSummary,
+    DepartmentAccessChange, DepartmentAppointment, DepartmentName, DepartmentProject, DepartmentRef,
+    DepartmentRestriction, Departments, DepartmentSummary,
     ProjectMember, ProjectMove,
 )
 from shared_memory.departments import Department, Departments as DepartmentStore
@@ -239,7 +244,9 @@ def _evidence(each: Evidence) -> DoubtEvidence:
 
 
 def _department_ref(department: Department | None) -> DepartmentRef | None:
-    return None if department is None else DepartmentRef(department_id=department.department_id, name=department.name)
+    if department is None:
+        return None
+    return DepartmentRef(department_id=department.department_id, name=department.name, restricted=department.restricted)
 
 
 def _sign_in_first() -> Response:
@@ -493,6 +500,9 @@ class ConsoleApi:
             "remove_department_lead": self._remove_department_lead,
             "move_project_in": self._move_project_in,
             "move_project_out": self._move_project_out,
+            "restrict_department": self._restrict_department,
+            "grant_department_access": self._grant_department_access,
+            "revoke_department_access": self._revoke_department_access,
             "sign_out": self._sign_out,
         }
         assert SAVING <= handlers.keys()
@@ -857,6 +867,40 @@ class ConsoleApi:
 
         return self._change_departments(request, move)
 
+    def _restrict_department(self, request: Request) -> Response:
+        def restrict(member: Member, caller: Caller) -> None:
+            asked: DepartmentRestriction = request.state.asked
+            changed = self._departments.restrict(caller, request.path_params["department_id"], asked.restricted)
+            self._audit.record(
+                DEPARTMENT_RESTRICTED if asked.restricted else DEPARTMENT_OPENED,
+                member=member,
+                target=changed.department_id,
+                detail={"name": changed.name},
+            )
+
+        return self._change_departments(request, restrict)
+
+    def _grant_department_access(self, request: Request) -> Response:
+        def grant(member: Member, caller: Caller) -> None:
+            asked: DepartmentAccessChange = request.state.asked
+            department_id = request.path_params["department_id"]
+            self._departments.grant_access(caller, department_id, asked.member_id)
+            self._audit.record(
+                DEPARTMENT_ACCESS_GRANTED, member=member, target=department_id, detail={"member_id": asked.member_id}
+            )
+
+        return self._change_departments(request, grant)
+
+    def _revoke_department_access(self, request: Request) -> Response:
+        def revoke(member: Member, caller: Caller) -> None:
+            department_id, member_id = request.path_params["department_id"], request.path_params["member_id"]
+            self._departments.revoke_access(caller, department_id, member_id)
+            self._audit.record(
+                DEPARTMENT_ACCESS_REVOKED, member=member, target=department_id, detail={"member_id": member_id}
+            )
+
+        return self._change_departments(request, revoke)
+
     def _change_departments(self, request: Request, change: Callable[[Member, Caller], None]) -> Response:
         """Everything an admin or a department lead does to a department: the same guard, and every department as
         it now stands."""
@@ -879,6 +923,8 @@ class ConsoleApi:
                     projects=[DepartmentProject(project_id=one.project_id, name=one.name) for one in view.projects],
                     you_lead=view.you_lead,
                     you_may_change=view.you_may_change,
+                    restricted=view.restricted,
+                    access=[ProjectMember(member_id=one.member_id, name=one.name) for one in view.access],
                 )
                 for view in self._departments.listed(member)
             ],

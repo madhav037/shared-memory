@@ -469,3 +469,17 @@ export function moveProjectOut(departmentId: string, projectId: string): Promise
   const where = `${encodeURIComponent(departmentId)}/projects/${encodeURIComponent(projectId)}`;
   return change<Departments>(`/api/departments/${where}/remove`);
 }
+
+/** Close a department to its access list, or open it to the whole company again. */
+export function restrictDepartment(departmentId: string, restricted: boolean): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/restrict`, { restricted });
+}
+
+export function grantDepartmentAccess(departmentId: string, memberId: string): Promise<Departments> {
+  return change<Departments>(`/api/departments/${encodeURIComponent(departmentId)}/access`, { member_id: memberId });
+}
+
+export function revokeDepartmentAccess(departmentId: string, memberId: string): Promise<Departments> {
+  const where = `${encodeURIComponent(departmentId)}/access/${encodeURIComponent(memberId)}`;
+  return change<Departments>(`/api/departments/${where}/remove`);
+}

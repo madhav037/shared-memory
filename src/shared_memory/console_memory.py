@@ -15,7 +15,7 @@ from typing import Any
 from shared_memory.challenges import Challenges
 from shared_memory.departments import Departments
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, project_in
+from shared_memory.identity import Caller, Identity
 from shared_memory.memory import (
     COMPANY_FOLDER,
     DEPARTMENTS_FOLDER,
@@ -145,12 +145,12 @@ class ConsoleMemory:
         else:
             memories, subfolders = self._store.list_folder(caller.company, pure)
             subfolders = sorted(
-                (sub for sub in subfolders if project_in(str(sub)) not in caller.unreachable), key=accepted_first
+                (sub for sub in subfolders if caller.reaches(str(sub))), key=accepted_first
             )
         inside = []
         if deep and pure.parts and pure.parts != ("projects",):
             for below, held in self._store.walk(caller.company, pure):
-                if below == pure or project_in(str(below)) in caller.unreachable:
+                if below == pure or not caller.reaches(str(below)):
                     continue
                 count, changed = self._store.extent(caller.company, below)
                 inside.append(

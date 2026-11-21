@@ -74,6 +74,10 @@ const WORDS: Record<Kind, string> = {
   department_lead_appointed: "Department lead appointed",
   department_lead_removed: "Department lead taken off",
   project_moved: "Project moved between departments",
+  department_restricted: "Department restricted",
+  department_opened: "Department opened to the company",
+  department_access_granted: "Department access granted",
+  department_access_revoked: "Department access taken away",
 };
 
 /** In what capacity a challenge was decided, as the record names it. */

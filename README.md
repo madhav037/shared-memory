@@ -76,7 +76,7 @@ name the project and the repository in two more headers, `X-Shared-Memory-Projec
   refused with the seconds to wait; a limited hook adds nothing and never blocks the coding agent.
 - A memory's text reaches a prompt inside a **fence** its own text cannot forge, so a memory cannot pass itself off as an
   instruction from the server.
-- A personal token is shown once, when issued. A restricted project is invisible to anyone outside its access list.
+- A personal token is shown once, when issued. A restricted project or restricted department is invisible to anyone outside its access list.
 - Nothing is sent home. A self-hosted server reports errors only if you set `SHARED_MEMORY_SENTRY_DSN`, and then with
   private data removed.
 - The threat model is in [`docs/threat-model.md`](docs/threat-model.md).

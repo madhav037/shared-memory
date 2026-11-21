@@ -82,6 +82,10 @@ Kind = Literal[
     "department_lead_appointed",
     "department_lead_removed",
     "project_moved",
+    "department_restricted",
+    "department_opened",
+    "department_access_granted",
+    "department_access_revoked",
 ]
 
 SIGNED_IN: Kind = "signed_in"
@@ -165,6 +169,14 @@ DEPARTMENT_LEAD_REMOVED: Kind = "department_lead_removed"
 # A project moved into or out of a department; the entry's detail holds the department it is in now and the one it
 # was in, either None for no department.
 PROJECT_MOVED: Kind = "project_moved"
+# A department closed to its access list or opened to the whole company again; the entry's target is its department ID
+# and its detail its name.
+DEPARTMENT_RESTRICTED: Kind = "department_restricted"
+DEPARTMENT_OPENED: Kind = "department_opened"
+# A member put on or taken off a department's access list; the entry's target is the department ID and its detail
+# names the member.
+DEPARTMENT_ACCESS_GRANTED: Kind = "department_access_granted"
+DEPARTMENT_ACCESS_REVOKED: Kind = "department_access_revoked"
 
 
 @dataclass(frozen=True)

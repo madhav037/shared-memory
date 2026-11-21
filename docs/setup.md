@@ -88,6 +88,8 @@ Whoever creates a project becomes its first **project lead**: they appoint other
 
 A project is open to the whole company unless a lead or an admin **restricts** it. A restricted project can be reached only by the members on its **access list**, its leads and the company's admins: everyone else stops seeing it listed, its memory tools refuse, and a session started in one of its repositories is told why and gets no briefing or recall. Company memory stays readable by the whole company. Opening a project up again keeps its access list, so restricting it later lets the same members straight back in.
 
+A **department** is open to the whole company too, unless one of its department leads or an admin restricts it to an access list from the console's **Departments** page. A restricted department's department memory and its projects are then invisible to everyone but its access list, its leads and the company's admins, with the same refusal a restricted project gives, even to a member on one of its projects' own access lists. A project inside it can be restricted further, but never opened to the whole company.
+
 ## 4. Join as a new member
 
 Your personal token comes from whoever added you. You can also issue yourself a new one on the console's **Connect your agent** page, which shows the steps below for each agent.

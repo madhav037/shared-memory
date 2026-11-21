@@ -72,10 +72,11 @@ def test_an_admin_creates_a_department_names_a_lead_and_moves_a_project_in(
     assert leads(department) == ["emp-2"]
     assert projects_in(department) == [billing]
     in_the_list = next(one for one in signed_out.get("/api/projects").json()["projects"] if one["project_id"] == billing)
-    assert in_the_list["department"] == {"department_id": payments["department_id"], "name": "Payments"}
+    assert in_the_list["department"] == {"department_id": payments["department_id"], "name": "Payments", "restricted": False}
     assert fetch_project(signed_out, billing)["department"] == {
         "department_id": payments["department_id"],
         "name": "Payments",
+        "restricted": False,
     }
     assert named(departments(dana), payments["department_id"])["you_lead"] is True
     dana.close()
