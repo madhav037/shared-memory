@@ -103,6 +103,12 @@ class Departments:
             ).fetchall()
         return {row["project_id"]: Department(row["department_id"], row["name"]) for row in rows}
 
+    def exists(self, department_id: str) -> bool:
+        """Whether a department with this ID exists; a removed one doesn't."""
+        with self._db.transaction() as conn:
+            found = conn.execute("SELECT 1 FROM departments WHERE department_id = %s", (department_id,)).fetchone()
+        return found is not None
+
     def leads(self, member: Member, department_id: str) -> bool:
         """Whether this member is one of the department's leads."""
         with self._db.transaction() as conn:

@@ -799,8 +799,11 @@ class ConsoleApi:
                 target=removed.department_id,
                 detail={"name": removed.name, "projects": left},
             )
-            # Its department memory is retired, each memory audited, and its history kept (ADR-0032).
-            self._lifecycle.retire_department_memory(caller, removed.department_id)
+            # Its department memory is retired the way the console retires any memory, each retiring audited and its
+            # history kept (ADR-0032, ADR-0009).
+            working = self._working_in(member, None)
+            for path in self._service.department_memory(caller, removed.department_id):
+                self._lifecycle.retire(working, path, "Its department was removed.")
 
         return self._change_departments(request, remove)
 

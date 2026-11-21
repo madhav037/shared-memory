@@ -207,13 +207,13 @@ def test_removing_a_department_retires_its_memory_and_keeps_its_history(
     payments = department(signed_out, "Payments", billing)
     path = promoted(owner.in_project(billing), REVIEWS, "department")
     session = owner.in_project(billing)
-    versions = len(session.call("history", path=path)["versions"])
+    versions = len(ask(signed_out, "/api/memory/history", path=path)["versions"])
 
     removed = signed_out.post_json(f"/api/departments/{payments}/remove", {})
 
     assert removed.status_code == 200, removed.text
     assert session.call("read", path=path)["status"] == "retired"
-    assert len(session.call("history", path=path)["versions"]) == versions + 1
+    assert len(ask(signed_out, "/api/memory/history", path=path)["versions"]) == versions + 1
     assert path not in [one["path"] for one in session.call("search", query="reviewers")["results"]]
     retired = [
         event

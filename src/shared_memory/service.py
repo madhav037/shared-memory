@@ -386,6 +386,15 @@ class MemoryService:
         found = self._departments.of_project(project_id)
         return None if found is None else found.department_id
 
+    def department_memory(self, caller: Caller, department_id: str) -> list[str]:
+        """The paths of a department's active department memory, for retiring it when the department is removed."""
+        return [
+            str(path)
+            for _, memories in self._store.walk(caller.company, PurePosixPath(DEPARTMENTS_FOLDER, department_id))
+            for path, memory in memories
+            if memory.status == "active"
+        ]
+
     def tree(self, caller: Caller, level: str | None = None) -> dict[str, Any]:
         project = caller.require_project()
         project_folder = PurePosixPath("projects", project.project_id)

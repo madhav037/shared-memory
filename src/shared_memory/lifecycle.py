@@ -26,7 +26,6 @@ from shared_memory.identity import Caller, Identity, Project, unknown_foundation
 from shared_memory.index import SearchIndex
 from shared_memory.memory import (
     CORE_FOUNDATIONS,
-    DEPARTMENTS_FOLDER,
     FOUNDATION_TYPE,
     KNOWN_ISSUE,
     LEVEL_ORDER,
@@ -735,6 +734,11 @@ class Lifecycle:
         retires_at_once = in_foundation and self._changes_at_once(
             caller, location.project_id, location.foundation, self._leads(caller, location.project_id)
         )
+        # The memory of a department that was removed has nobody left to decide a challenge: an admin retires it at
+        # once, as removing the department does (ADR-0032).
+        orphaned = self._orphaned(location)
+        if orphaned and (caller.member.is_owner or caller.member.is_admin):
+            retires_at_once = True
         if not retires_at_once and (in_foundation or memory.author != caller.member_id):
             challenge_id = self._challenges.raise_challenge(
                 caller,
@@ -750,36 +754,17 @@ class Lifecycle:
             change.write(location.path, replace(self._active(change, location.path), status="retired"))
             change.also(lambda: self._audit.memory(caller, MEMORY_RETIRED, str(location.path)))
         by = "its author" if memory.author == caller.member_id else "a project lead"
-        self._challenges.close_all_against(caller.company, str(location.path), caller.member_id, f"{by} retired it.")
+        reason = "its department was removed." if orphaned else f"{by} retired it."
+        self._challenges.close_all_against(caller.company, str(location.path), caller.member_id, reason)
         return {"status": "retired", "path": str(location.path)}
 
-    def retire_department_memory(self, caller: Caller, department_id: str) -> list[str]:
-        """Retire every active memory in a removed department's memory, keeping its history, and answer their paths.
-        Removing a department is the admins' to do (ADR-0032), and retiring is governing, so the console may (ADR-0009)."""
-        folder = PurePosixPath(DEPARTMENTS_FOLDER, department_id)
-        active = [
-            path
-            for _, memories in self._store.walk(caller.company, folder)
-            for path, memory in memories
-            if memory.status == "active"
-        ]
-        if not active:
-            return []
-        area = Area("department", department_id=department_id)
-        message = f"Retire: department {department_id} was removed"
-        with self._store.change(caller.company, committer(caller), message, areas=[area]) as change:
-            for path in active:
-                change.write(path, replace(change.read(path), status="retired"))
-            retired = [str(path) for path in active]
-
-            def audited() -> None:
-                for one in retired:
-                    self._audit.memory(caller, MEMORY_RETIRED, one, reason="department removed")
-
-            change.also(audited)
-        for one in retired:
-            self._challenges.close_all_against(caller.company, one, caller.member_id, "its department was removed.")
-        return retired
+    def _orphaned(self, location: Location) -> bool:
+        """Whether this is department memory of a department that no longer exists."""
+        return (
+            location.level == "department"
+            and location.department_id is not None
+            and not self._departments.exists(location.department_id)
+        )
 
     def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
         """Retire a known issue whose card is done, as retire does: at once when the caller wrote it, as a challenge
