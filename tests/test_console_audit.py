@@ -36,7 +36,9 @@ def test_a_refused_sign_in_is_recorded_with_the_account_that_tried(console: Cons
     log = read_log(signed_out, kind="sign_in_refused")
 
     assert [(event["kind"], event["actor"]) for event in log["events"]] == [("sign_in_refused", "@a-stranger-audit")]
-    assert "isn't linked to a member" in log["events"][0]["detail"]["reason"]
+    assert log["events"][0]["detail"] == {
+        "reason": "The GitHub account @a-stranger-audit isn't linked to a member. Ask an admin to link it to you."
+    }
 
 
 def test_a_member_who_is_not_the_owner_cannot_read_the_log(console: Console, signed_out: ConsoleClient) -> None:

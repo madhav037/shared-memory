@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from shared_memory import platform_sign_in
 
 from shared_memory.console_sessions import NONCE_COOKIE
-from tests.support import Console, ConsoleClient, HostedConsole, sign_in_error
+from tests.support import Console, ConsoleClient, HostedConsole, Session, sign_in_error
 
 
 @pytest.fixture
@@ -257,3 +257,51 @@ def test_a_sign_in_whose_payload_carries_no_nonce_cannot_be_trusted() -> None:
 
     with pytest.raises(platform_sign_in.InvalidSignIn):
         platform_sign_in.verify(f"{encoded.decode()}.{signature.decode()}", public)
+
+
+def test_a_linked_member_is_the_same_member_at_every_handed_over_sign_in_whatever_the_login(
+    hosted_console: HostedConsole, hosted: ConsoleClient
+) -> None:
+    company, _ = hosted_console.a_company("hana-kept")
+    hosted_console.platform.as_(221, "Hana-Kept")
+    hosted.sign_in()
+    first = hosted.status()["member"]
+    hosted.sign_out()
+
+    hosted_console.platform.as_(221, "hana-kept-renamed")
+    hosted.sign_in()
+
+    assert hosted.status()["member"] == first
+    assert first["company"] == company
+
+
+def test_a_removed_member_is_refused_a_handed_over_sign_in(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+    company, owner_token = hosted_console.a_company("hana-owner-removing")
+    owner = Session(hosted_console.server, owner_token)
+    owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    hosted_console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-removed")
+    owner.call("remove_member", member_id="emp-2")
+    hosted_console.platform.as_(222, "dana-removed")
+
+    landed = hosted.sign_in()
+
+    assert "You have been removed from this company, so you can no longer sign in." in sign_in_error(landed)
+    assert hosted.status()["signed_in"] is False
+
+
+def test_handed_over_sign_ins_are_audited_as_github_sign_ins_are(hosted_console: HostedConsole, hosted: ConsoleClient) -> None:
+    hosted_console.a_company("hana-audited")
+    hosted_console.platform.as_(223, "a-stranger-handed")
+    hosted.sign_in()
+    hosted_console.platform.as_(224, "hana-audited")
+    hosted.sign_in()
+
+    events = hosted.get("/api/audit").json()["events"]
+
+    refused = next(each for each in events if each["actor"] == "@a-stranger-handed")
+    assert refused["kind"] == "sign_in_refused"
+    assert refused["detail"] == {
+        "reason": "The GitHub account @a-stranger-handed isn't linked to a member. Ask an admin to link it to you."
+    }
+    signed = next(each for each in events if each["kind"] == "signed_in" and each["actor"] == "E1001")
+    assert signed["detail"] == {"github": "hana-audited"}

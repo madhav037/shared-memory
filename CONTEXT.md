@@ -64,6 +64,22 @@ _Avoid_: ACL, allowlist, permissions
 The secret that proves which member a session belongs to; issued once per member.
 _Avoid_: API key, password, project token
 
+**Sign-in method**:
+A way a member proves who they are to the console: GitHub, a magic link, or, on a self-hosted server, the company's identity provider. A member may link several, and they all lead to the same member through the verified email. Coding agents never use one; their sessions carry a personal token.
+_Avoid_: Login provider, auth provider, social login
+
+**Magic link**:
+A link emailed to a member's verified email that signs them in to the console once, within fifteen minutes of being sent.
+_Avoid_: Email login, passwordless link, login link, OTP
+
+**Identity provider**:
+The company's own sign-in service, such as Okta, Entra or Keycloak, that a self-hosted server can trust to sign its members in.
+_Avoid_: IdP, SSO provider, auth server
+
+**Verified email**:
+An email address a member has proven is theirs, because GitHub vouched for it or because they followed a confirmation link. It is how separate sign-in methods find the same member and how an invited member is recognised.
+_Avoid_: Login email, primary email
+
 **Time zone**:
 The zone a member's times are shown in: the one they chose, or else the one detected for them, from their browser when they sign in to the console or from their session until then.
 _Avoid_: Timezone, locale, region
@@ -285,7 +301,7 @@ _Avoid_: Serial, activation code
 ### The console
 
 **Console**:
-The web app where members browse memory and admins run the company; members sign in to it with GitHub.
+The web app where members browse memory and admins run the company; members sign in to it with any of their sign-in methods.
 _Avoid_: Dashboard, admin panel, web UI
 
 **Project health**:
@@ -293,7 +309,7 @@ A console page, read-only, where a project's leads see its possibly outdated mem
 _Avoid_: Dashboard, insights, analytics, stats page
 
 **Handed-over sign-in**:
-How a member signs in to a hosted server's console: the platform signs them in with its own GitHub app and hands the server a short-lived, single-use sign-in, signed by the platform, naming the GitHub account and the server's subdomain. A self-hosted server signs members in with its own GitHub app instead.
+How a member signs in to a hosted server's console: the platform signs them in, with GitHub or a magic link, and hands the server a short-lived, single-use sign-in, signed by the platform, naming the member's GitHub account or verified email and the server's subdomain. A self-hosted server signs members in itself instead.
 _Avoid_: SSO token, login token, auth ticket
 
 **Audit log**:
@@ -327,7 +343,7 @@ The vendor's own server: it carries the landing page, sign-up and trials, takes 
 _Avoid_: Control plane, main server, backend
 
 **Vendor console**:
-The platform's web app, where the vendor runs hosts, hosted servers, plans and license keys. Only an allow-listed few may sign in.
+The platform's web app, where the vendor runs hosts, hosted servers, plans and license keys. Only an allow-listed few may sign in, and each needs a second factor to do so.
 _Avoid_: Admin panel, super admin panel, back office
 
 **Self-hosted server**:

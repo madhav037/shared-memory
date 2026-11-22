@@ -47,6 +47,34 @@ class Member:
 
 
 @dataclass(frozen=True)
+class GitHubAccount:
+    account_id: int
+    login: str
+
+
+@dataclass(frozen=True)
+class ProvenSignIn:
+    """What a sign-in method proved about whoever is signing in, which is all the matcher is told."""
+
+    github: GitHubAccount
+
+    @property
+    def described(self) -> str:
+        """What was proven, as a refusal names it."""
+        return f"The GitHub account @{self.github.login}"
+
+    @property
+    def actor(self) -> str:
+        """Who the audit log says tried, when no member was found."""
+        return f"@{self.github.login}"
+
+    @property
+    def audited(self) -> dict[str, str]:
+        """What the audit log keeps of a sign-in by this proven."""
+        return {"github": self.github.login}
+
+
+@dataclass(frozen=True)
 class Project:
     project_id: str
     name: str
@@ -461,6 +489,7 @@ class Identity:
         self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
+            self._require_say_over_access(conn, caller, pk, "reissue", "personal token")
             conn.execute(
                 "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (self._clock(), pk)
             )
@@ -491,33 +520,42 @@ class Identity:
                 "UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, row["id"])
             )
 
-    def member_for_github(self, account_id: int, login: str) -> Member:
-        """The member a GitHub account belongs to, remembering the account's id the first time it signs in."""
+    def member_signing_in(self, proven: ProvenSignIn) -> Member:
+        """The member a sign-in is for, whichever way it came (ADR-0034): the one matcher every sign-in goes through.
+        It finds who was proven, refuses unless that is one member still in their company, and keeps what the
+        sign-in proved about them."""
         with self._db.transaction() as conn:
-            rows = conn.execute(
-                "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at,"
-                " m.github_user_id"
-                " FROM members m JOIN teams t ON t.id = m.team_id"
-                " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
-                (account_id, login),
-            ).fetchall()
-            if not rows:
-                raise Refused(
-                    f"The GitHub account @{login} isn't linked to a member. Ask an admin to link it to you."
-                )
-            if len(rows) > 1:
-                raise Refused(f"The GitHub account @{login} is linked to members in more than one company. Ask an admin.")
-            row = rows[0]
+            found = self._named_by(conn, proven)
+            if not found:
+                raise Refused(f"{proven.described} isn't linked to a member. Ask an admin to link it to you.")
+            if len(found) > 1:
+                raise Refused(f"{proven.described} is linked to members in more than one company. Ask an admin.")
+            row = found[0]
             if row["removed_at"] is not None:
                 raise Refused("You have been removed from this company, so you can no longer sign in.")
-            conn.execute(
-                "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
-                (account_id, login, row["id"]),
-            )
+            self._keep_proven(conn, row["id"], proven)
             return Member(
                 row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
                 row["is_admin"],
             )  # fmt: skip
+
+    @staticmethod
+    def _named_by(conn: Conn, proven: ProvenSignIn) -> list[dict[str, Any]]:
+        """The members a proven sign-in names: by the GitHub account's id, or by its login where no id is kept yet."""
+        return conn.execute(
+            "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
+            " FROM members m JOIN teams t ON t.id = m.team_id"
+            " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
+            (proven.github.account_id, proven.github.login),
+        ).fetchall()
+
+    @staticmethod
+    def _keep_proven(conn: Conn, member_pk: int, proven: ProvenSignIn) -> None:
+        """Keep the account's id from its first sign-in, and the login it goes by now."""
+        conn.execute(
+            "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
+            (proven.github.account_id, proven.github.login, member_pk),
+        )
 
     def reissue_own_token(self, member: Member) -> str:
         """A member replaces their own personal token; the one they had stops working."""
@@ -574,6 +612,19 @@ class Identity:
         if row["is_admin"] and not caller.member.is_owner:
             raise Refused(f"Only the company's owner can {verb} an admin.")
 
+    @staticmethod
+    def _require_say_over_access(conn: Conn, caller: Caller, pk: int, verb: str, access: str) -> None:
+        """Whoever sets how a member gets in can act as them, so it takes standing above them: the owner's is the
+        owner's alone, another admin's the owner's. The row stays locked, so their role holds until the change lands."""
+        if pk == caller.member.pk:
+            return
+        row = conn.execute("SELECT is_owner, is_admin FROM members WHERE id = %s FOR UPDATE", (pk,)).fetchone()
+        assert row is not None
+        if row["is_owner"]:
+            raise Refused(f"Only the owner can {verb} the owner's {access}.")
+        if row["is_admin"] and not caller.member.is_owner:
+            raise Refused(f"Only the company's owner can {verb} another admin's {access}.")
+
     def members(self, member: Member) -> list[dict[str, Any]]:
         """Everyone in this member's company, with their role and the GitHub account they sign in with."""
         with self._db.transaction() as conn:
@@ -598,6 +649,8 @@ class Identity:
         self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
+            if github is not None:
+                self._require_say_over_access(conn, caller, pk, "change", "GitHub account")
             if name is not None:
                 if not name.strip():
                     raise Refused("A member needs a name.")

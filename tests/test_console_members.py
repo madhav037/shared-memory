@@ -207,3 +207,80 @@ def test_an_admin_can_use_the_owners_memory_tools_in_claude(console: Console, si
 
     assert invited["member_id"] == "emp-3"
     assert "owner" in ash.refusal("remove_member", member_id="E1001")
+
+
+def two_admins(console: Console, owner: ConsoleClient, name: str, account: int) -> tuple[ConsoleClient, dict[str, str]]:
+    """A company with admins emp-2, signed in on the browser given back, and emp-3; and each admin's personal token."""
+    signed_in_owner(console, owner, f"olive-{name}", account)
+    tokens = {}
+    for member_id, login in (("emp-2", f"dana-{name}"), ("emp-3", f"theo-{name}")):
+        tokens[member_id] = add(owner, member_id, member_id.title(), login)["personal_token"]
+        assert owner.post_json(f"/api/members/{member_id}/admin", {"admin": True}).status_code == 200
+    admin = console.client()
+    console.github.as_(account + 1, f"dana-{name}")
+    admin.sign_in()
+    return admin, tokens
+
+
+def test_only_the_owner_changes_the_owners_github_account(console: Console, signed_out: ConsoleClient) -> None:
+    admin, _ = two_admins(console, signed_out, "guard-one", 651)
+
+    refused = admin.post_json("/api/members/E1001/change", {"name": "Renamed", "github": "another-guard-one"})
+    emptied = admin.post_json("/api/members/E1001/change", {"github": ""})
+
+    assert refused.status_code != 200
+    assert "Only the owner can change the owner's GitHub account" in refused.text
+    assert emptied.status_code != 200
+    owner = next(one for one in members(signed_out) if one["member_id"] == "E1001")
+    assert (owner["name"], owner["github_login"]) == ("Olive Owner", "olive-guard-one")
+    admin.close()
+
+
+def test_only_the_owner_changes_another_admins_github_account(console: Console, signed_out: ConsoleClient) -> None:
+    admin, _ = two_admins(console, signed_out, "guard-two", 654)
+
+    refused = admin.post_json("/api/members/emp-3/change", {"github": "another-guard-two"})
+
+    assert refused.status_code != 200
+    assert "Only the company's owner can change another admin's GitHub account" in refused.text
+    assert signed_out.post_json("/api/members/emp-3/change", {"github": "theo-moved-guard-two"}).status_code == 200
+    admin.close()
+
+
+def test_only_the_owner_reissues_the_owners_personal_token(console: Console, signed_out: ConsoleClient) -> None:
+    admin, tokens = two_admins(console, signed_out, "guard-three", 657)
+
+    refused = admin.post_json("/api/members/E1001/token", {})
+
+    assert refused.status_code != 200
+    assert "Only the owner can reissue the owner's personal token" in refused.text
+    assert "personal_token" not in refused.text
+    try:
+        Session(console.server, tokens["emp-2"]).call("reissue_token", member_id="E1001")
+        raise AssertionError("an admin was given the owner's personal token by the tool")
+    except ToolRefused as tool_refused:
+        assert "Only the owner can reissue the owner's personal token" in str(tool_refused)
+    admin.close()
+
+
+def test_only_the_owner_reissues_another_admins_personal_token(console: Console, signed_out: ConsoleClient) -> None:
+    admin, tokens = two_admins(console, signed_out, "guard-four", 660)
+
+    refused = admin.post_json("/api/members/emp-3/token", {})
+
+    assert refused.status_code != 200
+    assert "Only the company's owner can reissue another admin's personal token" in refused.text
+    Session(console.server, tokens["emp-3"]).call("create_project", name="Still works")
+    assert signed_out.post_json("/api/members/emp-3/token", {}).status_code == 200
+    admin.close()
+
+
+def test_an_admin_still_looks_after_members_and_their_own_access(console: Console, signed_out: ConsoleClient) -> None:
+    admin, tokens = two_admins(console, signed_out, "guard-five", 663)
+    add(signed_out, "emp-4", "Mia Member")
+
+    assert admin.post_json("/api/members/emp-4/change", {"github": "mia-guard-five"}).status_code == 200
+    assert admin.post_json("/api/members/emp-4/token", {}).status_code == 200
+    assert admin.post_json("/api/members/emp-3/change", {"name": "Theo Admin"}).status_code == 200
+    assert Session(console.server, tokens["emp-2"]).call("reissue_token", member_id="emp-2")["personal_token"]
+    admin.close()
