@@ -22,7 +22,7 @@ from shared_memory.clock import Clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Identity, Member
+from shared_memory.identity import GitHubAccount, Identity, Member, ProvenSignIn
 from shared_memory.platform_sign_in import MAX_LIFETIME, InvalidSignIn, verify
 
 COOKIE = "shared_memory_console"
@@ -45,12 +45,6 @@ class SignInStarted:
 
     url: str
     nonce: str | None = None
-
-
-@dataclass(frozen=True)
-class GitHubAccount:
-    account_id: int
-    login: str
 
 
 class ConsoleSessions:
@@ -118,7 +112,7 @@ class ConsoleSessions:
         if self._settings.signs_in_through_platform:
             raise Refused("This server signs members in through the platform, not with a GitHub app of its own.")
         self._spend_state(state)
-        return self._sign_in_as(self._account(self._access_token(code, base_url)))
+        return self._sign_in_by(ProvenSignIn(self._account(self._access_token(code, base_url))))
 
     def finish_handed_over(self, text: str, nonce: str | None) -> str:
         """Complete a sign-in the platform handed over and return the session's token, or refuse with what to tell the
@@ -150,17 +144,17 @@ class ConsoleSessions:
             ).fetchone()
         if spent is None:
             raise Refused("That sign-in was already used. Sign in again.")
-        return self._sign_in_as(GitHubAccount(handed.github_id, handed.github_login))
+        return self._sign_in_by(ProvenSignIn(GitHubAccount(handed.github_id, handed.github_login)))
 
-    def _sign_in_as(self, account: GitHubAccount) -> str:
-        """Sign in the member this GitHub account is linked to, and return the session's token."""
+    def _sign_in_by(self, proven: ProvenSignIn) -> str:
+        """Sign in the member this proven sign-in is for, and return the session's token. Every way in ends here."""
         try:
-            member = self._identity.member_for_github(account.account_id, account.login)
+            member = self._identity.member_signing_in(proven)
         except Refused as refused:
-            self._audit.record(SIGN_IN_REFUSED, actor=f"@{account.login}", detail={"reason": str(refused)})
+            self._audit.record(SIGN_IN_REFUSED, actor=proven.actor, detail={"reason": str(refused)})
             raise
         token = self._begin_session(member)
-        self._audit.record(SIGNED_IN, member=member, detail={"github": account.login})
+        self._audit.record(SIGNED_IN, member=member, detail=proven.audited)
         return token
 
     def _spend_state(self, state: str) -> None:
