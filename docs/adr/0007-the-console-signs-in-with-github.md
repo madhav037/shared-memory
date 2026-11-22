@@ -1,5 +1,7 @@
 # The console signs in with GitHub, and Claude sessions keep personal tokens
 
+Status: superseded by ADR-0034
+
 Members sign in to the console with their GitHub account, which an admin links to their member record; Claude Code sessions still prove who they are with a personal token (ADR-0005). The team already lives on GitHub, and the plugin marketplace is a GitHub repository, so no new accounts or passwords are needed.
 
 ## Considered Options
