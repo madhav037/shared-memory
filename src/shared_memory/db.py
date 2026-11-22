@@ -96,11 +96,16 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS github_user_id BIGINT;
 -- A member's time zone (spec #585): the IANA name they chose in the console, and the one their browser reported.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS chosen_time_zone TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS detected_time_zone TEXT;
+-- A member's verified email (ADR-0034, #679): one a sign-in method proved. Additive and nullable, so the release
+-- before this one runs on the same database.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS verified_email TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_login_per_team
     ON members (team_id, lower(github_login)) WHERE github_login IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_account_per_team
     ON members (team_id, github_user_id) WHERE github_user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS members_one_verified_email_per_team
+    ON members (team_id, lower(verified_email)) WHERE verified_email IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS console_sessions (
     id BIGSERIAL PRIMARY KEY,

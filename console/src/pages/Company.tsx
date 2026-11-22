@@ -417,6 +417,15 @@ function MemberRow({
         ) : (
           <span style={{ color: "var(--ink-3)" }}>not linked</span>
         )}
+        {editing?.kind !== "github" && (member.verified_email || member.sign_in_methods.length > 0) && (
+          <div
+            data-testid={`verified-email-${id}`}
+            style={{ color: "var(--ink-3)", fontSize: "0.8125rem", fontWeight: 400, overflowWrap: "anywhere" }}
+          >
+            {member.verified_email ?? "no verified email"}
+            {member.sign_in_methods.length > 0 && ` · signs in with ${member.sign_in_methods.join(", ").replace("github", "GitHub")}`}
+          </div>
+        )}
       </td>
       <td data-label="Role" style={{ fontWeight: member.role === "member" ? 400 : 700, color: member.role === "member" ? undefined : "var(--ink)" }}>
         {ROLE_WORDS[member.role] ?? member.role}
