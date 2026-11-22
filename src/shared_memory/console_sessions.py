@@ -102,7 +102,7 @@ class ConsoleSessions:
             {
                 "client_id": self._settings.github_client_id,
                 "redirect_uri": self.redirect_uri(base_url),
-                "scope": "read:user",
+                "scope": "read:user user:email",
                 "state": state,
             }
         )
@@ -116,7 +116,8 @@ class ConsoleSessions:
             raise Refused("This server signs members in through the platform, not with a GitHub app of its own.")
         self._require_started_here(state, kept)
         self._spend_state(state)
-        return self._sign_in_by(ProvenSignIn(self._account(self._access_token(code, base_url))))
+        token = self._access_token(code, base_url)
+        return self._sign_in_by(ProvenSignIn(self._account(token), self._verified_email(token)))
 
     def finish_handed_over(self, text: str, nonce: str | None) -> str:
         """Complete a sign-in the platform handed over and return the session's token, or refuse with what to tell the
@@ -204,6 +205,30 @@ class ConsoleSessions:
         if not isinstance(account_id, int) or not isinstance(login, str):
             raise Refused("GitHub didn't say who you are. Try again.")
         return GitHubAccount(account_id, login)
+
+    def _verified_email(self, access_token: str) -> str | None:
+        """The account's primary email, only if GitHub says it is verified. Anything going wrong reading it, or
+        reading it as something other than the list GitHub documents, means no email, never a refused sign-in."""
+        try:
+            response = httpx.get(
+                f"{self._settings.github_api_url.rstrip('/')}/user/emails",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+            body = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        if not isinstance(body, list):
+            return None
+        for one in body:
+            if not isinstance(one, dict) or one.get("primary") is not True or one.get("verified") is not True:
+                continue
+            email = one.get("email")
+            if isinstance(email, str) and email.strip():
+                return email.strip()
+        return None
 
     @staticmethod
     def _answer(response: httpx.Response) -> dict[str, Any]:

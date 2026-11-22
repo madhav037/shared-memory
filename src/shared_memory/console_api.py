@@ -1748,9 +1748,17 @@ class ConsoleApi:
             return JSONResponse({"message": str(refused)}, status_code=403)
         return self._company(member)
 
+    @staticmethod
+    def _as_seen_by(member: Member, one: dict[str, Any]) -> MemberSummary:
+        """A member as the one asking may see them: only an admin or the owner is told their verified email and
+        sign-in methods."""
+        if not (member.is_owner or member.is_admin):
+            one = {**one, "verified_email": None, "sign_in_methods": []}
+        return MemberSummary(**one)
+
     def _company(self, member: Member) -> Response:
         everyone = Members(
-            members=[MemberSummary(**one) for one in self._identity.members(member)],
+            members=[self._as_seen_by(member, one) for one in self._identity.members(member)],
             member_cap=self._identity.member_cap(),
             members_used=self._identity.members_in_use(),
         )

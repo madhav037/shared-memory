@@ -57,6 +57,8 @@ class ProvenSignIn:
     """What a sign-in method proved about whoever is signing in, which is all the matcher is told."""
 
     github: GitHubAccount
+    # The email the method vouched for, trimmed, or None where it vouched for none.
+    verified_email: str | None = None
 
     @property
     def described(self) -> str:
@@ -551,11 +553,26 @@ class Identity:
 
     @staticmethod
     def _keep_proven(conn: Conn, member_pk: int, proven: ProvenSignIn) -> None:
-        """Keep the account's id from its first sign-in, and the login it goes by now."""
+        """Keep the account's id from its first sign-in, and the login it goes by now, and the verified email it
+        vouched for when the member has none and no one else in the company holds it."""
         conn.execute(
             "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
             (proven.github.account_id, proven.github.login, member_pk),
         )
+        if proven.verified_email is None:
+            return
+        # A savepoint, so a second sign-in winning the email between the check and the write costs only the email,
+        # not the sign-in's transaction.
+        try:
+            with conn.transaction():
+                conn.execute(
+                    "UPDATE members SET verified_email = %s WHERE id = %s AND verified_email IS NULL"
+                    " AND NOT EXISTS (SELECT 1 FROM members o WHERE o.team_id = members.team_id AND o.id <> members.id"
+                    " AND lower(o.verified_email) = lower(%s))",
+                    (proven.verified_email, member_pk, proven.verified_email),
+                )
+        except UniqueViolation:
+            pass
 
     def reissue_own_token(self, member: Member) -> str:
         """A member replaces their own personal token; the one they had stops working."""
@@ -629,7 +646,7 @@ class Identity:
         """Everyone in this member's company, with their role and the GitHub account they sign in with."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT member_id, name, is_owner, is_admin, github_login, removed_at FROM members"
+                "SELECT member_id, name, is_owner, is_admin, github_login, verified_email, removed_at FROM members"
                 " WHERE team_id = %s ORDER BY is_owner DESC, is_admin DESC, member_id",
                 (member.company_pk,),
             ).fetchall()
@@ -639,6 +656,8 @@ class Identity:
                 "name": row["name"],
                 "role": "owner" if row["is_owner"] else "admin" if row["is_admin"] else "member",
                 "github_login": row["github_login"],
+                "verified_email": row["verified_email"],
+                "sign_in_methods": ["github"] if row["github_login"] else [],
                 "removed": row["removed_at"] is not None,
             }
             for row in rows

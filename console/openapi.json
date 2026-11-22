@@ -7108,6 +7108,25 @@
             ],
             "title": "Github Login"
           },
+          "verified_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Email"
+          },
+          "sign_in_methods": {
+            "items": {
+              "const": "github",
+              "type": "string"
+            },
+            "title": "Sign In Methods",
+            "type": "array"
+          },
           "removed": {
             "title": "Removed",
             "type": "boolean"
@@ -7118,6 +7137,8 @@
           "name",
           "role",
           "github_login",
+          "verified_email",
+          "sign_in_methods",
           "removed"
         ],
         "title": "MemberSummary",

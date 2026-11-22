@@ -666,6 +666,10 @@ class MemberSummary(BaseModel):
     name: str
     role: Literal["owner", "admin", "member"]
     github_login: str | None
+    # Only admins and the owner are told these two (a member sees null and an empty list): they are the company's
+    # to govern, not every member's to read.
+    verified_email: str | None
+    sign_in_methods: list[Literal["github"]]
     removed: bool
 
 
