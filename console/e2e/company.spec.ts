@@ -21,6 +21,7 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   const members = page.getByTestId("members");
   await expect(members).toContainText("Dana Dev");
   await expect(members).toContainText("@dana-seven");
+  await expect(page.getByTestId("verified-email-emp-7")).toHaveText("no verified email · signs in with GitHub");
 
   await page.getByTestId("actions-emp-7").click();
   await page.getByRole("menuitem", { name: "Make an admin" }).click();
