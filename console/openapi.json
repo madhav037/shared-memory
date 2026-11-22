@@ -7119,6 +7119,17 @@
             ],
             "title": "Verified Email"
           },
+          "added_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added Email"
+          },
           "sign_in_methods": {
             "items": {
               "const": "github",
@@ -7138,6 +7149,7 @@
           "role",
           "github_login",
           "verified_email",
+          "added_email",
           "sign_in_methods",
           "removed"
         ],
@@ -7223,6 +7235,18 @@
             ],
             "default": null,
             "title": "Github"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email"
           }
         },
         "required": [
@@ -7258,6 +7282,18 @@
             ],
             "default": null,
             "title": "Github"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email"
           }
         },
         "title": "ChangedMember",

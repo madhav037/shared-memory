@@ -153,12 +153,15 @@ class ConsoleSessions:
     def _sign_in_by(self, proven: ProvenSignIn) -> str:
         """Sign in the member this proven sign-in is for, and return the session's token. Every way in ends here."""
         try:
-            member = self._identity.member_signing_in(proven)
+            signed = self._identity.member_signing_in(proven)
         except Refused as refused:
             self._audit.record(SIGN_IN_REFUSED, actor=proven.actor, detail={"reason": str(refused)})
             raise
+        member = signed.member
         token = self._begin_session(member)
-        self._audit.record(SIGNED_IN, member=member, detail=proven.audited)
+        # An email is never kept in the log: only that this sign-in linked the account through one.
+        detail: dict[str, Any] = {**proven.audited, **({"linked": True} if signed.linked else {})}
+        self._audit.record(SIGNED_IN, member=member, detail=detail)
         return token
 
     @staticmethod

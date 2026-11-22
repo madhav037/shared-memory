@@ -99,6 +99,9 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS detected_time_zone TEXT;
 -- A member's verified email (ADR-0034, #679): one a sign-in method proved. Additive and nullable, so the release
 -- before this one runs on the same database.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS verified_email TEXT;
+-- What an admin or setup typed as a member's email (#680), not yet proven. Additive and nullable. A member never has
+-- both this and a verified email: proving it moves it across.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS added_email TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_login_per_team
     ON members (team_id, lower(github_login)) WHERE github_login IS NOT NULL;
@@ -106,6 +109,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS members_one_github_account_per_team
     ON members (team_id, github_user_id) WHERE github_user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS members_one_verified_email_per_team
     ON members (team_id, lower(verified_email)) WHERE verified_email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS members_one_added_email_per_team
+    ON members (team_id, lower(added_email)) WHERE added_email IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS console_sessions (
     id BIGSERIAL PRIMARY KEY,

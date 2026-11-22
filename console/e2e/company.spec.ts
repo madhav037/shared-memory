@@ -38,6 +38,32 @@ test("an owner adds a member, sees the token once, grants admin, reissues their 
   await expect(page.getByTestId("member-places")).toContainText(/places used|no member cap/);
 });
 
+test("an owner adds a member by email, sees it unverified, changes it and clears it", async ({ page }) => {
+  await signInAs(page, 1, "olive");
+  await page.getByTestId("to-company").click();
+
+  await expect(page.getByLabel("Email or GitHub username")).toBeVisible();
+  await page.getByTestId("new-member-id").fill("emp-8");
+  await page.getByTestId("new-name").fill("Eli Eng");
+  await page.getByTestId("new-github").fill("eli@example.com");
+  await page.getByTestId("add-member").click();
+
+  await expect(page.getByTestId("new-member-token-value")).toContainText("smt_");
+  await expect(page.getByTestId("verified-email-emp-8")).toHaveText("eli@example.com · unverified");
+
+  await page.getByTestId("actions-emp-8").click();
+  await page.getByTestId("change-email-emp-8").click();
+  await page.getByLabel("Email (empty to clear)").fill("eli.eng@example.com");
+  await page.getByTestId("members").getByRole("button", { name: "Save" }).click();
+  await expect(page.getByTestId("verified-email-emp-8")).toHaveText("eli.eng@example.com · unverified");
+
+  await page.getByTestId("actions-emp-8").click();
+  await page.getByTestId("change-email-emp-8").click();
+  await page.getByLabel("Email (empty to clear)").fill("");
+  await page.getByTestId("members").getByRole("button", { name: "Save" }).click();
+  await expect(page.getByTestId("verified-email-emp-8")).toHaveCount(0);
+});
+
 test("an admin downloads all of the company's data as one zip, and the audit log records it", async ({ page }) => {
   await signInAs(page, 1, "olive");
   await page.getByTestId("to-company").click();

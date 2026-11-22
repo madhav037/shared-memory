@@ -28,6 +28,7 @@ def test_an_admin_sees_everyone_with_their_role_and_github_account(
             "role": "owner",
             "github_login": "olive-members-one",
             "verified_email": None,
+            "added_email": None,
             "sign_in_methods": ["github"],
             "removed": False,
         },
@@ -37,6 +38,7 @@ def test_an_admin_sees_everyone_with_their_role_and_github_account(
             "role": "member",
             "github_login": "dana-members-one",
             "verified_email": None,
+            "added_email": None,
             "sign_in_methods": ["github"],
             "removed": False,
         },
@@ -90,6 +92,7 @@ def test_an_admin_corrects_a_name_and_a_github_account(console: Console, signed_
             "role": "member",
             "github_login": "dana-renamed-four",
             "verified_email": None,
+            "added_email": None,
             "sign_in_methods": ["github"],
             "removed": False,
         }

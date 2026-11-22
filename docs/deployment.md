@@ -45,7 +45,7 @@ Everything lives in [`deploy/`](../deploy): a Compose file that runs the server 
    docker compose up -d --build
    ```
 
-6. Create the company and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console:
+6. Create the company and its **owner**. The owner's **personal token** is printed once; hand it to the owner privately. `--owner-github` is the owner's GitHub username, which lets them sign in to the console; give `--owner-email` instead (not both) and the first GitHub account to sign in with that email verified becomes theirs:
 
    ```bash
    docker compose exec server shared-memory setup --company acme --owner-member-id E1001 --owner-name "Olive Owner" --owner-github olive
@@ -386,7 +386,7 @@ The console is served at the domain by the same Caddy that fronts the server, so
    | Authorization callback URL | `https://memory.example.com/api/sign-in/github/callback` |
 
 2. Put the app's client ID and a generated client secret in `.env` as `SHARED_MEMORY_GITHUB_CLIENT_ID` and `SHARED_MEMORY_GITHUB_CLIENT_SECRET`, then `docker compose up -d`.
-3. Link each member's GitHub account, so they can sign in. The owner's was linked by `setup --owner-github`:
+3. Link each member's GitHub account, so they can sign in. The owner's was linked by `setup --owner-github`. An admin can instead add a member by email on the Company page, and the first GitHub account to sign in with that email verified is linked to them. Moving a member to another GitHub account here also drops their verified email:
 
    ```bash
    docker compose exec server shared-memory link-github --company acme --member-id E1042 --github dana

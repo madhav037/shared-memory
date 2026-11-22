@@ -38,7 +38,12 @@ def run(
     setup.add_argument("--company", "--team", required=True, help="Company ID")
     setup.add_argument("--owner-member-id", required=True)
     setup.add_argument("--owner-name", required=True)
-    setup.add_argument("--owner-github", help="The owner's GitHub username, so they can sign in to the console.")
+    first_way_in = setup.add_mutually_exclusive_group()
+    first_way_in.add_argument("--owner-github", help="The owner's GitHub username, so they can sign in to the console.")
+    first_way_in.add_argument(
+        "--owner-email",
+        help="The owner's email: the first sign-in method to prove it, such as GitHub with it verified, is theirs.",
+    )
 
     link = commands.add_parser("link-github", help="Link a GitHub account to a member, so they can sign in to the console.")
     link.add_argument("--company", "--team", required=True, help="Company ID")
@@ -83,7 +88,7 @@ def run(
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
             token = Identity(db, system_clock).setup_company(
-                args.company, args.owner_member_id, args.owner_name, args.owner_github
+                args.company, args.owner_member_id, args.owner_name, args.owner_github, args.owner_email
             )
         except Refused as refused:
             print(refused, file=out)
