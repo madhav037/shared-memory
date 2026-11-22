@@ -54,13 +54,13 @@ test("an owner adds a member by email, sees it unverified, changes it and clears
   await page.getByTestId("actions-emp-8").click();
   await page.getByTestId("change-email-emp-8").click();
   await page.getByLabel("Email (empty to clear)").fill("eli.eng@example.com");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByTestId("members").getByRole("button", { name: "Save" }).click();
   await expect(page.getByTestId("verified-email-emp-8")).toHaveText("eli.eng@example.com · unverified");
 
   await page.getByTestId("actions-emp-8").click();
   await page.getByTestId("change-email-emp-8").click();
   await page.getByLabel("Email (empty to clear)").fill("");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByTestId("members").getByRole("button", { name: "Save" }).click();
   await expect(page.getByTestId("verified-email-emp-8")).toHaveCount(0);
 });
 
