@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
+import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -19,6 +20,8 @@ from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
 from shared_memory.time_zone import MemberTimeZone, checked
 
 NAME_LIMIT = 64
+# The longest an email address may be (RFC 5321): the one place the limit is named.
+EMAIL_LIMIT = 254
 PROJECT_ID_ATTEMPTS = 5
 NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
 
@@ -44,6 +47,14 @@ class Member:
         if self.is_owner:
             return "owner"
         return "admin" if self.is_admin else "member"
+
+
+@dataclass(frozen=True)
+class SignedIn:
+    """Who a sign-in was for, and whether it linked their GitHub account just now, through the email they proved."""
+
+    member: Member
+    linked: bool = False
 
 
 @dataclass(frozen=True)
@@ -216,6 +227,22 @@ def _runs_the_company(member: Member) -> bool:
     return member.is_owner or member.is_admin
 
 
+def checked_email(value: str) -> str:
+    """An email as the company keeps it: trimmed, at most EMAIL_LIMIT characters, exactly one @ with something either
+    side, a dot in the domain, and no whitespace or control character. Refused otherwise, without echoing it."""
+    cleaned = value.strip()
+    local, _, domain = cleaned.partition("@")
+    if (
+        len(cleaned) > EMAIL_LIMIT
+        or cleaned.count("@") != 1
+        or not local
+        or "." not in domain
+        or any(each.isspace() or unicodedata.category(each) == "Cc" for each in cleaned)
+    ):
+        raise Refused("That doesn't look like an email address.")
+    return cleaned
+
+
 def check_name(kind: str, value: str) -> str:
     if not NAME_PATTERN.match(value):
         raise Refused(
@@ -227,6 +254,14 @@ def check_name(kind: str, value: str) -> str:
 
 def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
     return Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
+
+
+# What the matcher reads of a member, to be given a WHERE.
+_SIGNING_IN_COLUMNS = (
+    "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at, m.github_login,"
+    " m.github_user_id FROM members m JOIN teams t ON t.id = m.team_id"
+)
+REMOVED_SIGNING_IN = "You have been removed from this company, so you can no longer sign in."
 
 
 class Identity:
@@ -242,9 +277,17 @@ class Identity:
         self._db = db
         self._clock = clock
 
-    def setup_company(self, company_code: str, owner_member_id: str, owner_name: str, owner_github: str | None = None) -> str:
+    def setup_company(
+        self,
+        company_code: str,
+        owner_member_id: str,
+        owner_name: str,
+        owner_github: str | None = None,
+        owner_email: str | None = None,
+    ) -> str:
         check_name("Company ID", company_code)
         check_name("Member ID", owner_member_id)
+        email = self._one_way_in(owner_github, owner_email)
         now = self._clock()
         with self._db.transaction() as conn:
             if conn.execute("SELECT 1 FROM teams WHERE code = %s", (company_code,)).fetchone():
@@ -254,9 +297,9 @@ class Identity:
             ).fetchone()
             assert company is not None
             member = conn.execute(
-                "INSERT INTO members (team_id, member_id, name, is_owner, github_login, created_at)"
-                " VALUES (%s, %s, %s, TRUE, %s, %s) RETURNING id",
-                (company["id"], owner_member_id, owner_name, _github_login(owner_github), now),
+                "INSERT INTO members (team_id, member_id, name, is_owner, github_login, added_email, created_at)"
+                " VALUES (%s, %s, %s, TRUE, %s, %s, %s) RETURNING id",
+                (company["id"], owner_member_id, owner_name, _github_login(owner_github), email, now),
             ).fetchone()
             assert member is not None
             return self._issue_token(conn, member["id"])
@@ -417,10 +460,39 @@ class Identity:
         pk: int = row["id"]
         return pk
 
+    @staticmethod
+    def _one_way_in(github: str | None, email: str | None) -> str | None:
+        """The email to keep for a member added with a GitHub login or an email, never both: validated, or None."""
+        if _github_login(github) is not None and (email or "").strip():
+            raise Refused("Give their GitHub username or their email, not both.")
+        return checked_email(email) if email is not None and email.strip() else None
+
+    @staticmethod
+    def _claim_email(conn: Conn, company_pk: int, email: str, except_pk: int | None) -> None:
+        """Make sure no other member of the company holds this email, as the added one or the verified one, ignoring
+        case, removed members included. The two columns can race each other, so the company's row is taken first (after
+        any member row, always in that order), which lines up everyone claiming an email in this company."""
+        conn.execute("SELECT 1 FROM teams WHERE id = %s FOR NO KEY UPDATE", (company_pk,))
+        taken = conn.execute(
+            "SELECT member_id FROM members WHERE team_id = %s"
+            " AND (lower(added_email) = lower(%s) OR lower(verified_email) = lower(%s))"
+            " AND (%s::bigint IS NULL OR id <> %s)",
+            (company_pk, email, email, except_pk, except_pk),
+        ).fetchone()
+        if taken is not None:
+            raise Refused(f"That email is already held by {taken['member_id']!r} in this company.")
+
     def add_member(
-        self, caller: Caller, member_id: str, name: str, company: str | None = None, github: str | None = None
+        self,
+        caller: Caller,
+        member_id: str,
+        name: str,
+        company: str | None = None,
+        github: str | None = None,
+        email: str | None = None,
     ) -> str:
         self._require_admin(caller)
+        added = self._one_way_in(github, email)
         if company is not None and company != caller.company:
             raise Refused(f"You can only add members to your own company ({caller.company}).")
         check_name("Member ID", member_id)
@@ -442,10 +514,12 @@ class Identity:
             login = _github_login(github)
             if login is not None:
                 self._github_free(conn, caller.member.company_pk, login, None)
+            if added is not None:
+                self._claim_email(conn, caller.member.company_pk, added, None)
             row = conn.execute(
-                "INSERT INTO members (team_id, member_id, name, github_login, created_at)"
-                " VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (caller.member.company_pk, member_id, name.strip(), login, self._clock()),
+                "INSERT INTO members (team_id, member_id, name, github_login, added_email, created_at)"
+                " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                (caller.member.company_pk, member_id, name.strip(), login, added, self._clock()),
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
@@ -504,8 +578,8 @@ class Identity:
             raise Refused("A GitHub username is needed.")
         with self._db.transaction() as conn:
             row = conn.execute(
-                "SELECT m.id FROM members m JOIN teams t ON t.id = m.team_id"
-                " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL",
+                "SELECT m.id, m.github_login FROM members m JOIN teams t ON t.id = m.team_id"
+                " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL FOR UPDATE OF m",
                 (company_code, member_id),
             ).fetchone()
             if row is None:
@@ -517,59 +591,127 @@ class Identity:
             ).fetchone()
             if taken is not None:
                 raise Refused(f"GitHub account @{login} is already linked to {taken['member_id']!r} in this company.")
-            # Clearing the account id makes the next sign-in bind this login to whichever account signs in with it.
+            # Clearing the account id makes the next sign-in bind this login to whichever account signs in with it. Moving
+            # to another login drops the verified email too, or the account just unlinked would sign straight back in.
             conn.execute(
-                "UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, row["id"])
+                "UPDATE members SET github_login = %s, github_user_id = NULL,"
+                " verified_email = CASE WHEN lower(%s) = lower(coalesce(github_login, '')) THEN verified_email END"
+                " WHERE id = %s",
+                (login, login, row["id"]),
             )
 
-    def member_signing_in(self, proven: ProvenSignIn) -> Member:
+    def member_signing_in(self, proven: ProvenSignIn) -> SignedIn:
         """The member a sign-in is for, whichever way it came (ADR-0034): the one matcher every sign-in goes through.
         It finds who was proven, refuses unless that is one member still in their company, and keeps what the
-        sign-in proved about them."""
+        sign-in proved about them. The GitHub account decides it, refusals included, and the email is looked at only when
+        the account names no one: then a member who holds the email and has no GitHub linked is linked to it."""
         with self._db.transaction() as conn:
             found = self._named_by(conn, proven)
             if not found:
-                raise Refused(f"{proven.described} isn't linked to a member. Ask an admin to link it to you.")
+                return self._found_by_email(conn, proven)
             if len(found) > 1:
                 raise Refused(f"{proven.described} is linked to members in more than one company. Ask an admin.")
             row = found[0]
             if row["removed_at"] is not None:
-                raise Refused("You have been removed from this company, so you can no longer sign in.")
+                raise Refused(REMOVED_SIGNING_IN)
             self._keep_proven(conn, row["id"], proven)
-            return Member(
-                row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"],
-                row["is_admin"],
-            )  # fmt: skip
+            return SignedIn(self._member_of(row))
+
+    @staticmethod
+    def _member_of(row: dict[str, Any]) -> Member:
+        return Member(
+            row["id"], row["team_id"], row["code"], row["member_id"], row["name"], row["is_owner"], row["is_admin"]
+        )
+
+    @staticmethod
+    def _not_linked(proven: ProvenSignIn) -> Refused:
+        return Refused(f"{proven.described} isn't linked to a member. Ask an admin to link it to you.")
+
+    def _found_by_email(self, conn: Conn, proven: ProvenSignIn) -> SignedIn:
+        """No member has this GitHub account. Where the sign-in proved an email, the member holding it (added or
+        verified, ignoring case) who has no GitHub linked at all is linked to this account; an email never replaces a
+        link, and a removed member is never let back in by one."""
+        email = proven.verified_email
+        if email is None:
+            raise self._not_linked(proven)
+        held = conn.execute(
+            _SIGNING_IN_COLUMNS + " WHERE lower(m.added_email) = lower(%s) OR lower(m.verified_email) = lower(%s)",
+            (email, email),
+        ).fetchall()
+        if not held:
+            raise self._not_linked(proven)
+        if len(held) > 1:
+            raise Refused(f"{proven.described} matches members in more than one company. Ask an admin.")
+        if held[0]["removed_at"] is not None:
+            raise Refused(REMOVED_SIGNING_IN)
+        if held[0]["github_login"] is not None or held[0]["github_user_id"] is not None:
+            raise self._not_linked(proven)
+        # Lock the row, then look again: what was seen may have changed since. The member's row comes before the
+        # company's, always in that order.
+        row = conn.execute(
+            _SIGNING_IN_COLUMNS + " WHERE m.id = %s AND (lower(m.added_email) = lower(%s)"
+            " OR lower(m.verified_email) = lower(%s)) FOR UPDATE OF m",
+            (held[0]["id"], email, email),
+        ).fetchone()
+        if row is None or row["github_login"] is not None or row["github_user_id"] is not None:
+            raise self._not_linked(proven)
+        if row["removed_at"] is not None:
+            raise Refused(REMOVED_SIGNING_IN)
+        conn.execute("SELECT 1 FROM teams WHERE id = %s FOR NO KEY UPDATE", (row["team_id"],))
+        try:
+            with conn.transaction():
+                conn.execute(
+                    "UPDATE members SET github_user_id = %s, github_login = %s, verified_email = %s, added_email = NULL"
+                    " WHERE id = %s",
+                    (proven.github.account_id, proven.github.login, email, row["id"]),
+                )
+        except UniqueViolation:
+            raise self._not_linked(proven) from None
+        return SignedIn(self._member_of(row), linked=True)
 
     @staticmethod
     def _named_by(conn: Conn, proven: ProvenSignIn) -> list[dict[str, Any]]:
         """The members a proven sign-in names: by the GitHub account's id, or by its login where no id is kept yet."""
         return conn.execute(
-            "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at"
-            " FROM members m JOIN teams t ON t.id = m.team_id"
-            " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
+            _SIGNING_IN_COLUMNS
+            + " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
             (proven.github.account_id, proven.github.login),
         ).fetchall()
 
     @staticmethod
     def _keep_proven(conn: Conn, member_pk: int, proven: ProvenSignIn) -> None:
-        """Keep the account's id from its first sign-in, and the login it goes by now, and the verified email it
-        vouched for when the member has none and no one else in the company holds it."""
+        """Keep the account's id from its first sign-in, and the login it goes by now, and what it proved of the email.
+        Where the member was added with an email, only that email, ignoring case, is kept, and it becomes their verified
+        one. Where they were not, the email is kept when they have no verified one and no other member of the company
+        holds it, in either column."""
         conn.execute(
             "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
             (proven.github.account_id, proven.github.login, member_pk),
         )
-        if proven.verified_email is None:
+        email = proven.verified_email
+        if email is None:
             return
+        # The member's row is locked by the update above; the company's comes after it.
+        conn.execute(
+            "SELECT 1 FROM teams WHERE id = (SELECT team_id FROM members WHERE id = %s) FOR NO KEY UPDATE", (member_pk,)
+        )
         # A savepoint, so a second sign-in winning the email between the check and the write costs only the email,
         # not the sign-in's transaction.
         try:
             with conn.transaction():
+                promoted = conn.execute(
+                    "UPDATE members SET verified_email = %s, added_email = NULL WHERE id = %s"
+                    " AND lower(added_email) = lower(%s)",
+                    (email, member_pk, email),
+                )
+                if promoted.rowcount:
+                    return
                 conn.execute(
                     "UPDATE members SET verified_email = %s WHERE id = %s AND verified_email IS NULL"
-                    " AND NOT EXISTS (SELECT 1 FROM members o WHERE o.team_id = members.team_id AND o.id <> members.id"
-                    " AND lower(o.verified_email) = lower(%s))",
-                    (proven.verified_email, member_pk, proven.verified_email),
+                    " AND added_email IS NULL AND NOT EXISTS (SELECT 1 FROM members o"
+                    " WHERE o.team_id = members.team_id AND o.id <> members.id"
+                    " AND (lower(o.verified_email) = lower(%s) OR lower(o.added_email) = lower(%s)))",
+                    (email, member_pk, email, email),
                 )
         except UniqueViolation:
             pass
@@ -646,7 +788,7 @@ class Identity:
         """Everyone in this member's company, with their role and the GitHub account they sign in with."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT member_id, name, is_owner, is_admin, github_login, verified_email, removed_at FROM members"
+                "SELECT member_id, name, is_owner, is_admin, github_login, verified_email, added_email, removed_at FROM members"
                 " WHERE team_id = %s ORDER BY is_owner DESC, is_admin DESC, member_id",
                 (member.company_pk,),
             ).fetchall()
@@ -657,19 +799,28 @@ class Identity:
                 "role": "owner" if row["is_owner"] else "admin" if row["is_admin"] else "member",
                 "github_login": row["github_login"],
                 "verified_email": row["verified_email"],
+                "added_email": row["added_email"],
                 "sign_in_methods": ["github"] if row["github_login"] else [],
                 "removed": row["removed_at"] is not None,
             }
             for row in rows
         ]
 
-    def change_member(self, caller: Caller, member_id: str, name: str | None, github: str | None) -> None:
-        """Correct a member's name, or the GitHub account they sign in with."""
+    def change_member(
+        self, caller: Caller, member_id: str, name: str | None, github: str | None, email: str | None = None
+    ) -> None:
+        """Correct a member's name, the GitHub account they sign in with, or the email an admin keeps for them. A new
+        email stays unverified until its holder proves it; an empty one clears both the added and the verified."""
         self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
+            if email is not None:
+                # The member's row before the company's, wherever an email is claimed: a sign-in takes them in this order.
+                conn.execute("SELECT 1 FROM members WHERE id = %s FOR UPDATE", (pk,))
+                self._require_say_over_access(conn, caller, pk, "change", "email")
             if github is not None:
                 self._require_say_over_access(conn, caller, pk, "change", "GitHub account")
+            wanted = checked_email(email) if email is not None and email.strip() else None
             if name is not None:
                 if not name.strip():
                     raise Refused("A member needs a name.")
@@ -678,8 +829,27 @@ class Identity:
                 login = _github_login(github)
                 if login is not None:
                     self._github_free(conn, caller.member.company_pk, login, pk)
-                # Clearing the account id lets the next sign-in bind this login to whoever signs in with it.
-                conn.execute("UPDATE members SET github_login = %s, github_user_id = NULL WHERE id = %s", (login, pk))
+                # Clearing the account id lets the next sign-in bind this login to whoever signs in with it. Moving to
+                # another login, or none, drops the verified email: the account just unlinked would otherwise sign
+                # straight back in by it. The same login again keeps it.
+                conn.execute(
+                    "UPDATE members SET github_login = %s, github_user_id = NULL,"
+                    " verified_email = CASE WHEN lower(coalesce(%s, '')) = lower(coalesce(github_login, ''))"
+                    " THEN verified_email END WHERE id = %s",
+                    (login, login, pk),
+                )
+            if email is None:
+                return
+            if wanted is None:
+                conn.execute("UPDATE members SET added_email = NULL, verified_email = NULL WHERE id = %s", (pk,))
+                return
+            self._claim_email(conn, caller.member.company_pk, wanted, pk)
+            # The email the member already holds as verified stays as it is: nothing to prove again.
+            conn.execute(
+                "UPDATE members SET added_email = %s, verified_email = NULL WHERE id = %s"
+                " AND lower(coalesce(verified_email, '')) <> lower(%s)",
+                (wanted, pk, wanted),
+            )
 
     def set_admin(self, caller: Caller, member_id: str, admin: bool) -> None:
         """Grant admin to a member, or take it away. Only the owner can."""

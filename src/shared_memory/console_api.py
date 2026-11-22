@@ -1632,11 +1632,16 @@ class ConsoleApi:
         asked: NewMember = request.state.asked
         try:
             caller = self._identity.caller_in(member, None)
-            token = self._identity.add_member(caller, asked.member_id, asked.name, github=asked.github)
+            token = self._identity.add_member(
+                caller, asked.member_id, asked.name, github=asked.github, email=asked.email
+            )
         except Refused as refused:
             return JSONResponse({"message": str(refused)}, status_code=403)
         self._audit.record(
-            MEMBER_ADDED, member=member, target=asked.member_id, detail={"name": asked.name, "github": asked.github}
+            MEMBER_ADDED,
+            member=member,
+            target=asked.member_id,
+            detail={"name": asked.name, "github": asked.github, "email": bool(asked.email and asked.email.strip())},
         )
         self._audit.record(TOKEN_ISSUED, member=member, target=asked.member_id, detail={"for": asked.member_id})
         return self._issued(request, asked.member_id, token)
@@ -1652,9 +1657,12 @@ class ConsoleApi:
     def _change_member(self, request: Request) -> Response:
         def change(member: Member, caller: Caller, member_id: str) -> None:
             asked: ChangedMember = request.state.asked
-            self._identity.change_member(caller, member_id, asked.name, asked.github)
+            self._identity.change_member(caller, member_id, asked.name, asked.github, asked.email)
             self._audit.record(
-                MEMBER_CHANGED, member=member, target=member_id, detail={"name": asked.name, "github": asked.github}
+                MEMBER_CHANGED,
+                member=member,
+                target=member_id,
+                detail={"name": asked.name, "github": asked.github, "email": asked.email is not None},
             )
 
         return self._run_on_member(request, change)
@@ -1750,10 +1758,10 @@ class ConsoleApi:
 
     @staticmethod
     def _as_seen_by(member: Member, one: dict[str, Any]) -> MemberSummary:
-        """A member as the one asking may see them: only an admin or the owner is told their verified email and
-        sign-in methods."""
+        """A member as the one asking may see them: only an admin or the owner is told their verified or added email
+        and sign-in methods."""
         if not (member.is_owner or member.is_admin):
-            one = {**one, "verified_email": None, "sign_in_methods": []}
+            one = {**one, "verified_email": None, "added_email": None, "sign_in_methods": []}
         return MemberSummary(**one)
 
     def _company(self, member: Member) -> Response:

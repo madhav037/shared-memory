@@ -275,7 +275,7 @@ export function fetchMembers(signal?: AbortSignal): Promise<Members> {
 }
 
 /** Add a member; their personal token comes back once. */
-export function addMember(asked: { member_id: string; name: string; github?: string }): Promise<IssuedToken> {
+export function addMember(asked: { member_id: string; name: string; github?: string; email?: string }): Promise<IssuedToken> {
   return change<IssuedToken>("/api/members", asked);
 }
 
@@ -283,7 +283,7 @@ export function removeMember(memberId: string): Promise<Members> {
   return change<Members>(`/api/members/${encodeURIComponent(memberId)}/remove`);
 }
 
-export function changeMember(memberId: string, asked: { name?: string; github?: string }): Promise<Members> {
+export function changeMember(memberId: string, asked: { name?: string; github?: string; email?: string }): Promise<Members> {
   return change<Members>(`/api/members/${encodeURIComponent(memberId)}/change`, asked);
 }
 

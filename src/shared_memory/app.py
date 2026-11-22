@@ -1028,13 +1028,15 @@ def build_app(
         ctx: Context,
         company: str | None = None,
         github: str | None = None,
+        email: str | None = None,
     ) -> dict[str, Any]:
         """Owner and admins: add a member to your company. Their personal token is shown once, in this result.
 
-        github is their GitHub username, which lets them sign in to the console.
+        github is their GitHub username, or email their email, not both: whichever sign-in method first proves it
+        lets them sign in to the console. An added email stays unverified until its holder proves it.
         """
         current = caller(ctx)
-        token = identity.add_member(current, member_id, name, company, github)
+        token = identity.add_member(current, member_id, name, company, github, email)
         return {"company": current.company, "member_id": member_id, "name": name, "personal_token": token}
 
     @server.tool()

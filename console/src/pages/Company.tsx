@@ -28,7 +28,7 @@ import { useAsked } from "../lib/useAsked";
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
 type Editing =
-  | { kind: "name" | "github"; memberId: string; value: string }
+  | { kind: "name" | "github" | "email"; memberId: string; value: string }
   | { kind: "remove" | "ownership"; memberId: string }
   | null;
 
@@ -417,15 +417,26 @@ function MemberRow({
         ) : (
           <span style={{ color: "var(--ink-3)" }}>not linked</span>
         )}
-        {editing?.kind !== "github" && (member.verified_email || member.sign_in_methods.length > 0) && (
-          <div
-            data-testid={`verified-email-${id}`}
-            style={{ color: "var(--ink-3)", fontSize: "0.8125rem", fontWeight: 400, overflowWrap: "anywhere" }}
-          >
-            {member.verified_email ?? "no verified email"}
-            {member.sign_in_methods.length > 0 && ` · signs in with ${member.sign_in_methods.join(", ").replace("github", "GitHub")}`}
-          </div>
+        {editing?.kind === "email" && (
+          <InlineEdit
+            label="Email (empty to clear)"
+            value={editing.value}
+            onChange={(value) => setEditing({ ...editing, value })}
+            onSave={() => attempt(() => changeMember(id, { email: editing.value }))}
+            onCancel={() => setEditing(null)}
+          />
         )}
+        {editing?.kind !== "github" &&
+          editing?.kind !== "email" &&
+          (member.verified_email || member.added_email || member.sign_in_methods.length > 0) && (
+            <div
+              data-testid={`verified-email-${id}`}
+              style={{ color: "var(--ink-3)", fontSize: "0.8125rem", fontWeight: 400, overflowWrap: "anywhere" }}
+            >
+              {member.added_email ? `${member.added_email} · unverified` : (member.verified_email ?? "no verified email")}
+              {member.sign_in_methods.length > 0 && ` · signs in with ${member.sign_in_methods.join(", ").replace("github", "GitHub")}`}
+            </div>
+          )}
       </td>
       <td data-label="Role" style={{ fontWeight: member.role === "member" ? 400 : 700, color: member.role === "member" ? undefined : "var(--ink)" }}>
         {ROLE_WORDS[member.role] ?? member.role}
@@ -472,6 +483,20 @@ function MemberRow({
                       onClick={() => setEditing({ kind: "github", memberId: id, value: member.github_login ?? "" })}
                     >
                       Change their GitHub account
+                    </Menu.Item>
+                  )}
+                  {setsTheirAccess && (
+                    <Menu.Item
+                      onClick={() =>
+                        setEditing({
+                          kind: "email",
+                          memberId: id,
+                          value: member.added_email ?? member.verified_email ?? "",
+                        })
+                      }
+                      data-testid={`change-email-${id}`}
+                    >
+                      Change their email
                     </Menu.Item>
                   )}
                   <Menu.Divider />
@@ -564,19 +589,27 @@ function AddMember({
 }) {
   const [memberId, setMemberId] = useState("");
   const [name, setName] = useState("");
-  const [github, setGithub] = useState("");
+  const [wayIn, setWayIn] = useState("");
   const [adding, setAdding] = useState(false);
   const [missing, setMissing] = useState(false);
 
   const add = async () => {
     setAdding(true);
     try {
-      const token = await addMember({ member_id: memberId.trim(), name: name.trim(), github: github.trim() || undefined });
+      // One field: a value with an @ after its first character is an email, anything else a GitHub username (which
+      // may start with an @).
+      const given = wayIn.trim();
+      const isEmail = given.indexOf("@", 1) > 0;
+      const token = await addMember({
+        member_id: memberId.trim(),
+        name: name.trim(),
+        ...(isEmail ? { email: given } : { github: given || undefined }),
+      });
       const everyone = await fetchMembers();
       onAdded(token, everyone);
       setMemberId("");
       setName("");
-      setGithub("");
+      setWayIn("");
       setMissing(false);
     } catch (problem) {
       onRefused((problem as Error).message);
@@ -591,8 +624,8 @@ function AddMember({
         Add a member
       </h2>
       <p className="section-lede">
-        Their personal token is shown once, here, to pass on privately. Their GitHub username lets them sign in to the
-        console.
+        Their personal token is shown once, here, to pass on privately. Their email or GitHub username lets them sign
+        in to the console: the first sign-in method to prove it is theirs, and an email stays unverified until then.
       </p>
       <form
         className="form-line"
@@ -620,11 +653,11 @@ function AddMember({
           style={{ flex: "2 1 180px" }}
         />
         <TextInput
-          label="GitHub username"
-          placeholder="e.g. dana-dev"
-          value={github}
+          label="Email or GitHub username"
+          placeholder="e.g. dana@example.com or dana-dev"
+          value={wayIn}
           data-testid="new-github"
-          onChange={(event) => setGithub(event.currentTarget.value)}
+          onChange={(event) => setWayIn(event.currentTarget.value)}
           style={{ flex: "2 1 160px" }}
         />
         <Button
