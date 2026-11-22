@@ -35,7 +35,7 @@ relative to the repository root; `src/shared_memory/` is shortened to `sm/`.
 
 | | Threat | Check | Where |
 | --- | --- | --- | --- |
-| **S** | Forged or replayed GitHub sign-in | A one-time state, stored as a hash, spent once within 10 minutes; the code is exchanged server-side; the account id must match a member of exactly one company. | `sm/console_sessions.py:67-75`, `:101-109`; `sm/identity.py:345` |
+| **S** | Forged or replayed GitHub sign-in | A one-time state, stored as a hash, kept in the browser's cookie and refused from any other browser, spent once within 10 minutes; the code is exchanged server-side; the account id must match a member of exactly one company. | `sm/console_sessions.py:67-75`, `:101-109`; `sm/identity.py:345` |
 | **S** | Stolen or stale session | Cookie is HttpOnly, Secure on HTTPS, SameSite=Lax; every call checks the session isn't ended, idle 24 h, older than 7 days, or a removed member's. | `sm/console_api.py:294-301`; `sm/console_sessions.py:162-182`; `sm/config.py:36-37` |
 | **T** | Cross-site request changing something | A changing call without `X-Shared-Memory-Console` gets 403; there are no CORS headers, so another site can't send it. | `sm/console_api.py:259-260` |
 | **T** | The console writing memory | Never: it pins, unpins, decides challenges and retires (ADR-0009). Saving, editing and promoting exist only as MCP tools. | `sm/console_api.py:79` |

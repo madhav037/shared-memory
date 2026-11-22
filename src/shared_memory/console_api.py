@@ -578,16 +578,15 @@ class ConsoleApi:
         except Refused as refused:
             return self._back_to_console(request, str(refused))
         sent = RedirectResponse(started.url, status_code=302)
-        if started.nonce is not None:
-            sent.set_cookie(
-                NONCE_COOKIE,
-                started.nonce,
-                max_age=STATE_MINUTES * 60,
-                httponly=True,
-                secure=self._https(request),
-                samesite="lax",
-                path=NONCE_PATH,
-            )
+        sent.set_cookie(
+            NONCE_COOKIE,
+            started.nonce,
+            max_age=STATE_MINUTES * 60,
+            httponly=True,
+            secure=self._https(request),
+            samesite="lax",
+            path=NONCE_PATH,
+        )
         return sent
 
     def _sign_in_callback(self, request: Request) -> Response:
@@ -595,10 +594,12 @@ class ConsoleApi:
         if not code or not state:
             return self._back_to_console(request, "That sign-in didn't finish. Try again.")
         try:
-            token = self._sessions.finish(code, state, self._root(request))
+            token = self._sessions.finish(code, state, self._root(request), request.cookies.get(NONCE_COOKIE))
         except Refused as refused:
-            return self._back_to_console(request, str(refused))
-        return self._signed_in(request, token)
+            answer = self._back_to_console(request, str(refused))
+        else:
+            answer = self._signed_in(request, token)
+        return self._sign_in_over(request, answer)
 
     def _sign_in_handed_over(self, request: Request) -> Response:
         handed_over = request.query_params.get("sign_in", "")
@@ -610,7 +611,10 @@ class ConsoleApi:
             answer = self._back_to_console(request, str(refused))
         else:
             answer = self._signed_in(request, token)
-        # The nonce serves one sign-in, however it went.
+        return self._sign_in_over(request, answer)
+
+    def _sign_in_over(self, request: Request, answer: Response) -> Response:
+        """The answer, dropping what the browser kept for the sign-in: it serves one, however that went."""
         answer.delete_cookie(NONCE_COOKIE, path=NONCE_PATH, httponly=True, secure=self._https(request), samesite="lax")
         return answer
 

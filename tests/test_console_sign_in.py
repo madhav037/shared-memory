@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
+from shared_memory.console_sessions import NONCE_COOKIE
 from tests.support import Console, ConsoleClient, RunningServer, Session, sign_in_error
 
 
@@ -125,6 +127,8 @@ def test_a_session_ends_when_the_member_is_removed(console: Console, signed_out:
 
 
 def test_a_sign_in_that_did_not_start_here_is_refused(console: Console, signed_out: ConsoleClient) -> None:
+    signed_out.set_cookie(NONCE_COOKIE, "made-up")  # so it is the state, not the browser, that is refused
+
     landed = signed_out.get("/api/sign-in/github/callback?code=fake-code&state=made-up")
 
     assert "didn't come from this console" in sign_in_error(landed)
@@ -145,3 +149,56 @@ def test_a_server_without_github_cannot_sign_anyone_in(server: RunningServer) ->
         assert "isn't set up on this server" in sign_in_error(landed)
     finally:
         client.close()
+
+
+def test_a_sign_in_finished_in_a_browser_that_did_not_start_it_is_refused_unspent(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    console.a_company("olive-bound-one")
+    console.github.as_(151, "olive-bound-one")
+    callback = sent_back_to(signed_out)
+
+    elsewhere = ConsoleClient(console.server)
+    try:
+        landed = elsewhere.get(callback)
+
+        assert "didn't start in this browser" in sign_in_error(landed)
+        assert elsewhere.status()["signed_in"] is False
+    finally:
+        elsewhere.close()
+    signed_out.get(callback)
+    assert signed_out.status()["signed_in"] is True
+
+
+def test_a_browser_with_a_sign_in_of_its_own_cannot_finish_anothers(console: Console, signed_out: ConsoleClient) -> None:
+    console.a_company("olive-bound-two")
+    console.github.as_(152, "olive-bound-two")
+    callback = sent_back_to(signed_out)
+
+    elsewhere = ConsoleClient(console.server)
+    try:
+        elsewhere.start_sign_in()
+        landed = elsewhere.get(callback)
+
+        assert "didn't start in this browser" in sign_in_error(landed)
+        assert elsewhere.status()["signed_in"] is False
+    finally:
+        elsewhere.close()
+
+
+def test_the_cookie_a_github_sign_in_is_kept_by_serves_one_sign_in(console: Console, signed_out: ConsoleClient) -> None:
+    console.a_company("olive-bound-three")
+    console.github.as_(153, "olive-bound-three")
+    callback = sent_back_to(signed_out)
+    assert signed_out.cookie(NONCE_COOKIE)
+
+    signed_out.get(callback)
+
+    assert signed_out.cookie(NONCE_COOKIE) is None
+
+
+def sent_back_to(browser: ConsoleClient) -> str:
+    """The callback address GitHub sends a sign-in this browser started back to, without going there."""
+    sent = httpx.get(browser.start_sign_in(), follow_redirects=False)
+    assert sent.status_code == 302, sent.text
+    return str(sent.headers["location"])
