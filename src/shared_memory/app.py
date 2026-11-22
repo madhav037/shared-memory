@@ -1047,7 +1047,8 @@ def build_app(
     @server.tool()
     @_refusals_as_tool_errors
     def reissue_token(member_id: str, ctx: Context) -> dict[str, Any]:
-        """Owner and admins: revoke a member's personal token and issue a new one, shown once in this result."""
+        """Owner and admins: revoke a member's personal token and issue a new one, shown once in this result. Only
+        the owner does it for another admin, and nobody else for the owner."""
         token = identity.reissue_token(caller(ctx), member_id)
         return {"member_id": member_id, "personal_token": token}
 

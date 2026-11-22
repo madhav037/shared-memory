@@ -489,6 +489,7 @@ class Identity:
         self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
+            self._require_say_over_access(conn, caller, pk, "reissue", "personal token")
             conn.execute(
                 "UPDATE tokens SET revoked_at = %s WHERE member_id = %s AND revoked_at IS NULL", (self._clock(), pk)
             )
@@ -611,6 +612,19 @@ class Identity:
         if row["is_admin"] and not caller.member.is_owner:
             raise Refused(f"Only the company's owner can {verb} an admin.")
 
+    @staticmethod
+    def _require_say_over_access(conn: Conn, caller: Caller, pk: int, verb: str, access: str) -> None:
+        """Whoever sets how a member gets in can act as them, so it takes standing above them: the owner's is the
+        owner's alone, another admin's the owner's. The row stays locked, so their role holds until the change lands."""
+        if pk == caller.member.pk:
+            return
+        row = conn.execute("SELECT is_owner, is_admin FROM members WHERE id = %s FOR UPDATE", (pk,)).fetchone()
+        assert row is not None
+        if row["is_owner"]:
+            raise Refused(f"Only the owner can {verb} the owner's {access}.")
+        if row["is_admin"] and not caller.member.is_owner:
+            raise Refused(f"Only the company's owner can {verb} another admin's {access}.")
+
     def members(self, member: Member) -> list[dict[str, Any]]:
         """Everyone in this member's company, with their role and the GitHub account they sign in with."""
         with self._db.transaction() as conn:
@@ -635,6 +649,8 @@ class Identity:
         self._require_admin(caller)
         with self._db.transaction() as conn:
             pk = self._member_pk(conn, caller, member_id)
+            if github is not None:
+                self._require_say_over_access(conn, caller, pk, "change", "GitHub account")
             if name is not None:
                 if not name.strip():
                     raise Refused("A member needs a name.")
