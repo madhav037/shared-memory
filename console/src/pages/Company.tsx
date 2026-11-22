@@ -379,6 +379,8 @@ function MemberRow({
 }) {
   const id = member.member_id;
   const actionable = runs && !member.removed && id !== me.member_id;
+  // The server's rule: how an admin gets in is the owner's to change, and how the owner does is theirs alone.
+  const setsTheirAccess = member.role === "member" || (member.role === "admin" && me.role === "owner");
   const cells = (
     <>
       <td className="primary">
@@ -448,17 +450,21 @@ function MemberRow({
                   {me.role === "owner" && (
                     <Menu.Item onClick={() => setEditing({ kind: "ownership", memberId: id })}>Hand over ownership…</Menu.Item>
                   )}
-                  <Menu.Item onClick={() => issue(id)} data-testid={`reissue-${id}`}>
-                    Issue a new personal token
-                  </Menu.Item>
+                  {setsTheirAccess && (
+                    <Menu.Item onClick={() => issue(id)} data-testid={`reissue-${id}`}>
+                      Issue a new personal token
+                    </Menu.Item>
+                  )}
                   <Menu.Item onClick={() => setEditing({ kind: "name", memberId: id, value: member.name })}>
                     Correct their name
                   </Menu.Item>
-                  <Menu.Item
-                    onClick={() => setEditing({ kind: "github", memberId: id, value: member.github_login ?? "" })}
-                  >
-                    Change their GitHub account
-                  </Menu.Item>
+                  {setsTheirAccess && (
+                    <Menu.Item
+                      onClick={() => setEditing({ kind: "github", memberId: id, value: member.github_login ?? "" })}
+                    >
+                      Change their GitHub account
+                    </Menu.Item>
+                  )}
                   <Menu.Divider />
                   <Menu.Item
                     className="danger-item"
