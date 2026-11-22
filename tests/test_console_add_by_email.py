@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import itertools
 import threading
+import time
 from typing import Any
 
 import httpx
+import psycopg
 import pytest
 
 from tests.support import Console, ConsoleClient, Session, ToolRefused, sign_in_error
@@ -560,3 +562,143 @@ def test_no_email_is_written_to_the_audit_log_only_that_one_was_given(console: C
     assert by_kind["member_changed"]["detail"]["email"] is True
     assert any(event["kind"] == "member_added" and event["detail"].get("email") is True for event in log)
     assert any(event["kind"] == "signed_in" and event["detail"].get("linked") is True for event in log)
+
+
+# -- emails are ASCII ---------------------------------------------------------------------------------------------------
+
+
+def a_pair() -> tuple[str, str]:
+    """An ASCII address under a domain of its own, and the address that differs from it by one non-ASCII letter."""
+    domain = f"gmail{next(_domains)}.com"
+    return f"victim@{domain}", f"victim@{domain.replace('i', chr(0x130), 1)}"
+
+
+def a_pair_in_the_local_part() -> tuple[str, str]:
+    domain = f"site{next(_domains)}.org"
+    return f"kevin@{domain}", f"{chr(0x212A)}evin@{domain}"
+
+
+@pytest.mark.parametrize("pair", [a_pair, a_pair_in_the_local_part], ids=["domain", "local-part"])
+@pytest.mark.parametrize("how", ["added", "verified"])
+def test_emails_are_ascii_so_a_non_ascii_email_matches_nobody(console: Console, how: str, pair: Any) -> None:
+    held, other = pair()
+    owner = a_company(console, f"olive-ascii-{how}")
+    if how == "added":
+        added(owner, "emp-2", email=held)
+    else:
+        login, account = gh(f"dana-ascii-{how}")
+        added(owner, "emp-2", github=login)
+        sign_in(console, login, account, entry(held))
+        # Only a member with no GitHub linked can be matched by email, so take the link away, as the row would be.
+        with psycopg.connect(console.server.settings.database_url, autocommit=True) as conn:
+            conn.execute("UPDATE members SET github_login = NULL, github_user_id = NULL WHERE member_id = 'emp-2' AND verified_email = %s", (held,))
+    before = listed(owner)["emp-2"]
+    thief, thief_account = gh(f"thief-ascii-{how}")
+
+    stranger, landed = sign_in(console, thief, thief_account, entry(other))
+
+    assert NOT_LINKED in refused_by(stranger, landed)
+    assert listed(owner)["emp-2"] == before
+
+
+@pytest.mark.parametrize("pair", [a_pair, a_pair_in_the_local_part], ids=["domain", "local-part"])
+def test_emails_are_ascii_so_a_linked_member_proving_one_stores_nothing(console: Console, pair: Any) -> None:
+    held, other = pair()
+    owner = a_company(console, "olive-ascii-keep")
+    login, account = gh("dana-ascii-keep")
+    added(owner, "emp-2", github=login)
+    changed(owner, "emp-2", email=held)
+    login2, account2 = gh("eli-ascii-keep")
+    added(owner, "emp-3", github=login2)
+
+    sign_in(console, login, account, entry(other))
+    sign_in(console, login2, account2, entry(other))
+
+    assert (listed(owner)["emp-2"]["added_email"], listed(owner)["emp-2"]["verified_email"]) == (held, None)
+    assert listed(owner)["emp-3"]["verified_email"] is None
+
+
+@pytest.mark.parametrize("pair", [a_pair, a_pair_in_the_local_part], ids=["domain", "local-part"])
+def test_emails_are_ascii_on_add_change_and_setup(console: Console, pair: Any) -> None:
+    _, other = pair()
+    owner = a_company(console, "olive-ascii-write")
+    added(owner, "emp-3", github=gh("eli-ascii-write")[0])
+
+    on_add = new(owner, "emp-2", email=other)
+    on_change = changed(owner, "emp-3", email=other)
+
+    assert on_add.status_code in (403, 422) and on_change.status_code in (403, 422)
+    assert set(listed(owner)) == {"E1001", "emp-3"}
+    assert listed(owner)["emp-3"]["added_email"] is None
+    with pytest.raises(RuntimeError):
+        console.server.run_cli(
+            "setup", "--company", "acme-ascii", "--owner-member-id", "E1001", "--owner-name", "Olive Owner",
+            "--owner-email", other,
+        )  # fmt: skip
+
+
+def test_emails_are_ascii_so_a_stored_non_ascii_value_is_never_matched_by_an_ascii_one(console: Console) -> None:
+    held, other = a_pair()
+    login, account = gh("olive-ascii-stored")
+    company, _ = console.a_company(login)
+    owner, _ = sign_in(console, login, account)
+    added(owner, "emp-2", email=mail("placeholder"))
+    with psycopg.connect(console.server.settings.database_url, autocommit=True) as conn:
+        conn.execute(
+            "UPDATE members SET added_email = %s WHERE member_id = 'emp-2' AND team_id = (SELECT id FROM teams WHERE code = %s)",
+            (other, company),
+        )
+    thief, thief_account = gh("thief-ascii-stored")
+
+    stranger, landed = sign_in(console, thief, thief_account, entry(held))
+
+    assert NOT_LINKED in refused_by(stranger, landed)
+    assert listed(owner)["emp-2"]["added_email"] == other
+
+
+# -- the lookup locks the row ---------------------------------------------------------------------------------------
+
+
+def _waiting_on_a_lock(conn: psycopg.Connection[Any]) -> bool:
+    row = conn.execute(
+        "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'"
+    ).fetchone()
+    return bool(row and row[0] > 0)
+
+
+@pytest.mark.parametrize("change", ["unlinked", "removed"])
+def test_the_lookup_locks_the_row_so_a_sign_in_waits_for_a_change_and_sees_it(console: Console, change: str) -> None:
+    login, account = gh(f"olive-lock-{change}")
+    company, _ = console.a_company(login)
+    owner, _ = sign_in(console, login, account)
+    dana, dana_account = gh(f"dana-lock-{change}")
+    added(owner, "emp-2", github=dana)
+    sign_in(console, dana, dana_account, entry(mail("dana")))
+    changes = {
+        "unlinked": "github_login = 'moved-on', github_user_id = NULL, verified_email = NULL",
+        "removed": "removed_at = now()",
+    }
+    holder = psycopg.connect(console.server.settings.database_url)
+    answers: list[tuple[ConsoleClient, httpx.Response]] = []
+    try:
+        holder.execute(
+            f"UPDATE members SET {changes[change]} WHERE member_id = 'emp-2'"
+            " AND team_id = (SELECT id FROM teams WHERE code = %s)",
+            (company,),
+        )
+        thread = threading.Thread(target=lambda: answers.append(sign_in(console, dana, dana_account, entry(mail("dana")))))
+        thread.start()
+        deadline = time.monotonic() + 30
+        while not _waiting_on_a_lock(holder) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert _waiting_on_a_lock(holder), "the sign-in did not wait for the row"
+        holder.commit()
+        thread.join(30)
+    finally:
+        holder.close()
+
+    client, landed = answers[0]
+    assert (NOT_LINKED if change == "unlinked" else REMOVED) in refused_by(client, landed)
+    row = listed(owner)["emp-2"]
+    assert row["verified_email"] is None if change == "unlinked" else row["removed"] is True
+    assert row["github_login"] == ("moved-on" if change == "unlinked" else dana)

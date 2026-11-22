@@ -72,6 +72,12 @@ class ProvenSignIn:
     verified_email: str | None = None
 
     @property
+    def matchable_email(self) -> str | None:
+        """The email to match and keep: emails are ASCII, so one that is not is ignored, whichever method proved it."""
+        email = self.verified_email
+        return email if email is not None and email.isascii() else None
+
+    @property
     def described(self) -> str:
         """What was proven, as a refusal names it."""
         return f"The GitHub account @{self.github.login}"
@@ -237,6 +243,7 @@ def checked_email(value: str) -> str:
         or cleaned.count("@") != 1
         or not local
         or "." not in domain
+        or not cleaned.isascii()
         or any(each.isspace() or unicodedata.category(each) == "Cc" for each in cleaned)
     ):
         raise Refused("That doesn't look like an email address.")
@@ -260,6 +267,11 @@ def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
 _SIGNING_IN_COLUMNS = (
     "SELECT m.id, m.team_id, t.code, m.member_id, m.name, m.is_owner, m.is_admin, m.removed_at, m.github_login,"
     " m.github_user_id FROM members m JOIN teams t ON t.id = m.team_id"
+)
+# Whoever holds an email, compared ignoring case, but only among stored values that are ASCII, as emails are.
+_HOLDS_ASCII = (
+    "(lower(m.added_email) = lower(%s) AND octet_length(m.added_email) = char_length(m.added_email))"
+    " OR (lower(m.verified_email) = lower(%s) AND octet_length(m.verified_email) = char_length(m.verified_email))"
 )
 REMOVED_SIGNING_IN = "You have been removed from this company, so you can no longer sign in."
 
@@ -579,7 +591,7 @@ class Identity:
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT m.id, m.github_login FROM members m JOIN teams t ON t.id = m.team_id"
-                " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL FOR UPDATE OF m",
+                " WHERE t.code = %s AND m.member_id = %s AND m.removed_at IS NULL FOR NO KEY UPDATE OF m",
                 (company_code, member_id),
             ).fetchone()
             if row is None:
@@ -631,13 +643,10 @@ class Identity:
         """No member has this GitHub account. Where the sign-in proved an email, the member holding it (added or
         verified, ignoring case) who has no GitHub linked at all is linked to this account; an email never replaces a
         link, and a removed member is never let back in by one."""
-        email = proven.verified_email
+        email = proven.matchable_email
         if email is None:
             raise self._not_linked(proven)
-        held = conn.execute(
-            _SIGNING_IN_COLUMNS + " WHERE lower(m.added_email) = lower(%s) OR lower(m.verified_email) = lower(%s)",
-            (email, email),
-        ).fetchall()
+        held = conn.execute(_SIGNING_IN_COLUMNS + " WHERE " + _HOLDS_ASCII, (email, email)).fetchall()
         if not held:
             raise self._not_linked(proven)
         if len(held) > 1:
@@ -649,8 +658,7 @@ class Identity:
         # Lock the row, then look again: what was seen may have changed since. The member's row comes before the
         # company's, always in that order.
         row = conn.execute(
-            _SIGNING_IN_COLUMNS + " WHERE m.id = %s AND (lower(m.added_email) = lower(%s)"
-            " OR lower(m.verified_email) = lower(%s)) FOR UPDATE OF m",
+            _SIGNING_IN_COLUMNS + " WHERE m.id = %s AND (" + _HOLDS_ASCII + ") FOR NO KEY UPDATE OF m",
             (held[0]["id"], email, email),
         ).fetchone()
         if row is None or row["github_login"] is not None or row["github_user_id"] is not None:
@@ -674,7 +682,9 @@ class Identity:
         """The members a proven sign-in names: by the GitHub account's id, or by its login where no id is kept yet."""
         return conn.execute(
             _SIGNING_IN_COLUMNS
-            + " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))",
+            + " WHERE m.github_user_id = %s OR (m.github_user_id IS NULL AND lower(m.github_login) = lower(%s))"
+            # The lookup locks the row: a change in flight is waited for and the match checked again against it.
+            " FOR NO KEY UPDATE OF m",
             (proven.github.account_id, proven.github.login),
         ).fetchall()
 
@@ -688,7 +698,7 @@ class Identity:
             "UPDATE members SET github_user_id = %s, github_login = %s WHERE id = %s",
             (proven.github.account_id, proven.github.login, member_pk),
         )
-        email = proven.verified_email
+        email = proven.matchable_email
         if email is None:
             return
         # The member's row is locked by the update above; the company's comes after it.
@@ -701,7 +711,7 @@ class Identity:
             with conn.transaction():
                 promoted = conn.execute(
                     "UPDATE members SET verified_email = %s, added_email = NULL WHERE id = %s"
-                    " AND lower(added_email) = lower(%s)",
+                    " AND lower(added_email) = lower(%s) AND octet_length(added_email) = char_length(added_email)",
                     (email, member_pk, email),
                 )
                 if promoted.rowcount:
@@ -816,7 +826,7 @@ class Identity:
             pk = self._member_pk(conn, caller, member_id)
             if email is not None:
                 # The member's row before the company's, wherever an email is claimed: a sign-in takes them in this order.
-                conn.execute("SELECT 1 FROM members WHERE id = %s FOR UPDATE", (pk,))
+                conn.execute("SELECT 1 FROM members WHERE id = %s FOR NO KEY UPDATE", (pk,))
                 self._require_say_over_access(conn, caller, pk, "change", "email")
             if github is not None:
                 self._require_say_over_access(conn, caller, pk, "change", "GitHub account")
