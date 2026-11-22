@@ -1,6 +1,6 @@
 # Members sign in with GitHub, a magic link or their company's identity provider
 
-ADR-0007 made GitHub the console's only sign-in, which shuts out companies whose people don't all have GitHub accounts. A member now has one or more sign-in methods, all leading to the same member through a verified email: GitHub, a magic link, and on a self-hosted server the company's own identity provider over OIDC, on every plan. The platform runs Logto, an open-source identity server, as its one sign-in service; hosted servers keep the handed-over sign-in and never talk to Logto themselves. Personal tokens for coding agents are unchanged (ADR-0005).
+ADR-0007 made GitHub the console's only sign-in, which shuts out companies whose people don't all have GitHub accounts. A member now has one or more sign-in methods, all leading to the same member through a verified email: GitHub, a magic link, and on a self-hosted server the company's own identity provider over OIDC, on every plan. The platform runs Logto, an MPL-2.0 identity server, as its one sign-in service; hosted servers keep the handed-over sign-in and never talk to Logto themselves. Personal tokens for coding agents are unchanged (ADR-0005).
 
 ## Considered Options
 
