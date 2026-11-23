@@ -24,7 +24,7 @@ from shared_memory.embeddings import DIMENSIONS, MAX_TOKENS, CachedQueries, Quer
 from shared_memory.memory import Memory, locate
 from shared_memory.store import MemoryStore
 
-_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
+_HEADING = re.compile(r"^#{1,6}\s+(\S.*)$")
 _RRF_K = 60
 _CANDIDATES = 30
 _SIMILAR_LIMIT = 10
@@ -172,7 +172,8 @@ def split_sections(memory: Memory) -> list[tuple[str, str]]:
         match = _HEADING.match(line)
         if match:
             sections.append((heading, "\n".join(lines).strip()))
-            heading, lines = match.group(1), []
+            # Closing #s and trailing space are cut here, not in the pattern, where they backtracked over long runs.
+            heading, lines = match.group(1).rstrip().rstrip("#").rstrip() or match.group(1).rstrip(), []
         else:
             lines.append(line)
     sections.append((heading, "\n".join(lines).strip()))

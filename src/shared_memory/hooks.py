@@ -125,7 +125,7 @@ _EDIT_TOOLS = frozenset(
 
 # Codex edits files with apply_patch, whose one argument is the patch: each file it changes is named on a line of its
 # own.
-_PATCHED_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$", re.MULTILINE)
+_PATCHED_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$", re.MULTILINE)
 
 # Where agents with no working folder in their payload name the folders that are open: Cursor and Cline.
 _ROOTS_FIELDS = ("workspace_roots", "workspaceRoots")
@@ -282,7 +282,8 @@ def _files_named(payload: Mapping[str, Any], root: str | None, *, edits_only: bo
     named = [given[field] for field in _FILE_FIELDS if isinstance(given.get(field), str)][:1]
     patch = given.get("command")
     if not named and isinstance(patch, str):
-        named = _PATCHED_FILE.findall(patch)
+        # Stripped here: a lazy capture before `\s*$` would rescan a long run of spaces from every character.
+        named = [file for file in (each.strip() for each in _PATCHED_FILE.findall(patch)) if file]
     folders = _roots(payload, root)
     working = _roots(payload, None)[:1]
     files = (_from_root(file, folders, working) for file in named)

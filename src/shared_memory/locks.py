@@ -314,7 +314,7 @@ def matching(patterns: Sequence[str], path: str) -> str | None:
     """The first of these never-lock patterns the path matches, or None."""
     name = posixpath.basename(path)
     for pattern in patterns:
-        if _glob(pattern).match(path if "/" in pattern else name):
+        if _glob_matches(pattern, path if "/" in pattern else name):
             return pattern
     return None
 
@@ -367,10 +367,43 @@ def usable(pattern: str) -> str:
     return written
 
 
-def _glob(pattern: str) -> re.Pattern[str]:
-    parts = re.split(r"(\*\*|\*|\?)", pattern)
-    translated = {"**": ".*", "*": "[^/]*", "?": "[^/]"}
-    return re.compile("".join(translated.get(part) or re.escape(part) for part in parts) + r"\Z")
+def _glob_matches(pattern: str, text: str) -> bool:
+    """Whether the whole text matches the glob: `**` crosses folders, `*` and `?` stay within one. Every place the
+    pattern could be is followed at once as one bit each, so the time grows with the text and never backtracks."""
+    pieces: list[str] = []
+    for part in re.split(r"(\*\*|\*|\?)", pattern):
+        if part in ("*", "**") and pieces and pieces[-1] in ("*", "**"):
+            pieces[-1] = "**" if "**" in (part, pieces[-1]) else "*"  # a run of stars is one star
+        elif part in ("*", "**", "?"):
+            pieces.append(part)
+        else:
+            pieces.extend(part)
+    literal: dict[str, int] = {}
+    one = star = folders = 0
+    for place, piece in enumerate(pieces):
+        bit = 1 << place
+        if piece == "?":
+            one |= bit
+        elif piece == "*":
+            star |= bit
+        elif piece == "**":
+            folders |= bit
+        else:
+            literal[piece] = literal.get(piece, 0) | bit
+    stars = star | folders
+
+    def skipping_stars(places: int) -> int:
+        return places | (places & stars) << 1  # no two stars are next to each other, so one step is enough
+
+    places = skipping_stars(1)
+    for character in text:
+        within = character != "/"
+        moves = literal.get(character, 0) | (one if within else 0)
+        stays = folders | (star if within else 0)
+        places = skipping_stars((places & moves) << 1 | places & stays)
+        if not places:
+            return False
+    return bool(places >> len(pieces) & 1)
 
 
 def _ago(now: datetime, then: datetime) -> str:
