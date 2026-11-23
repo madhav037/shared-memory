@@ -133,6 +133,16 @@ GitHub's key can run nothing but that script: no shell, no port forwarding, no r
 
 When `deploy/deploy.sh` changes, install it on the host again (step 2's `install` line); until then the host runs the copy it has.
 
+**A deploy cut off half-way.** Once a deploy or drill has switched, a dropped connection or the job's timeout no longer stops it: it settles the switch, putting the release before back if the new one isn't healthy, and anything else that stops it puts that release back too. Its lines are also kept in `~/.local/state/shared-memory-deploy/deploy.log`. If the host itself cut it off (a kill, a reboot), or the release it fell back to wasn't healthy either, `switching` in that folder still names the release to fall back to, and every deploy and drill is refused until someone looks (`docker compose ps`), puts that release back by hand, and deletes the file. Its images are tagged `previous` after a deploy and `drill` after a drill:
+
+```bash
+tag=previous   # or drill
+for image in shared-memory-server shared-memory-caddy shared-memory-backup; do docker tag "$image:$tag" "$image:latest"; done
+git -C ~/shared-memory checkout -q --detach "$(cat ~/.local/state/shared-memory-deploy/switching)"
+(cd ~/shared-memory/deploy && docker compose up -d --no-build --remove-orphans)
+rm ~/.local/state/shared-memory-deploy/switching
+```
+
 Install it again before the first release whose server runs as its own user (#388) reaches the host. Putting back a release from before that, whose server ran as root, then hands the memory folder back to root first; the copy from before it doesn't, and a root server can't open a memory folder another user owns.
 
 **What a deploy sends.** Only the layers the host lacks. The workflow first asks the script's `layers`, which prints the layers of the release images the host holds and changes nothing, and leaves those layers out of what it sends ([`deploy/upload.py`](../deploy/upload.py)); `docker load` on the host finds them already there. The server image is built in two parts for this ([`Dockerfile`](../Dockerfile)): a base with the system packages, the locked dependencies and the search model, named by a hash of exactly what goes into it, and the server's code on top. The images the three Dockerfiles start from are pinned by digest. So a release that changes only the server's code or the console sends a few megabytes, and the log says how many bytes went and how long they took.
