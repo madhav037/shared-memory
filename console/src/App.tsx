@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
 import {
-  fetchChallenges,
+  fetchChallengeCount,
   fetchLicense,
   fetchStatus,
   onRateLimited,
@@ -179,8 +179,8 @@ function SignedIn({
 
   useEffect(() => {
     const attempt = new AbortController();
-    fetchChallenges(attempt.signal)
-      .then((answer) => setWaiting(answer.waiting.length))
+    fetchChallengeCount(attempt.signal)
+      .then((answer) => setWaiting(answer.waiting))
       .catch(() => undefined);
     return () => attempt.abort();
   }, [location.pathname, location.search]);
@@ -265,7 +265,7 @@ function SignedIn({
             <Route path="/search" element={<SearchPage />} />
             <Route
               path="/challenges"
-              element={<Challenges readsAudit={readsAudit} onDecided={(left) => setWaiting(left.waiting.length)} />}
+              element={<Challenges readsAudit={readsAudit} onDecided={(left) => setWaiting(left.total)} />}
             />
             <Route path="/projects/:projectId/board" element={<BoardPage />} />
             <Route path="/projects/:projectId/sessions" element={<SessionsPage />} />

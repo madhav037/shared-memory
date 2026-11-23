@@ -1950,14 +1950,58 @@
     "/api/challenges": {
       "get": {
         "operationId": "challenges",
-        "summary": "Challenges waiting for this member's decision, and the ones they raised.",
+        "summary": "A page of the challenges waiting for this member's decision, oldest first, after the challenge `after` and against the memory at `path` when given, and the last ones they raised.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Challenges waiting for this member's decision, and the ones they raised.",
+            "description": "A page of the challenges waiting for this member's decision, oldest first, after the challenge `after` and against the memory at `path` when given, and the last ones they raised.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChallengeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/challenges/count": {
+      "get": {
+        "operationId": "challenge_count",
+        "summary": "How many challenges are waiting for this member's decision.",
+        "responses": {
+          "200": {
+            "description": "How many challenges are waiting for this member's decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeCount"
                 }
               }
             }
@@ -6422,6 +6466,10 @@
               }
             ]
           },
+          "challenger_unseen": {
+            "title": "Challenger Unseen",
+            "type": "boolean"
+          },
           "reasoning": {
             "anyOf": [
               {
@@ -6479,6 +6527,7 @@
           "foundation_name",
           "target",
           "challenger",
+          "challenger_unseen",
           "reasoning",
           "reason",
           "evidence",
@@ -6679,7 +6728,7 @@
         "type": "object"
       },
       "ChallengeList": {
-        "description": "What is waiting for this member's decision, and what they have asked of others.",
+        "description": "A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where\nthe next page starts; and the last challenges they raised themselves.",
         "properties": {
           "waiting": {
             "items": {
@@ -6687,6 +6736,21 @@
             },
             "title": "Waiting",
             "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
           },
           "raised": {
             "items": {
@@ -6698,9 +6762,25 @@
         },
         "required": [
           "waiting",
+          "total",
+          "next",
           "raised"
         ],
         "title": "ChallengeList",
+        "type": "object"
+      },
+      "ChallengeCount": {
+        "description": "How many challenges are waiting for this member's decision.",
+        "properties": {
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "waiting"
+        ],
+        "title": "ChallengeCount",
         "type": "object"
       },
       "Notice": {
@@ -6816,6 +6896,21 @@
             "title": "Waiting",
             "type": "array"
           },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
           "raised": {
             "items": {
               "$ref": "#/components/schemas/RaisedChallenge"
@@ -6829,6 +6924,8 @@
         },
         "required": [
           "waiting",
+          "total",
+          "next",
           "raised",
           "decided"
         ],

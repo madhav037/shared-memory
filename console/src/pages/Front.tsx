@@ -145,8 +145,8 @@ function PartContents({ path, kind }: { path: string; kind: string }) {
 function Waiting() {
   const { answer } = useAsked((signal) => fetchChallenges(signal), []);
   const { nameOf } = useContents();
-  if (!answer || answer.waiting.length === 0) return null;
-  const count = answer.waiting.length;
+  if (!answer || answer.total === 0) return null;
+  const count = answer.total;
   return (
     <section className="notice appear" aria-labelledby="waiting-heading" data-testid="waiting">
       <h2 className="notice-title" id="waiting-heading">

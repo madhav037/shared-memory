@@ -22,6 +22,7 @@ export type PinState = components["schemas"]["PinState"];
 export type Pins = components["schemas"]["Pins"];
 export type Pin = components["schemas"]["Pin"];
 export type ChallengeList = components["schemas"]["ChallengeList"];
+export type ChallengeCount = components["schemas"]["ChallengeCount"];
 export type ChallengeDetail = components["schemas"]["ChallengeDetail"];
 export type DoubtEvidence = components["schemas"]["DoubtEvidence"];
 export type InDoubtMark = components["schemas"]["InDoubtMark"];
@@ -218,9 +219,20 @@ export function fetchPins(projectId: string, signal?: AbortSignal): Promise<Pins
   return ask<Pins>(`/api/projects/${encodeURIComponent(projectId)}/pins`, { signal });
 }
 
-/** Challenges waiting for this member's decision, and the ones they raised. */
-export function fetchChallenges(signal?: AbortSignal): Promise<ChallengeList> {
-  return ask<ChallengeList>("/api/challenges", { signal });
+/** A page of the challenges waiting for this member's decision, oldest first: after the challenge `after`, and only
+ * those against the memory at `path` when given. With them, how many wait in all and the last ones they raised. */
+export function fetchChallenges(
+  signal?: AbortSignal,
+  page: { after?: number; path?: string | null } = {},
+): Promise<ChallengeList> {
+  return ask<ChallengeList>(withQuery("/api/challenges", { after: page.after, path: page.path ?? undefined }), {
+    signal,
+  });
+}
+
+/** How many challenges are waiting for this member's decision: all the masthead shows. */
+export function fetchChallengeCount(signal?: AbortSignal): Promise<ChallengeCount> {
+  return ask<ChallengeCount>("/api/challenges/count", { signal });
 }
 
 /**

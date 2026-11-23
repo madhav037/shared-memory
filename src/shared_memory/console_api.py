@@ -11,6 +11,7 @@ import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache, partial
 from datetime import UTC, date, datetime, time
 from typing import Any
 from urllib.parse import quote
@@ -69,14 +70,16 @@ from shared_memory.audit import (
 )
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
-from shared_memory.challenges import PROMOTE, Challenge, Challenges, Doubt, Evidence, InDoubt, Waiting, project_of
+from shared_memory.challenges import (
+    PROMOTE, Challenges, Doubt, Evidence, InDoubt, Waiting, challenger_unseen, project_of,
+)  # fmt: skip
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
 from shared_memory.console_contract import (
     AccessChange, ActiveSession, AdminChange, Appointment, AuditEvent, FoundationName, KeeperAssignment, AuditPage, BoardArchive, BoardColumn, Card,
     CardCommentText,
-    CardDetail, CardFields, CardMove, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
+    CardDetail, CardFields, CardMove, ChallengeCount, ChallengeDetail, DeletedCard, NewCard, ChallengeList, ChallengedMemory,
     ChangedMember, ConnectionFile, DECLARATIONS, Decided, DecidedChallenges, Decision, Declaration, DoubtEvidence, Folder,
     DoubtedMemory, HeldLock, InDoubtMark, InDoubtReason, IssuedToken, MemberSummary,
     LicenseKeyText, LicenseState,
@@ -160,6 +163,12 @@ def _on_the_board(refusal: str) -> str:
 # How long the console keeps showing a notice the member's session has already had, and how many it shows at most.
 NOTICE_DAYS = 7
 NOTICE_LIMIT = 20
+
+# How many waiting challenges a page of the list holds unless asked for fewer, and the most it may be asked for; and
+# how many of the challenges a member raised it shows, the newest.
+CHALLENGE_PAGE = 20
+CHALLENGE_PAGE_LIMIT = 100
+RAISED_SHOWN = 50
 
 # A notice is only its words, so the card it is about is read back out of them: the board names a card as
 # `card 4 "Its title" in project-id`, the member's own as `your card 4 "…"`, and cards returned to To do after
@@ -517,6 +526,7 @@ class ConsoleApi:
             "retire_at": self._retire_at,
             "search_everywhere": self._search_everywhere,
             "challenges": self._challenges,
+            "challenge_count": self._challenge_count,
             "notices": self._notices,
             "decide_challenge": self._decide_challenge,
             "rate_limits": self._rate_limits,
@@ -1463,7 +1473,25 @@ class ConsoleApi:
         member = self._member(request)
         if member is None:
             return _sign_in_first()
-        return self._disputes(self._identity.caller_in(member, None))
+        asked = request.query_params
+        try:
+            after = int(asked["after"]) if asked.get("after") else None
+            limit = int(asked.get("limit", CHALLENGE_PAGE))
+        except ValueError:
+            return JSONResponse({"message": "That page wasn't understood."}, status_code=422)
+        if not 1 <= limit <= CHALLENGE_PAGE_LIMIT:
+            return JSONResponse({"message": f"A page holds 1 to {CHALLENGE_PAGE_LIMIT} challenges."}, status_code=422)
+        caller = self._identity.caller_in(member, None)
+        listed = self._challenge_list(caller, after=after, limit=limit, path=asked.get("path") or None)
+        return JSONResponse(listed.model_dump(mode="json"))
+
+    def _challenge_count(self, request: Request) -> Response:
+        """How many challenges wait for the member: who decides each is worked out, but none of them is read."""
+        member = self._member(request)
+        if member is None:
+            return _sign_in_first()
+        waiting = self._challenging.waiting_for(self._identity.caller_in(member, None))
+        return JSONResponse(ChallengeCount(waiting=len(waiting)).model_dump(mode="json"))
 
     def _interviewed(self, request: Request) -> Response:
         """What was written from the member's interviews, in the projects they can still reach. Only a read: retiring
@@ -1549,53 +1577,66 @@ class ConsoleApi:
         else:
             decided = Decided(challenge_id=challenge.id, decision="accepted", in_force=result.get("path"))
         left = self._challenge_list(self._identity.caller_in(member, None))
-        return JSONResponse(
-            DecidedChallenges(waiting=left.waiting, raised=left.raised, decided=decided).model_dump(mode="json")
-        )
+        return JSONResponse(DecidedChallenges(**vars(left), decided=decided).model_dump(mode="json"))
 
-    def _disputes(self, caller: Caller) -> Response:
-        return JSONResponse(self._challenge_list(caller).model_dump(mode="json"))
-
-    def _challenge_list(self, caller: Caller) -> ChallengeList:
-        found = self._challenging.waiting_for(caller)
+    def _challenge_list(
+        self, caller: Caller, *, after: int | None = None, limit: int = CHALLENGE_PAGE, path: str | None = None
+    ) -> ChallengeList:
+        """A page of the challenges waiting for this member, and the last ones they raised. Who decides each is worked
+        out for them all at once; only the page's are read, each memory and foundation once however many name it."""
+        found = sorted(self._challenging.waiting_for(caller), key=lambda one: one.challenge.id)
+        if path is not None:
+            found = [one for one in found if one.challenge.target_path == path]
+        later = [one for one in found if after is None or one.challenge.id > after]
+        page = later[:limit]
+        target = cache(partial(self._target, caller))
+        side = cache(partial(self._side, caller))
+        named = cache(self._identity.foundation_name)
         doubts = {
             doubt.challenge.id: doubt
-            for each in self._challenging.doubts_against(caller.company, [one.challenge.target_path for one in found]).values()
+            for each in self._challenging.doubts_against(caller.company, [one.challenge.target_path for one in page]).values()
             for doubt in each
         }
-        waiting = [self._dispute(caller, one, doubts.get(one.challenge.id)) for one in found]
+
+        def dispute(waiting: Waiting, doubt: Doubt | None) -> ChallengeDetail:
+            """A challenge waiting for this member, and for a doubt the evidence every raise of it brought. One raised
+            from memory they can't reach shows nothing of that memory: neither it nor the reasoning."""
+            challenge = waiting.challenge
+            unseen = challenger_unseen(caller, challenge)
+            project_id = project_of(challenge)
+            return ChallengeDetail(
+                challenge_id=challenge.id,
+                kind=challenge.kind,
+                project_id=project_id,
+                raised_by=challenge.raised_by,
+                raised_at=challenge.raised_at,
+                yours=waiting.decides_as == "author",
+                decides_as=waiting.decides_as,
+                foundation=challenge.foundation,
+                foundation_name=(
+                    named(project_id, challenge.foundation)
+                    if challenge.foundation is not None and project_id is not None
+                    else challenge.foundation
+                ),
+                target=target(challenge.kind, challenge.foundation, challenge.target_path),
+                challenger=None if challenge.challenger_path is None or unseen else side(challenge.challenger_path),
+                challenger_unseen=unseen,
+                reasoning=None if unseen else challenge.reasoning,
+                reason=challenge.reason,
+                evidence=[] if doubt is None else [_evidence(caller, each) for each in doubt.evidence],
+                count=None if doubt is None else doubt.count,
+            )
+
         raised = [
-            RaisedChallenge(**one, target_title=self._target(caller, one["kind"], one["foundation"], one["target_path"]).title)
-            for one in self._challenging.raised_by(caller)
+            RaisedChallenge(**one, target_title=target(one["kind"], one["foundation"], one["target_path"]).title)
+            for one in self._challenging.raised_by(caller, RAISED_SHOWN)
         ]
-        return ChallengeList(waiting=waiting, raised=raised)
-
-    def _dispute(self, caller: Caller, waiting: Waiting, doubt: Doubt | None) -> ChallengeDetail:
-        """A challenge waiting for this member, and for a doubt the evidence every raise of it brought."""
-        challenge = waiting.challenge
-        return ChallengeDetail(
-            challenge_id=challenge.id,
-            kind=challenge.kind,
-            project_id=project_of(challenge),
-            raised_by=challenge.raised_by,
-            raised_at=challenge.raised_at,
-            yours=waiting.decides_as == "author",
-            decides_as=waiting.decides_as,
-            foundation=challenge.foundation,
-            foundation_name=self._foundation_named(challenge),
-            target=self._target(caller, challenge.kind, challenge.foundation, challenge.target_path),
-            challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
-            reasoning=challenge.reasoning,
-            reason=challenge.reason,
-            evidence=[] if doubt is None else [_evidence(caller, each) for each in doubt.evidence],
-            count=None if doubt is None else doubt.count,
+        return ChallengeList(
+            waiting=[dispute(one, doubts.get(one.challenge.id)) for one in page],
+            total=len(found),
+            next=page[-1].challenge.id if len(later) > limit else None,
+            raised=raised,
         )
-
-    def _foundation_named(self, challenge: Challenge) -> str | None:
-        project_id = project_of(challenge)
-        if challenge.foundation is None or project_id is None:
-            return challenge.foundation
-        return self._identity.foundation_name(project_id, challenge.foundation)
 
     def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:
         """What a challenge is against: a memory, for an "add" the foundation whose folder the path is, or for a
@@ -1616,10 +1657,8 @@ class ConsoleApi:
 
     def _side(self, caller: Caller, path: str) -> ChallengedMemory:
         """One memory of a challenge, or a stand-in when it is no longer where it was."""
-        working = self._working_in(caller.member, _project_in(path))
         try:
-            memory = self._service.read(working, path)
-            memory["source"] = self._service.source(working, path)
+            memory = self._service.as_it_stands(caller, path)
         except Refused:
             return ChallengedMemory(
                 path=path, title=path, summary="", body="", level="", type="", author="", status="gone"
