@@ -72,7 +72,7 @@ def test_the_server_is_handed_one_forwarded_address_the_client_cant_choose() -> 
     # Strict: the client is the right-most address Caddy doesn't trust, not whatever the caller put first.
     assert "trusted_proxies_strict" in CADDYFILE
     # One way to the server, which replaces whatever X-Forwarded-For arrived with that one address.
-    assert CADDYFILE.count("reverse_proxy") == 1
+    assert len(re.findall(r"^\s*reverse_proxy", CADDYFILE, re.MULTILINE)) == 1
     assert "header_up X-Forwarded-For {client_ip}" in CADDYFILE
     assert CADDYFILE.count("import to_server") == 4
     # The host's nginx passes on the address it saw, not the caller's own header with it appended.
