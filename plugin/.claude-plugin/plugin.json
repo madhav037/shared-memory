@@ -1,6 +1,6 @@
 {
   "name": "shared-memory",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Connects Claude Code sessions to your company's Shared Memory server.",
   "author": {
     "name": "madhav037",

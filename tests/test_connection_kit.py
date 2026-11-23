@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import threading
 import tomllib
@@ -958,6 +959,41 @@ def test_every_agents_guidance_says_news_can_arrive_mid_turn() -> None:
 # Claude Code stands by with a background command the skill gives (ADR-0027, #526)
 
 
+class HeaderListener:
+    """A local HTTP listener that records each request's path and Authorization header, and answers {}."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str]] = []
+        seen = self.seen
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802  # the name http.server calls
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self._answer()
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._answer()
+
+            def _answer(self) -> None:
+                seen.append((self.path, self.headers.get("Authorization", "")))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self._server.server_port}"
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
 def claude_code_skill() -> str:
     return (REPO_ROOT / "plugin" / "skills" / "shared-memory" / "SKILL.md").read_text(encoding="utf-8")
 
@@ -1025,8 +1061,9 @@ def test_claude_codes_standby_command_reaches_the_server_as_the_plugins_hooks_do
     hooks = (REPO_ROOT / "plugin" / "hooks" / "hooks.json").read_text(encoding="utf-8")
 
     assert "$CLAUDE_PLUGIN_OPTION_SERVER_URL/hooks/standby" in command
+    assert '-H "@$SHARED_MEMORY_HEADER_FILE"' in command
+    assert "PERSONAL_TOKEN" not in command, "the token comes from the header file, not the environment"
     for read in (
-        "$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN",
         "X-Shared-Memory-Project: $SHARED_MEMORY_PROJECT",
         "X-Shared-Memory-Repository: $SHARED_MEMORY_REPOSITORY",
         "X-Shared-Memory-Agent: claude-code",
@@ -1035,32 +1072,32 @@ def test_claude_codes_standby_command_reaches_the_server_as_the_plugins_hooks_do
     assert '"session_id":"<session>"' in command
 
 
-def test_claude_codes_standby_command_never_puts_the_token_on_its_command_line(tmp_path: Path) -> None:
+def test_claude_codes_standby_command_sends_the_token_from_the_header_file_never_its_command_line(
+    tmp_path: Path,
+) -> None:
     token = "smt_never-on-the-command-line"
-    shims = tmp_path / "bin"
-    shims.mkdir()
-    curl = shims / "curl"
-    curl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$SEEN/arguments"\ncat > "$SEEN/input"\n', encoding="utf-8")
-    curl.chmod(0o755)
+    listener = HeaderListener()
+    header_file = tmp_path / "shared-memory.headers"
+    header_file.write_text(f"Authorization: Bearer {token}\n", encoding="utf-8")
     command = standby_command(claude_code_skill()).replace("<session>", "test-session")
-
-    ran = subprocess.run(
-        ["sh", "-c", command],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={
-            **os.environ,
-            "PATH": f"{shims}{os.pathsep}{os.environ['PATH']}",
-            "SEEN": str(tmp_path),
-            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
-            "CLAUDE_PLUGIN_OPTION_SERVER_URL": "https://memory.example.com",
-        },
-    )
+    try:
+        ran = subprocess.run(
+            ["sh", "-c", command],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={
+                **without_plugin_settings(),
+                "SHARED_MEMORY_HEADER_FILE": str(header_file),
+                "CLAUDE_PLUGIN_OPTION_SERVER_URL": listener.url,
+            },
+        )
+    finally:
+        listener.stop()
 
     assert ran.returncode == 0, ran.stderr
-    assert token not in (tmp_path / "arguments").read_text(encoding="utf-8")
-    assert f"Authorization: Bearer {token}" in (tmp_path / "input").read_text(encoding="utf-8")
+    assert token not in command
+    assert listener.seen == [("/hooks/standby", f"Bearer {token}")]
 
 
 # Claude Code gives the plugin's settings only to the plugin's own hooks and MCP server, not to the agent's commands, so
@@ -1099,11 +1136,9 @@ def without_plugin_settings() -> dict[str, str]:
     }
 
 
-def test_claude_codes_session_start_hook_hands_the_agents_commands_its_settings_exactly(tmp_path: Path) -> None:
-    env_file = tmp_path / "claude-env"
-    env_file.write_text("export ALREADY_THERE='kept'\n", encoding="utf-8")
-
-    ran = subprocess.run(
+def run_session_start(tmp_path: Path, env_file: Path | None) -> subprocess.CompletedProcess[str]:
+    """Claude Code's session-start hook, with the awkward settings, a stand-in curl and its own state folder."""
+    return subprocess.run(
         ["sh", "-c", claude_code_session_start_hook()],
         input=SESSION_START,
         capture_output=True,
@@ -1112,51 +1147,71 @@ def test_claude_codes_session_start_hook_hands_the_agents_commands_its_settings_
         env={
             **without_plugin_settings(),
             **recording_curl(tmp_path),
-            "CLAUDE_ENV_FILE": str(env_file),
+            **({"CLAUDE_ENV_FILE": str(env_file)} if env_file else {}),
+            "XDG_STATE_HOME": str(tmp_path / "state"),
             "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": AWKWARD_TOKEN,
             "CLAUDE_PLUGIN_OPTION_SERVER_URL": AWKWARD_SERVER_URL,
         },
     )
-    sourced = subprocess.run(
-        [
-            "sh",
-            "-c",
-            '. "$1"; printf \'%s\\n%s\\n%s\' "$ALREADY_THERE" "$CLAUDE_PLUGIN_OPTION_SERVER_URL" '
-            '"$CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN"',
-            "sh",
-            str(env_file),
-        ],
+
+
+def sourced(env_file: Path, *names: str) -> list[str]:
+    """What the agent's commands see of these variables once Claude Code has sourced the environment file."""
+    shown = " ".join(f'"${{{name}-unset}}"' for name in names)
+    ran = subprocess.run(
+        ["sh", "-c", f'. "$1"; printf \'%s\\n\' {shown}', "sh", str(env_file)],
         capture_output=True,
         text=True,
         timeout=30,
         env=without_plugin_settings(),
     )
+    return ran.stdout.rstrip("\n").split("\n")
+
+
+def test_claude_codes_session_start_hook_keeps_the_token_out_of_the_agents_environment(tmp_path: Path) -> None:
+    env_file = tmp_path / "claude-env"
+    env_file.write_text("export ALREADY_THERE='kept'\n", encoding="utf-8")
+
+    ran = run_session_start(tmp_path, env_file)
 
     assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", ""), "the briefing's answer, and nothing else"
-    assert sourced.stdout.split("\n") == ["kept", AWKWARD_SERVER_URL, AWKWARD_TOKEN]
+    assert "smt_" not in env_file.read_text(encoding="utf-8")
+    seen = sourced(env_file, "ALREADY_THERE", "CLAUDE_PLUGIN_OPTION_SERVER_URL", "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN")
+    assert seen == ["kept", AWKWARD_SERVER_URL, "unset"]
     arguments = (tmp_path / "arguments").read_text(encoding="utf-8")
     assert [line for line in arguments.split("\n") if "smt_" in line] == [f"Authorization: Bearer {AWKWARD_TOKEN}"], (
-        "the token reaches curl only as the hooks have always sent it"
+        "the hook's own request still carries the token as the hooks have always sent it"
     )
+
+
+def test_claude_codes_session_start_hook_writes_a_header_file_only_its_owner_can_read(tmp_path: Path) -> None:
+    env_file = tmp_path / "claude-env"
+
+    run_session_start(tmp_path, env_file)
+
+    [named] = sourced(env_file, "SHARED_MEMORY_HEADER_FILE")
+    header_file = Path(named)
+    assert header_file.is_file() and tmp_path / "state" in header_file.parents
+    if os.name != "nt":
+        assert stat.S_IMODE(header_file.stat().st_mode) == 0o600
+        assert stat.S_IMODE(header_file.parent.stat().st_mode) == 0o700
+    listener = HeaderListener()
+    try:
+        subprocess.run(
+            ["curl", "-s", "--max-time", "10", "-H", f"@{header_file}", f"{listener.url}/hooks/standby"],
+            capture_output=True,
+            timeout=30,
+        )
+    finally:
+        listener.stop()
+    assert listener.seen == [("/hooks/standby", f"Bearer {AWKWARD_TOKEN}")], "curl reads the token back exactly"
 
 
 def test_claude_codes_session_start_hook_without_an_environment_file_only_briefs(tmp_path: Path) -> None:
-    ran = subprocess.run(
-        ["sh", "-c", claude_code_session_start_hook()],
-        input=SESSION_START,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={
-            **without_plugin_settings(),
-            **recording_curl(tmp_path),
-            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": AWKWARD_TOKEN,
-            "CLAUDE_PLUGIN_OPTION_SERVER_URL": AWKWARD_SERVER_URL,
-        },
-    )
+    ran = run_session_start(tmp_path, None)
 
     assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", "")
-    assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"], "and writes no header file"
 
 
 # Every other agent's kit says how it stands by (ADR-0027, #527): the background command first and the `stand_by` tool
