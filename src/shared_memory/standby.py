@@ -2,12 +2,14 @@
 typing.
 
 A standby belongs to a session, and a session has at most one: starting one ends the session's earlier standby, which
-answers "replaced". While it is held, it checks every `Settings.standby_check_seconds` (2 s) for news for its session,
-asking the one place every hook asks (`waiting_for` in `app.py`), which marks what it hands over told. As soon as there
-is any, it answers with that news. Otherwise it ends at its cap, `Settings.standby_cap_minutes` and never longer than
-the project's wait, measured against the server's clock, answering "nothing yet" with the time left of the project's
-wait; or at the session's next prompt, which ends it (`end`) and answers "your member moved on", the prompt hook
-delivering the news itself. For news and nothing yet, the answer hands the member's warning over on its own as well
+answers "replaced". While it is held, it checks every `Settings.standby_check_seconds` (2 s) for news for its session.
+Each check is one transaction, which reads the standby's row and a digest of what the session's news is worked out
+from (`digest`). Only on the first check, or when the digest has changed since the last, does it ask the one place
+every hook asks (`waiting_for` in `app.py`), which marks what it hands over told. As soon as there is any, it answers
+with that news. Otherwise it ends at its cap, `Settings.standby_cap_minutes` and never longer than the project's wait,
+measured against the server's clock, answering "nothing yet" with the time left of the project's wait; or at the
+session's next prompt, which ends it (`end`) and answers "your member moved on", the prompt hook delivering the news
+itself. For news and nothing yet, the answer hands the member's warning over on its own as well
 (`Ended.member`): every warning the news shows first, or an hourglass warning with the time left.
 
 It is worked out against Postgres, so any worker can hold a standby while another records the answer or the prompt
@@ -17,10 +19,11 @@ event loop between checks, and each check's queries run on a worker thread.
 
 What other modules stand on, all of it on `Standbys`:
 
-- `hold(session, news, awaits=(), seconds=None, gone=None)`: hold a standby for this session until it ends, and give
-  how it ended. `news` is what the session would be told now, marking it told (`waiting_for`); `awaits` the member IDs
-  whose answer it awaits, kept for the console; `seconds` a shorter hold than the cap, for the `stand_by` tool's held call
-  (`STAND_BY_SECONDS` unless it asks for another, at most `Settings.standby_tool_cap_seconds`); `gone`
+- `hold(session, news, digest, awaits=(), seconds=None, gone=None)`: hold a standby for this session until it ends,
+  and give how it ended. `news` is what the session would be told now, marking it told (`waiting_for`); `digest` a
+  digest of what that news is worked out from, read in the check's transaction and changing nothing; `awaits` the
+  member IDs whose answer it awaits, kept for the console; `seconds` a shorter hold than the cap, for the `stand_by`
+  tool's held call (`STAND_BY_SECONDS` unless it asks for another, at most `Settings.standby_tool_cap_seconds`); `gone`
   says the asker has gone away, which ends the standby before it can take news nobody would receive.
 - `end(session)`: the session's member moved on: its next prompt ends its standby.
 - `in_project(project_id)`: the standbys held now in a project, each with its session's id and whose answer it awaits.
@@ -64,6 +67,9 @@ CREATE INDEX IF NOT EXISTS standbys_by_project ON standbys (project_id);
 
 # How long one `stand_by` tool call is held when it names no seconds: within a coding agent's default tool timeout.
 STAND_BY_SECONDS = 45
+
+# What a standby has seen of its news's digest before its first check, unequal to anything read.
+_NOT_YET = object()
 
 
 class Ending(StrEnum):
@@ -171,24 +177,29 @@ class Standbys:
         self,
         session: Session,
         news: Callable[[], list[str]],
+        digest: Callable[[Conn], object],
         awaits: Sequence[str] = (),
         seconds: float | None = None,
         gone: Callable[[], Awaitable[bool]] | None = None,
     ) -> Ended:
         """Hold a standby for this session until it ends, replacing any earlier one, and give how it ended. Each check
-        reads the standby's row, then whether the asker is gone, then the news, then the clock, and sleeps between."""
+        reads the standby's row with the news's digest, then whether the asker is gone, then the news if its digest
+        changed, then the clock, and sleeps between."""
         request = secrets.token_hex(8)
         wait = await anyio.to_thread.run_sync(self._start, session, request, tuple(awaits), seconds)
         ended: Ended | None = None
+        seen: object = _NOT_YET
         try:
             while True:
-                ended = await anyio.to_thread.run_sync(self._still_held, session, request)
+                ended, now_seen = await anyio.to_thread.run_sync(self._still_held, session, request, digest)
                 if ended is not None:
                     return ended
                 if gone is not None and await gone():
                     ended = Ended(Ending.GONE)
                     return ended
-                found = await anyio.to_thread.run_sync(news)
+                # Read before the news is asked, so whatever changes after is a change the next check sees.
+                found = await anyio.to_thread.run_sync(news) if now_seen != seen else []
+                seen = now_seen
                 if found:
                     ended = Ended(Ending.NEWS, found, at=self._clock())
                     return ended
@@ -222,18 +233,20 @@ class Standbys:
             )
         return _Held(now, now + held, project_wait=whole)
 
-    def _still_held(self, session: Session, request: str) -> Ended | None:
-        """None while this request is still the session's standby; otherwise how it ended: replaced by a newer one, or
-        ended by the session's next prompt or by the session's end."""
+    def _still_held(
+        self, session: Session, request: str, digest: Callable[[Conn], object]
+    ) -> tuple[Ended | None, object]:
+        """None while this request is still the session's standby, with its news's digest; otherwise how it ended:
+        replaced by a newer one, or ended by the session's next prompt or by the session's end."""
         with self._db.transaction() as conn:
             row = conn.execute(
                 "SELECT request, moved_on FROM standbys WHERE session_id = %s", (session.id,)
             ).fetchone()
-        if row is None or row["moved_on"]:
-            return Ended(Ending.MOVED_ON)
-        if row["request"] != request:
-            return Ended(Ending.REPLACED)
-        return None
+            if row is None or row["moved_on"]:
+                return Ended(Ending.MOVED_ON), None
+            if row["request"] != request:
+                return Ended(Ending.REPLACED), None
+            return None, digest(conn)
 
     def _let_go(self, session: Session, request: str) -> None:
         """This request no longer holds the session's standby."""

@@ -17,6 +17,7 @@ What other modules stand on, all of it on `Locks`:
   (`Held`'s, ending with `TAKEOVER_IS_POSSIBLE`) or None to let it through.
 - `waiting_notices(session)`: what a session is told once of each takeover of a lock it held, and of each lock of
   its own that an added never-lock pattern ended.
+- `news_digest(conn, session)`: how many of those wait, for a standby to see whether its news may have changed.
 - `release(session, path, repository)`: the holder gives the file up. Any other session is refused with `NotHeld`.
 - `of(project_id, repository, path)`: the file's lock, with its holder, or None.
 - `held(project_id)`: a project's locks, oldest first.
@@ -581,6 +582,18 @@ class Locks:
                 now,
             ),
         )
+
+    @staticmethod
+    def news_digest(conn: Conn, session: Session) -> int:
+        """How many takeovers and locks ended by a pattern wait to be told to this session, read in a transaction
+        already open, for a standby to see whether news may have come (ADR-0027)."""
+        row = conn.execute(
+            "SELECT (SELECT count(*) FROM takeovers WHERE session_id = %(id)s)"
+            " + (SELECT count(*) FROM locks_ended_by_pattern WHERE session_id = %(id)s) AS waiting",
+            {"id": session.id},
+        ).fetchone()
+        assert row is not None
+        return int(row["waiting"])
 
     def waiting_notices(self, session: Session) -> list[str]:
         """What this session is told once, with its next prompt or the result of its next tool call: each takeover
