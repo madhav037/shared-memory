@@ -27,8 +27,13 @@ MIN_AVAILABLE_MB="${SHARED_MEMORY_DEPLOY_MIN_AVAILABLE_MB:-1024}"
 IMAGES=(shared-memory-server shared-memory-caddy shared-memory-backup)
 SERVICES="backup caddy db server"
 
-log()  { echo "$(date -u +%H:%M:%S) $*"; }
-fail() { echo "$(date -u +%H:%M:%S) ✗ $*" >&2; exit 1; }
+# Every line also goes to a file here, and a line the connection can no longer take is dropped rather than fatal.
+log()  { local line; line="$(date -u +%H:%M:%S) $*"; echo "$line" >> "$STATE/deploy.log"; echo "$line" 2>/dev/null || true; }
+fail() {
+    local line; line="$(date -u +%H:%M:%S) ✗ $*"
+    echo "$line" >> "$STATE/deploy.log"; echo "$line" >&2 2>/dev/null || true
+    exit 1
+}
 usage() { fail "usage: check | layers | deploy <commit> | drill"; }
 
 compose() { (cd "$REPO/deploy" && docker compose "$@"); }
@@ -71,13 +76,14 @@ healthy() {
 }
 
 # Runs the images tagged $1 with the deploy files of commit $2. Called as a condition, where `set -e` doesn't hold, so
-# every step says itself whether it failed.
+# every step says itself whether it failed. What git and compose print goes to the log file, since a write to a
+# connection that has gone could stop them half-way through.
 switch_to() {
-    git -C "$REPO" checkout -q --detach "$2" || return 1
+    git -C "$REPO" checkout -q --detach "$2" >> "$STATE/deploy.log" 2>&1 || return 1
     local image
     for image in "${IMAGES[@]}"; do docker tag "$image:$1" "$image:latest" || return 1; done
     root_owns_memory || return 1
-    compose up -d --no-build --remove-orphans || return 1
+    compose up -d --no-build --remove-orphans >> "$STATE/deploy.log" 2>&1 || return 1
 }
 
 # A server image from before #388 runs as root, and git refuses a memory folder another user owns, so putting such a
@@ -85,8 +91,28 @@ switch_to() {
 root_owns_memory() {
     [ "$(docker image inspect -f '{{json .Config.Entrypoint}}' shared-memory-server:latest)" = null ] || return 0
     log "The server image runs as root, so /data goes back to root"
-    compose stop server || return 1
-    compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data || return 1
+    compose stop server >> "$STATE/deploy.log" 2>&1 || return 1
+    compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data >> "$STATE/deploy.log" 2>&1 || return 1
+}
+
+# From the switch until it is settled, a dropped connection or the job's timeout must not stop the script half-way:
+# hang-ups and closed output are ignored, and any other exit puts back the release tagged $1 with commit $2, as an
+# unhealthy release would be. A note of the switch stays until it is settled, so a switch the host itself cut off
+# (a kill, a reboot) stops the next deploy before it retags `previous` over the release to fall back to.
+begin_switch() {
+    echo "$2" > "$STATE/switching"
+    trap '' HUP PIPE
+    trap "put_back $1 $2" EXIT
+}
+settled() { trap - EXIT; rm -f "$STATE/switching"; }
+put_back() {
+    trap - EXIT
+    log "Stopped before the switch was settled. Putting $2 back"
+    if switch_to "$1" "$2" && healthy; then settled; log "$2 runs again"; else log "$2 isn't healthy. Look now."; fi
+}
+unsettled() {
+    [ ! -e "$STATE/switching" ] || fail "A deploy or drill stopped and never settled, so $(cat "$STATE/switching") \
+may not be running. Look now (docker compose ps), put it back by hand, then delete $STATE/switching."
 }
 
 check() {
@@ -119,6 +145,7 @@ deploy() {
 
     exec 9>"$STATE/lock"
     flock -n 9 || fail "Another deploy is running."
+    unsettled
 
     git -C "$REPO" fetch -q origin main
     git -C "$REPO" merge-base --is-ancestor "$commit" origin/main 2>/dev/null || fail "$commit isn't on main."
@@ -138,14 +165,18 @@ deploy() {
     compose exec -T backup backup now || fail "The backup failed, so nothing was switched."
 
     for image in "${IMAGES[@]}"; do docker tag "$image:latest" "$image:previous"; done
+    begin_switch previous "$previous"
     log "Switching to $commit"
     # A release that fails to start counts as unhealthy, so it too is replaced by the one it replaced.
     if switch_to "$commit" "$commit" && healthy; then
+        settled
         log "$commit is healthy"
     else
         log "$commit isn't healthy. Putting $previous back"
+        trap - EXIT
         { switch_to previous "$previous" && healthy; } \
             || fail "$previous isn't healthy either. Look now: docker compose ps, docker compose logs."
+        settled
         fail "$commit wasn't healthy, so $previous runs again."
     fi
     echo "$previous" > "$STATE/previous"
@@ -167,6 +198,7 @@ drill() {
     local current earlier before after image same=yes earlier_healthy=yes
     exec 9>"$STATE/lock"
     flock -n 9 || fail "Another deploy is running."
+    unsettled
 
     current=$(git -C "$REPO" rev-parse HEAD)
     earlier=$(cat "$STATE/previous" 2>/dev/null || true)
@@ -185,6 +217,7 @@ drill() {
     compose exec -T backup backup now || fail "The backup failed, so nothing was switched."
 
     for image in "${IMAGES[@]}"; do docker tag "$image:latest" "$image:drill"; done
+    begin_switch drill "$current"
     if switch_to previous "$earlier" && healthy; then
         log "$earlier is healthy"
     else
@@ -192,8 +225,10 @@ drill() {
         earlier_healthy=no
     fi
     log "Coming back to $current"
+    trap - EXIT
     { switch_to drill "$current" && healthy; } \
         || fail "$current isn't healthy after coming back. Look now: docker compose ps, docker compose logs."
+    settled
     for image in "${IMAGES[@]}"; do docker image rm -f "$image:drill" >/dev/null; done
 
     after=$(web_server)

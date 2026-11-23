@@ -12,8 +12,10 @@ from __future__ import annotations
 import gzip
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -180,6 +182,29 @@ class Host:
         env = {**self.env, **stubs, "SSH_ORIGINAL_COMMAND": command}
         return subprocess.run(["bash", str(SCRIPT)], input=gzip.compress(upload.encode()), env=env, capture_output=True)
 
+    def ssh_cut_off(self, command: str, upload: str = "", *, sent: str | None, **stubs: str) -> None:
+        """Runs the script as `ssh` does and, once it has switched (its first `compose up`), cuts it off as a dropped
+        connection or the job's timeout does: its output's reader goes away, and the signal named `sent` arrives if given."""
+        env = {**self.env, **stubs, "SSH_ORIGINAL_COMMAND": command}
+        pipe = subprocess.PIPE
+        script = subprocess.Popen(["bash", str(SCRIPT)], stdin=pipe, stdout=pipe, stderr=pipe, env=env)
+        assert script.stdin is not None and script.stdout is not None and script.stderr is not None
+        script.stdin.write(gzip.compress(upload.encode()))
+        script.stdin.close()
+        deadline = time.monotonic() + 10
+        while "compose up" not in self.calls():
+            assert script.poll() is None and time.monotonic() < deadline, "the script never switched"
+            time.sleep(0.01)
+        script.stdout.close()
+        script.stderr.close()
+        if sent is not None:
+            script.send_signal(signal.Signals[sent])
+        script.wait(timeout=30)
+
+    def unfinished(self) -> Path:
+        """Where the script notes a switch it has begun and not yet settled."""
+        return self.home / ".local" / "state" / "shared-memory-deploy" / "switching"
+
     def release(self, commit: str) -> str:
         """What `docker save` of a release's three images carries, in the stand-ins' terms."""
         return "".join(f"{image}:{commit}\n" for image in IMAGES)
@@ -217,6 +242,45 @@ def test_a_healthy_release_replaces_the_running_one_after_a_backup(host: Host) -
     assert calls.index("backup backup now") < calls.index("compose up"), "the backup comes before the switch"
     assert "--no-build" in calls, "the host never builds"
     assert (host.images / "shared-memory-server:previous").read_text().strip() == "shared-memory-server@running"
+    assert not host.unfinished().exists(), "a settled switch leaves nothing unfinished"
+
+
+@pytest.mark.parametrize("sent", [None, "SIGHUP"], ids=["output gone", "hung up"])
+def test_an_unhealthy_release_cut_off_from_its_connection_is_still_replaced(host: Host, sent: str | None) -> None:
+    host.ssh_cut_off(
+        f"deploy {host.newer}", host.release(host.newer), sent=sent, STUB_UNHEALTHY=f"shared-memory-server:{host.newer}"
+    )
+
+    assert host.serving() == "shared-memory-server@running"
+    assert host.head() == host.running
+    assert not host.unfinished().exists()
+
+
+def test_a_deploy_stopped_before_its_release_proved_healthy_puts_the_running_one_back(host: Host) -> None:
+    host.ssh_cut_off(
+        f"deploy {host.newer}",
+        host.release(host.newer),
+        sent="SIGTERM",
+        STUB_UNHEALTHY=f"shared-memory-server:{host.newer}",
+        SHARED_MEMORY_HEALTH_SECONDS="5",
+    )
+
+    assert host.serving() == "shared-memory-server@running"
+    assert host.head() == host.running
+    assert not host.unfinished().exists()
+
+
+@pytest.mark.parametrize("command", ["deploy {commit}", "drill"])
+def test_nothing_switches_after_a_switch_that_never_settled(host: Host, command: str) -> None:
+    deployed(host)
+    host.unfinished().write_text(f"{host.running}\n", encoding="utf-8")
+
+    done = host.ssh(command.format(commit=host.newer), host.release(host.newer))
+
+    assert done.returncode == 1
+    assert b"never settled" in done.stderr
+    for change in ("docker load", "docker tag", "compose up", "backup now"):
+        assert change not in host.calls()
 
 
 def test_an_unhealthy_release_is_replaced_by_the_one_it_replaced(host: Host) -> None:
@@ -392,6 +456,15 @@ def test_a_drill_whose_release_before_is_unhealthy_comes_back_and_says_so(host: 
     assert b"isn't healthy" in done.stderr
     assert host.serving() == f"shared-memory-server:{host.newer}"
     assert host.head() == host.newer
+
+
+@pytest.mark.parametrize("sent", [None, "SIGHUP", "SIGTERM"], ids=["output gone", "hung up", "stopped"])
+def test_a_drill_cut_off_after_its_switch_still_comes_back(host: Host, sent: str | None) -> None:
+    deployed(host).ssh_cut_off("drill", sent=sent, STUB_UNHEALTHY="shared-memory-server@running")
+
+    assert host.serving() == f"shared-memory-server:{host.newer}"
+    assert host.head() == host.newer
+    assert not host.unfinished().exists()
 
 
 def test_a_drill_with_no_release_before_changes_nothing(host: Host) -> None:
