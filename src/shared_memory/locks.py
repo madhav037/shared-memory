@@ -373,34 +373,34 @@ def _glob_matches(pattern: str, text: str) -> bool:
     pieces: list[str] = []
     for part in re.split(r"(\*\*|\*|\?)", pattern):
         if part in ("*", "**") and pieces and pieces[-1] in ("*", "**"):
-            pieces[-1] = "**" if "**" in (part, pieces[-1]) else "*"  # a run of stars is one star
+            pieces[-1] = "**" if "**" in (part, pieces[-1]) else "*"  # a run of wildcards is one wildcard
         elif part in ("*", "**", "?"):
             pieces.append(part)
         else:
             pieces.extend(part)
     literal: dict[str, int] = {}
-    one = star = folders = 0
+    one = wildcard = folders = 0
     for place, piece in enumerate(pieces):
         bit = 1 << place
         if piece == "?":
             one |= bit
         elif piece == "*":
-            star |= bit
+            wildcard |= bit
         elif piece == "**":
             folders |= bit
         else:
             literal[piece] = literal.get(piece, 0) | bit
-    stars = star | folders
+    wildcards = wildcard | folders
 
-    def skipping_stars(places: int) -> int:
-        return places | (places & stars) << 1  # no two stars are next to each other, so one step is enough
+    def skipping_wildcards(places: int) -> int:
+        return places | (places & wildcards) << 1  # no two wildcards are next to each other, so one step is enough
 
-    places = skipping_stars(1)
+    places = skipping_wildcards(1)
     for character in text:
         within = character != "/"
         moves = literal.get(character, 0) | (one if within else 0)
-        stays = folders | (star if within else 0)
-        places = skipping_stars((places & moves) << 1 | places & stays)
+        stays = folders | (wildcard if within else 0)
+        places = skipping_wildcards((places & moves) << 1 | places & stays)
         if not places:
             return False
     return bool(places >> len(pieces) & 1)
