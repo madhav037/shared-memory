@@ -584,13 +584,22 @@ def build_app(
                 return JSONResponse({})
             current, payload = call.caller, call.payload
             named_event = hooks.event_in(payload, event)
-            ready = first is None or await within_recall_budget(first, current, payload) is not None
+            # Recall failing, as on a prompt Postgres can't store, drops recall alone: the required part marks news as
+            # delivered, so its answer must still go out.
+            try:
+                ready = first is None or await within_recall_budget(first, current, payload) is not None
+            except Exception:
+                log.exception("%s hook's first step failed; answering without recall", event)
+                ready = False
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
             if optional is not None and ready:
-                telling = await within_recall_budget(optional, current, payload)
-                if telling is not None:
-                    await anyio.to_thread.run_sync(telling.told)
-                    parts.append(telling.text)
+                try:
+                    telling = await within_recall_budget(optional, current, payload)
+                    if telling is not None:
+                        await anyio.to_thread.run_sync(telling.told)
+                        parts.append(telling.text)
+                except Exception:
+                    log.exception("%s hook's recall failed; answering with the rest", event)
         except Refused:
             return JSONResponse({})
         except Exception:
