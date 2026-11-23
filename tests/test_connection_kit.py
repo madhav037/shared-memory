@@ -1197,7 +1197,12 @@ def test_claude_codes_session_start_hook_keeps_one_header_file_per_server_whatev
     assert "smt_" not in header_file.name
 
 
-def test_claude_codes_standby_command_without_its_header_file_asks_for_a_new_session(tmp_path: Path) -> None:
+@pytest.mark.parametrize("header_file", ["gone", "empty"])
+def test_claude_codes_standby_command_without_its_header_file_asks_for_a_new_session(
+    tmp_path: Path, header_file: str
+) -> None:
+    if header_file == "empty":
+        (tmp_path / "empty.headers").write_text("", encoding="utf-8")
     listener = HeaderListener()
     command = standby_command(claude_code_skill()).replace("<session>", "test-session")
     try:
@@ -1208,7 +1213,7 @@ def test_claude_codes_standby_command_without_its_header_file_asks_for_a_new_ses
             timeout=30,
             env={
                 **without_plugin_settings(),
-                "SHARED_MEMORY_HEADER_FILE": str(tmp_path / "gone.headers"),
+                "SHARED_MEMORY_HEADER_FILE": str(tmp_path / f"{header_file}.headers"),
                 "CLAUDE_PLUGIN_OPTION_SERVER_URL": listener.url,
             },
         )
@@ -1247,6 +1252,8 @@ def test_claude_codes_session_start_hook_without_an_environment_file_only_briefs
 
     assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", "")
     assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"], "and writes no header file"
+    arguments = (tmp_path / "arguments").read_text(encoding="utf-8").split("\n")
+    assert f"Authorization: Bearer {AWKWARD_TOKEN}" in arguments, "its request carries the token as before"
 
 
 # Every other agent's kit says how it stands by (ADR-0027, #527): the background command first and the `stand_by` tool
