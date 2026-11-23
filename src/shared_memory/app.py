@@ -492,7 +492,8 @@ def build_app(
         for a later session no hook has reached, that its gate waits (#518). The one place it is gathered: the
         prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
         no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
-        agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
+        agent with no hooks. A module with something for a session adds it here, and what it is worked out from to
+        `news_digest`, or a standby never hears of it. Asking marks it all told, so a tool
         asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
         compares with the other sessions' activities, and says it is `prompted`: a muted session hears its messages
         that are not urgent only then, or once it unmutes (#514); everything else gets through a mute."""
