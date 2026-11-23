@@ -88,6 +88,10 @@ CREATE INDEX IF NOT EXISTS sessions_by_project ON sessions (project_id, last_see
 # The longest identifier kept. Coding agents send a UUID or something as short.
 IDENTIFIER_LIMIT = 100
 
+# How many sessions one member keeps going in one project. A new one past it ends the one seen longest ago, so an agent
+# that names a new session on every call can't fill the project with them.
+SESSION_LIMIT = 50
+
 # How many of the files a session touched are kept, the most recent first, and the longest path kept among them.
 TOUCHED_KEPT = 20
 TOUCHED_PATH_LIMIT = 500
@@ -215,6 +219,8 @@ class Sessions:
                 " utc_offset_minutes",
                 (*key, caller.repository, caller.agent or hooked_by, now, now),
             ).fetchone()
+            # A session new or back from its end is one more going: past the limit, the one seen longest ago ends.
+            going_again = row is not None
             if row is None:
                 known = conn.execute(
                     "SELECT id, last_seen_at, ended_at FROM sessions"
@@ -242,6 +248,15 @@ class Sessions:
                     ),  # fmt: skip
                 ).fetchone()
                 assert row is not None
+                going_again = ended
+            if going_again:
+                crowded = conn.execute(
+                    "UPDATE sessions SET ended_at = %s, back_from_idle = FALSE WHERE id IN (SELECT id FROM sessions"
+                    " WHERE member_id = %s AND project_id = %s AND ended_at IS NULL AND id <> %s"
+                    " ORDER BY last_seen_at DESC, id DESC OFFSET %s) RETURNING id",
+                    (now, caller.member.pk, project.project_id, row["id"], SESSION_LIMIT - 1),
+                ).fetchall()
+                self._tell_gone(conn, [each["id"] for each in crowded])
         return Session(
             id=row["id"],
             identifier=kept,

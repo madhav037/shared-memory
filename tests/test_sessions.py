@@ -435,3 +435,25 @@ def test_whatever_ends_with_a_session_is_told_when_it_ends_and_when_it_is_back_f
     assert back == [known.id]
     assert gone == [known.id, known.id]
     assert sessions.still_active([known.id]) == set()
+
+
+def test_a_member_keeps_at_most_fifty_sessions_going_in_a_project_the_newest(owner: Session) -> None:
+    for number in range(55):
+        owner.as_session(f"session-{number:02}").start()
+
+    going = sorted(identifier for member_id, identifier in active(owner) if member_id == "owner-1")
+
+    assert going == [f"session-{number:02}" for number in range(5, 55)]
+
+
+def test_a_session_back_from_its_end_counts_toward_the_fifty(owner: Session) -> None:
+    for number in range(50):
+        owner.as_session(f"session-{number:02}").start()
+    owner.as_session("session-00").end()
+    owner.as_session("session-50").start()
+
+    owner.as_session("session-00").start()
+
+    going = {identifier for member_id, identifier in active(owner) if member_id == "owner-1"}
+    assert len(going) == 50 and "session-00" in going and "session-01" not in going
+
