@@ -51,10 +51,17 @@ test("a department lead restricts their department and keeps its access list, an
   await page.goto(`/projects/${projectId}`);
   await expect(page.getByTestId("folder-refused")).toContainText("is restricted");
 
-  // Removing the department leaves the contents as every other journey expects them.
+  // A restricted department still holding a project can't be removed: its project is moved out first. Removing it then
+  // leaves the contents as every other journey expects them.
   await signOut(page);
   await signInAs(page, 1, "olive");
   await page.goto("/departments");
-  await page.getByTestId("department").filter({ hasText: "Strongroom" }).getByTestId("remove-department").click();
+  const olives = page.getByTestId("department").filter({ hasText: "Strongroom" });
+  await olives.getByTestId("remove-department").click();
+  await expect(page.getByTestId("department-refused")).toContainText("Move its projects out first");
+  await expect(olives).toHaveCount(1);
+  await olives.getByTestId(`move-out-${projectId}`).click();
+  await expect(olives.getByTestId("department-projects")).toContainText("No projects in this department yet");
+  await olives.getByTestId("remove-department").click();
   await expect(page.getByTestId("department").filter({ hasText: "Strongroom" })).toHaveCount(0);
 });

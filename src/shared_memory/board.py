@@ -837,11 +837,10 @@ class Board:
 
         return committed
 
-    @staticmethod
-    def _leads(conn: Conn, caller: Caller, project_id: str) -> list[str]:
-        """Who is told about a project's board as a whole: its leads, or the company's owner and admins where it has
-        none."""
-        return Identity.told_about(conn, caller.member.company_pk, project_id)
+    def _leads(self, conn: Conn, caller: Caller, project_id: str) -> list[str]:
+        """Who is told about a project's board as a whole: its leads who can reach it, or the company's owner and
+        admins where it has none."""
+        return self._identity.told_about(conn, caller.member.company_pk, project_id)
 
     @staticmethod
     def _found(conn: Conn, project_id: str, number: int) -> dict[str, Any]:

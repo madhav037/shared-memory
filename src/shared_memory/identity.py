@@ -456,15 +456,16 @@ class Identity:
         """`looks_after`, asked inside a transaction already open."""
         return member.is_owner or member.is_admin or Identity._leads_it(conn, member.pk, project_id)
 
-    @staticmethod
-    def told_about(conn: Conn, company_pk: int, project_id: str) -> list[str]:
-        """Who hears about a project as a whole, by member ID: its leads, or the company's owner and admins where it has
-        none. Asked inside a transaction already open."""
+    def told_about(self, conn: Conn, company_pk: int, project_id: str) -> list[str]:
+        """Who hears about a project as a whole, by member ID: its leads who can reach it, or the company's owner and
+        admins where it has none. Asked inside a transaction already open."""
         leads = conn.execute(
-            "SELECT m.member_id FROM project_leads l JOIN members m ON m.id = l.member_id"
+            "SELECT m.id, m.member_id FROM project_leads l JOIN members m ON m.id = l.member_id"
             " WHERE l.project_id = %s AND m.removed_at IS NULL ORDER BY m.member_id",
             (project_id,),
         ).fetchall()
+        lost = set(self.cannot_reach(conn, company_pk, [(row["id"], project_id) for row in leads]))
+        leads = [row for row in leads if (row["id"], project_id) not in lost]
         if not leads:
             leads = conn.execute(
                 "SELECT member_id FROM members WHERE team_id = %s AND removed_at IS NULL AND (is_owner OR is_admin)"
@@ -1133,14 +1134,15 @@ class Identity:
             conn.execute("UPDATE projects SET name = %s WHERE project_id = %s", (name.strip(), project_id))
 
     def leads_of(self, member: Member) -> list[str]:
-        """The projects this member leads."""
+        """The projects this member leads and can reach: a lead a restricted department keeps out leads none of it."""
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT l.project_id FROM project_leads l JOIN projects p ON p.project_id = l.project_id"
                 " WHERE l.member_id = %s AND p.team_id = %s ORDER BY l.project_id",
                 (member.pk, member.company_pk),
             ).fetchall()
-        return [row["project_id"] for row in rows]
+            walled = self._shut_out(conn, member).projects
+        return [row["project_id"] for row in rows if row["project_id"] not in walled]
 
     @staticmethod
     def _project_name(conn: Conn, member: Member, project_id: str) -> str:

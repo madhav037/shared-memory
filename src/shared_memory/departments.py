@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from psycopg.errors import UniqueViolation
 
+from shared_memory.audit import Audit
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
@@ -65,6 +66,13 @@ CREATE TABLE IF NOT EXISTS department_access (
 -- Who a restricted department keeps out is asked on every authenticated call, so it reads one company's restricted
 -- departments by index.
 CREATE INDEX IF NOT EXISTS departments_restricted ON departments (company_id) WHERE restricted;
+
+-- A removed department's memory stays, retired, and only the company's owner and admins reach it.
+CREATE TABLE IF NOT EXISTS removed_departments (
+    department_id TEXT PRIMARY KEY,
+    company_id BIGINT NOT NULL REFERENCES teams(id),
+    removed_at TIMESTAMPTZ NOT NULL
+);
 """
 
 # The members a restricted department lets in, besides the company's owner and admins: its leads and its access list.
@@ -107,22 +115,36 @@ def _runs_the_company(member: Member) -> bool:
 
 
 class Departments:
-    def __init__(self, db: Database, identity: Identity, clock: Clock) -> None:
+    def __init__(self, db: Database, identity: Identity, clock: Clock, audit: Audit) -> None:
         self._db = db
         self._identity = identity
         self._clock = clock
         if db.sets_up:
             with db.transaction() as conn:
+                found = conn.execute("SELECT to_regclass('removed_departments') IS NOT NULL AS kept").fetchone()
+            # Departments removed before removals were kept here are found in the audit log, once: when the table is made.
+            earlier = [] if found is not None and found["kept"] else audit.departments_removed()
+            with db.transaction() as conn:
                 conn.execute(SCHEMA)
+                conn.execute(
+                    "INSERT INTO removed_departments (department_id, company_id, removed_at)"
+                    " SELECT x.department_id, x.company_id, x.removed_at"
+                    " FROM unnest(%s::text[], %s::bigint[], %s::timestamptz[]) AS x(department_id, company_id, removed_at)"
+                    " WHERE NOT EXISTS (SELECT 1 FROM departments d WHERE d.department_id = x.department_id)"
+                    " ON CONFLICT DO NOTHING",
+                    ([one[0] for one in earlier], [one[1] for one in earlier], [one[2] for one in earlier]),
+                )
 
     # --- who a restricted department keeps out (identity.DepartmentWall) ---
 
     def shut_out(self, conn: Conn, member: Member) -> ShutOut:
-        """The restricted departments of the member's company they are outside of, and the projects in them."""
+        """The restricted departments of the member's company they are outside of, and the projects in them; and every
+        removed department, whose memory only the company's owner and admins reach."""
         rows = conn.execute(
             "SELECT d.department_id, p.project_id FROM departments d"  # noqa: S608  # only the member's row id is bound
             " LEFT JOIN department_projects p ON p.department_id = d.department_id"
-            f" WHERE d.company_id = %(company)s AND d.restricted AND NOT {_LETS_IN.format(member='%(member)s')}",
+            f" WHERE d.company_id = %(company)s AND d.restricted AND NOT {_LETS_IN.format(member='%(member)s')}"
+            " UNION ALL SELECT department_id, NULL FROM removed_departments WHERE company_id = %(company)s",
             {"company": member.company_pk, "member": member.pk},
         ).fetchall()
         return ShutOut(
@@ -308,16 +330,32 @@ class Departments:
         return Department(department_id, name)
 
     def remove(self, caller: Caller, department_id: str) -> tuple[Department, list[str]]:
-        """Remove a department. Its projects are left in no department; its leads lead nothing. Returns the department
-        and the project IDs that were in it."""
+        """Remove a department. Its projects are left in no department; its leads lead nothing; its memory is reached
+        by the company's owner and admins only from now on. A restricted department still holding projects is refused,
+        so none of them opens to the whole company without someone moving it out. Returns the department and the
+        project IDs that were in it."""
         self._require_admin(caller, "remove a department")
         with self._db.transaction() as conn:
             department = self._found(conn, caller, department_id)
+            held = conn.execute(
+                "SELECT 1 FROM department_projects p JOIN departments d ON d.department_id = p.department_id"
+                " WHERE d.department_id = %s AND d.restricted LIMIT 1",
+                (department_id,),
+            ).fetchone()
+            if held is not None:
+                raise Refused(
+                    f"{department.name!r} is restricted and still holds projects, which would open to the whole company "
+                    "once it is gone. Move its projects out first."
+                )
             left = conn.execute(
                 "DELETE FROM department_projects WHERE department_id = %s RETURNING project_id", (department_id,)
             ).fetchall()
             conn.execute("DELETE FROM department_leads WHERE department_id = %s", (department_id,))
             conn.execute("DELETE FROM departments WHERE department_id = %s", (department_id,))
+            conn.execute(
+                "INSERT INTO removed_departments (department_id, company_id, removed_at) VALUES (%s, %s, %s)",
+                (department_id, caller.member.company_pk, self._clock()),
+            )
         return department, sorted(row["project_id"] for row in left)
 
     def remove_lead(self, caller: Caller, department_id: str, member_id: str) -> None:
