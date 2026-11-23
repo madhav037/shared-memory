@@ -204,24 +204,24 @@ class DraftLearningEdits(TypedDict, total=False):
 
 
 def _fenced_save(saved: dict[str, Any]) -> dict[str, Any]:
-    """A save's answer as a coding agent is given it: the similar memories it names fenced, since others wrote them."""
-    token = new_token()
-    for each in saved.get("similar", []):
-        each["title"] = escape(each["title"])
-        each["summary"] = fenced(each["summary"], token, inline=True)
-        _escape_in_doubt(each)
+    """A save's or a proposal's answer as a coding agent is given it: the similar memories it names fenced, since
+    others wrote them."""
+    if "similar" in saved:
+        token = new_token()
+        saved["similar"] = [_fenced_memory(each, token) for each in saved["similar"]]
     return saved
 
 
 def _fenced_memory(memory: dict[str, Any], token: str) -> dict[str, Any]:
-    """One memory as a coding agent is given it whole: its title escaped, its summary, body and the reason its lead
-    keeps it as an exception in this call's fence, and its in-doubt line defanged."""
+    """One memory as a coding agent is given it: its title escaped, its summary, body and the reason its lead keeps
+    it as an exception in this call's fence, and its in-doubt line defanged."""
     shown = {
         **memory,
         "title": escape(memory["title"]),
         "summary": fenced(memory["summary"], token, inline=True),
-        "body": fenced(memory["body"], token),
     }
+    if "body" in memory:
+        shown["body"] = fenced(memory["body"], token)
     if memory.get("exception_reason"):
         shown["exception_reason"] = fenced(memory["exception_reason"], token, inline=True)
     _escape_in_doubt(shown)
@@ -1350,9 +1350,11 @@ def build_app(
                 similar_before_promoting, path, level, ctx, author, imported_from, foundation
             )
             if proposal is not None:
-                return proposal
-        return await saves.run(
-            promoting, path, level, ctx, reference, resolutions, reasoning, author, imported_from, foundation
+                return _fenced_save(proposal)
+        return _fenced_save(
+            await saves.run(
+                promoting, path, level, ctx, reference, resolutions, reasoning, author, imported_from, foundation
+            )
         )
 
     @_refusals_as_tool_errors
@@ -1405,9 +1407,9 @@ def build_app(
                 similar_before_saving, title, summary, body, tied_files, card, ctx
             )
             if proposal is not None:
-                return proposal
-        return await saves.run(
-            saving_known_issue, title, summary, body, tied_files, card, ctx, reference, resolutions
+                return _fenced_save(proposal)
+        return _fenced_save(
+            await saves.run(saving_known_issue, title, summary, body, tied_files, card, ctx, reference, resolutions)
         )
 
     @server.tool()
