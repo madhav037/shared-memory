@@ -17,13 +17,14 @@ import {
 import { Amended } from "../components/Amended";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
 import { Compared } from "../components/Compared";
+import { HiddenWarning, Told } from "../components/Told";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
 import { asks, REASON_NAMES } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
-import { hasHidden, visible } from "../lib/hidden";
+import { visible } from "../lib/hidden";
 import { useAsked } from "../lib/useAsked";
 
 /** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
@@ -420,7 +421,7 @@ function LevelContradiction({
           )}
         </p>
         <p className="dispute-note">Until you decide, the {where} memory holds for its {where}.</p>
-        <HiddenWarning challenge={challenge} />
+        <HiddenWarning texts={wordsOf(challenge)} />
         <div className="facing" data-testid="facing">
           {[narrower, broader].map(
             (side) =>
@@ -529,7 +530,7 @@ function Proposal({
           <p className="reasoning-text" data-testid="reasoning-text">{visible(challenge.reasoning)}</p>
         </div>
       )}
-      <HiddenWarning challenge={challenge} />
+      <HiddenWarning texts={wordsOf(challenge)} />
       {challenge.evidence.length > 0 && <EvidenceList evidence={challenge.evidence} who={who} />}
       {changes && (
         <div className="what-changes" data-testid="what-changes">
@@ -754,38 +755,12 @@ function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memb
   );
 }
 
-/** What recall tells coding agents of a memory besides its body: its summary, and the files it is tied to. */
-function Told({ summary, tiedFiles }: { summary: string; tiedFiles: string[] }) {
-  return (
-    <>
-      {summary && (
-        <p className="told" data-testid="facing-summary">
-          {visible(summary)}
-        </p>
-      )}
-      {tiedFiles.length > 0 && (
-        <p className="by" data-testid="facing-tied-files">
-          Tied to {tiedFiles.map(visible).join(", ")}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** A warning that a challenge's words hold characters that hide or reorder text, as memories saved before the server
- * refused them may. */
-function HiddenWarning({ challenge }: { challenge: ChallengeDetail }) {
+/** Every word of a challenge a coding agent may be given: both memories, the reasoning and the evidence. */
+function wordsOf(challenge: ChallengeDetail): (string | null)[] {
   const sides = [challenge.target, challenge.challenger].flatMap((side) =>
     side ? [side.title, side.summary, side.body, side.source, ...side.tied_files] : [],
   );
-  const evidence = challenge.evidence.flatMap((each) => [each.reasoning, each.quoted_line]);
-  if (!hasHidden(challenge.reasoning, ...sides, ...evidence)) return null;
-  return (
-    <p className="left-out" data-testid="hidden-characters">
-      This holds characters that hide or reorder text, so what you see may not be what a coding agent reads. Each is
-      drawn as its code, such as {"<U+202E>"}, where it falls.
-    </p>
-  );
+  return [challenge.reasoning, ...sides, ...challenge.evidence.flatMap((each) => [each.reasoning, each.quoted_line])];
 }
 
 const STATES: Record<string, string> = {

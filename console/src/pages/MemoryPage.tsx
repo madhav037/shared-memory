@@ -18,6 +18,8 @@ import { fetchMemoryAt, pinAt, retireAt, unpinAt, type MemoryDetail } from "../a
 import { Dotted, InDoubtMark, OutdatedMark, PinnedMark, Placeholder, Rank, Refusal, StatusMark, SuspectedMark, Trail } from "../components/Bits";
 import { useContents } from "../lib/contents";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
+import { HiddenWarning } from "../components/Told";
+import { visible } from "../lib/hidden";
 import { doubtsUrl, says } from "../lib/challenge";
 import { day, memoryUrl, moment, plural, projectIn, typeName } from "../lib/format";
 import { useAsked } from "../lib/useAsked";
@@ -62,9 +64,10 @@ export function MemoryPage() {
               †{" "}
             </span>
           )}
-          <span className={cancelled ? "cancelled-title" : undefined}>{memory.title}</span>
+          <span className={cancelled ? "cancelled-title" : undefined}>{visible(memory.title)}</span>
         </h1>
-        <p className="standfirst summary">{memory.summary}</p>
+        <p className="standfirst summary">{visible(memory.summary)}</p>
+        <HiddenWarning texts={[memory.title, memory.summary, memory.source, ...memory.tied_files]} />
         {history && <Currency history={history} />}
         <Dotted className="standing-line" hidden>
           <Rank level={memory.level} />

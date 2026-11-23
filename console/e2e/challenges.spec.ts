@@ -28,10 +28,10 @@ test("the owner decides a challenge waiting for them and the memory is supersede
   await expect(facing.getByTestId("facing-summary").last()).toHaveText(
     "The staging database is wiped every night at 02:17 UTC.",
   );
-  await expect(facing.getByTestId("facing-source").first().locator("del")).toContainText(
+  await expect(facing.getByTestId("facing-source").first().locator("del").filter({ hasText: "summary:" })).toContainText(
     "summary: The staging database is wiped every night.",
   );
-  await expect(facing.getByTestId("facing-source").last().locator("ins")).toContainText(
+  await expect(facing.getByTestId("facing-source").last().locator("ins").filter({ hasText: "summary:" })).toContainText(
     "summary: The staging database is wiped every night at 02:17 UTC.",
   );
   await page.getByTestId("view-text").click();

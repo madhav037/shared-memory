@@ -37,8 +37,9 @@ const element = (tagName: string, properties: Record<string, unknown>, children:
 const LISTED = 8; // left-out words named in the warning
 const WORD = /[\p{L}\p{N}]+/gu;
 const words = (value: unknown): string[] => (typeof value === "string" ? (value.match(WORD) ?? []) : []);
-// An entity such as &amp; is set as the character it names, so its name is no word left out.
-const ENTITY = /&(?:#\d+|#x[\da-f]+|[a-z][a-z\d]*);/gi;
+// An entity such as &amp; is set as the character it names, so its name is no word left out. Only the common ones:
+// any `&word;` would let words be hidden as entities where the setting drops them.
+const ENTITY = /&(?:#\d+|#x[\da-f]+|amp|lt|gt|quot|apos|nbsp);/gi;
 
 const textOf = (node: Node): string =>
   node.type === "text" ? (node.value ?? "") : (node.children ?? []).map(textOf).join("");
