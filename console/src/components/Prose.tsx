@@ -13,7 +13,7 @@ export function Prose({ children, testid }: { children: string; testid?: string 
       {tooIntricate(children) ? (
         plain
       ) : (
-        <Guarded fallback={plain}>
+        <Guarded fallback={plain} resetKey={children}>
           <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
         </Guarded>
       )}
@@ -21,12 +21,12 @@ export function Prose({ children, testid }: { children: string; testid?: string 
   );
 }
 
-/** A text that couldn't be set as printed text, shown word for word with a line saying why. */
+/** A text that couldn't be set as printed text, shown word for word with a line saying so. */
 export function WordForWord({ text }: { text: string }) {
   return (
     <>
       <p className="hint" data-testid="shown-word-for-word">
-        Shown word for word: it is nested too deep, or a table is too wide, to be set as text.
+        Shown word for word, as it couldn't be set as text.
       </p>
       <pre className="source">{text}</pre>
     </>

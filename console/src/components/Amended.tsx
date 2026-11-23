@@ -17,21 +17,23 @@ export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: s
   const scope = `amend${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const { markdown, notes } = amend(pieces);
   const plugins = [[markAmendments, { notes, scope }]] as Options["rehypePlugins"];
+  // Shown word for word, the text carries no marks, so the notes keyed to them are left out too.
+  const plain = tooIntricate(markdown);
 
   return (
     <>
       <div className="prose amended" data-testid={testid}>
-        {tooIntricate(markdown) ? (
+        {plain ? (
           <WordForWord text={withoutMarks(markdown)} />
         ) : (
-          <Guarded fallback={<WordForWord text={withoutMarks(markdown)} />}>
+          <Guarded fallback={<WordForWord text={withoutMarks(markdown)} />} resetKey={markdown}>
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
               {markdown}
             </Markdown>
           </Guarded>
         )}
       </div>
-      {notes.length > 0 && (
+      {!plain && notes.length > 0 && (
         <ol className="amendments" aria-label="Amendments">
           {notes.map((note) => (
             <li key={note.marker} id={`${scope}-${note.marker}`}>

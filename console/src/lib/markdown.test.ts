@@ -7,6 +7,12 @@ describe("Markdown too intricate to set as text", () => {
     expect(tooIntricate("# Title\n\n> a quote\n> > nested\n\n- a\n  - b\n\n| a | b |\n|---|---|\n| 1 | 2 |")).toBe(false);
   });
 
+  it("lets a long rule of dashes, a long run of spaces or a long number through", () => {
+    expect(tooIntricate("-".repeat(500))).toBe(false);
+    expect(tooIntricate(`${" ".repeat(500)}x`)).toBe(false);
+    expect(tooIntricate("9".repeat(500))).toBe(false);
+  });
+
   it("stops a line nested thousands deep", () => {
     expect(tooIntricate(">".repeat(11_999))).toBe(true);
     expect(tooIntricate("- ".repeat(500) + "x")).toBe(true);
