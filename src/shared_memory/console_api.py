@@ -1614,8 +1614,10 @@ class ConsoleApi:
 
     def _side(self, caller: Caller, path: str) -> ChallengedMemory:
         """One memory of a challenge, or a stand-in when it is no longer where it was."""
+        working = self._working_in(caller.member, _project_in(path))
         try:
-            memory = self._service.read(self._working_in(caller.member, _project_in(path)), path)
+            memory = self._service.read(working, path)
+            memory["source"] = self._service.source(working, path)
         except Refused:
             return ChallengedMemory(
                 path=path, title=path, summary="", body="", level="", type="", author="", status="gone"

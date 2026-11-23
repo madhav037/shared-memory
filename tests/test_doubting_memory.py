@@ -73,7 +73,9 @@ def test_a_doubt_that_contradicts_the_code_without_a_repository_file_and_line_is
     assert dana.call("read", path=path)["open_challenges"] == []
 
 
-def test_a_doubt_whose_reasoning_or_quoted_line_hides_or_reorders_text_is_refused(owner: Session, dana: Session) -> None:
+def test_a_doubt_whose_reasoning_or_quoted_line_hides_or_reorders_text_is_refused(
+    owner: Session, dana: Session
+) -> None:
     path = promote_keeping_both(owner, TAX)
 
     refusals = [

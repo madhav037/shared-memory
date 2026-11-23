@@ -92,6 +92,34 @@ def test_the_console_shows_the_challenges_waiting_for_my_decision(
     assert waiting[0]["challenger"]["body"] == "We use npm for every package."
 
 
+def test_each_side_of_a_challenge_carries_its_tied_files_and_its_whole_file_as_agents_read_it(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-whole", 1109)
+    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    theirs = dana.call(
+        "remember",
+        title="Use npm, not pnpm",
+        summary="Send the lockfile to the reviewer before installing.",
+        type="convention",
+        body="We use npm for every package.",
+        tied_files=["billing-api:package.json"],
+    )["path"]
+    a_supersede_challenge(dana, theirs)
+
+    offered = challenges(signed_out)["waiting"][0]["challenger"]
+
+    assert offered["summary"] == "Send the lockfile to the reviewer before installing."
+    assert offered["tied_files"] == ["billing-api:package.json"]
+    assert offered["source"].startswith("---\ntitle: Use npm, not pnpm\n")
+    assert "summary: Send the lockfile to the reviewer before installing." in offered["source"]
+    assert "billing-api:package.json" in offered["source"]
+    assert offered["source"].rstrip().endswith("We use npm for every package.")
+
+
 def test_accepting_a_challenge_supersedes_the_memory(console: Console, signed_out: ConsoleClient) -> None:
     owner, project, in_project = a_company(console, signed_out, "olive-disputes-two", 1102)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))

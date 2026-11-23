@@ -6521,6 +6521,19 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "tied_files": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tied Files",
+            "type": "array"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [
