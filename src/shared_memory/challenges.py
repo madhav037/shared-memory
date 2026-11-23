@@ -15,6 +15,7 @@ from shared_memory.config import Settings
 from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.departments import Departments
 from shared_memory.errors import Refused
+from shared_memory.fence import framing_of_words, new_token, one_line, quoted
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, project_in
 from shared_memory.memory import locate
 from shared_memory.sessions import usable
@@ -888,13 +889,15 @@ class Challenges:
         if not waiting:
             return None
         lines = [heading]
+        # What members wrote (reasoning, summaries, quoted code) sits in this notice's fence; titles are escaped.
+        token = new_token()
         evidence = self._evidence([one.challenge.id for one in waiting if one.challenge.kind == DOUBT])
         for target_path in dict.fromkeys(one.challenge.target_path for one in waiting):
             first = next(one.challenge for one in waiting if one.challenge.target_path == target_path)
             if first.foundation is not None and first.kind == "add":
                 lines.append(f"The {first.foundation} foundation ({target_path}):")
             elif first.kind == PROMOTE:
-                lines.append(f"{self.department_name(first)} department memory ({target_path}):")
+                lines.append(f"{one_line(self.department_name(first))} department memory ({target_path}):")
             elif first.foundation is not None:
                 lines.append(f"{self._title(caller.company, target_path)} ({target_path}), in the {first.foundation} foundation:")
             else:
@@ -907,26 +910,25 @@ class Challenges:
                     lines.append(f"- Challenge {c.id}{whose}: {HIDDEN}")
                     continue
                 if c.kind == DOUBT:
-                    lines.extend(_doubt_lines(c, whose, evidence.get(c.id, ())))
+                    lines.extend(_doubt_lines(c, whose, evidence.get(c.id, ()), token))
                     continue
                 if c.kind == "add":
-                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c)} to the {c.foundation} foundation"
-                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c, token)} to the {c.foundation} foundation"
                 elif c.kind == PROMOTE:
-                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: promote {self._replacement(caller, c)}"
-                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: promote {self._replacement(caller, c, token)}"
                 elif c.challenger_path is None:
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: retire it"
-                    line += f" — reasoning: {c.reasoning}" if c.reasoning else "."
                 else:
-                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: supersede it with {self._replacement(caller, c)}"
-                    if c.reasoning:
-                        line += f" — reasoning: {c.reasoning}"
+                    line = f"- Challenge {c.id} by {c.raised_by}{whose}: supersede it with {self._replacement(caller, c, token)}"
+                if c.reasoning:
+                    line += f" — reasoning: {quoted(c.reasoning, token, inline=True)}"
+                elif c.challenger_path is None or c.kind in ("add", PROMOTE):
+                    line += "."
                 lines.append(line)
         lines.append(
             "Show these to the member and record their decision with decide_challenge (accept or reject). "
             "At most one challenge per memory can be accepted. Where the memory is another member's, its author is "
-            "told who decided and in what capacity."
+            "told who decided and in what capacity. " + framing_of_words(token)
         )
         if evidence:
             lines.append(
@@ -948,7 +950,7 @@ class Challenges:
             days = (self._clock() - c.raised_at).days
             age = "today" if days < 1 else "1 day" if days == 1 else f"{days} days"
             narrower, broader = locate(c.challenger_path).level, locate(c.target_path).level
-            lines.append(
+            lines.append(  # titles are escaped by _title
                 f'- Level contradiction {c.id}, waiting {age}: "{self._title(caller.company, c.challenger_path)}" '
                 f'({c.challenger_path}, {narrower} memory) holds over "{self._title(caller.company, c.target_path)}" '
                 f"({c.target_path}, {broader} memory)."
@@ -956,15 +958,14 @@ class Challenges:
         lines.append("Show the member both. decide_challenge: keep_exception with a reason, or follow (retires the narrower).")
         return "\n".join(lines)
 
-    def _replacement(self, caller: Caller, challenge: Challenge) -> str:
-
-        """The challenging memory, titled and summarised when it can still be read."""
+    def _replacement(self, caller: Caller, challenge: Challenge, token: str) -> str:
+        """The challenging memory, titled and summarised when it can still be read, its summary in this notice's fence."""
         assert challenge.challenger_path is not None
         try:
             challenger = self._store.read(caller.company, PurePosixPath(challenge.challenger_path))
         except Refused:
             return challenge.challenger_path
-        return f'"{challenger.title}" ({challenge.challenger_path}): {challenger.summary}'
+        return f'"{one_line(challenger.title)}" ({challenge.challenger_path}): {quoted(challenger.summary, token, inline=True)}'
 
     def department_name(self, challenge: Challenge) -> str:
         """The name of the department a promotion into department memory asks to join, or its ID once removed."""
@@ -973,8 +974,9 @@ class Challenges:
         return department_id if found is None else found.name
 
     def _title(self, company: str, path: str) -> str:
+        """A memory's title as a notice names it, escaped and on one line; its path once it can't be read."""
         try:
-            return self._store.read(company, PurePosixPath(path)).title
+            return one_line(self._store.read(company, PurePosixPath(path)).title)
         except Refused:
             return path
 
@@ -985,7 +987,8 @@ class Challenges:
                 " AND delivered_at IS NULL" + _REACHED_NOTICE + " RETURNING id, text",
                 {"now": self._clock(), **_notice_reach(caller)},
             ).fetchall()
-        texts = [row["text"] for row in sorted(rows, key=lambda row: row["id"])]
+        # A notice holds members' words (a comment, a title, a name), so each is escaped and kept to its one line.
+        texts = [one_line(row["text"]) for row in sorted(rows, key=lambda row: row["id"])]
         return "[shared memory news]\n" + "\n".join(f"- {text}" for text in texts) if texts else None
 
     def told(self, caller: Caller, *, days: int, limit: int) -> list[dict[str, Any]]:
@@ -1037,17 +1040,17 @@ def _reason(reason: str, code_reference: str | None, quoted_line: str | None) ->
     raise Refused(f"A doubt names its reason: {' or '.join(REASONS)}.")
 
 
-def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...]) -> list[str]:
+def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...], token: str) -> list[str]:
     """A doubt as a briefing or prompt shows it: its reason and how many members raised it, then each piece of
-    evidence."""
+    evidence, what its raisers wrote in this notice's fence."""
     count = len(_members(evidence))
     says = "says" if count == 1 else "say"
     lines = [f"- Challenge {challenge.id}, a doubt{whose}: {count} {says} {_REASON_IN_WORDS[challenge.reason or '']}."]
     for each in evidence:
         line = f"  - {each.member_id}"
         if each.code_reference is not None:
-            line += f" quotes {each.code_reference}: {each.code_reference.quoted_line}"
-        line += f" — reasoning: {each.reasoning}" if each.reasoning else ("" if each.code_reference else ".")
+            line += f" quotes {one_line(str(each.code_reference))}: {quoted(each.code_reference.quoted_line, token, inline=True)}"
+        line += f" — reasoning: {quoted(each.reasoning, token, inline=True)}" if each.reasoning else ("" if each.code_reference else ".")
         lines.append(line)
     return lines
 

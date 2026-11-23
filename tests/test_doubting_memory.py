@@ -136,8 +136,8 @@ def test_a_member_raising_the_same_doubt_again_from_another_session_adds_evidenc
     assert again == {"challenge_id": first["challenge_id"], "joined": True, "count": 2}
     briefing = added_context(owner.start())
     assert f"- Challenge {first['challenge_id']}, a doubt: 2 say it misled them." in briefing
-    assert "  - emp-2 — reasoning: My invoices came out wrong." in briefing
-    assert "  - emp-2 — reasoning: My refunds came out wrong too." in briefing
+    assert "  - emp-2 — reasoning: <memory-TOKEN>My invoices came out wrong.</memory-TOKEN>" in briefing
+    assert "  - emp-2 — reasoning: <memory-TOKEN>My refunds came out wrong too.</memory-TOKEN>" in briefing
     assert "In doubt: 2 say it misled them" in owner.call("read", path=path)["in_doubt"]
 
 
@@ -185,12 +185,12 @@ def test_the_authors_next_briefing_names_the_doubted_memory_the_reason_and_the_e
     assert f"{TAX['title']} ({path}):" in briefing
     assert f"- Challenge {contradicts['challenge_id']}, a doubt: 2 say it contradicts the code." in briefing
     assert (
-        "  - owner-1 quotes billing-api:src/tax.py:42: RATE = Decimal('0.20') — reasoning: The code charges twenty "
-        "percent." in briefing
+        "  - owner-1 quotes billing-api:src/tax.py:42: <memory-TOKEN>RATE = Decimal('0.20')</memory-TOKEN> — reasoning: <memory-TOKEN>The code "
+        "charges twenty percent.</memory-TOKEN>" in briefing
     )
-    assert "  - emp-3 quotes billing-api:src/tax.py:42: RATE = Decimal('0.20')" in briefing
+    assert "  - emp-3 quotes billing-api:src/tax.py:42: <memory-TOKEN>RATE = Decimal('0.20')</memory-TOKEN>" in briefing
     assert f"- Challenge {misled['challenge_id']}, a doubt: 1 says it misled them." in briefing
-    assert "  - emp-3 — reasoning: My invoice totals came out wrong." in briefing
+    assert "  - emp-3 — reasoning: <memory-TOKEN>My invoice totals came out wrong.</memory-TOKEN>" in briefing
 
 
 def test_the_challenge_tools_description_and_the_skill_say_to_trust_the_code_and_raise_contradicts_code_instead_of_editing(

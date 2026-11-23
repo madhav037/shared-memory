@@ -27,6 +27,7 @@ from shared_memory.hooks import (
     AgentHooks,
 )
 from shared_memory.standby import STAND_BY_SECONDS
+from shared_memory.store import signable
 
 TOKEN_VARIABLE = "SHARED_MEMORY_TOKEN"  # noqa: S105  # a name, not a secret
 GEMINI_SCRIPT = ".gemini/hooks/shared-memory.mjs"
@@ -722,7 +723,7 @@ alwaysApply: true
 
 # Shared Memory
 
-This repository belongs to {project_name} in the company's Shared Memory, which every member's coding agent reads and
+This repository belongs to {signable(project_name)} in the company's Shared Memory, which every member's coding agent reads and
 writes through the `shared-memory` MCP server.
 
 - Call `search` before answering how this codebase or company works. Cursor cannot add memory to a prompt by itself, so
@@ -1158,7 +1159,7 @@ def _agents_section(hooks_url: str, project_id: str, project_name: str, reposito
     return (
         f"{SECTION_START}\n"
         "## Shared Memory\n\n"
-        f"This repository is `{repository}` of the project {project_name} (`{project_id}`) in the company's Shared "
+        f"This repository is `{repository}` of the project {signable(project_name)} (`{project_id}`) in the company's Shared "
         "Memory, which every member's coding agent reads and writes through the `shared-memory` MCP server.\n\n"
         "- At the start of a task, call `briefing` unless the session was already given it.\n"
         "- Call `search` before answering how this codebase or company works.\n"

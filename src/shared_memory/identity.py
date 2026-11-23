@@ -274,6 +274,19 @@ def checked_member_name(name: str) -> str:
     return cleaned
 
 
+def checked_project_name(name: str) -> str:
+    """A project's name as it is stored and written into the files its repositories commit: one line, as a member's
+    name is, with a letter or digit and no < or >."""
+    cleaned = name.strip()
+    if not cleaned:
+        raise Refused("A project needs a name.")
+    if not any(each.isalnum() for each in cleaned) or len(cleaned) > MEMBER_NAME_LIMIT or signable(cleaned) != cleaned:
+        raise Refused(
+            f"A project's name is one line of up to {MEMBER_NAME_LIMIT} characters, with a letter or digit and no < or >."
+        )
+    return cleaned
+
+
 def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
     return Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
 
@@ -1100,8 +1113,7 @@ class Identity:
 
     def create_project(self, caller: Caller, name: str) -> Project:
         """Create a project. Whoever creates it is its first project lead."""
-        if not name.strip():
-            raise Refused("A project needs a name.")
+        name = checked_project_name(name)
         now = self._clock()
         # Project IDs are unique across every company and the suffix is random, so two projects with a common name can
         # draw the same suffix: draw again rather than fail the member.
@@ -1126,8 +1138,7 @@ class Identity:
 
     def rename_project(self, caller: Caller, project_id: str, name: str) -> None:
         """Change a project's name. Its project ID never changes: repositories are committed with it."""
-        if not name.strip():
-            raise Refused("A project needs a name.")
+        name = checked_project_name(name)
         self._require_lead(caller, project_id)
         with self._db.transaction() as conn:
             self._project_name(conn, caller.member, project_id)

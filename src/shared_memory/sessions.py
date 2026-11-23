@@ -292,7 +292,10 @@ class Sessions:
     def report(self, session: Session, branch: str | None, files: Sequence[str]) -> None:
         """Keep where this session is, as its hook before a tool says: its branch, where the hook named one, and the
         files the tool named, ahead of those it touched before. Nothing is written when nothing changes."""
-        touched = [file for file in dict.fromkeys(files) if len(file) <= TOUCHED_PATH_LIMIT][:TOUCHED_KEPT]
+        # A path with a line break or other control character is no file a member works on, and would break the
+        # lines a collision warning or a gate's refusal names it in: it is not kept.
+        named = [file for file in dict.fromkeys(files) if len(file) <= TOUCHED_PATH_LIMIT and file.isprintable()]
+        touched = named[:TOUCHED_KEPT]
         kept = list(dict.fromkeys([*touched, *session.touched_files]))[:TOUCHED_KEPT]
         moved = branch is not None and branch != session.branch
         if not moved and kept == list(session.touched_files):

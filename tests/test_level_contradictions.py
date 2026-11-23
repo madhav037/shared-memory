@@ -286,6 +286,8 @@ def test_the_console_keeps_an_exception_with_a_reason(console: Console, signed_o
     }  # fmt: skip
     assert kept.json()["waiting"] == []
     assert made["olive"].call("read", path=made["raised"]["path"])["exception_reason"] == REASON
+    as_sent = made["olive"].call_as_sent("read", path=made["raised"]["path"])["exception_reason"]
+    assert as_sent.startswith("<memory-") and as_sent.endswith(">"), "a coding agent gets the reason in the fence"
 
 
 def test_the_console_follows_by_retiring_the_narrower_memory(console: Console, signed_out: ConsoleClient) -> None:
