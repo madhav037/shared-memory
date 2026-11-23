@@ -136,3 +136,48 @@ def test_an_index_built_before_chunks_is_brought_up_to_date_at_start(upgrading: 
             after.stop()
 
     assert path in context
+
+
+def test_a_word_counts_its_own_tokens_beside_a_long_one() -> None:
+    embedder = FastEmbedEmbedder(REPO_ROOT / ".cache" / "fastembed")
+
+    assert embedder.tokens(["a", "src/shared_memory/console_contract.py"])[0] == embedder.tokens(["a"])[0] == 1
+
+
+def test_a_short_memory_naming_a_long_path_is_one_chunk(owner: Session) -> None:
+    body = " ".join(["Keep the billing retries in one place."] * 12 + ["See src/shared_memory/console_contract.py."])
+    saved = owner.call("remember", title="Billing retries", summary="Retries live together.", type="convention", body=body)
+
+    with psycopg.connect(owner.server.settings.database_url, autocommit=True) as conn:
+        chunks = conn.execute("SELECT count(*) FROM sections WHERE path = %s", (saved["path"],)).fetchone()
+
+    assert chunks is not None and chunks[0] == 1
+
+
+def test_an_index_cut_by_padded_counts_is_cut_again_at_start(upgrading: Settings) -> None:
+    with start_blocking_portal() as portal:
+        before = serving(upgrading, portal)
+        try:
+            company = new_company(before)
+            project = company.owner().call("create_project", name="Billing")["project_id"]
+            path = remember_long(company.owner().in_project(project))
+        finally:
+            before.stop()
+        with psycopg.connect(upgrading.database_url, autocommit=True) as conn:
+            # As an index cut before: every section in many more chunks than its words need, and no mark.
+            conn.execute("DELETE FROM sections_cut_by_words")
+            conn.execute(
+                "INSERT INTO sections (team, path, section_no, chunk_no, level, project_id, member_id, type, author, status,"
+                " content_hash, embedding, tokens) SELECT team, path, section_no, chunk_no + 1000, level, project_id,"
+                " member_id, type, author, status, 'padded ' || content_hash, embedding, tokens FROM sections"
+            )
+
+        after = serving(upgrading, portal)
+        after.stop()
+
+    with psycopg.connect(upgrading.database_url, autocommit=True) as conn:
+        extra = conn.execute("SELECT count(*) FROM sections WHERE path = %s AND chunk_no >= 1000", (path,)).fetchone()
+        marked = conn.execute("SELECT count(*) FROM sections_cut_by_words").fetchone()
+
+    assert extra is not None and extra[0] == 0
+    assert marked is not None and marked[0] == 1

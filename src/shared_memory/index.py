@@ -61,6 +61,9 @@ ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id TEXT;
 ALTER TABLE sections ADD COLUMN IF NOT EXISTS exception_to TEXT;
 CREATE INDEX IF NOT EXISTS sections_tokens ON sections USING GIN (tokens);
 CREATE INDEX IF NOT EXISTS sections_content_hash ON sections (team, content_hash);
+-- Holds its one row once every section has been cut by its words' own token counts. Before, padding counted too, and
+-- sections were cut into far more chunks than they needed.
+CREATE TABLE IF NOT EXISTS sections_cut_by_words (cut BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (cut));
 """
 # Nearest sections by meaning come from an approximate-nearest-neighbour index rather than a comparison with every one.
 _EMBEDDING_INDEX = "CREATE INDEX IF NOT EXISTS sections_embedding ON sections USING hnsw (embedding vector_cosine_ops)"
@@ -205,6 +208,11 @@ def overridden(db: Database, company: str, project_id: str, department_id: str |
     return {str(row["exception_to"]) for row in rows}
 
 
+def _paragraph_between(text: str, before: re.Match[str], after: re.Match[str]) -> bool:
+    """Whether a blank line separates two words of the text."""
+    return "\n\n" in text[before.end() : after.start()].replace("\r", "")
+
+
 class SearchIndex:
     def __init__(self, db: Database, embedder: CachedQueries) -> None:
         self._db = db
@@ -213,6 +221,7 @@ class SearchIndex:
         self._prepared_lock = threading.Lock()
         self._unchunked = False
         self._unexcepted = False
+        self._overcut = False
         if db.sets_up:
             with db.transaction() as conn:
                 # Built before sections named the memory an exception overrides: catch_up fills it in.
@@ -237,15 +246,25 @@ class SearchIndex:
                         " ADD PRIMARY KEY (team, path, section_no, chunk_no)"
                     )
                     conn.execute("ALTER TABLE sections ALTER COLUMN chunk_no DROP DEFAULT")
+                if conn.execute("SELECT 1 FROM sections_cut_by_words").fetchone() is None:
+                    if conn.execute("SELECT 1 FROM sections LIMIT 1").fetchone() is None:
+                        conn.execute("INSERT INTO sections_cut_by_words DEFAULT VALUES")
+                    else:
+                        self._overcut = True
 
     def catch_up(self, store: MemoryStore) -> None:
-        """Index every memory again if the index was built before long sections were split into chunks.
+        """Index every memory again if the index was built before long sections were split into chunks, or were cut
+        by token counts that included padding.
 
-        Sections short enough to have been read whole keep their embeddings; only long ones are embedded again.
+        Sections and chunks whose text is unchanged keep their embeddings; only the rest are embedded again. The cut is
+        marked done only once every memory is indexed again, so one that stops part way is taken up at the next start.
         """
-        if self._unchunked or self._unexcepted:
+        if self._unchunked or self._unexcepted or self._overcut:
             self._update_all(store)
-            self._unchunked = self._unexcepted = False
+            if self._overcut:
+                with self._db.transaction() as conn:
+                    conn.execute("INSERT INTO sections_cut_by_words DEFAULT VALUES ON CONFLICT DO NOTHING")
+            self._unchunked = self._unexcepted = self._overcut = False
 
     def _chunks(self, title: str, heading: str, text: str) -> list[str]:
         """The texts embedded for one section: the whole of it, or overlapping chunks the model reads whole."""
@@ -261,12 +280,17 @@ class SearchIndex:
         while True:
             end, used = start + 1, counts[start]
             while end < len(words) and used + counts[end] <= budget:
+                # A chunk half full ends at a paragraph, so a paragraph's point isn't lost among its neighbour's words.
+                if used * 2 >= budget and _paragraph_between(text, words[end - 1], words[end]):
+                    break
                 used += counts[end]
                 end += 1
             chunks.append(prefix + text[words[start].start() : words[end - 1].end()])
             if end == len(words):
                 return chunks
             first, start, overlap = start, end, 0
+            if _paragraph_between(text, words[end - 1], words[end]):
+                continue  # nothing is cut mid-sentence at a paragraph, so the next chunk needs no overlap
             while start - 1 > first and overlap + counts[start - 1] <= _CHUNK_OVERLAP:
                 start -= 1
                 overlap += counts[start]
