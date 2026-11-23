@@ -95,6 +95,35 @@ def test_a_memory_with_a_bad_header_is_refused(member: Session, overrides: dict[
     assert complaint in refusal_to_remember(member, **overrides)
 
 
+HIDDEN = {
+    "a tag character": "\U000e0070\U000e0075\U000e0073\U000e0068",
+    "a bidi override": "‮",
+    "a bidi isolate": "⁦",
+    "a right-to-left mark": "‏",
+    "an Arabic letter mark": "؜",
+    "a zero-width space": "​",
+    "a word joiner": "⁠",
+    "a byte order mark": "﻿",
+}
+
+
+@pytest.mark.parametrize("field", ["title", "summary", "body"])
+@pytest.mark.parametrize("hidden", HIDDEN.values(), ids=HIDDEN.keys())
+def test_a_memory_holding_a_character_that_hides_or_reorders_text_is_refused(
+    member: Session, field: str, hidden: str
+) -> None:
+    refusal = refusal_to_remember(member, **{field: f"Use pnpm.{hidden} always"})
+
+    assert f"U+{ord(hidden[0]):04X}" in refusal
+    assert "hidden" in refusal
+
+
+def test_joiners_used_by_emoji_and_by_persian_and_indic_text_are_kept(member: Session) -> None:
+    body = "The on-call rota \U0001f469‍\U0001f4bb. می‌خواهم. क्‍ष"
+
+    assert member.call("read", path=remember(member, body=body)["path"])["body"].strip() == body
+
+
 @pytest.mark.parametrize("tool", ["read", "edit_memory", "delete_memory"])
 def test_a_path_outside_the_company_folder_is_refused(member: Session, tool: str) -> None:
     arguments: dict[str, object] = {"path": "../other-company/company/conventions/secret.md"}

@@ -73,6 +73,25 @@ def test_a_doubt_that_contradicts_the_code_without_a_repository_file_and_line_is
     assert dana.call("read", path=path)["open_challenges"] == []
 
 
+def test_a_doubt_whose_reasoning_or_quoted_line_hides_or_reorders_text_is_refused(owner: Session, dana: Session) -> None:
+    path = promote_keeping_both(owner, TAX)
+
+    refusals = [
+        dana.refusal("challenge", path=path, reason="misled", reasoning="It misled me.‮"),
+        dana.refusal(
+            "challenge",
+            path=path,
+            reason="contradicts_code",
+            code_reference=TAX_LINE["code_reference"],
+            quoted_line="RATE = Decimal('0.20')\U000e0041",
+        ),
+    ]
+
+    assert "U+202E" in refusals[0]
+    assert "U+E0041" in refusals[1]
+    assert dana.call("read", path=path)["open_challenges"] == []
+
+
 def test_a_member_raises_a_doubt_against_their_own_memory_and_against_project_and_company_memory(
     owner: Session, dana: Session
 ) -> None:

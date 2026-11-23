@@ -28,6 +28,9 @@ _ASSIGNMENT = re.compile(
 )
 _PLACEHOLDER = re.compile(r"^(?:\$\{.*\}|<.*>|\*+|x+|\.\.\.+|changeme|example|placeholder|redacted)$", re.IGNORECASE)
 _CANDIDATE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
+# Tag characters, bidi controls and zero-width characters. ZWNJ and ZWJ (U+200C, U+200D) stay: emoji and Persian and
+# Indic text need them.
+_HIDDEN = re.compile("[\U000e0000-\U000e007f‪-‮⁦-⁩‎‏؜​⁠﻿]")
 
 # The word limit bounds what a memory says; this bounds what it weighs, so a few enormous "words" can't slip past it.
 # At twenty characters a word, a memory at the word limit still fits, paths and identifiers included.
@@ -61,8 +64,14 @@ def _find_secret(text: str) -> str | None:
 
 
 def refuse_secret(text: str, what: str = "This memory", where: str = "into memory") -> None:
-    """Refuse text that looks like it holds a secret: memory by default, or whatever else is named, such as a card's
-    title on the board."""
+    """Refuse text that looks like it holds a secret, or that holds a character hiding or reordering what a reader
+    sees: memory by default, or whatever else is named, such as a card's title on the board."""
+    hidden = _HIDDEN.search(text)
+    if hidden:
+        raise Refused(
+            f"{what} holds a hidden character, U+{ord(hidden.group()):04X}, which carries text no reader sees, "
+            "reorders what is shown, or makes different text look the same. Remove it."
+        )
     found = _find_secret(text)
     if found:
         raise Refused(
