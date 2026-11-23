@@ -80,7 +80,7 @@ class ProjectHealth:
         if not self._identity.looks_after(caller.member, project.project_id):
             raise NotALead()
         memories = self._project_memory(caller.company, project.project_id)
-        return Health(project, self._possibly_outdated(caller.company, memories), self._in_doubt(caller.company, memories))
+        return Health(project, self._possibly_outdated(caller.company, memories), self._in_doubt(caller, memories))
 
     def _project_memory(self, company: str, project_id: str) -> dict[str, Memory]:
         return {
@@ -94,7 +94,7 @@ class ProjectHealth:
         listed = [OutdatedMemory(path, memories[path], self._uses.last_used(company, path)) for path in outdated]
         return tuple(sorted(listed, key=lambda one: (one.last_used or _NEVER, one.path)))
 
-    def _in_doubt(self, company: str, memories: dict[str, Memory]) -> tuple[DoubtedMemory, ...]:
-        doubted = self._challenges.in_doubt(company, memories)
+    def _in_doubt(self, caller: Caller, memories: dict[str, Memory]) -> tuple[DoubtedMemory, ...]:
+        doubted = self._challenges.in_doubt(caller.company, memories, caller.unreachable)
         listed = [DoubtedMemory(path, memories[path], in_doubt) for path, in_doubt in doubted.items()]
         return tuple(sorted(listed, key=lambda one: (-one.in_doubt.count, one.path)))

@@ -23,6 +23,7 @@ from shared_memory.challenges import (
     Challenge,
     Challenges,
     DecidesAs,
+    checked_reasoning,
     department_of,
     project_of,
 )
@@ -77,13 +78,6 @@ RESOLUTIONS = ("supersede", "keep_both", "cancel")
 # How a level contradiction is decided: the narrower memory stays as an exception, with a reason, or follows the broader
 # one and is retired. From a session or the console (ADR-0009: neither writes what the memory says).
 LEVEL_DECISIONS = ("keep_exception", "follow")
-
-
-def _check_reasoning(reasoning: str | None) -> None:
-    """Reasoning for a promotion, retirement or addition is shown to whoever decides, kept as an exception's reason, and
-    folded into briefings, so it is checked like a memory's words."""
-    if reasoning and reasoning.strip():
-        refuse_secret(reasoning, "This reasoning", "into reasoning, which members and their coding agents are shown")
 
 
 @dataclass(frozen=True)
@@ -151,7 +145,7 @@ class Lifecycle:
         imported_from: str | None = None,
         foundation: str | None = None,
     ) -> dict[str, Any]:
-        _check_reasoning(reasoning)
+        reasoning = checked_reasoning(reasoning)
         promotable = self._promotable(caller, path, level, foundation)
         location, target, promoted_by = promotable.location, promotable.target, promotable.promoted_by
         project, into, department_id = promotable.project, promotable.foundation, promotable.department_id
@@ -548,7 +542,7 @@ class Lifecycle:
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
         foundation, otherwise as a challenge they decide while the memory stays where it is."""
-        _check_reasoning(reasoning)
+        reasoning = checked_reasoning(reasoning)
         project = caller.require_project()
         caller.require_reach(path)
         location = locate(path)
@@ -890,7 +884,9 @@ class Lifecycle:
     # Retiring
 
     def retire(self, caller: Caller, path: str, reasoning: str | None = None) -> dict[str, Any]:
-        _check_reasoning(reasoning)
+        """Retire a memory: at once where the caller may, otherwise as a challenge its decider decides. A retire
+        challenge the caller already raised against it, still open, is given back rather than raised again."""
+        reasoning = checked_reasoning(reasoning)
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)
@@ -911,6 +907,9 @@ class Lifecycle:
         if orphaned and (caller.member.is_owner or caller.member.is_admin):
             retires_at_once = True
         if not retires_at_once and (in_foundation or memory.author != caller.member_id):
+            for open_one in self._challenges.open_challenges(caller.company, target_path=str(location.path)):
+                if open_one.kind == "retire" and open_one.raised_by == caller.member_id:
+                    return self._challenge_raised(open_one.id, str(location.path), memory.author, in_foundation)
             challenge_id = self._challenges.raise_challenge(
                 caller,
                 kind="retire",
@@ -942,17 +941,13 @@ class Lifecycle:
 
     def retire_fixed(self, caller: Caller, path: str, reasoning: str) -> dict[str, Any] | None:
         """Retire a known issue whose card is done, as retire does: at once when the caller wrote it, as a challenge
-        to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do.
-        A challenge the caller already raised to retire it, still open, is given back rather than raised again."""
+        to its author otherwise. None when it is already retired or superseded, or gone: there is nothing to do."""
         location = locate(path)
         if not self._store.exists(caller.company, location.path):
             return None
         memory = self._store.read(caller.company, location.path)
         if memory.status != "active":
             return None
-        for challenge in self._challenges.open_challenges(caller.company, target_path=str(location.path)):
-            if challenge.kind == "retire" and challenge.raised_by == caller.member_id:
-                return self._challenge_raised(challenge.id, str(location.path), memory.author)
         try:
             return self.retire(caller, path, reasoning)
         except Refused:
@@ -966,6 +961,7 @@ class Lifecycle:
     def decide_challenge(
         self, caller: Caller, challenge_id: int, decision: str, reason: str | None = None
     ) -> dict[str, Any]:
+        reason = checked_reasoning(reason, "The reason")
         caller.require_project()
         if decision not in ("accept", "reject", *LEVEL_DECISIONS):
             raise Refused("Decide a challenge with 'accept' or 'reject', a level contradiction with 'keep_exception' or 'follow'.")

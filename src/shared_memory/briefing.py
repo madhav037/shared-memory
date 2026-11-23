@@ -170,7 +170,7 @@ class Briefing:
         caller.require_project()
         target = pin_target(path)
         caller.require_reach(target.path)
-        [rendered] = self._rendered(caller.company, [target])
+        [rendered] = self._rendered(caller.company, [target], unreachable=caller.unreachable)
         if rendered is None:
             raise Refused(f"There is no active memory or topic at {target.path!r} to pin.")
         with self._db.transaction() as conn:
@@ -287,7 +287,7 @@ class Briefing:
             PinTarget(row["path"], row["kind"], row["level"], row["project_id"], row["department_id"]) for row in rows
         ]
         pins = []
-        for row, target, rendered in zip(rows, targets, self._rendered(caller.company, targets), strict=True):
+        for row, target, rendered in zip(rows, targets, self._rendered(caller.company, targets, unreachable=caller.unreachable), strict=True):
             pins.append(
                 {
                     "path": target.path,
@@ -352,7 +352,9 @@ class Briefing:
         department_id = self._department_of(project_id)
         # A broader memory an exception overrides here is left out in favour of the exception.
         left_for_exceptions = overridden(self._db, caller.company, project_id, department_id)
-        for path, text in self._pinned_texts(caller.company, project_id, department_id, token, left_for_exceptions):
+        for path, text in self._pinned_texts(
+            caller.company, project_id, department_id, token, left_for_exceptions, caller.unreachable
+        ):
             if estimate_tokens(text) <= budget:
                 sections.append(text)
                 budget -= estimate_tokens(text)
@@ -399,13 +401,15 @@ class Briefing:
         department_id: str | None,
         token: str,
         leaving_out: set[str] | None = None,
+        unreachable: frozenset[str] = frozenset(),
     ) -> list[tuple[str, str]]:
         """(path, rendered text) for each pin visible from a project in a department, oldest first, leaving out the
-        memories in `leaving_out`."""
+        memories in `leaving_out`, as a member who can't reach the projects in `unreachable` is shown them."""
         targets = self._rows(company, project_id, department_id)
+        rendered_all = self._rendered(company, targets, token, leaving_out, unreachable)
         return [
             (target.path, rendered)
-            for target, rendered in zip(targets, self._rendered(company, targets, token, leaving_out), strict=True)
+            for target, rendered in zip(targets, rendered_all, strict=True)
             if rendered is not None
         ]
 
@@ -428,13 +432,18 @@ class Briefing:
         return [(str(path), memory) for path, memory in memories if memory.status == "active"]
 
     def _rendered(
-        self, company: str, targets: list[PinTarget], token: str | None = None, leaving_out: set[str] | None = None
+        self,
+        company: str,
+        targets: list[PinTarget],
+        token: str | None = None,
+        leaving_out: set[str] | None = None,
+        unreachable: frozenset[str] = frozenset(),
     ) -> list[str | None]:
         """Each pin as the briefing shows it, or None for one with nothing active to show. Which of their memories are
         in doubt is asked once for them all."""
         out = leaving_out or set()
         shown = [[(path, memory) for path, memory in self._shown(company, target) if path not in out] for target in targets]
-        in_doubt = self._challenges.in_doubt(company, [path for memories in shown for path, _ in memories])
+        in_doubt = self._challenges.in_doubt(company, [path for memories in shown for path, _ in memories], unreachable)
         return [
             _render(target, memories, token or new_token(), in_doubt)
             for target, memories in zip(targets, shown, strict=True)

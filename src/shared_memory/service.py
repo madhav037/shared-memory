@@ -302,7 +302,7 @@ class MemoryService:
             similar.append(SimilarMemory(found, locate(found).level, other.title, other.summary, similarity))
             if len(similar) == SAVE_SIMILAR_LIMIT:
                 break
-        in_doubt = self._challenges.in_doubt(caller.company, [each.path for each in similar])
+        in_doubt = self._challenges.in_doubt(caller.company, [each.path for each in similar], caller.unreachable)
         return [replace(each, in_doubt=in_doubt.get(each.path)) for each in similar]
 
     def read(self, caller: Caller, path: str, for_agent: bool = False) -> dict[str, Any]:
@@ -316,7 +316,7 @@ class MemoryService:
         memory["possibly_outdated"] = bool(self._uses.possibly_outdated(caller.company, {memory["path"]: memory["status"]}))
         if memory["possibly_outdated"]:
             memory["check"] = self._uses.check(caller.company, memory["path"])
-        if for_agent and (in_doubt := self._challenges.in_doubt(caller.company, [memory["path"]]).get(memory["path"])):
+        if for_agent and (in_doubt := self._challenges.in_doubt(caller.company, [memory["path"]], caller.unreachable).get(memory["path"])):
             memory["in_doubt"] = in_doubt.line()
         return memory
 
@@ -334,7 +334,9 @@ class MemoryService:
             except Refused:
                 continue  # moved or deleted since the index was read
             found.append(TiedMemory(tie, locate(tie.memory_path).level, memory))
-        in_doubt = self._challenges.in_doubt(caller.company, [each.tie.memory_path for each in found])
+        in_doubt = self._challenges.in_doubt(
+            caller.company, [each.tie.memory_path for each in found], caller.unreachable
+        )
         return {
             "file": asked.written,
             "memories": [each.answer(in_doubt.get(each.tie.memory_path)) for each in found],
@@ -472,7 +474,7 @@ class MemoryService:
             source=QuerySource.SEARCH,
         )
         # Every candidate is ranked again before the cut, so a memory in doubt makes way for one that isn't.
-        in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in candidates])
+        in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in candidates], caller.unreachable)
         penalty = self._settings.in_doubt_penalty
         hits = sorted(candidates, key=lambda hit: -ranked(hit.score, in_doubt.get(hit.path), penalty))
         results = self._found(caller, hits[: max(1, min(limit, 50))], in_doubt=in_doubt)
