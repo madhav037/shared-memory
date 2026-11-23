@@ -1,9 +1,9 @@
 """An admin's export of all the company's data, as one zip archive (spec #409).
 
-It holds the memory folder's git repository with its full history as a git bundle, and JSON of the members, projects
-(with their repositories, leads and access), the departments (with their leads and projects), the cards of every
-board and the audit log. It only reads, so it is consistent with ADR-0009: the console governs memory and never
-writes it.
+It holds this company's folder of the memory repository, with its full history, as a git bundle, and JSON of the
+members, projects (with their repositories, leads and access), the departments (with their leads and projects), the
+cards of every board and the audit log. It only reads, so it is consistent with ADR-0009: the console governs memory
+and never writes it.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class CompanyExport:
         with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as zipped:
             for name, text in files.items():
                 zipped.writestr(name, text)
-            bundle = self._memory_bundle()
+            bundle = self._memory_bundle(member.company_code)
             if bundle is not None:
                 zipped.writestr("memory.bundle", bundle)
         return package.getvalue()
@@ -99,14 +99,46 @@ class CompanyExport:
                 return events
             before = page.next
 
-    def _memory_bundle(self) -> bytes | None:
-        """The memory folder's repository with every branch and version, or None while it holds no version yet."""
+    def _memory_bundle(self, company: str) -> bytes | None:
+        """This company's folder of the memory repository, with every version of it, or None while it has none.
+
+        The repository holds every company on the server, so its history is first copied with only this company's
+        folder in it (`git fast-export` limited to the folder, into a new repository) and that copy is bundled: no other
+        company's file, path or version is in the archive."""
         folder = ordinary(memory_folder(self._settings.memory_root))
         if self._git(folder, "rev-parse", "--verify", "HEAD").returncode != 0:
             return None
+        # A literal pathspec: fast-export checks a plain path against the working tree, so a company whose folder isn't
+        # there now would be refused, and nothing in the company's code is read as a pattern.
+        exported = subprocess.run(  # noqa: S603  # an argument list, never a shell
+            ["git", "-C", folder, "fast-export", "--all", "--reencode=yes", "--signed-tags=strip",  # noqa: S607
+             "--tag-of-filtered-object=drop", "--", f":(literal){company}/"],
+            env=dict(os.environ),
+            capture_output=True,
+            check=False,
+        )  # fmt: skip
+        if exported.returncode != 0:
+            raise RuntimeError(f"git fast-export failed: {exported.stderr.decode(errors='replace').strip()}")
         with tempfile.TemporaryDirectory() as scratch:
+            copy = str(Path(scratch) / "company.git")
+            self._git(scratch, "init", "-q", "--bare", copy)
+            imported = subprocess.run(  # noqa: S603  # an argument list, never a shell
+                ["git", "-C", copy, "fast-import", "--quiet"],  # noqa: S607
+                input=exported.stdout,
+                env=dict(os.environ),
+                capture_output=True,
+                check=False,
+            )
+            if imported.returncode != 0:
+                raise RuntimeError(f"git fast-import failed: {imported.stderr.decode(errors='replace').strip()}")
+            if not self._git(copy, "for-each-ref", "--format=%(refname)").stdout.strip():
+                return None
+            # The copy's default branch is the repository's, so a clone of the bundle checks it out.
+            branch = self._git(folder, "symbolic-ref", "-q", "HEAD").stdout.strip()
+            if branch:
+                self._git(copy, "symbolic-ref", "HEAD", branch)
             bundle = Path(scratch) / "memory.bundle"
-            made = self._git(folder, "bundle", "create", str(bundle), "--all")
+            made = self._git(copy, "bundle", "create", str(bundle), "--all")
             if made.returncode != 0:
                 raise RuntimeError(f"git bundle failed: {made.stderr.strip()}")
             return bundle.read_bytes()

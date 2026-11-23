@@ -128,3 +128,29 @@ def test_the_export_tells_an_admin_each_members_verified_email_and_sign_in_metho
     assert [(one["verified_email"], one["sign_in_methods"]) for one in members] == [
         ("olive-export@example.com", ["github"])
     ]
+
+
+def test_the_memory_bundle_holds_only_the_exporting_companys_memory_and_history(
+    console: Console, signed_out: ConsoleClient, tmp_path: Path
+) -> None:
+    other = console.client()
+    theirs = signed_in_owner(console, other, "olive-export-theirs", 1611)
+    promote_now(theirs.in_project(theirs.call("create_project", name="Theirs")["project_id"], "their-api"), NPM)
+    other.close()
+    ours = signed_in_owner(console, signed_out, "olive-export-ours", 1613)
+    promote_now(ours.in_project(ours.call("create_project", name="Ours")["project_id"], "our-api"), NPM)
+    company = signed_out.status()["member"]["company"]
+
+    bundle = tmp_path / "memory.bundle"
+    bundle.write_bytes(download(signed_out).read("memory.bundle"))
+    cloned = tmp_path / "cloned"
+    subprocess.run(["git", "clone", "-q", str(bundle), str(cloned)], check=True, capture_output=True)  # noqa: S603, S607
+    every_path = subprocess.run(  # noqa: S603, S607
+        ["git", "-C", str(cloned), "log", "--all", "--format=", "--name-only"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+
+    assert every_path, "the bundle still carries this company's memory and its history"
+    assert {path.split("/", 1)[0] for path in every_path} == {company}
