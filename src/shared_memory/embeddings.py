@@ -58,7 +58,8 @@ class FastEmbedEmbedder:
         if not words:
             return []
         encodings = self._model.model.tokenizer.encode_batch(words, add_special_tokens=False)
-        return [len(encoding.ids) for encoding in encodings]
+        # The tokenizer pads every word to the longest in the batch; the attention mask counts only its own tokens.
+        return [sum(encoding.attention_mask) for encoding in encodings]
 
 
 class LazyEmbedder:
