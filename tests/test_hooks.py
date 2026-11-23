@@ -13,7 +13,17 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-from tests.support import CLAUDE_EVENTS, WORKING_FOLDER, Session, Company, added_context
+from tests.support import (
+    CLAUDE_EVENTS,
+    WORKING_FOLDER,
+    Company,
+    Console,
+    ConsoleClient,
+    Session,
+    add,
+    added_context,
+    signed_in_owner,
+)
 
 # Where each agent family reads the context out of an answer, and so the shape the server owes it. None is the format
 # an agent that asks for none gets: Claude Code's, which is what these endpoints have always answered.
@@ -309,3 +319,22 @@ def test_a_standby_whose_body_arrives_after_its_member_is_removed_is_refused(com
     status, answer = held_back(dana, "standby", {}, lambda: owner.call("remove_member", member_id="emp-2"))
 
     assert status == 401, answer
+
+
+def test_a_hook_whose_body_arrives_after_its_project_is_closed_to_its_member_gets_nothing(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-held-back-closed", 1621)
+    billing = owner.call("create_project", name="Billing")["project_id"]
+    pinned(owner.in_project(billing), "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(billing)
+    assert "integer cents" in context_in(dana.start(), None), "briefed while the project was open to them"
+
+    def close() -> None:
+        closing = signed_out.post_json(f"/api/projects/{billing}/restrict", {"restricted": True})
+        assert closing.status_code == 200, closing.text
+
+    status, answer = held_back(dana, "session-start", {"source": "startup"}, close)
+
+    assert status == 200
+    assert "integer cents" not in json.dumps(answer), "briefed after the project was closed to them"

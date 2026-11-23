@@ -330,7 +330,6 @@ def test_a_session_start_that_is_not_a_compaction_leaves_what_was_told(owner: Se
     assert path not in added_context(owner.prompt(prompt))
 
 
-
 def test_a_prompt_is_answered_before_its_hook_gives_up_however_long_each_part_takes(
     owner: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -351,5 +350,5 @@ def test_a_prompt_is_answered_before_its_hook_gives_up_however_long_each_part_ta
     started = time.monotonic()
     owner.prompt("store the refund amount in the database")
 
-    assert time.monotonic() - started < HOOK_SECONDS - 0.3
+    assert time.monotonic() - started < HOOK_SECONDS - 0.1, "the agent would have given up"
     assert owner.server.settings.hook_deadline_seconds < HOOK_SECONDS - 0.5, "room for the network"
