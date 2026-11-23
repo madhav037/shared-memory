@@ -12,6 +12,7 @@ from shared_memory.clock import system_clock
 from shared_memory.config import Settings
 from shared_memory.db import Database
 from shared_memory.errors import Refused
+from shared_memory.console_sessions import end_member_sessions
 from shared_memory.identity import Identity
 from shared_memory.license import PUBLIC_KEYS
 
@@ -162,7 +163,10 @@ def run(
     if args.command == "link-github":
         db = Database(settings.database_url, settings.statement_timeout_seconds)
         try:
-            Identity(db, system_clock).link_github(args.company, args.member_id, args.github)
+            identity = Identity(db, system_clock)
+            # Moving someone to another account signs the old one out of the console, as it does from the console.
+            identity.on_link_moved(lambda conn, member_pk: end_member_sessions(conn, member_pk, system_clock()))
+            identity.link_github(args.company, args.member_id, args.github)
         except Refused as refused:
             print(refused, file=out)
             return 1
