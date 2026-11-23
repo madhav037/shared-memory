@@ -229,3 +229,14 @@ def test_the_message_retention_and_recent_window_read_their_environment_variable
     assert Settings.from_env({"SHARED_MEMORY_MESSAGE_KEPT_DAYS": "3"}).message_kept_days == 3
     assert Settings.from_env({}).recent_work_hours == 24
     assert Settings.from_env({"SHARED_MEMORY_RECENT_WORK_HOURS": "12"}).recent_work_hours == 12
+
+
+def test_a_message_reaches_the_session_when_recall_fails_on_its_prompt(owner: Session, dana: Session) -> None:
+    owner.start()
+    dana.start()
+    send(owner, "emp-2", ASKED)
+
+    # Postgres can't hold a NUL, so recall fails on this prompt; the message it carries mustn't fail with it.
+    heard = added_context(dana.prompt("Explain how our invoices are numbered\u0000"))
+
+    assert ASKED in heard
