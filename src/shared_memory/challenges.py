@@ -193,7 +193,7 @@ class Challenge:
             row["promoted_by"],
             row["raised_at"],
             row["reasoning"],
-            row.get("foundation"),
+            row.get("foundation") or (_foundation_doubted(row["target_path"]) if row["kind"] == DOUBT else None),
             row.get("reason"),
             row.get("exception_to"),
         )
@@ -291,6 +291,14 @@ def department_of(challenge: Challenge) -> str | None:
     if challenge.kind != PROMOTE:
         return None
     return PurePosixPath(challenge.target_path).name
+
+
+def _foundation_doubted(target_path: str) -> str | None:
+    """The foundation a doubted memory is in, so its keepers and its project's leads decide the doubt (ADR-0019)."""
+    try:
+        return locate(target_path).foundation
+    except Refused:
+        return None
 
 
 def project_of(challenge: Challenge) -> str | None:
@@ -440,9 +448,12 @@ class Challenges:
         while True:
             opened = conn.execute(
                 "INSERT INTO challenges (team, kind, target_path, target_author, level, raised_by, raised_at, state,"
-                " reason) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open', %s) ON CONFLICT (team, target_path, reason)"
-                " WHERE kind = 'doubt' AND state = 'open' DO NOTHING RETURNING id",
-                (caller.company, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason),
+                " reason, foundation) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)"
+                " ON CONFLICT (team, target_path, reason) WHERE kind = 'doubt' AND state = 'open' DO NOTHING RETURNING id",
+                (
+                    caller.company, DOUBT, target_path, target_author, level, caller.member_id, self._clock(), reason,
+                    _foundation_doubted(target_path),
+                ),  # fmt: skip
             ).fetchone()
             if opened is not None:
                 return int(opened["id"]), False

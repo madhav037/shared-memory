@@ -76,6 +76,25 @@ def test_a_leads_briefing_shows_the_waiting_challenge_with_the_members_reasoning
     assert "department challenges" not in added_context(dana.start())
 
 
+def test_a_memory_waiting_on_a_department_challenge_cannot_change_so_the_lead_accepts_what_was_offered(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    signed_in_owner(console, signed_out, "olive-dept-challenge-offered", 1929)
+    billing = create(signed_out, "Billing")["project_id"]
+    lena = member(console, signed_out, "emp-lena", "Lena Lead", billing)
+    department(signed_out, "Payments", billing, lead="emp-lena")
+    dana = member(console, signed_out, "emp-dana", "Dana Developer", billing)
+    personal, answered = ask_leads(dana)
+
+    edited = dana.refusal("edit_memory", path=personal, body="Push straight to main.")
+    deleted = dana.refusal("delete_memory", path=personal)
+    accepted = lena.call("decide_challenge", challenge_id=answered["challenge_id"], decision="accept")
+
+    assert f"waiting on challenge {answered['challenge_id']}" in edited
+    assert f"waiting on challenge {answered['challenge_id']}" in deleted
+    assert lena.call("read", path=accepted["path"])["body"] == REVIEWS["body"]
+
+
 def test_a_lead_accepting_the_challenge_moves_the_memory_into_department_memory(
     console: Console, signed_out: ConsoleClient
 ) -> None:

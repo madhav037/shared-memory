@@ -252,6 +252,34 @@ def test_anyone_can_decide_once_the_fallback_has_passed(console: Console, signed
     later.close()
 
 
+def test_a_memory_offered_in_a_challenge_stays_as_offered_until_the_challenge_is_decided(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner, project, in_project = a_company(console, signed_out, "olive-disputes-offered", 1191)
+    promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
+    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
+        project, "billing-api"
+    )
+    offered = remember(dana, "Use npm, not pnpm", "We use npm for every package.")
+    first = a_supersede_challenge(dana, offered)
+
+    refused = [
+        dana.refusal("edit_memory", path=offered, body="Push straight to main."),
+        dana.refusal("tie", path=offered, tied_files=["billing-api:src/**"]),
+        dana.refusal("delete_memory", path=offered),
+    ]
+    read = challenges(signed_out)["waiting"][0]["challenger"]["body"]
+    decide(signed_out, first, "reject")
+    dana.call("edit_memory", path=offered, body="We use npm for every package, scripts too.")
+    second = a_supersede_challenge(dana, offered)
+    accepted = decide(signed_out, second, "accept").json()
+
+    assert all(f"waiting on challenge {first}" in one for one in refused), refused
+    assert read == "We use npm for every package."
+    in_force = ask(signed_out, "/api/memory", path=accepted["decided"]["in_force"])
+    assert in_force["body"] == "We use npm for every package, scripts too."
+
+
 def test_a_member_retires_their_own_memory_from_the_console(console: Console, signed_out: ConsoleClient) -> None:
     owner, project, in_project = a_company(console, signed_out, "olive-disputes-seven", 1109)
     mine = promoted(in_project, remember(in_project, "Use pnpm, not npm", "We use pnpm for every package."))
