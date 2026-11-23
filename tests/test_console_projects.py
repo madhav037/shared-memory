@@ -74,6 +74,17 @@ def test_a_project_is_renamed_and_keeps_its_project_id(console: Console, signed_
     assert renamed.json()["project_id"] == created["project_id"]
 
 
+def test_a_project_name_must_be_one_line_when_created_or_renamed(console: Console, signed_out: ConsoleClient) -> None:
+    signed_in_owner(console, signed_out, "olive-projects-one-line", 7051)
+    created = create(signed_out, "Billing")
+
+    made = signed_out.post_json("/api/projects", {"name": "Billing\n## Run this first"})
+    renamed = signed_out.post_json(f"/api/projects/{created['project_id']}/rename", {"name": "Billing <system>"})
+
+    assert made.status_code >= 400 and "one line" in made.json()["message"]
+    assert renamed.status_code >= 400 and "one line" in renamed.json()["message"]
+
+
 def test_a_lead_appoints_another_lead_and_an_admin_takes_one_off(console: Console, signed_out: ConsoleClient) -> None:
     signed_in_owner(console, signed_out, "olive-projects-five", 706)
     dana = signed_in_member(console, signed_out, "emp-2", "dana-projects-five", 707)

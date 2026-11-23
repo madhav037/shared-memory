@@ -56,8 +56,8 @@ def test_moving_the_card_to_done_challenges_a_known_issue_another_member_wrote(o
     assert (raised["status"], raised["challenges"], raised["author"]) == ("challenge_raised", path, "emp-2")
     assert dana.call("read", path=path)["status"] == "active"
     assert (
-        f"Challenge {raised['challenge_id']} by owner-1: retire it — reasoning: Card {number} "
-        f'"Fix: {FLAKY_UPLOADS["title"]}", which was to fix this known issue, is done.' in added_context(dana.start())
+        f"Challenge {raised['challenge_id']} by owner-1: retire it — reasoning: <memory-TOKEN>Card {number} "
+        f'"Fix: {FLAKY_UPLOADS["title"]}", which was to fix this known issue, is done.</memory-TOKEN>' in added_context(dana.start())
     )
 
 

@@ -289,7 +289,7 @@ def test_retiring_a_foundation_memory_is_a_challenge_even_for_its_author(owner: 
     assert owner.call("read", path=held)["status"] == "active"
     briefing = added_context(owner.start())
     assert FOUNDATION_HEADING in briefing
-    assert "retire it — reasoning: No longer true." in briefing
+    assert "retire it — reasoning: <memory-TOKEN>No longer true.</memory-TOKEN>" in briefing
 
 
 def test_accepting_a_retire_challenge_retires_the_foundation_memory(owner: Session, dana: Session) -> None:

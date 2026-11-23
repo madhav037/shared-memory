@@ -214,14 +214,16 @@ def _fenced_save(saved: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fenced_memory(memory: dict[str, Any], token: str) -> dict[str, Any]:
-    """One memory as a coding agent is given it whole: its title escaped, its summary and body in this call's fence,
-    and its in-doubt line defanged."""
+    """One memory as a coding agent is given it whole: its title escaped, its summary, body and the reason its lead
+    keeps it as an exception in this call's fence, and its in-doubt line defanged."""
     shown = {
         **memory,
         "title": escape(memory["title"]),
         "summary": fenced(memory["summary"], token, inline=True),
         "body": fenced(memory["body"], token),
     }
+    if memory.get("exception_reason"):
+        shown["exception_reason"] = fenced(memory["exception_reason"], token, inline=True)
     _escape_in_doubt(shown)
     return shown
 

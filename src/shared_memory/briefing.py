@@ -18,7 +18,7 @@ from shared_memory.errors import Refused
 from shared_memory.identity import Caller
 from shared_memory.index import overridden
 from shared_memory.memory import COMPANY_FOLDER, DEPARTMENTS_FOLDER, FOLDER_TYPES, Memory, locate
-from shared_memory.fence import escape, fenced, new_token
+from shared_memory.fence import escape, fenced, new_token, one_line
 from shared_memory.recall import framing
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import label_for, reasons_for
@@ -96,7 +96,8 @@ def _work_sections(work: Work, sessions: list[str], budget: int) -> list[str]:
     full = False
     for heading, lines, kind in parts:
         shown: list[str] = []
-        for line in lines:
+        # Each line carries members' words (a card's title, a known issue's, a name, an activity): escaped, one line.
+        for line in map(one_line, lines):
             cost = estimate_tokens(line) + 1 + (0 if shown else estimate_tokens(heading) + 1)
             if not full and cost <= budget:
                 shown.append(line)

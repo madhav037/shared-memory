@@ -64,7 +64,7 @@ def test_a_retire_challenges_reasoning_is_folded_into_the_authors_briefing_and_p
     for context in (briefing, prompt):
         assert (
             f"Challenge {raised['challenge_id']} by emp-2: retire it — reasoning: "
-            "We stopped retrying failed charges last quarter." in context
+            "<memory-TOKEN>We stopped retrying failed charges last quarter.</memory-TOKEN>" in context
         )
 
 

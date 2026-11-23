@@ -155,11 +155,11 @@ FILES_NAMED = 5
 def whereabouts(other: Session) -> str:
     """Where another session is, as a collision warning or a gate's refusal names it (story 5): its branch and the
     files it touched lately, escaped, since its hooks sent them; or nothing when its hooks named neither."""
-    parts = [f"branch {fence.escape(other.branch)}"] if other.branch else []
+    parts = [f"branch {fence.one_line(other.branch)}"] if other.branch else []
     if other.touched_files:
         named = other.touched_files[:FILES_NAMED]
         more = len(other.touched_files) - len(named)
-        parts.append(f"touched {fence.escape(', '.join(named))}{f' and {more} more' if more else ''}")
+        parts.append(f"touched {fence.one_line(', '.join(named))}{f' and {more} more' if more else ''}")
     return f" [{'; '.join(parts)}]" if parts else ""
 
 
