@@ -2,10 +2,19 @@
 # Run from this folder with a .env beside it (copy .env.example). See docs/deployment.md.
 name: shared-memory
 
+# Docker's default json-file driver never rotates, so a container's log would grow until the disk is full. Every
+# service keeps five files of 20 MB at most.
+x-logging: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   db:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
+    logging: *bounded-logs
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -24,6 +33,7 @@ services:
     image: shared-memory-server
     build: ..
     restart: unless-stopped
+    logging: *bounded-logs
     depends_on:
       db:
         condition: service_healthy
@@ -71,6 +81,7 @@ services:
       context: ..
       dockerfile: deploy/console/Dockerfile
     restart: unless-stopped
+    logging: *bounded-logs
     depends_on:
       - server
     environment:
@@ -92,6 +103,7 @@ services:
     image: shared-memory-backup
     build: backup
     restart: unless-stopped
+    logging: *bounded-logs
     depends_on:
       db:
         condition: service_healthy
