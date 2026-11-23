@@ -90,7 +90,8 @@ LEVEL_CONTRADICTION = "level_contradiction"
 _REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
 # The longest line of code a contradicts_code doubt may quote.
 QUOTED_LINE_LIMIT = 300
-_CODE_REFERENCE = re.compile(r"^(?P<repository>[^:\s]+):(?P<path>[^:\n]*[^:\s][^:\n]*):(?P<line>[1-9][0-9]*)$")
+# A path that is only spaces is refused in code: said in the pattern, it backtracked quadratically.
+_CODE_REFERENCE = re.compile(r"^(?P<repository>[^:\s]+):(?P<path>[^:\n]+):(?P<line>[1-9][0-9]*)$")
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ class CodeReference:
         """The code reference a contradicts_code doubt gives, refused unless it names a repository, a file and a line
         and quotes that line."""
         match = _CODE_REFERENCE.match((written or "").strip())
-        if match is None or not NAME_PATTERN.match(match["repository"]):
+        if match is None or not match["path"].strip() or not NAME_PATTERN.match(match["repository"]):
             raise Refused(
                 "A doubt that contradicts the code says where: pass code_reference written repository:path:line, for "
                 "example billing-api:src/tax.py:42, using the repository names from each repository's settings."

@@ -18,7 +18,8 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("a Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
     ("a private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("a JSON Web Token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
-    ("a connection string with a password", re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s:/@]+:[^\s@/]{3,}@")),
+    # A scheme is bounded, so a run of dotted words is not rescanned to its end from every word.
+    ("a connection string with a password", re.compile(r"\b[a-z][a-z0-9+.-]{0,31}://[^\s:/@]+:[^\s@/]{3,}@")),
 ]
 _ASSIGNMENT = re.compile(
     r"(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['\"]?([^\s'\"]{8,})"
@@ -31,7 +32,7 @@ _CANDIDATE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
 CHARACTER_LIMIT = 12_000
 # A workaround line ("Workaround: ...", as a list item or in bold too) or a "Workaround" heading over its own section.
 _WORKAROUND = re.compile(
-    r"^\s*(?:(?P<heading>#{1,6})\s+|[-*>]\s+)?[*_]*workarounds?[*_]*\s*(?P<colon>:)?[*_]*\s*(?P<rest>.*?)\s*$",
+    r"^\s*(?:(?P<heading>#{1,6})\s+|[-*>]\s+)?[*_]*workarounds?[*_]*\s*(?P<colon>:)?[*_]*\s*(?P<rest>.*)$",
     re.IGNORECASE,
 )
 _HEADING = re.compile(r"^\s*#{1,6}\s")
@@ -80,7 +81,8 @@ def _single_line(field: str, value: str, limit: int) -> None:
 def _has_workaround(body: str) -> bool:
     lines = body.splitlines()
     for number, line in enumerate(lines):
-        match = _WORKAROUND.match(line)
+        # Trailing space is taken off first: a lazy capture before `\s*$` would rescan it from every character.
+        match = _WORKAROUND.match(line.rstrip())
         if match is None or not (match.group("heading") or match.group("colon")):
             continue
         if match.group("rest").strip("*_ "):

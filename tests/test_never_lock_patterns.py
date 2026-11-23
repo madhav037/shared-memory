@@ -4,10 +4,12 @@ member of the project reads them, and a file matching one never locks in any of 
 from __future__ import annotations
 
 import dataclasses
+import random
+import re
 
 import pytest
 
-from shared_memory.locks import NEVER_LOCK, PATTERN_LIMIT
+from shared_memory.locks import NEVER_LOCK, PATTERN_LIMIT, matching
 from tests.support import (
     Console,
     ConsoleClient,
@@ -341,3 +343,18 @@ def test_each_add_and_remove_is_in_the_audit_log_with_who_made_it(console: Conso
         ("never_lock_pattern_added", "emp-3", "*.snap"),
     ]
     assert events[0]["detail"] == {"agent": "Claude Code"}
+
+
+def test_a_glob_matches_as_the_regular_expression_it_replaced() -> None:
+    def as_regex(pattern: str, text: str) -> bool:
+        parts = re.split(r"(\*\*|\*|\?)", pattern)
+        said = {"**": ".*", "*": "[^/]*", "?": "[^/]"}
+        return re.compile("".join(said.get(part) or re.escape(part) for part in parts) + r"\Z").match(text) is not None
+
+    chosen = random.Random(696)
+    for _ in range(5_000):
+        pattern = "".join(chosen.choice(["a", "b", "/", "*", "**", "?"]) for _ in range(chosen.randint(1, 7)))
+        text = "".join(chosen.choice("ab/") for _ in range(chosen.randint(0, 9)))
+        # A pattern with no slash matches the file's name, as before.
+        compared = text if "/" in pattern else text.rsplit("/", 1)[-1]
+        assert (matching([pattern], text) is not None) == as_regex(pattern, compared), (pattern, text)
