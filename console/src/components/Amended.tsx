@@ -17,7 +17,8 @@ export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: s
   const scope = `amend${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const { markdown, notes } = amend(pieces);
   const plugins = [[markAmendments, { notes, scope }]] as Options["rehypePlugins"];
-  // Shown word for word, the text carries no marks, so the notes keyed to them are left out too.
+  // Too intricate to set, the text is shown word for word without its marks, so the notes keyed to them are left out.
+  // A text that fails to draw for another reason keeps its notes: its source is shown, and they still say what changed.
   const plain = tooIntricate(markdown);
 
   return (
