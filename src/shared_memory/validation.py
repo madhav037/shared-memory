@@ -8,6 +8,8 @@ from collections import Counter
 
 from shared_memory.errors import Refused
 from shared_memory.memory import KNOWN_ISSUE, Memory, type_folder
+from shared_memory.identity import NAME_LIMIT
+from shared_memory.locks import PATTERN_LIMIT
 from shared_memory.tied import tie_of
 
 _SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -93,9 +95,18 @@ def _has_workaround(body: str) -> bool:
     return False
 
 
+# How many files one memory ties, and how long one is as written: a repository's name, a colon and a pattern.
+TIED_FILE_LIMIT = 20
+TIED_FILE_LENGTH = NAME_LIMIT + 1 + PATTERN_LIMIT
+
+
 def validate_tied_files(tied_files: list[str]) -> None:
-    """Refuse a tied file that can't be one, or that holds a secret."""
+    """Refuse more tied files than a memory carries, or one that is too long, can't be one, or holds a secret."""
+    if len(tied_files) > TIED_FILE_LIMIT:
+        raise Refused(f"A memory ties at most {TIED_FILE_LIMIT} files; tie the folder they share instead, as a glob.")
     for entry in tied_files:
+        if len(entry) > TIED_FILE_LENGTH:
+            raise Refused(f"Tied file {entry[:80]!r}... is too long: at most {TIED_FILE_LENGTH} characters.")
         tie_of(entry)
         refuse_secret(entry)
 

@@ -374,3 +374,21 @@ def test_tie_with_an_unusable_glob_is_refused(member: Session) -> None:
     assert "Tied file 'billing-api:src/{tax,fees}/**' isn't a usable glob" in refusal
     assert member.call("read", path=path)["tied_files"] == ["billing-api:src/tax.ts"]
     assert tied(member, "billing-api:src/tax.ts") == [path]
+
+
+def test_a_memory_ties_at_most_twenty_files(member: Session) -> None:
+    files = [f"billing-api:src/module_{number}.py" for number in range(21)]
+
+    refusal = member.refusal("remember", title="Many", summary="s", type="convention", body="b", tied_files=files)
+
+    assert "at most 20" in refusal
+    saved = member.call("remember", title="Twenty", summary="s", type="convention", body="b", tied_files=files[:20])
+    assert len(member.call("read", path=saved["path"])["tied_files"]) == 20
+
+
+def test_a_tied_file_padded_past_its_length_is_refused(member: Session) -> None:
+    padded = "billing-api:src/tax.ts" + " " * 10_000
+
+    refusal = member.refusal("remember", title="Padded", summary="s", type="convention", body="b", tied_files=[padded])
+
+    assert "too long" in refusal
