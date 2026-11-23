@@ -174,7 +174,8 @@ def test_the_edge_ceilings_are_at_or_above_the_servers_and_set_in_the_environmen
         default = re.search(r"\{\$%s:(\d+)\}" % name, CADDYFILE)
         assert default, f"the Caddyfile does not read {name}"
         assert int(default.group(1)) >= serves, f"{name} is below the server's own limit"
-        assert f"{name}: $" in COMPOSE
+        composed = re.search(r"%s: \$\{SHARED_MEMORY_EDGE_RATE_\w+:-(\d+)\}" % name, COMPOSE)
+        assert composed and composed.group(1) == default.group(1), f"compose.yaml and the Caddyfile disagree on {name}"
 
 
 def test_the_consoles_image_builds_caddy_with_the_rate_limit_module() -> None:
@@ -192,7 +193,8 @@ def test_the_example_nginx_site_guards_against_floods_with_room_for_a_whole_offi
 
     zones = re.findall(r"^limit_req_zone (\S+) zone=(\w+):\S+ rate=(\d+)r/m;", nginx, re.MULTILINE)
     assert [(key, name) for key, name, _ in zones] == [("$binary_remote_addr", "shared_memory_address")]
-    office = OFFICE * (server.rate_limit_token_per_minute * (1 + TOOL_HOOKS_MULTIPLE) + server.rate_limit_console_per_minute)
+    per_member = server.rate_limit_token_per_minute * (1 + TOOL_HOOKS_MULTIPLE) + server.rate_limit_console_per_minute
+    office = OFFICE * per_member
     assert int(zones[0][2]) >= office, "an office's own calls would be turned away"
     assert "limit_req zone=shared_memory_address " in nginx
     assert "limit_req_status 429;" in nginx

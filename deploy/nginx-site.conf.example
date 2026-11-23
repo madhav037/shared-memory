@@ -9,8 +9,9 @@
 # Everything here goes on to the stack's Caddy, which counts each personal token, the hooks on every tool call and the
 # console as the server does. nginx only turns away a flood from one address, above what a whole office's agents and
 # consoles make: 15 members at the server's 120 calls a minute, 480 more for the hooks on every tool call, and 300 for
-# the console. This goes in the http context, which is where sites-enabled files are included.
-limit_req_zone $binary_remote_addr zone=shared_memory_address:10m rate=15000r/m;
+# the console, with room for the console's pages besides. This goes in the http context, which is where sites-enabled
+# files are included.
+limit_req_zone $binary_remote_addr zone=shared_memory_address:10m rate=20000r/m;
 
 server {
     listen 80;
@@ -29,7 +30,7 @@ server {
     }
 
     location / {
-        limit_req zone=shared_memory_address burst=3000 nodelay;
+        limit_req zone=shared_memory_address burst=5000 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8180;
         proxy_http_version 1.1;

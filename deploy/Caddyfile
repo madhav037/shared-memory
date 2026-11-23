@@ -25,13 +25,13 @@
 # client address (as trusted_proxies resolves it). A made-up token would be a fresh allowance on every call, so calls
 # carrying a token are counted per address too, with room for a whole office. The hooks on every tool call have their
 # own allowance, as the server gives them (TOOL_HOOK_PATHS in ratelimit.py): an edit whose hook is refused here goes
-# ahead unchecked. Console calls come from browsers, so /api is counted per address with room for a whole office. Set
-# the ceilings in .env.
+# ahead unchecked. A token is matched in either case of "Bearer", as the server reads it. Console calls come from
+# browsers, so /api is counted per address with room for a whole office. Set the ceilings in .env.
 (agent_limits) {
 	rate_limit {
 		zone by_token {
 			match {
-				header Authorization Bearer*
+				header Authorization Bearer* bearer*
 				not path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {http.request.header.Authorization}
@@ -40,7 +40,7 @@
 		}
 		zone token_by_address {
 			match {
-				header Authorization Bearer*
+				header Authorization Bearer* bearer*
 				not path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {client_ip}
@@ -49,7 +49,7 @@
 		}
 		zone tool_hooks_by_token {
 			match {
-				header Authorization Bearer*
+				header Authorization Bearer* bearer*
 				path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {http.request.header.Authorization}
@@ -58,7 +58,7 @@
 		}
 		zone tool_hooks_by_address {
 			match {
-				header Authorization Bearer*
+				header Authorization Bearer* bearer*
 				path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {client_ip}
@@ -67,7 +67,7 @@
 		}
 		zone by_address {
 			match {
-				not header Authorization Bearer*
+				not header Authorization Bearer* bearer*
 			}
 			key {client_ip}
 			window 1m
