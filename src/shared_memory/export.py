@@ -25,7 +25,7 @@ from shared_memory.departments import Departments
 from shared_memory.errors import Refused
 from shared_memory.identity import Identity, Member
 from shared_memory.memory import DEPARTMENTS_FOLDER
-from shared_memory.store import memory_folder, ordinary
+from shared_memory.store import MAIN, memory_folder, ordinary
 
 #: The audit log is read a page at a time; this is the most the log allows.
 AUDIT_PAGE = 200
@@ -103,52 +103,37 @@ class CompanyExport:
         """This company's folder of the memory repository, with every version of it, or None while it has none.
 
         The repository holds every company on the server, so its history is first copied with only this company's
-        folder in it (`git fast-export` limited to the folder, into a new repository) and that copy is bundled: no other
-        company's file, path or version is in the archive."""
+        folder in it (`git fast-export` limited to the folder, into a new repository) and that copy is bundled. Only
+        main is copied, the one branch the server writes, and every commit on it is one company's change (`Change` in
+        store.py), so no other company's file, path, version, branch or commit message is in the archive."""
         folder = ordinary(memory_folder(self._settings.memory_root))
-        if self._git(folder, "rev-parse", "--verify", "HEAD").returncode != 0:
+        if not self._git("-C", folder, "for-each-ref", MAIN).strip():
             return None
         # A literal pathspec: fast-export checks a plain path against the working tree, so a company whose folder isn't
         # there now would be refused, and nothing in the company's code is read as a pattern.
-        exported = subprocess.run(  # noqa: S603  # an argument list, never a shell
-            ["git", "-C", folder, "fast-export", "--all", "--reencode=yes", "--signed-tags=strip",  # noqa: S607
-             "--tag-of-filtered-object=drop", "--", f":(literal){company}/"],
-            env=dict(os.environ),
-            capture_output=True,
-            check=False,
-        )  # fmt: skip
-        if exported.returncode != 0:
-            raise RuntimeError(f"git fast-export failed: {exported.stderr.decode(errors='replace').strip()}")
+        exported = self._git("-C", folder, "fast-export", "--reencode=yes", MAIN, "--", f":(literal){company}/")
         with tempfile.TemporaryDirectory() as scratch:
+            # The copy is named with --git-dir: git refuses a bare repository named by -C under safe.bareRepository.
             copy = str(Path(scratch) / "company.git")
-            self._git(scratch, "init", "-q", "--bare", copy)
-            imported = subprocess.run(  # noqa: S603  # an argument list, never a shell
-                ["git", "-C", copy, "fast-import", "--quiet"],  # noqa: S607
-                input=exported.stdout,
-                env=dict(os.environ),
-                capture_output=True,
-                check=False,
-            )
-            if imported.returncode != 0:
-                raise RuntimeError(f"git fast-import failed: {imported.stderr.decode(errors='replace').strip()}")
-            if not self._git(copy, "for-each-ref", "--format=%(refname)").stdout.strip():
+            self._git("init", "-q", "--bare", "--initial-branch=main", copy)
+            self._git("--git-dir", copy, "fast-import", "--quiet", stdin=exported)
+            if not self._git("--git-dir", copy, "for-each-ref", MAIN).strip():
                 return None
-            # The copy's default branch is the repository's, so a clone of the bundle checks it out.
-            branch = self._git(folder, "symbolic-ref", "-q", "HEAD").stdout.strip()
-            if branch:
-                self._git(copy, "symbolic-ref", "HEAD", branch)
             bundle = Path(scratch) / "memory.bundle"
-            made = self._git(copy, "bundle", "create", str(bundle), "--all")
-            if made.returncode != 0:
-                raise RuntimeError(f"git bundle failed: {made.stderr.strip()}")
+            self._git("--git-dir", copy, "bundle", "create", str(bundle), "--all")
             return bundle.read_bytes()
 
     @staticmethod
-    def _git(folder: str, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(  # noqa: S603  # an argument list, never a shell
-            ["git", "-C", folder, *args],  # noqa: S607  # git from the PATH the image installs it on
+    def _git(*args: str, stdin: bytes | None = None) -> bytes:
+        """What git printed. Raises when it fails, so a failed step never passes for a company with nothing to export."""
+        done = subprocess.run(  # noqa: S603  # an argument list, never a shell
+            ["git", *args],  # noqa: S607  # git from the PATH the image installs it on
+            input=stdin,
             env=dict(os.environ),
             capture_output=True,
-            text=True,
             check=False,
         )
+        if done.returncode != 0:
+            raise RuntimeError(f"git {args[2] if args[0] in ('-C', '--git-dir') else args[0]} failed: "
+                               f"{done.stderr.decode(errors='replace').strip()}")  # fmt: skip
+        return done.stdout

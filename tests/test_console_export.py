@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from tests.support import NPM, Console, ConsoleClient, Session, add, ask, promote_now, signed_in, signed_in_owner
 
 
@@ -131,8 +133,12 @@ def test_the_export_tells_an_admin_each_members_verified_email_and_sign_in_metho
 
 
 def test_the_memory_bundle_holds_only_the_exporting_companys_memory_and_history(
-    console: Console, signed_out: ConsoleClient, tmp_path: Path
+    console: Console, signed_out: ConsoleClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Hardened hosts refuse a bare repository named by -C; the export's copy of the history is one.
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "safe.bareRepository")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "explicit")
     other = console.client()
     theirs = signed_in_owner(console, other, "olive-export-theirs", 1611)
     promote_now(theirs.in_project(theirs.call("create_project", name="Theirs")["project_id"], "their-api"), NPM)
@@ -150,7 +156,12 @@ def test_the_memory_bundle_holds_only_the_exporting_companys_memory_and_history(
         check=True,
         capture_output=True,
         text=True,
-    ).stdout.split()
+    ).stdout.splitlines()
+    refs = subprocess.run(  # noqa: S603, S607
+        ["git", "ls-remote", str(bundle)], check=True, capture_output=True, text=True
+    ).stdout.splitlines()
 
-    assert every_path, "the bundle still carries this company's memory and its history"
-    assert {path.split("/", 1)[0] for path in every_path} == {company}
+    assert [path for path in every_path if path], "the bundle still carries this company's memory and its history"
+    assert {path.split("/", 1)[0] for path in every_path if path} == {company}
+    assert sorted(line.split()[1] for line in refs) == ["HEAD", "refs/heads/main"], "no other branch or tag"
+    assert (cloned / company).is_dir(), "a clone checks out the company's memory"
