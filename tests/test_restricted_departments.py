@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import psycopg
 
+from shared_memory import departments
 from tests.support import (
     Console,
     ConsoleClient,
@@ -464,7 +466,7 @@ def test_governing_department_memory_from_the_console_is_logged_under_no_project
     console: Console, signed_out: ConsoleClient
 ) -> None:
     it = restricted(console, signed_out, "olive-closed-dept-twenty-four", 2749)
-    it.dana.call("create_project", name="0 Notes")  # Dana leads a project that comes first by name
+    it.dana.call("create_project", name="Accounts")
     dana = signed_in(console, "dana-olive-closed-dept-twenty-four", 2750)
 
     unpinned = signed_out.post_json("/api/memory/unpin", {"path": it.department_memory})
@@ -513,3 +515,21 @@ def test_a_lead_is_not_shown_log_entries_about_memory_they_cannot_reach(
     assert it.department_memory not in str(his)
     assert "Treasury reviews" not in str(his)
     ash.close()
+
+
+def test_a_department_removed_before_removals_were_kept_is_closed_once_the_server_sets_up(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-seven", 2755)
+    signed_out.post(f"/api/departments/{it.treasury}/projects/{it.billing}/remove")
+    signed_out.post(f"/api/departments/{it.treasury}/remove")
+    with psycopg.connect(console.server.settings.database_url, autocommit=True) as conn:
+        conn.execute("DELETE FROM removed_departments WHERE department_id = %s", (it.treasury,))
+        opened = it.dana.in_project(it.payments, "payments-api").call("read", path=it.department_memory)
+        conn.execute(departments.SCHEMA)
+        conn.execute(departments.SCHEMA)  # setting up again changes nothing
+
+    refused = it.dana.in_project(it.payments, "payments-api").refusal("read", path=it.department_memory)
+
+    assert "SECRET-DEPARTMENT" in opened["body"]
+    assert "is restricted" in refused
