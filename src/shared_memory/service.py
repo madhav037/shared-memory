@@ -545,6 +545,9 @@ class MemoryService:
                 f"You can only {verb} your own personal memory. Project and company memory change only by "
                 "promoting a memory that supersedes it."
             )
+        # A memory offered in a challenge stays as offered, so whoever decides it accepts the text they read.
+        if waiting := self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)]):
+            raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
         return location, memory
 
     def _prepare_edit(

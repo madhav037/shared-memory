@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import psycopg
+
 from tests.support import (
     CENTS,
     FOUNDATION_HEADING,
@@ -188,3 +190,47 @@ def test_assigning_and_removing_a_keeper_is_in_the_audit_log(console: Console, s
         ("keeper_removed", "emp-kit", "architecture"),
         ("keeper_assigned", "emp-kit", "architecture"),
     ]
+
+
+def a_foundation_memory_by_rae(crew: Crew) -> str:
+    """Rae's memory in the architecture foundation: Rae is no lead and no keeper, so a project lead accepts it."""
+    raised = promote(crew.rae, SERVICES)
+    path: str = crew.owner.call("decide_challenge", challenge_id=raised["challenge_id"], decision="accept")["path"]
+    return path
+
+
+def test_a_doubt_about_a_foundation_memory_is_decided_by_its_keepers_and_leads_not_its_author_or_anyone_later(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 1814)
+    crew.assign("emp-kit")
+    held = a_foundation_memory_by_rae(crew)
+    doubted = crew.rae.call("challenge", path=held, reason="misled", reasoning="It no longer holds.")
+
+    by_author = crew.rae.refusal("decide_challenge", challenge_id=doubted["challenge_id"], decision="accept")
+    heard = briefing(crew.kit)
+    console.clock.advance(days=4)
+    by_anyone = crew.bea.refusal("decide_challenge", challenge_id=doubted["challenge_id"], decision="accept")
+    accepted = crew.kit.call("decide_challenge", challenge_id=doubted["challenge_id"], decision="accept")
+
+    assert "/foundations/architecture/" in held
+    assert "You raised" in by_author
+    assert "keeper of the architecture foundation" in by_anyone
+    assert FOUNDATION_HEADING in heard
+    assert accepted["status"] == "accepted"
+    assert crew.owner.call("read", path=held)["status"] == "retired"
+
+
+def test_a_doubt_stored_without_its_foundation_is_still_decided_as_a_foundation_challenge(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    crew = Crew(console, signed_out, 1815)
+    held = a_foundation_memory_by_rae(crew)
+    doubted = crew.bea.call("challenge", path=held, reason="misled")
+    with psycopg.connect(console.server.settings.database_url, autocommit=True) as conn:
+        conn.execute("UPDATE challenges SET foundation = NULL WHERE id = %s", (doubted["challenge_id"],))
+
+    by_author = crew.rae.refusal("decide_challenge", challenge_id=doubted["challenge_id"], decision="accept")
+
+    assert "keeper of the architecture foundation" in by_author
+    assert crew.owner.call("read", path=held)["status"] == "active"
