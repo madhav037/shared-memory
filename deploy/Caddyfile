@@ -23,13 +23,16 @@
 # The edge's rate limit is coarse: it refuses floods before they wake a worker, with ceilings at or above the server's own
 # (which count precisely, in Postgres). Calls carrying a personal token are counted per personal token, the rest per
 # client address (as trusted_proxies resolves it). A made-up token would be a fresh allowance on every call, so calls
-# carrying a token are counted per address too, with room for a whole office. Console calls come from browsers, so /api
-# is counted per address with room for a whole office. Set the ceilings in .env.
+# carrying a token are counted per address too, with room for a whole office. The hooks on every tool call have their
+# own allowance, as the server gives them (TOOL_HOOK_PATHS in ratelimit.py): an edit whose hook is refused here goes
+# ahead unchecked. Console calls come from browsers, so /api is counted per address with room for a whole office. Set
+# the ceilings in .env.
 (agent_limits) {
 	rate_limit {
 		zone by_token {
 			match {
 				header Authorization Bearer*
+				not path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {http.request.header.Authorization}
 			window 1m
@@ -38,10 +41,29 @@
 		zone token_by_address {
 			match {
 				header Authorization Bearer*
+				not path /hooks/before-edit /hooks/after-tool /hooks/standby
 			}
 			key {client_ip}
 			window 1m
 			events {$CADDY_RATE_TOKEN_ADDRESS_PER_MINUTE:2400}
+		}
+		zone tool_hooks_by_token {
+			match {
+				header Authorization Bearer*
+				path /hooks/before-edit /hooks/after-tool /hooks/standby
+			}
+			key {http.request.header.Authorization}
+			window 1m
+			events {$CADDY_RATE_TOOL_HOOK_PER_MINUTE:960}
+		}
+		zone tool_hooks_by_address {
+			match {
+				header Authorization Bearer*
+				path /hooks/before-edit /hooks/after-tool /hooks/standby
+			}
+			key {client_ip}
+			window 1m
+			events {$CADDY_RATE_TOOL_HOOK_ADDRESS_PER_MINUTE:9600}
 		}
 		zone by_address {
 			match {

@@ -6,17 +6,11 @@
 #   sudo certbot --nginx -d memory.example.com
 # certbot adds the HTTPS server block and the redirect from HTTP. It touches no other site.
 
-# The same edge limit the stack's Caddy applies, for a host that runs its own nginx: calls carrying a personal token are
-# counted per personal token, the rest per client address. Ceilings at or above the server's own (120 a minute per
-# personal token, 30 per address). A made-up token would be a fresh allowance on every call, so every call is also
-# counted per address, with room for a whole office. This goes in the http context, which is where sites-enabled files
-# are included.
-map $http_authorization $shared_memory_caller {
-    default $http_authorization;
-    ""      $binary_remote_addr;
-}
-limit_req_zone $shared_memory_caller zone=shared_memory:10m rate=240r/m;
-limit_req_zone $binary_remote_addr zone=shared_memory_address:10m rate=2400r/m;
+# Everything here goes on to the stack's Caddy, which counts each personal token, the hooks on every tool call and the
+# console as the server does. nginx only turns away a flood from one address, above what a whole office's agents and
+# consoles make: 15 members at the server's 120 calls a minute, 480 more for the hooks on every tool call, and 300 for
+# the console. This goes in the http context, which is where sites-enabled files are included.
+limit_req_zone $binary_remote_addr zone=shared_memory_address:10m rate=15000r/m;
 
 server {
     listen 80;
@@ -35,8 +29,7 @@ server {
     }
 
     location / {
-        limit_req zone=shared_memory burst=60 nodelay;
-        limit_req zone=shared_memory_address burst=600 nodelay;
+        limit_req zone=shared_memory_address burst=3000 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8180;
         proxy_http_version 1.1;

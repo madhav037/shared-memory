@@ -230,18 +230,21 @@ personal tokens, so one never limits the other. The counts live in Postgres, so 
 
 Caddy applies a coarser version of the same limits at the edge, before a worker is woken: per personal token (default
 240 a minute) and per client address for `/mcp` and `/hooks` calls without one (60), and per client address for the
-console's `/api` (1200, room for a whole office). Calls carrying a personal token are counted per client address too
-(2400, room for a whole office), since a made-up token would otherwise be a fresh allowance on every call. Set them with
-`SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`, `SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE`,
-`SHARED_MEMORY_EDGE_RATE_TOKEN_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep
+console's `/api` (1200, room for a whole office). The hooks on every tool call (before an edit, after a tool, standing
+by) have their own allowance per personal token, as on the server (960): an edit whose hook the edge refuses would go
+ahead unchecked. Calls carrying a personal token are counted per client address too (2400, and 9600 for the hooks on
+every tool call, room for a whole office), since a made-up token would otherwise be a fresh allowance on every call.
+Set them with `SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`, `SHARED_MEMORY_EDGE_RATE_TOOL_HOOK_PER_MINUTE`,
+`SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE`, `SHARED_MEMORY_EDGE_RATE_TOKEN_ADDRESS_PER_MINUTE`,
+`SHARED_MEMORY_EDGE_RATE_TOOL_HOOK_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep
 them at or above the server's own. This needs the console image's Caddy, which is built with the
-[caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
-has the equivalent `limit_req`.
+[caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, which hands everything to
+this Caddy, `nginx-site.conf.example` only turns away a flood from one address, above what a whole office makes.
 
 Every limit counts by the client's address, so the server is handed exactly one, which no caller can choose: Caddy
 takes the right-most address in `X-Forwarded-For` that isn't one of its trusted proxies, and passes on that address
-alone. Behind your own nginx, the example site passes on the address nginx saw (`X-Forwarded-For $remote_addr`) and
-counts every call per address as well. A site set up from an older example should take both from it again, then
+alone. Behind your own nginx, the example site passes on the address nginx saw (`X-Forwarded-For $remote_addr`). A
+site set up from an older example should take that line and its `limit_req` lines from it again, then
 `sudo nginx -t && sudo systemctl reload nginx`. If that nginx itself sits behind a CDN or load balancer, set its
 `set_real_ip_from` and `real_ip_header` too, or every caller arrives as that one device.
 

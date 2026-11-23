@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 from shared_memory.config import Settings
+from shared_memory.ratelimit import TOOL_HOOK_PATHS, TOOL_HOOKS_MULTIPLE
 from tests.support import REPO_ROOT
 
 DEPLOY = REPO_ROOT / "deploy"
@@ -131,6 +132,20 @@ def test_caddy_counts_agent_calls_per_personal_token_and_falls_back_to_the_addre
         assert "import agent_limits" in handle_block(path)
 
 
+def test_caddy_gives_the_hooks_on_every_tool_call_their_own_allowance_as_the_server_does() -> None:
+    limits = re.search(r"^\(agent_limits\) \{\n(.*?)^\}", CADDYFILE, re.MULTILINE | re.DOTALL)
+    assert limits, "no agent_limits snippet"
+    zones = dict(re.findall(r"zone (\w+) \{(.*?)\n\t\t\}", limits.group(1), re.DOTALL))
+    tool_hooks = "path " + " ".join(TOOL_HOOK_PATHS)
+
+    for name in ("tool_hooks_by_token", "tool_hooks_by_address"):
+        assert f"\t{tool_hooks}\n" in zones[name] and "header Authorization Bearer*" in zones[name], name
+    assert "key {http.request.header.Authorization}" in zones["tool_hooks_by_token"]
+    assert "key {client_ip}" in zones["tool_hooks_by_address"]
+    for name in ("by_token", "token_by_address"):
+        assert f"not {tool_hooks}" in zones[name], f"{name} would count the tool hooks against the other calls"
+
+
 def test_caddy_counts_the_consoles_calls_per_address_with_room_for_an_office() -> None:
     api = handle_block("/api/*")
 
@@ -139,11 +154,19 @@ def test_caddy_counts_the_consoles_calls_per_address_with_room_for_an_office() -
     assert "{$CADDY_RATE_CONSOLE_PER_MINUTE:1200}" in api
 
 
+# The most members a plan has, who may all work from one office's address.
+OFFICE = 15
+
+
 def test_the_edge_ceilings_are_at_or_above_the_servers_and_set_in_the_environment() -> None:
     server = Settings("", Path("."), Path("."))
+    token = server.rate_limit_token_per_minute
+    tool_hooks = token * TOOL_HOOKS_MULTIPLE
     ceilings = {
-        "CADDY_RATE_TOKEN_PER_MINUTE": server.rate_limit_token_per_minute,
-        "CADDY_RATE_TOKEN_ADDRESS_PER_MINUTE": server.rate_limit_token_per_minute,
+        "CADDY_RATE_TOKEN_PER_MINUTE": token,
+        "CADDY_RATE_TOOL_HOOK_PER_MINUTE": tool_hooks,
+        "CADDY_RATE_TOKEN_ADDRESS_PER_MINUTE": OFFICE * token,
+        "CADDY_RATE_TOOL_HOOK_ADDRESS_PER_MINUTE": OFFICE * tool_hooks,
         "CADDY_RATE_ADDRESS_PER_MINUTE": server.rate_limit_address_per_minute,
         "CADDY_RATE_CONSOLE_PER_MINUTE": server.rate_limit_console_per_minute,
     }
@@ -161,13 +184,15 @@ def test_the_consoles_image_builds_caddy_with_the_rate_limit_module() -> None:
     assert "COPY --from=caddy /usr/bin/caddy /usr/bin/caddy" in dockerfile
 
 
-def test_the_example_nginx_site_has_the_equivalent_limit() -> None:
+def test_the_example_nginx_site_guards_against_floods_with_room_for_a_whole_office() -> None:
+    """The site passes everything to the stack's Caddy, which counts each personal token as the server does, so nginx
+    only turns away a flood from one address, above what a whole office's agents and consoles make."""
     nginx = (DEPLOY / "nginx-site.conf.example").read_text(encoding="utf-8")
+    server = Settings("", Path("."), Path("."))
 
-    assert "limit_req_zone $shared_memory_caller" in nginx
-    assert "$http_authorization" in nginx and "$binary_remote_addr" in nginx
-    assert "limit_req zone=shared_memory " in nginx
-    # A made-up token is a fresh allowance, so every call is counted per address as well.
-    assert re.search(r"limit_req_zone \$binary_remote_addr zone=shared_memory_address:", nginx)
+    zones = re.findall(r"^limit_req_zone (\S+) zone=(\w+):\S+ rate=(\d+)r/m;", nginx, re.MULTILINE)
+    assert [(key, name) for key, name, _ in zones] == [("$binary_remote_addr", "shared_memory_address")]
+    office = OFFICE * (server.rate_limit_token_per_minute * (1 + TOOL_HOOKS_MULTIPLE) + server.rate_limit_console_per_minute)
+    assert int(zones[0][2]) >= office, "an office's own calls would be turned away"
     assert "limit_req zone=shared_memory_address " in nginx
     assert "limit_req_status 429;" in nginx
