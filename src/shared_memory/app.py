@@ -278,7 +278,8 @@ class _HookCall:
     payload: dict[str, Any] | None
 
 
-# A hook's agent sends its body with its headers; one that takes longer than this to come was held back.
+# A hook's agent sends its body with its headers; one that takes longer than this to come was held back. A body held
+# back for less is not authenticated again: doing that for every hook would cost a transaction on every tool call.
 _BODY_AT_ONCE_SECONDS = 0.2
 
 
