@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from psycopg.errors import UniqueViolation
 
+from shared_memory.audit import Audit
 from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
@@ -66,19 +67,12 @@ CREATE TABLE IF NOT EXISTS department_access (
 -- departments by index.
 CREATE INDEX IF NOT EXISTS departments_restricted ON departments (company_id) WHERE restricted;
 
--- A removed department's memory stays, retired, and only the company's owner and admins reach it. Departments removed
--- before this was kept are found from their audit entries.
+-- A removed department's memory stays, retired, and only the company's owner and admins reach it.
 CREATE TABLE IF NOT EXISTS removed_departments (
     department_id TEXT PRIMARY KEY,
     company_id BIGINT NOT NULL REFERENCES teams(id),
     removed_at TIMESTAMPTZ NOT NULL
 );
-INSERT INTO removed_departments (department_id, company_id, removed_at)
-    SELECT DISTINCT ON (target) target, team_id, at FROM audit_events
-    WHERE kind = 'department_removed' AND target IS NOT NULL AND team_id IS NOT NULL
-    AND NOT EXISTS (SELECT 1 FROM departments d WHERE d.department_id = target)
-    ORDER BY target, id
-    ON CONFLICT DO NOTHING;
 """
 
 # The members a restricted department lets in, besides the company's owner and admins: its leads and its access list.
@@ -121,13 +115,25 @@ def _runs_the_company(member: Member) -> bool:
 
 
 class Departments:
-    def __init__(self, db: Database, identity: Identity, clock: Clock) -> None:
+    def __init__(self, db: Database, identity: Identity, clock: Clock, audit: Audit) -> None:
         self._db = db
         self._identity = identity
         self._clock = clock
         if db.sets_up:
             with db.transaction() as conn:
+                found = conn.execute("SELECT to_regclass('removed_departments') IS NOT NULL AS kept").fetchone()
+            # Departments removed before removals were kept here are found in the audit log, once: when the table is made.
+            earlier = [] if found is not None and found["kept"] else audit.departments_removed()
+            with db.transaction() as conn:
                 conn.execute(SCHEMA)
+                conn.execute(
+                    "INSERT INTO removed_departments (department_id, company_id, removed_at)"
+                    " SELECT x.department_id, x.company_id, x.removed_at"
+                    " FROM unnest(%s::text[], %s::bigint[], %s::timestamptz[]) AS x(department_id, company_id, removed_at)"
+                    " WHERE NOT EXISTS (SELECT 1 FROM departments d WHERE d.department_id = x.department_id)"
+                    " ON CONFLICT DO NOTHING",
+                    ([one[0] for one in earlier], [one[1] for one in earlier], [one[2] for one in earlier]),
+                )
 
     # --- who a restricted department keeps out (identity.DepartmentWall) ---
 

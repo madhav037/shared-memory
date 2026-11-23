@@ -287,6 +287,16 @@ class Audit:
             ).fetchall()
         return [row["source"] for row in promoted], [row["source"] for row in waiting]
 
+    def departments_removed(self) -> list[tuple[str, int, datetime]]:
+        """Every department the log says was removed, once each: its department ID, its company and when."""
+        with self._db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT ON (target) target, team_id, at FROM audit_events"
+                " WHERE kind = %s AND target IS NOT NULL AND team_id IS NOT NULL ORDER BY target, id",
+                (DEPARTMENT_REMOVED,),
+            ).fetchall()
+        return [(row["target"], row["team_id"], row["at"]) for row in rows]
+
     def interviews_of(self, member: Member) -> list[Interviewed]:
         """Each promotion that named this member as author with an interview as its source, newest first: what was
         written from their interview, by whom and when (ADR-0029)."""

@@ -319,7 +319,7 @@ def build_app(
     audit = Audit(db, clock, identity)
     licenses = Licenses(settings, db, audit, clock, license_keys)
     identity.member_cap = licenses.member_cap
-    departments = Departments(db, identity, clock)
+    departments = Departments(db, identity, clock, audit)
     identity.walled_by(departments)
 
     def unless_read_only(step: F) -> F:

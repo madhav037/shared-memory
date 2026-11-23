@@ -15,7 +15,11 @@ from typing import Any
 import httpx
 import psycopg
 
-from shared_memory import departments
+from shared_memory.audit import Audit
+from shared_memory.clock import system_clock
+from shared_memory.db import Database
+from shared_memory.departments import Departments
+from shared_memory.identity import Identity
 from tests.support import (
     Console,
     ConsoleClient,
@@ -523,13 +527,15 @@ def test_a_department_removed_before_removals_were_kept_is_closed_once_the_serve
     it = restricted(console, signed_out, "olive-closed-dept-twenty-seven", 2755)
     signed_out.post(f"/api/departments/{it.treasury}/projects/{it.billing}/remove")
     signed_out.post(f"/api/departments/{it.treasury}/remove")
-    with psycopg.connect(console.server.settings.database_url, autocommit=True) as conn:
-        conn.execute("DELETE FROM removed_departments WHERE department_id = %s", (it.treasury,))
-        opened = it.dana.in_project(it.payments, "payments-api").call("read", path=it.department_memory)
-        conn.execute(departments.SCHEMA)
-        conn.execute(departments.SCHEMA)  # setting up again changes nothing
+    url = console.server.settings.database_url
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute("DROP TABLE removed_departments")  # as on a server set up before removals were kept
 
+    for _ in range(2):  # setting up again changes nothing
+        db = Database(url, 30, pool_size=2)
+        identity = Identity(db, system_clock)
+        Departments(db, identity, system_clock, Audit(db, system_clock, identity))
+        db.close()
     refused = it.dana.in_project(it.payments, "payments-api").refusal("read", path=it.department_memory)
 
-    assert "SECRET-DEPARTMENT" in opened["body"]
     assert "is restricted" in refused
