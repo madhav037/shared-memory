@@ -10,12 +10,17 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from shared_memory.errors import Refused
 from shared_memory.store import confine, memory_folder, ordinary
+
+
+# Whether the member asking reaches a memory path: `Caller.reaches`.
+Reaches = Callable[[str], bool]
 
 
 @dataclass(frozen=True)
@@ -49,15 +54,16 @@ class MemoryHistory:
             raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
         return result.stdout
 
-    def versions(self, company: str, path: PurePosixPath) -> list[Version]:
+    def versions(self, company: str, path: PurePosixPath, reaches: Reaches) -> list[Version]:
         """Every version of one memory, newest first: who wrote it, when, and what the change was called.
 
         It follows the memory back through promotion, when its file moved from a member's folder to the shared one,
-        so the trail starts where the memory was first written rather than where it now lives.
+        so the trail starts where the memory was first written rather than where it now lives, unless that was
+        somewhere `reaches` says the member can't go: there the trail stops.
         """
-        return [version for version, _ in self._trail(company, path)]
+        return [version for version, _ in self._trail(company, path, reaches)]
 
-    def _trail(self, company: str, path: PurePosixPath) -> list[tuple[Version, str]]:
+    def _trail(self, company: str, path: PurePosixPath, reaches: Reaches) -> list[tuple[Version, str]]:
         """Each version of a memory with the path its file had at that version.
 
         Promotion moves a memory's file to another folder under the same name, in one commit. So where a file came
@@ -68,7 +74,7 @@ class MemoryHistory:
         trail: list[tuple[Version, str]] = []
         where: str | None = self._inside_company(company, path)
         until: str | None = None
-        while where is not None:
+        while where is not None and reaches(str(PurePosixPath(*PurePosixPath(where).parts[1:]))):
             revision = [f"{until}^"] if until else []
             printed = self._git(
                 "log", *revision, "--no-renames", "--name-status",
@@ -112,17 +118,17 @@ class MemoryHistory:
         below = PurePosixPath(where).parts[2:]
         return next((each for each in removed if PurePosixPath(each).parts[2:] == below), removed[0] if removed else None)
 
-    def _where_then(self, company: str, path: PurePosixPath, commit: str) -> str:
+    def _where_then(self, company: str, path: PurePosixPath, commit: str, reaches: Reaches) -> str:
         """The path this memory's file had at one version, which is not where it lives now once it was promoted."""
-        for version, where in self._trail(company, path):
+        for version, where in self._trail(company, path, reaches):
             if version.commit.startswith(commit):
                 return where
         return self._inside_company(company, path)
 
-    def text_at(self, company: str, path: PurePosixPath, commit: str) -> str:
-        """The memory's text as it was at one version."""
+    def text_at(self, company: str, path: PurePosixPath, commit: str, reaches: Reaches) -> str:
+        """The memory's text as it was at one version, among those `versions` lists."""
         _check_commit(commit)
-        where = self._where_then(company, path, commit)
+        where = self._where_then(company, path, commit, reaches)
         try:
             return self._git("show", f"{commit}:{where}")
         except RuntimeError:

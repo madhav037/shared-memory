@@ -73,7 +73,16 @@ CREATE TABLE IF NOT EXISTS notices (
     created_at TIMESTAMPTZ NOT NULL,
     delivered_at TIMESTAMPTZ
 );
+-- The project a notice is about, where it is about one: it reaches a member only while they reach that project.
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS project_id TEXT;
 """
+
+# A notice reaches a member only while they reach what it is about: the project it was told under, and every
+# restricted project or department its text names (which covers notices kept before they had a project).
+_REACHED_NOTICE = (
+    " AND (project_id IS NULL OR project_id <> ALL(%(unreachable)s::text[]))"
+    " AND NOT text LIKE ANY(%(unreachable_named)s::text[])"
+)
 
 # The challenge kind a session raises to doubt a memory, and the reasons a doubt names (CONTEXT.md: Reason).
 DOUBT = "doubt"
@@ -583,11 +592,12 @@ class Challenges:
         for member_id in raisers:
             self.tell(company, member_id, text)
 
-    def tell(self, company: str, member_id: str, text: str) -> None:
+    def tell(self, company: str, member_id: str, text: str, project_id: str | None = None) -> None:
+        """Keep a notice for a member's next session, about `project_id` where it is about a project."""
         with self._db.transaction() as conn:
             conn.execute(
-                "INSERT INTO notices (team, member_id, text, created_at) VALUES (%s, %s, %s, %s)",
-                (company, member_id, text, self._clock()),
+                "INSERT INTO notices (team, member_id, text, created_at, project_id) VALUES (%s, %s, %s, %s, %s)",
+                (company, member_id, text, self._clock(), project_id),
             )
 
     def pending(self, company: str, paths: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
@@ -838,6 +848,7 @@ class Challenges:
             c
             for c in self.open_challenges(caller.company)
             if c.target_author == caller.member_id and c.foundation is None and c.kind not in (PROMOTE, LEVEL_CONTRADICTION)
+            and caller.reaches(c.target_path)  # left unshown, so it is shown if they are let back in
         ]
         with self._db.transaction() as conn:
             fresh_targets = {
@@ -892,6 +903,9 @@ class Challenges:
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
                 whose = "" if one.decides_as == "author" else f", yours to decide {self._capacity(one.decides_as)}"
+                if _hidden(caller, c):
+                    lines.append(f"- Challenge {c.id}{whose}: {HIDDEN}")
+                    continue
                 if c.kind == DOUBT:
                     lines.extend(_doubt_lines(c, whose, evidence.get(c.id, ())))
                     continue
@@ -928,6 +942,9 @@ class Challenges:
         lines = ["[level contradictions waiting for your decision]"]
         for c in waiting:
             assert c.challenger_path is not None
+            if _hidden(caller, c):
+                lines.append(f"- Level contradiction {c.id}: {HIDDEN}")
+                continue
             days = (self._clock() - c.raised_at).days
             age = "today" if days < 1 else "1 day" if days == 1 else f"{days} days"
             narrower, broader = locate(c.challenger_path).level, locate(c.target_path).level
@@ -964,9 +981,9 @@ class Challenges:
     def _news(self, caller: Caller) -> str | None:
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "UPDATE notices SET delivered_at = %s WHERE team = %s AND member_id = %s AND delivered_at IS NULL"
-                " RETURNING id, text",
-                (self._clock(), caller.company, caller.member_id),
+                "UPDATE notices SET delivered_at = %(now)s WHERE team = %(company)s AND member_id = %(member_id)s"  # noqa: S608  # only the constant _REACHED_NOTICE is spliced in; values are bound as parameters
+                " AND delivered_at IS NULL" + _REACHED_NOTICE + " RETURNING id, text",
+                {"now": self._clock(), **_notice_reach(caller)},
             ).fetchall()
         texts = [row["text"] for row in sorted(rows, key=lambda row: row["id"])]
         return "[shared memory news]\n" + "\n".join(f"- {text}" for text in texts) if texts else None
@@ -977,11 +994,37 @@ class Challenges:
         still waits to be delivered, so the member's coding agent is told too."""
         with self._db.transaction() as conn:
             rows = conn.execute(
-                "SELECT id, text, created_at FROM notices WHERE team = %s AND member_id = %s"
-                " AND (delivered_at IS NULL OR created_at >= %s) ORDER BY id DESC LIMIT %s",
-                (caller.company, caller.member_id, self._clock() - timedelta(days=days), limit),
+                "SELECT id, text, created_at FROM notices WHERE team = %(company)s AND member_id = %(member_id)s"  # noqa: S608  # only the constant _REACHED_NOTICE is spliced in; values are bound as parameters
+                " AND (delivered_at IS NULL OR created_at >= %(since)s)" + _REACHED_NOTICE
+                + " ORDER BY id DESC LIMIT %(limit)s",
+                {"since": self._clock() - timedelta(days=days), "limit": limit, **_notice_reach(caller)},
             ).fetchall()
         return [{"notice_id": row["id"], "text": row["text"], "created_at": row["created_at"]} for row in rows]
+
+
+# What a member is shown of a challenge raised from memory they can't reach, in place of anything it says.
+HIDDEN = "raised from memory you can't reach, so only its number is shown."
+
+
+def _hidden(caller: Caller, challenge: Challenge) -> bool:
+    """Whether the challenging memory is somewhere this member can't reach, so nothing of it may be shown."""
+    return challenge.challenger_path is not None and not caller.reaches(challenge.challenger_path)
+
+
+def _notice_reach(caller: Caller) -> dict[str, Any]:
+    """The parameters `_REACHED_NOTICE` takes for this member, beside whose notices they are."""
+    walled = sorted(caller.unreachable | caller.unreachable_departments)
+    return {
+        "company": caller.company,
+        "member_id": caller.member_id,
+        "unreachable": sorted(caller.unreachable),
+        "unreachable_named": [f"%{_like(each)}%" for each in walled],
+    }
+
+
+def _like(text: str) -> str:
+    """Text matched literally inside a LIKE pattern."""
+    return text.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
 
 
 def _reason(reason: str, code_reference: str | None, quoted_line: str | None) -> Reason:

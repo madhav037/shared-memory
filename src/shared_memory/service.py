@@ -332,7 +332,7 @@ class MemoryService:
         caller.require_reach(path)
         location = locate(path)
         self._store.read(caller.company, location.path)  # refuses a memory that isn't there
-        versions = self._history.versions(caller.company, location.path)
+        versions = self._history.versions(caller.company, location.path, caller.reaches)
         return {
             "path": str(location.path),
             "versions": [
@@ -356,7 +356,7 @@ class MemoryService:
         return {
             "path": str(location.path),
             "commit": commit,
-            "text": self._history.text_at(caller.company, location.path, commit),
+            "text": self._history.text_at(caller.company, location.path, commit, caller.reaches),
         }
 
     def list_folder(self, caller: Caller, folder: str) -> dict[str, Any]:
