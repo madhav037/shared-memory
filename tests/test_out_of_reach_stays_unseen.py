@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from tests.support import (
     Console,
     ConsoleClient,
@@ -160,3 +162,35 @@ def test_a_pin_over_the_cap_of_a_briefing_the_member_cant_see_names_none_of_its_
     assert "over its cap" in refused
     assert "a briefing you can't see" in refused
     assert billing not in refused and hidden not in refused
+
+
+def a_department(client: ConsoleClient, name: str, project: str) -> str:
+    made = client.post_json("/api/departments", {"name": name})
+    assert made.status_code == 200, made.text
+    department: str = next(one["department_id"] for one in made.json()["departments"] if one["name"] == name)
+    assert client.post_json(f"/api/departments/{department}/projects", {"project_id": project}).status_code == 200
+    assert client.post_json(f"/api/departments/{department}/leads", {"member_id": "E1001"}).status_code == 200
+    return department
+
+
+@pytest.mark.parametrize("level", ["project", "department"])
+def test_news_of_a_challenge_about_memory_the_member_cant_reach_waits_until_they_can(
+    console: Console, signed_out: ConsoleClient, level: str
+) -> None:
+    owner = signed_in_owner(console, signed_out, f"olive-unseen-{level}", 2111 if level == "project" else 2113)
+    billing, payments = create(signed_out, "Billing")["project_id"], create(signed_out, "Payments")["project_id"]
+    department = a_department(signed_out, "Treasury", billing) if level == "department" else None
+    path = promote_keeping_both(owner.in_project(billing, "billing-api"), memory("Ledger closes at midnight"), level)
+    dana = a_member(console, signed_out, f"dana-unseen-{level}").in_project(payments, "payments-api")
+    raised = dana.call("challenge", path=path, reason="misled", reasoning="It closes at noon.")
+    closed = f"/api/departments/{department}/restrict" if department else f"/api/projects/{billing}/restrict"
+    assert signed_out.post_json(closed, {"restricted": True}).status_code == 200
+    owner.in_project(billing, "billing-api").call("decide_challenge", challenge_id=raised["challenge_id"], decision="reject")
+    browser = signed_in(console, f"dana-unseen-{level}", 2112 if level == "project" else 2114)
+
+    in_console: list[dict[str, Any]] = ask(browser, "/api/notices")["notices"]
+    told = added_context(dana.prompt("hello"))
+
+    assert in_console == []
+    assert path not in told and f"Your challenge {raised['challenge_id']}" not in told
+    browser.close()
