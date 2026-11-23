@@ -90,13 +90,32 @@ export function onRateLimited(listener: (message: string) => void): () => void {
 
 async function ask<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, headers: { Accept: "application/json", ...options.headers } });
-  if (!response.ok) {
-    const said = (await response.json().catch(() => null)) as { message?: string } | null;
-    const message = said?.message ?? `The server answered ${response.status}.`;
-    if (response.status === 429) whenLimited.forEach((listener) => listener(message));
-    throw new ApiError(message, response.status);
-  }
+  if (!response.ok) await refuse(response);
   return (await response.json()) as T;
+}
+
+/** Throw what the server said when it refused a call. */
+async function refuse(response: Response): Promise<never> {
+  const said = (await response.json().catch(() => null)) as { message?: string } | null;
+  const message = said?.message ?? `The server answered ${response.status}.`;
+  if (response.status === 429) whenLimited.forEach((listener) => listener(message));
+  throw new ApiError(message, response.status);
+}
+
+/**
+ * Download all of the company's data as one zip, which the browser saves under the name the server gives it. A POST
+ * with the console's header, so no other page, and no image in a member's text, can start one.
+ */
+export async function downloadExport(): Promise<void> {
+  const response = await fetch("/api/export", { method: "POST", headers: fromConsole });
+  if (!response.ok) await refuse(response);
+  const named = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") ?? "")?.[1];
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = named ?? "shared-memory-export.zip";
+  link.click();
+  // Kept a moment, so the browser has started saving it before the address goes.
+  setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
 }
 
 /** Ask the server whether it answers, and who is signed in. */

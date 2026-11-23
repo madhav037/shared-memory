@@ -20,7 +20,7 @@ def opened(archive: bytes) -> zipfile.ZipFile:
 
 
 def download(client: ConsoleClient) -> zipfile.ZipFile:
-    response = client.get("/api/export")
+    response = client.post("/api/export")
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "application/zip"
     assert "attachment" in response.headers["content-disposition"]
@@ -82,7 +82,7 @@ def test_a_member_who_is_not_an_admin_is_refused(console: Console, signed_out: C
     console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-export-two")
     dana = signed_in(console, "dana-export-two", 1602)
 
-    refused = dana.get("/api/export")
+    refused = dana.post("/api/export")
 
     assert refused.status_code == 403
     assert "owner and its admins" in refused.json()["message"]
@@ -91,7 +91,7 @@ def test_a_member_who_is_not_an_admin_is_refused(console: Console, signed_out: C
 
 
 def test_the_export_cannot_be_downloaded_without_signing_in(console: Console, signed_out: ConsoleClient) -> None:
-    assert signed_out.get("/api/export").status_code == 401
+    assert signed_out.post("/api/export").status_code == 401
 
 
 def test_every_export_is_recorded_in_the_audit_log(console: Console, signed_out: ConsoleClient) -> None:
@@ -109,7 +109,7 @@ def test_a_refused_export_is_not_recorded(console: Console, signed_out: ConsoleC
     Session(console.server, owner_token).call("add_member", member_id="emp-2", name="Dana Dev")
     console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-export-four")
     dana = signed_in(console, "dana-export-four", 1604)
-    dana.get("/api/export")
+    dana.post("/api/export")
     dana.close()
     console.github.as_(1605, "olive-export-four")
     signed_out.sign_in()
@@ -165,3 +165,13 @@ def test_the_memory_bundle_holds_only_the_exporting_companys_memory_and_history(
     assert {path.split("/", 1)[0] for path in every_path if path} == {company}
     assert sorted(line.split()[1] for line in refs) == ["HEAD", "refs/heads/main"], "no other branch or tag"
     assert (cloned / company).is_dir(), "a clone checks out the company's memory"
+
+
+def test_another_site_cannot_start_an_export(console: Console, signed_out: ConsoleClient) -> None:
+    """A page elsewhere, or an image in a member's text, can make a signed-in admin's browser ask for an address, but
+    only with a GET, or a POST without the console's header."""
+    signed_in_owner(console, signed_out, "olive-export-cross-site", 1617)
+
+    assert signed_out.get("/api/export").status_code == 405
+    assert signed_out.post("/api/export", with_header=False).status_code == 403
+    assert ask(signed_out, "/api/audit", kind="team_exported")["events"] == []

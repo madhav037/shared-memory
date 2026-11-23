@@ -1585,10 +1585,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         path="/export",
-        method="GET",
+        # A POST with the console's header: a GET, which any page or image can make a signed-in browser send, would
+        # start a whole export, and record one, for whoever opened it.
+        method="POST",
         operation_id="export",
         summary="All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         answers=None,
+        changes=True,
         download="application/zip",
     ),
     Declaration(

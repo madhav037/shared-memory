@@ -1619,7 +1619,7 @@
       }
     },
     "/api/export": {
-      "get": {
+      "post": {
         "operationId": "export",
         "summary": "All of the company's data as one zip: the memory with its history, and the company's records. Admins only.",
         "responses": {

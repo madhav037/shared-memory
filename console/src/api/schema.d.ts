@@ -745,10 +745,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
-        get: operations["export"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** All of the company's data as one zip: the memory with its history, and the company's records. Admins only. */
+        post: operations["export"];
         delete?: never;
         options?: never;
         head?: never;
