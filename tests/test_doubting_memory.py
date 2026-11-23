@@ -79,7 +79,7 @@ def test_a_doubt_whose_reasoning_or_quoted_line_hides_or_reorders_text_is_refuse
     path = promote_keeping_both(owner, TAX)
 
     refusals = [
-        dana.refusal("challenge", path=path, reason="misled", reasoning="It misled me.‮"),
+        dana.refusal("challenge", path=path, reason="misled", reasoning="It misled me.\u202e"),
         dana.refusal(
             "challenge",
             path=path,

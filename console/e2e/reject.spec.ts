@@ -32,8 +32,14 @@ test("a member reads what a challenge would change and rejects it, and the memor
   await expect(page.getByTestId("reasoning-text")).toHaveText("Billing moved its queue to Kafka in March.");
   await expect(page.locator('[data-testid="reasoning"] ~ [data-testid="what-changes"]')).toHaveCount(1);
 
-  // Both memories are set as their pages set them: the list is a list, and the part the offer swaps is marked in it.
+  // As the agent reads them, they are word for word, Markdown and all, and that is how they are shown first.
   const facing = page.getByTestId("facing");
+  await expect(facing.getByTestId("facing-source").first()).toContainText("- Queue: RabbitMQ");
+  await expect(facing.getByTestId("facing-source").last()).toContainText("- Queue: Kafka");
+
+  // Set as text, both memories read as their pages set them: the list is a list, and the part the offer swaps is
+  // marked in it.
+  await page.getByTestId("view-text").click();
   await expect(facing.getByTestId("facing-text").locator("li")).toHaveText([
     "Language: Go",
     "Database: Postgres",

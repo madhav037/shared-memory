@@ -36,7 +36,7 @@ def test_a_promotion_whose_reasoning_hides_or_reorders_text_is_refused(owner: Se
         level="project",
         reference=similar["reference"],
         resolutions={one["path"]: "supersede" for one in similar["similar"]},
-        reasoning="pnpm is now standard.‮",
+        reasoning="pnpm is now standard.\u202e",
     )
 
     assert "U+202E" in refusal

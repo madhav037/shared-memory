@@ -30,7 +30,7 @@ _PLACEHOLDER = re.compile(r"^(?:\$\{.*\}|<.*>|\*+|x+|\.\.\.+|changeme|example|pl
 _CANDIDATE = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
 # Tag characters, bidi controls and zero-width characters. ZWNJ and ZWJ (U+200C, U+200D) stay: emoji and Persian and
 # Indic text need them.
-_HIDDEN = re.compile("[\U000e0000-\U000e007f‪-‮⁦-⁩‎‏؜​⁠﻿]")
+_HIDDEN = re.compile("[\U000e0000-\U000e007f\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c\u200b\u2060\ufeff]")
 
 # The word limit bounds what a memory says; this bounds what it weighs, so a few enormous "words" can't slip past it.
 # At twenty characters a word, a memory at the word limit still fits, paths and identifiers included.

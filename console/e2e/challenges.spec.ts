@@ -22,6 +22,20 @@ test("the owner decides a challenge waiting for them and the memory is supersede
   await expect(reasoning.locator("em, strong")).toHaveCount(0);
   await expect(dispute.locator('[data-testid="reasoning"] ~ [data-testid="facing"]')).toHaveCount(1);
 
+  // A decision is made on what coding agents read: each side's summary is shown, and by default both files word for
+  // word, header and all, with the lines the offer changes marked.
+  const facing = dispute.getByTestId("facing");
+  await expect(facing.getByTestId("facing-summary").last()).toHaveText(
+    "The staging database is wiped every night at 02:17 UTC.",
+  );
+  await expect(facing.getByTestId("facing-source").first().locator("del")).toContainText(
+    "summary: The staging database is wiped every night.",
+  );
+  await expect(facing.getByTestId("facing-source").last().locator("ins")).toContainText(
+    "summary: The staging database is wiped every night at 02:17 UTC.",
+  );
+  await page.getByTestId("view-text").click();
+
   // An offer is marked up the way a memory's history is: what it puts in, bracketed and keyed to a note saying
   // what it took out. Without the marks it reads in its own words.
   await expect(dispute.getByTestId("amended").locator("ins")).toContainText("02:17 UTC");

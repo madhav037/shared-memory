@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 
 import { amend, hasMarks, markOf, withoutMarks, type Amendment } from "../lib/amend";
 import type { Piece } from "../lib/diff";
-import { tooIntricate } from "../lib/markdown";
+import { showLeftOut, tooIntricate } from "../lib/markdown";
 import { Guarded } from "./Guarded";
 import { MEMBER_TEXT, WordForWord } from "./Prose";
 
@@ -16,7 +16,7 @@ import { MEMBER_TEXT, WordForWord } from "./Prose";
 export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: string; testid?: string }) {
   const scope = `amend${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const { markdown, notes } = amend(pieces);
-  const plugins = [[markAmendments, { notes, scope }]] as Options["rehypePlugins"];
+  const plugins = [showLeftOut, [markAmendments, { notes, scope }]] as Options["rehypePlugins"];
   // Too intricate to set, the text is shown word for word without its marks, so the notes keyed to them are left out.
   // A text that fails to draw for another reason keeps its notes: its source is shown, and they still say what changed.
   const plain = tooIntricate(markdown);

@@ -97,13 +97,13 @@ def test_a_memory_with_a_bad_header_is_refused(member: Session, overrides: dict[
 
 HIDDEN = {
     "a tag character": "\U000e0070\U000e0075\U000e0073\U000e0068",
-    "a bidi override": "‮",
-    "a bidi isolate": "⁦",
-    "a right-to-left mark": "‏",
-    "an Arabic letter mark": "؜",
-    "a zero-width space": "​",
-    "a word joiner": "⁠",
-    "a byte order mark": "﻿",
+    "a bidi override": "\u202e",
+    "a bidi isolate": "\u2066",
+    "a right-to-left mark": "\u200f",
+    "an Arabic letter mark": "\u061c",
+    "a zero-width space": "\u200b",
+    "a word joiner": "\u2060",
+    "a byte order mark": "\ufeff",
 }
 
 
@@ -119,7 +119,7 @@ def test_a_memory_holding_a_character_that_hides_or_reorders_text_is_refused(
 
 
 def test_joiners_used_by_emoji_and_by_persian_and_indic_text_are_kept(member: Session) -> None:
-    body = "The on-call rota \U0001f469‍\U0001f4bb. می‌خواهم. क्‍ष"
+    body = "The on-call rota \U0001f469\u200d\U0001f4bb. می\u200cخواهم. क्\u200dष"
 
     assert member.call("read", path=remember(member, body=body)["path"])["body"].strip() == body
 

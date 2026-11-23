@@ -16,12 +16,14 @@ import {
 } from "../api/client";
 import { Amended } from "../components/Amended";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
+import { Compared } from "../components/Compared";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
 import { asks, REASON_NAMES } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
+import { hasHidden, visible } from "../lib/hidden";
 import { useAsked } from "../lib/useAsked";
 
 /** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
@@ -42,7 +44,7 @@ export function Challenges({
   const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map((company?.members ?? []).map((one) => [one.member_id, one.name]));
   // A member is their name here; their member ID belongs on Company.
-  const who = (memberId: string) => names.get(memberId) ?? memberId;
+  const who = (memberId: string) => visible(names.get(memberId) ?? memberId);
 
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
@@ -211,7 +213,8 @@ function Waiting({
   const [deciding, setDeciding] = useState<{ challengeId: number; decision: Choice } | null>(null);
   const busy = useRef(false);
   const [refused, setRefused] = useState<{ challengeId: number; message: string } | null>(null);
-  const [view, setView] = useState<ReadingView>("text");
+  // A decision is made on what coding agents will read, so the files come first, word for word.
+  const [view, setView] = useState<ReadingView>("source");
   const [marked, setMarked] = useState(true);
   const { refresh } = useContents();
 
@@ -281,7 +284,7 @@ function Waiting({
             <section className="dispute" key={path} aria-label={`Challenges against ${first.target.title}`}>
               <div className="dispute-head">
                 <h3>
-                  <Link to={memoryUrl(first.target.path)}>{first.target.title}</Link>
+                  <Link to={memoryUrl(first.target.path)}>{visible(first.target.title)}</Link>
                 </h3>
                 <Rank level={first.target.level} />
                 {against.length > 1 && <span className="mark alert">{against.length} challenges</span>}
@@ -311,7 +314,7 @@ function Waiting({
                 aria-label={`Foundation challenge to the ${challenge.foundation_name} foundation`}
               >
                 <div className="dispute-head">
-                  <h3>{shown && <Link to={memoryUrl(shown.path)}>{shown.title}</Link>}</h3>
+                  <h3>{shown && <Link to={memoryUrl(shown.path)}>{visible(shown.title)}</Link>}</h3>
                   <span className="mark strong" data-testid="foundation-mark">
                     {challenge.foundation_name} foundation
                   </span>
@@ -337,7 +340,7 @@ function Waiting({
               <div className="dispute-head">
                 <h3>
                   {challenge.challenger && (
-                    <Link to={memoryUrl(challenge.challenger.path)}>{challenge.challenger.title}</Link>
+                    <Link to={memoryUrl(challenge.challenger.path)}>{visible(challenge.challenger.title)}</Link>
                   )}
                 </h3>
                 <span className="mark strong" data-testid="department-mark">
@@ -353,12 +356,16 @@ function Waiting({
     {levels.length > 0 && (
       <>
         <h2 className="section-heading">Level contradictions</h2>
+        {ordinary.length === 0 && foundations.length === 0 && departments.length === 0 && (
+          <ViewSwitch view={view} onChange={setView} />
+        )}
         <div className="waiting" data-testid="level-contradictions">
           {levels.map((challenge) => (
             <LevelContradiction
               key={challenge.challenge_id}
               challenge={challenge}
               who={who}
+              view={view}
               deciding={deciding}
               refused={refused?.challengeId === challenge.challenge_id ? refused.message : null}
               onDecide={(decision, reason) => decide(challenge, decision, 0, reason)}
@@ -378,12 +385,14 @@ const LEVEL_CONTRADICTION = "level_contradiction";
 function LevelContradiction({
   challenge,
   who,
+  view,
   deciding,
   refused,
   onDecide,
 }: {
   challenge: ChallengeDetail;
   who: (memberId: string) => string;
+  view: ReadingView;
   deciding: { challengeId: number; decision: Choice } | null;
   refused: string | null;
   onDecide: (decision: Choice, reason?: string) => void;
@@ -411,6 +420,7 @@ function LevelContradiction({
           )}
         </p>
         <p className="dispute-note">Until you decide, the {where} memory holds for its {where}.</p>
+        <HiddenWarning challenge={challenge} />
         <div className="facing" data-testid="facing">
           {[narrower, broader].map(
             (side) =>
@@ -418,11 +428,16 @@ function LevelContradiction({
                 <div key={side.path} data-testid="level-side">
                   <Rank level={side.level} />
                   <Link className="title" to={memoryUrl(side.path)}>
-                    {side.title}
+                    {visible(side.title)}
                   </Link>
+                  <Told summary={side.summary} tiedFiles={side.tied_files} />
                   <p className="by">By {who(side.author)}</p>
                   <div className="body">
-                    <Prose testid="facing-text">{side.body}</Prose>
+                    {view === "source" ? (
+                      <Source text={side.source} testid="facing-source" />
+                    ) : (
+                      <Prose testid="facing-text">{side.body}</Prose>
+                    )}
                   </div>
                 </div>
               ),
@@ -511,9 +526,10 @@ function Proposal({
       {challenge.reasoning && (
         <div className="reasoning" data-testid="reasoning">
           <p className="reasoning-head">Reasoning</p>
-          <p className="reasoning-text" data-testid="reasoning-text">{challenge.reasoning}</p>
+          <p className="reasoning-text" data-testid="reasoning-text">{visible(challenge.reasoning)}</p>
         </div>
       )}
+      <HiddenWarning challenge={challenge} />
       {challenge.evidence.length > 0 && <EvidenceList evidence={challenge.evidence} who={who} />}
       {changes && (
         <div className="what-changes" data-testid="what-changes">
@@ -556,12 +572,17 @@ function Proposal({
         ) : (
           <div>
             <Link className="title" to={memoryUrl(challenge.target.path)}>
-              {challenge.target.title}
+              {visible(challenge.target.title)}
             </Link>
+            <Told summary={challenge.target.summary} tiedFiles={challenge.target.tied_files} />
             <p className="by">As it stands now, by {who(challenge.target.author)}</p>
             <div className="body">
               {view === "source" ? (
-                <Source text={challenge.target.body} testid="facing-source" />
+                offered ? (
+                  <Compared before={challenge.target.source} after={offered.source} side="now" />
+                ) : (
+                  <Source text={challenge.target.source} testid="facing-source" />
+                )
               ) : (
                 <Prose testid="facing-text">{challenge.target.body}</Prose>
               )}
@@ -572,15 +593,20 @@ function Proposal({
           {offered ? (
             <>
               <Link className="title" to={memoryUrl(offered.path)}>
-                {offered.title}
+                {visible(offered.title)}
               </Link>
+              <Told summary={offered.summary} tiedFiles={offered.tied_files} />
               <p className="by">
                 {promoting ? "Offered for department memory" : adding ? "Offered for the foundation" : "Offered in its place"}{" "}
                 by {who(offered.author)}
               </p>
               <div className="body">
                 {view === "source" ? (
-                  <Source text={offered.body} testid="facing-source" />
+                  adding ? (
+                    <Source text={offered.source} testid="facing-source" />
+                  ) : (
+                    <Compared before={challenge.target.source} after={offered.source} side="offered" />
+                  )
                 ) : pieces && changed(pieces) ? (
                   <Amended pieces={pieces} source="this offer" testid="amended" />
                 ) : (
@@ -712,19 +738,53 @@ function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memb
             <p className="evidence-by">
               <b>{who(each.member_id)}</b> · {moment(each.raised_at)}
             </p>
-            {each.reasoning && <p className="reasoning-text">{each.reasoning}</p>}
+            {each.reasoning && <p className="reasoning-text">{visible(each.reasoning)}</p>}
             {each.code_reference && (
               <p className="evidence-code">
                 <code className="path" data-testid="evidence-reference">
                   {each.code_reference}
                 </code>
-                {each.quoted_line && <code className="quoted">{each.quoted_line}</code>}
+                {each.quoted_line && <code className="quoted">{visible(each.quoted_line)}</code>}
               </p>
             )}
           </li>
         ))}
       </ol>
     </div>
+  );
+}
+
+/** What recall tells coding agents of a memory besides its body: its summary, and the files it is tied to. */
+function Told({ summary, tiedFiles }: { summary: string; tiedFiles: string[] }) {
+  return (
+    <>
+      {summary && (
+        <p className="told" data-testid="facing-summary">
+          {visible(summary)}
+        </p>
+      )}
+      {tiedFiles.length > 0 && (
+        <p className="by" data-testid="facing-tied-files">
+          Tied to {tiedFiles.map(visible).join(", ")}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** A warning that a challenge's words hold characters that hide or reorder text, as memories saved before the server
+ * refused them may. */
+function HiddenWarning({ challenge }: { challenge: ChallengeDetail }) {
+  const sides = [challenge.target, challenge.challenger].flatMap((side) =>
+    side ? [side.title, side.summary, side.body, side.source, ...side.tied_files] : [],
+  );
+  const evidence = challenge.evidence.flatMap((each) => [each.reasoning, each.quoted_line]);
+  if (!hasHidden(challenge.reasoning, ...sides, ...evidence)) return null;
+  return (
+    <p className="left-out" data-testid="hidden-characters">
+      This holds characters that hide or reorder text, so what you see may not be what a coding agent reads. Each is
+      drawn as its code, such as {"<U+202E>"}, where it falls.
+    </p>
   );
 }
 
