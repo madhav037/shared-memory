@@ -336,6 +336,10 @@ APART_CONNECTIONS = 2
 
 
 class Database:
+    # The tests set this, so a thread that takes a second connection while it holds one fails at once. Under load the
+    # same nesting waits on a pool its own threads hold, and every request in the worker waits with it.
+    second_connection_fails = False
+
     def __init__(
         self,
         url: str,
@@ -368,6 +372,7 @@ class Database:
         self._saves = threading.BoundedSemaphore(max(1, saving_connections - self.apart_connections))
         self._apart = threading.BoundedSemaphore(self.apart_connections)
         self._saving = threading.local()
+        self._holding = threading.local()
 
     @contextmanager
     def transaction(self) -> Iterator[Conn]:
@@ -377,8 +382,15 @@ class Database:
             with joined.transaction():
                 yield joined
             return
+        held: Conn | None = getattr(self._holding, "conn", None)
+        if held is not None and self.second_connection_fails:
+            raise AssertionError("A transaction was opened inside another on the same thread: open it before or after instead.")
         with self._pool.connection() as conn:
-            yield conn
+            self._holding.conn = conn
+            try:
+                yield conn
+            finally:
+                self._holding.conn = held
 
     @contextmanager
     def save_transaction(self) -> Iterator[SaveTransaction]:

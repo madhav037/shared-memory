@@ -556,20 +556,26 @@ class MemoryService:
         body: str | None,
         tied_files: list[str] | None,
     ) -> None:
-        """Embed an edit's new text before its save takes its turn. A refusal is left for the save itself to raise."""
+        """Embed an edit's new text before its save takes its turn, only once the edit would be allowed: an edit that
+        will be refused embeds nothing. The refusal itself is left for the save to raise."""
         try:
-            memory = self._store.read(caller.company, locate(path).path)
-        except Refused:
-            return
-        self._index.prepare(
-            caller.company,
-            replace(
+            caller.require_project()
+            caller.require_reach(path)
+            location = locate(path)
+            if location.level != "personal" or location.member_id != caller.member_id:
+                return
+            memory = self._store.read(caller.company, location.path)
+            edited = replace(
                 memory,
                 title=memory.title if title is None else title.strip(),
                 summary=memory.summary if summary is None else summary.strip(),
                 body=memory.body if body is None else body,
-            ),
-        )
+                tied_files=memory.tied_files if tied_files is None else list(tied_files),
+            )
+            validate(edited, self._settings.memory_word_limit)
+        except Refused:
+            return
+        self._index.prepare(caller.company, edited)
 
     def edit_memory(
         self,

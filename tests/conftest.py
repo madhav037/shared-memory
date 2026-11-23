@@ -26,6 +26,9 @@ from tests.support import (
     member,
     new_company,
 )
+from shared_memory.db import Database
+
+Database.second_connection_fails = True
 
 
 @pytest.fixture(scope="session")
