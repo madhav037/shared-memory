@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { Amended } from "./Amended";
 import { Prose } from "./Prose";
 
 const set = (text: string) => renderToString(createElement(Prose, { children: text }));
@@ -16,5 +17,25 @@ describe("a memory set as text", () => {
 
     expect(page).toContain("<blockquote>");
     expect(page).not.toContain("shown-word-for-word");
+  });
+});
+
+describe("an image in a member's text", () => {
+  const image = "Look: ![the chart](/api/export?1) and on.";
+
+  it("is shown as the Markdown it was written in, never fetched", () => {
+    const page = set(image);
+
+    expect(page).not.toContain("<img");
+    expect(page).toContain("![the chart](/api/export?1)");
+  });
+
+  it("is never fetched in an amended text either", () => {
+    const page = renderToString(
+      createElement(Amended, { pieces: [{ kind: "same", text: image }], source: "version 2" }),
+    );
+
+    expect(page).not.toContain("<img");
+    expect(page).toContain("![the chart](/api/export?1)");
   });
 });

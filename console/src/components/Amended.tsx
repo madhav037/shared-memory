@@ -6,7 +6,7 @@ import { amend, hasMarks, markOf, withoutMarks, type Amendment } from "../lib/am
 import type { Piece } from "../lib/diff";
 import { tooIntricate } from "../lib/markdown";
 import { Guarded } from "./Guarded";
-import { WordForWord } from "./Prose";
+import { MEMBER_TEXT, WordForWord } from "./Prose";
 
 /**
  * A text as an amending version left it, set as printed text and marked up the way consolidated legislation is:
@@ -28,7 +28,7 @@ export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: s
           <WordForWord text={withoutMarks(markdown)} />
         ) : (
           <Guarded fallback={<WordForWord text={withoutMarks(markdown)} />} resetKey={markdown}>
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins} components={MEMBER_TEXT}>
               {markdown}
             </Markdown>
           </Guarded>
