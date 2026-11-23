@@ -251,20 +251,22 @@ def _mark(in_doubt: InDoubt) -> InDoubtMark:
     )
 
 
-def _with_evidence(challenge: dict[str, Any], doubt: Doubt | None) -> dict[str, Any]:
+def _with_evidence(caller: Caller, challenge: dict[str, Any], doubt: Doubt | None) -> dict[str, Any]:
     """An open challenge against a memory, with a doubt's count and evidence for whoever reads the memory."""
     return {
         **challenge,
         "count": None if doubt is None else doubt.count,
-        "evidence": [] if doubt is None else [_evidence(each) for each in doubt.evidence],
+        "evidence": [] if doubt is None else [_evidence(caller, each) for each in doubt.evidence],
     }
 
 
-def _evidence(each: Evidence) -> DoubtEvidence:
-    reference = each.code_reference
+def _evidence(caller: Caller, each: Evidence) -> DoubtEvidence:
+    """One piece of a doubt's evidence, with nothing it brought when it was raised from a project the member can't
+    reach."""
+    reference = None if each.unseen_by(caller) else each.code_reference
     return DoubtEvidence(
         member_id=each.member_id,
-        reasoning=each.reasoning,
+        reasoning=None if each.unseen_by(caller) else each.reasoning,
         code_reference=None if reference is None else str(reference),
         quoted_line=None if reference is None else reference.quoted_line,
         raised_at=each.raised_at,
@@ -1031,7 +1033,7 @@ class ConsoleApi:
         against = self._challenging.doubts_against(caller.company, [memory["path"]])[memory["path"]]
         doubts = {each.challenge.id: each for each in against}
         memory["open_challenges"] = [
-            _with_evidence(one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
+            _with_evidence(caller, one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
         ]
         memory["in_doubt"] = _marked(InDoubt.of(doubts.values()) if doubts else None)
         return MemoryDetail(**memory)
@@ -1585,7 +1587,7 @@ class ConsoleApi:
             challenger=None if challenge.challenger_path is None else self._side(caller, challenge.challenger_path),
             reasoning=challenge.reasoning,
             reason=challenge.reason,
-            evidence=[] if doubt is None else [_evidence(each) for each in doubt.evidence],
+            evidence=[] if doubt is None else [_evidence(caller, each) for each in doubt.evidence],
             count=None if doubt is None else doubt.count,
         )
 

@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS challenge_evidence (
     raised_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS challenge_evidence_by_challenge ON challenge_evidence (challenge_id);
+-- The project the raising session was in: what it brought is shown only to members who reach it. None before this.
+ALTER TABLE challenge_evidence ADD COLUMN IF NOT EXISTS project_id TEXT;
 
 CREATE TABLE IF NOT EXISTS notices (
     id BIGSERIAL PRIMARY KEY,
@@ -100,8 +102,26 @@ LEVEL_CONTRADICTION = "level_contradiction"
 _REASON_IN_WORDS: dict[str, str] = {"misled": "it misled them", "contradicts_code": "it contradicts the code"}
 # The longest line of code a contradicts_code doubt may quote.
 QUOTED_LINE_LIMIT = 300
+# The longest code reference, repository:path:line, a doubt may give; its line has at most nine digits.
+CODE_REFERENCE_LIMIT = 300
+# The longest reasoning a challenge, a doubt or a kept exception may carry, as long as a card's comment.
+REASONING_LIMIT = 1_500
+# How many pieces of a doubt's evidence a notice shows, and how many code references its in-doubt line names.
+EVIDENCE_SHOWN = 5
+REFERENCES_SHOWN = 3
 # A path that is only spaces is refused in code: said in the pattern, it backtracked quadratically.
-_CODE_REFERENCE = re.compile(r"^(?P<repository>[^:\s]+):(?P<path>[^:\n]+):(?P<line>[1-9][0-9]*)$")
+_CODE_REFERENCE = re.compile(r"^(?P<repository>[^:\s]+):(?P<path>[^:\n]+):(?P<line>[1-9][0-9]{0,8})$")
+
+
+def checked_reasoning(reasoning: str | None, what: str = "This reasoning") -> str | None:
+    """Reasoning as a challenge keeps it: None when there is none, refused past `REASONING_LIMIT` or holding a secret."""
+    written = (reasoning or "").strip() or None
+    if written is None:
+        return None
+    if len(written) > REASONING_LIMIT:
+        raise Refused(f"{what} is {len(written)} characters; the limit is {REASONING_LIMIT} characters.")
+    refuse_secret(written, what, "into reasoning, which members and their coding agents are shown")
+    return written
 
 
 @dataclass(frozen=True)
@@ -120,11 +140,13 @@ class CodeReference:
     def parse(cls, written: str | None, quoted_line: str | None) -> CodeReference:
         """The code reference a contradicts_code doubt gives, refused unless it names a repository, a file and a line
         and quotes that line."""
-        match = _CODE_REFERENCE.match((written or "").strip())
+        given = (written or "").strip()
+        match = _CODE_REFERENCE.match(given) if len(given) <= CODE_REFERENCE_LIMIT else None
         if match is None or not match["path"].strip() or not NAME_PATTERN.match(match["repository"]):
             raise Refused(
                 "A doubt that contradicts the code says where: pass code_reference written repository:path:line, for "
-                "example billing-api:src/tax.py:42, using the repository names from each repository's settings."
+                "example billing-api:src/tax.py:42, using the repository names from each repository's settings, at "
+                f"most {CODE_REFERENCE_LIMIT} characters."
             )
         quoted = (quoted_line or "").strip()
         if not quoted or "\n" in quoted or len(quoted) > QUOTED_LINE_LIMIT:
@@ -152,12 +174,20 @@ class Evidence:
     reasoning: str | None
     code_reference: CodeReference | None
     raised_at: datetime
+    # The project the raising session was in, None for evidence kept before it was recorded.
+    project_id: str | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Evidence:
         written = row["code_reference"]
         reference = None if written is None else CodeReference.stored(written, row["quoted_line"] or "")
-        return cls(row["member_id"], row["session_identifier"], row["reasoning"], reference, row["raised_at"])
+        return cls(
+            row["member_id"], row["session_identifier"], row["reasoning"], reference, row["raised_at"], row["project_id"]
+        )
+
+    def unseen_by(self, caller: Caller) -> bool:
+        """Whether it was raised from a project this member can't reach, so nothing it brought may be shown them."""
+        return self.project_id is not None and self.project_id in caller.unreachable
 
 
 @dataclass(frozen=True)
@@ -239,10 +269,13 @@ class ReasonRaised:
     code_references: tuple[str, ...] = ()
 
     def in_words(self) -> str:
-        """As the in-doubt line says it, e.g. "1 says it contradicts billing-api:src/tax.py:42"."""
+        """As the in-doubt line says it, e.g. "1 says it contradicts billing-api:src/tax.py:42", naming the first
+        `REFERENCES_SHOWN` code references and counting the rest."""
         says = "says" if self.count == 1 else "say"
         if self.reason == "contradicts_code" and self.code_references:
-            return f"{self.count} {says} it contradicts {', '.join(self.code_references)}"
+            named = ", ".join(self.code_references[:REFERENCES_SHOWN])
+            more = len(self.code_references) - REFERENCES_SHOWN
+            return f"{self.count} {says} it contradicts {named}" + (f" and {more} more" if more > 0 else "")
         return f"{self.count} {says} {_REASON_IN_WORDS[self.reason]}"
 
 
@@ -402,18 +435,16 @@ class Challenges:
     ) -> Raised:
         """Doubt a memory the caller can read, at any level and their own included, naming a reason. A raise naming
         the same memory and reason as an open doubt joins it as a +1."""
-        caller.require_project()
+        project = caller.require_project()
         caller.require_reach(path)  # before the memory is looked up, so a restricted project never says what it holds
         named = _reason(reason, code_reference, quoted_line)
         reference = CodeReference.parse(code_reference, quoted_line) if named == "contradicts_code" else None
-        written = (reasoning or "").strip() or None
-        if written is not None:
-            refuse_secret(written, "This reasoning", "into a challenge")
+        written = checked_reasoning(reasoning)
         location = locate(path)
         memory = self._store.read(caller.company, location.path)
         if memory.status != "active":
             raise Refused(f"{location.path} is already {memory.status}, so there is nothing left to doubt.")
-        evidence = Evidence(caller.member_id, usable(session), written, reference, self._clock())
+        evidence = Evidence(caller.member_id, usable(session), written, reference, self._clock(), project.project_id)
         return self.raise_doubt(
             caller, target_path=str(location.path), target_author=memory.author, level=location.level, reason=named,
             evidence=evidence,
@@ -432,11 +463,11 @@ class Challenges:
                 _show_the_author_again(conn, challenge_id)
             conn.execute(
                 "INSERT INTO challenge_evidence (challenge_id, member_id, session_identifier, reasoning, code_reference,"
-                " quoted_line, raised_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                " quoted_line, raised_at, project_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     challenge_id, evidence.member_id, evidence.session_identifier, evidence.reasoning,
                     None if reference is None else str(reference), None if reference is None else reference.quoted_line,
-                    evidence.raised_at,
+                    evidence.raised_at, evidence.project_id,
                 ),  # fmt: skip
             )
             counted = conn.execute(
@@ -624,7 +655,8 @@ class Challenges:
                     "challenge_id": c.id,
                     "kind": c.kind,
                     "raised_by": c.raised_by,
-                    "challenger_path": c.challenger_path,
+                    # Raised from memory the member can't reach: named by its number alone (as `_render_group` does).
+                    "challenger_path": None if _hidden(caller, c) else c.challenger_path,
                     "reason": c.reason,
                     "may_decide": decides_as is not None,
                     "decides_as": decides_as,
@@ -910,7 +942,7 @@ class Challenges:
                     lines.append(f"- Challenge {c.id}{whose}: {HIDDEN}")
                     continue
                 if c.kind == DOUBT:
-                    lines.extend(_doubt_lines(c, whose, evidence.get(c.id, ()), token))
+                    lines.extend(_doubt_lines(caller, c, whose, evidence.get(c.id, ()), token))
                     continue
                 if c.kind == "add":
                     line = f"- Challenge {c.id} by {c.raised_by}{whose}: add {self._replacement(caller, c, token)} to the {c.foundation} foundation"
@@ -1007,6 +1039,8 @@ class Challenges:
 
 # What a member is shown of a challenge raised from memory they can't reach, in place of anything it says.
 HIDDEN = "raised from memory you can't reach, so only its number is shown."
+# What a member is shown of evidence a doubt was given from a project they can't reach, in place of anything it says.
+HIDDEN_EVIDENCE = "raised from a project you can't reach, so none of it is shown."
 
 
 def _hidden(caller: Caller, challenge: Challenge) -> bool:
@@ -1040,18 +1074,26 @@ def _reason(reason: str, code_reference: str | None, quoted_line: str | None) ->
     raise Refused(f"A doubt names its reason: {' or '.join(REASONS)}.")
 
 
-def _doubt_lines(challenge: Challenge, whose: str, evidence: tuple[Evidence, ...], token: str) -> list[str]:
-    """A doubt as a briefing or prompt shows it: its reason and how many members raised it, then each piece of
-    evidence, what its raisers wrote in this notice's fence."""
+def _doubt_lines(
+    caller: Caller, challenge: Challenge, whose: str, evidence: tuple[Evidence, ...], token: str
+) -> list[str]:
+    """A doubt as a briefing or prompt shows it: its reason and how many members raised it, then the first
+    `EVIDENCE_SHOWN` pieces of evidence, what their raisers wrote in this notice's fence, and a count of the rest.
+    Evidence raised from a project this member can't reach shows none of what it brought."""
     count = len(_members(evidence))
     says = "says" if count == 1 else "say"
     lines = [f"- Challenge {challenge.id}, a doubt{whose}: {count} {says} {_REASON_IN_WORDS[challenge.reason or '']}."]
-    for each in evidence:
+    for each in evidence[:EVIDENCE_SHOWN]:
+        if each.unseen_by(caller):
+            lines.append(f"  - {HIDDEN_EVIDENCE}")
+            continue
         line = f"  - {each.member_id}"
         if each.code_reference is not None:
             line += f" quotes {one_line(str(each.code_reference))}: {quoted(each.code_reference.quoted_line, token, inline=True)}"
         line += f" — reasoning: {quoted(each.reasoning, token, inline=True)}" if each.reasoning else ("" if each.code_reference else ".")
         lines.append(line)
+    if len(evidence) > EVIDENCE_SHOWN:
+        lines.append(f"  - and {len(evidence) - EVIDENCE_SHOWN} more")
     return lines
 
 
