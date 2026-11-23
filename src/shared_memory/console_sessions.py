@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
@@ -20,7 +20,7 @@ import httpx
 from shared_memory.audit import SIGN_IN_REFUSED, SIGNED_IN, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import GitHubAccount, Identity, Member, ProvenSignIn
 from shared_memory.platform_sign_in import MAX_LIFETIME, InvalidSignIn, verify
@@ -38,6 +38,11 @@ STATE_MINUTES = 10
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def end_member_sessions(conn: Conn, member_pk: int, at: datetime) -> None:
+    """End every open console session of one member, in the caller's transaction."""
+    conn.execute("UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id = %s", (at, member_pk))
 
 
 @dataclass(frozen=True)
@@ -102,7 +107,7 @@ class ConsoleSessions:
             {
                 "client_id": self._settings.github_client_id,
                 "redirect_uri": self.redirect_uri(base_url),
-                "scope": "read:user",
+                "scope": "read:user user:email",
                 "state": state,
             }
         )
@@ -116,7 +121,8 @@ class ConsoleSessions:
             raise Refused("This server signs members in through the platform, not with a GitHub app of its own.")
         self._require_started_here(state, kept)
         self._spend_state(state)
-        return self._sign_in_by(ProvenSignIn(self._account(self._access_token(code, base_url))))
+        token = self._access_token(code, base_url)
+        return self._sign_in_by(ProvenSignIn(self._account(token), self._verified_email(token)))
 
     def finish_handed_over(self, text: str, nonce: str | None) -> str:
         """Complete a sign-in the platform handed over and return the session's token, or refuse with what to tell the
@@ -152,12 +158,15 @@ class ConsoleSessions:
     def _sign_in_by(self, proven: ProvenSignIn) -> str:
         """Sign in the member this proven sign-in is for, and return the session's token. Every way in ends here."""
         try:
-            member = self._identity.member_signing_in(proven)
+            signed = self._identity.member_signing_in(proven)
         except Refused as refused:
             self._audit.record(SIGN_IN_REFUSED, actor=proven.actor, detail={"reason": str(refused)})
             raise
+        member = signed.member
         token = self._begin_session(member)
-        self._audit.record(SIGNED_IN, member=member, detail=proven.audited)
+        # An email is never kept in the log: only that this sign-in linked the account through one.
+        detail: dict[str, Any] = {**proven.audited, **({"linked": True} if signed.linked else {})}
+        self._audit.record(SIGNED_IN, member=member, detail=detail)
         return token
 
     @staticmethod
@@ -204,6 +213,30 @@ class ConsoleSessions:
         if not isinstance(account_id, int) or not isinstance(login, str):
             raise Refused("GitHub didn't say who you are. Try again.")
         return GitHubAccount(account_id, login)
+
+    def _verified_email(self, access_token: str) -> str | None:
+        """The account's primary email, only if GitHub says it is verified. Anything going wrong reading it, or
+        reading it as something other than the list GitHub documents, means no email, never a refused sign-in."""
+        try:
+            response = httpx.get(
+                f"{self._settings.github_api_url.rstrip('/')}/user/emails",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+            body = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        if not isinstance(body, list):
+            return None
+        for one in body:
+            if not isinstance(one, dict) or one.get("primary") is not True or one.get("verified") is not True:
+                continue
+            email = one.get("email")
+            if isinstance(email, str) and email.strip():
+                return email.strip()
+        return None
 
     @staticmethod
     def _answer(response: httpx.Response) -> dict[str, Any]:
@@ -259,6 +292,10 @@ class ConsoleSessions:
                 "SELECT member_id FROM console_sessions WHERE token_hash = %s AND ended_at IS NULL", (_hash(token),)
             ).fetchone()
         return int(row["member_id"]) if row else None
+
+    def end_for_moved_link(self, conn: Conn, member_pk: int) -> None:
+        """End a member's console sessions when their GitHub account is moved or taken away, inside that change."""
+        end_member_sessions(conn, member_pk, self._clock())
 
     def end_all_for(self, member_id: str, company_pk: int) -> None:
         """End every console session of one member, for when they are removed from the company."""

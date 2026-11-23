@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: shared_memory
     ports:
-      - "5433:5432"
+      # This machine only: Docker would otherwise publish it on every interface, ahead of the firewall.
+      - "127.0.0.1:5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +25,7 @@ services:
       SHARED_MEMORY_DATABASE_URL: postgresql://postgres:postgres@db:5432/shared_memory
       SHARED_MEMORY_ROOT: /data/memory
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - memory-data:/data
 

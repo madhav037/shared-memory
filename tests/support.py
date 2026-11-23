@@ -528,18 +528,38 @@ class FakeGitHub:
         # The login each account number was first used with. It lives as long as this fake GitHub does, which is as
         # long as the server whose database remembers the same thing.
         self._logins: dict[int, str] = {}
+        # What GET /user/emails answers, set per test and reset by each `as_`: the entries, the status they come with,
+        # and a raw body that replaces the entries when a test needs one that isn't JSON. `email_calls` counts asks.
+        self.emails: Any = []
+        self.emails_status = 200
+        self.emails_raw: str | None = None
+        self.email_calls = 0
 
         async def authorize(request: Request) -> Response:
             redirect_uri = request.query_params["redirect_uri"]
             state = request.query_params.get("state", "")
             joiner = "&" if "?" in redirect_uri else "?"
-            return RedirectResponse(f"{redirect_uri}{joiner}code=fake-code&state={state}", status_code=302)
+            # The code names whoever was signing in when it was handed out, so sign-ins finishing together stay apart.
+            code = f"fake-code.{self.account_id}.{self.login}"
+            return RedirectResponse(f"{redirect_uri}{joiner}code={code}&state={state}", status_code=302)
 
         async def access_token(request: Request) -> Response:
-            return JSONResponse({"access_token": "gho_fake", "token_type": "bearer", "scope": "read:user"})
+            code = (await request.json()).get("code", "")
+            named = code.removeprefix("fake-code") if code.startswith("fake-code.") else ""
+            return JSONResponse({"access_token": f"gho_fake{named}", "token_type": "bearer", "scope": "read:user"})
 
         async def user(request: Request) -> Response:
+            _, _, named = request.headers.get("authorization", "").partition("gho_fake.")
+            if named:
+                account_id, _, login = named.partition(".")
+                return JSONResponse({"id": int(account_id), "login": login})
             return JSONResponse({"id": self.account_id, "login": self.login})
+
+        async def user_emails(request: Request) -> Response:
+            self.email_calls += 1
+            if self.emails_raw is not None:
+                return Response(self.emails_raw, status_code=self.emails_status, media_type="application/json")
+            return JSONResponse(self.emails, status_code=self.emails_status)
 
         async def as_account(request: Request) -> Response:
             body = await request.json()
@@ -554,6 +574,7 @@ class FakeGitHub:
                 Route("/login/oauth/authorize", authorize, methods=["GET"]),
                 Route("/login/oauth/access_token", access_token, methods=["POST"]),
                 Route("/user", user, methods=["GET"]),
+                Route("/user/emails", user_emails, methods=["GET"]),
                 Route("/as-account", as_account, methods=["POST"]),
             ]
         )
@@ -574,6 +595,11 @@ class FakeGitHub:
         )
         self._logins[account_id] = login
         self.account_id, self.login = account_id, login
+        self.emails, self.emails_status, self.emails_raw, self.email_calls = [], 200, None, 0
+
+    def has_emails(self, *emails: dict[str, Any]) -> None:
+        """The emails the account signing in next has, as GitHub lists them."""
+        self.emails = list(emails)
 
     def stop(self) -> None:
         self._server.stop()

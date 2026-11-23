@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import psycopg
+
 from tests.support import Session, Company
 
 
@@ -88,3 +90,22 @@ def test_add_member_accepts_the_company_id_but_only_the_callers_own_company(comp
     assert "your own company" in company.owner().refusal(
         "add_member", company="some-other-company", member_id="emp-3", name="Eve"
     )
+
+
+def test_a_name_must_be_one_line_of_plain_text(company: Company) -> None:
+    for name in ["Dana\nDev", "Dana\rDev", "Dana Dev", "Dana\x00Dev", "Dana <dana@x>", "...", "  "]:
+        assert "name" in company.owner().refusal("add_member", member_id="emp-2", name=name)
+
+
+def test_saves_still_land_when_a_stored_name_has_a_line_break(company: Company) -> None:
+    project = company.owner().call("create_project", name="Billing")["project_id"]
+    member = add(company, "emp-2", "Dana Dev").in_project(project)
+    # A name stored before names were checked.
+    with psycopg.connect(company.server.settings.database_url, autocommit=True) as conn:
+        conn.execute("UPDATE members SET name = %s WHERE member_id = 'emp-2'", ("Dana\n<Dev>",))
+
+    first = member.call("remember", title="Retry twice", summary="s", type="convention", body="b")
+    second = company.owner().in_project(project).call("remember", title="Log once", summary="s", type="convention", body="b")
+
+    assert member.call("read", path=first["path"])["author"] == "emp-2"
+    assert member.call("read", path=second["path"])["author"] == "owner-1"

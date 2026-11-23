@@ -30,7 +30,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from shared_memory import hooks, onboarding, time_zone, warning
 from shared_memory.activity import Activities
 from shared_memory.agents import agent_named
-from shared_memory.audit import PROJECT_CREATED, Audit
+from shared_memory.audit import MEMBER_ADDED, MEMBER_REMOVED, PROJECT_CREATED, TOKEN_ISSUED, Audit
 from shared_memory.board import DONE, Board
 from shared_memory.briefing import Briefing, Work
 from shared_memory.console_api import ConsoleApi, SessionTalk
@@ -1028,20 +1028,32 @@ def build_app(
         ctx: Context,
         company: str | None = None,
         github: str | None = None,
+        email: str | None = None,
     ) -> dict[str, Any]:
         """Owner and admins: add a member to your company. Their personal token is shown once, in this result.
 
-        github is their GitHub username, which lets them sign in to the console.
+        github is their GitHub username, or email their email, not both: whichever sign-in method first proves it
+        lets them sign in to the console. An added email stays unverified until its holder proves it.
         """
         current = caller(ctx)
-        token = identity.add_member(current, member_id, name, company, github)
+        token = identity.add_member(current, member_id, name, company, github, email)
+        # The same entries the console writes (console_api._add_member), so a change through an agent is seen too.
+        audit.record(
+            MEMBER_ADDED,
+            member=current.member,
+            target=member_id,
+            detail={"name": name, "github": github, "email": bool(email and email.strip())},
+        )
+        audit.record(TOKEN_ISSUED, member=current.member, target=member_id, detail={"for": member_id})
         return {"company": current.company, "member_id": member_id, "name": name, "personal_token": token}
 
     @server.tool()
     @_refusals_as_tool_errors
     def remove_member(member_id: str, ctx: Context) -> dict[str, Any]:
         """Owner and admins: remove a member. Their token stops working; their memories stay, credited to them."""
-        identity.remove_member(caller(ctx), member_id)
+        current = caller(ctx)
+        identity.remove_member(current, member_id)
+        audit.record(MEMBER_REMOVED, member=current.member, target=member_id)
         return {"removed": member_id}
 
     @server.tool()
@@ -1049,7 +1061,12 @@ def build_app(
     def reissue_token(member_id: str, ctx: Context) -> dict[str, Any]:
         """Owner and admins: revoke a member's personal token and issue a new one, shown once in this result. Only
         the owner does it for another admin, and nobody else for the owner."""
-        token = identity.reissue_token(caller(ctx), member_id)
+        current = caller(ctx)
+        token = identity.reissue_token(current, member_id)
+        mine = member_id == current.member.member_id
+        audit.record(
+            TOKEN_ISSUED, member=current.member, target=member_id, detail={"for": "themselves" if mine else member_id}
+        )
         return {"member_id": member_id, "personal_token": token}
 
     @server.tool()
@@ -1745,6 +1762,7 @@ def build_app(
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
     console_sessions = ConsoleSessions(settings, db, identity, audit, clock)
+    identity.on_link_moved(console_sessions.end_for_moved_link)
     rate_limits = RateLimits(settings, db, identity, console_sessions, audit, clock)
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(

@@ -113,3 +113,18 @@ def test_a_refused_export_is_not_recorded(console: Console, signed_out: ConsoleC
     signed_out.sign_in()
 
     assert ask(signed_out, "/api/audit", kind="team_exported")["events"] == []
+
+
+def test_the_export_tells_an_admin_each_members_verified_email_and_sign_in_methods(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    console.a_company("olive-export-email")
+    console.github.as_(1691, "olive-export-email")
+    console.github.has_emails({"email": "olive-export@example.com", "primary": True, "verified": True})
+    signed_out.sign_in()
+
+    members = json.loads(download(signed_out).read("members.json"))
+
+    assert [(one["verified_email"], one["sign_in_methods"]) for one in members] == [
+        ("olive-export@example.com", ["github"])
+    ]

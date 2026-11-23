@@ -666,6 +666,12 @@ class MemberSummary(BaseModel):
     name: str
     role: Literal["owner", "admin", "member"]
     github_login: str | None
+    # Only admins and the owner are told these two (a member sees null and an empty list): they are the company's
+    # to govern, not every member's to read.
+    verified_email: str | None
+    # The email an admin or setup typed, not yet proven by its holder; hidden from members like the verified one.
+    added_email: str | None
+    sign_in_methods: list[Literal["github"]]
     removed: bool
 
 
@@ -681,7 +687,9 @@ class NewMember(BaseModel):
 
     member_id: str
     name: str
+    # Their GitHub username or their email, not both.
     github: str | None = None
+    email: str | None = None
 
 
 class ChangedMember(BaseModel):
@@ -689,6 +697,8 @@ class ChangedMember(BaseModel):
 
     name: str | None = None
     github: str | None = None
+    # Left out: unchanged. Empty: cleared. Otherwise the new email, unverified until its holder proves it.
+    email: str | None = None
 
 
 class AdminChange(BaseModel):

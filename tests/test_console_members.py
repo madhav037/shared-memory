@@ -27,6 +27,9 @@ def test_an_admin_sees_everyone_with_their_role_and_github_account(
             "name": "Olive Owner",
             "role": "owner",
             "github_login": "olive-members-one",
+            "verified_email": None,
+            "added_email": None,
+            "sign_in_methods": ["github"],
             "removed": False,
         },
         {
@@ -34,6 +37,9 @@ def test_an_admin_sees_everyone_with_their_role_and_github_account(
             "name": "Dana Dev",
             "role": "member",
             "github_login": "dana-members-one",
+            "verified_email": None,
+            "added_email": None,
+            "sign_in_methods": ["github"],
             "removed": False,
         },
     ]
@@ -85,6 +91,9 @@ def test_an_admin_corrects_a_name_and_a_github_account(console: Console, signed_
             "name": "Dana Developer",
             "role": "member",
             "github_login": "dana-renamed-four",
+            "verified_email": None,
+            "added_email": None,
+            "sign_in_methods": ["github"],
             "removed": False,
         }
     ]
@@ -284,3 +293,72 @@ def test_an_admin_still_looks_after_members_and_their_own_access(console: Consol
     assert admin.post_json("/api/members/emp-3/change", {"name": "Theo Admin"}).status_code == 200
     assert Session(console.server, tokens["emp-2"]).call("reissue_token", member_id="emp-2")["personal_token"]
     admin.close()
+
+
+def a_member_signed_in(console: Console, owner: ConsoleClient, name: str, account: int) -> tuple[str, ConsoleClient]:
+    """A company whose owner is signed in on `owner`, and its member emp-2 signed in on the browser given back."""
+    company, _ = console.a_company(f"olive-{name}")
+    console.github.as_(account, f"olive-{name}")
+    owner.sign_in()
+    add(owner, "emp-2", "Dana Dev", f"dana-{name}")
+    dana = console.client()
+    console.github.as_(account + 1, f"dana-{name}")
+    dana.sign_in()
+    assert dana.status()["signed_in"] is True
+    return company, dana
+
+
+def test_moving_a_member_to_another_github_account_ends_their_console_sessions(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    _, dana = a_member_signed_in(console, signed_out, "relink-one", 671)
+
+    assert signed_out.post_json("/api/members/emp-2/change", {"github": "dana-elsewhere-one"}).status_code == 200
+
+    assert dana.status()["signed_in"] is False
+    dana.close()
+
+
+def test_clearing_a_members_github_account_ends_their_console_sessions(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    _, dana = a_member_signed_in(console, signed_out, "relink-two", 674)
+
+    assert signed_out.post_json("/api/members/emp-2/change", {"github": ""}).status_code == 200
+
+    assert dana.status()["signed_in"] is False
+    dana.close()
+
+
+def test_relinking_a_member_on_the_server_ends_their_console_sessions(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    company, dana = a_member_signed_in(console, signed_out, "relink-three", 677)
+
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-moved-three")
+
+    assert dana.status()["signed_in"] is False
+    dana.close()
+
+
+def test_the_same_github_account_again_or_a_new_name_keeps_their_console_sessions(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    company, dana = a_member_signed_in(console, signed_out, "relink-four", 680)
+
+    signed_out.post_json("/api/members/emp-2/change", {"name": "Dana Developer", "github": "DANA-relink-four"})
+    console.server.run_cli("link-github", "--company", company, "--member-id", "emp-2", "--github", "dana-relink-four")
+
+    assert dana.status()["signed_in"] is True
+    assert signed_out.status()["signed_in"] is True
+    dana.close()
+
+
+def test_a_corrected_name_must_be_one_line(console: Console, signed_out: ConsoleClient) -> None:
+    signed_in_owner(console, signed_out, "olive-members-oneline", 6911)
+    add(signed_out, "emp-2", "Dana Dev", "dana-members-oneline")
+
+    answer = signed_out.post_json("/api/members/emp-2/change", {"name": "Dana\nCommitter: Olive"})
+
+    assert answer.status_code == 403
+    assert [one["name"] for one in members(signed_out) if one["member_id"] == "emp-2"] == ["Dana Dev"]

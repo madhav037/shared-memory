@@ -3069,6 +3069,12 @@ export interface components {
             role: "owner" | "admin" | "member";
             /** Github Login */
             github_login: string | null;
+            /** Verified Email */
+            verified_email: string | null;
+            /** Added Email */
+            added_email: string | null;
+            /** Sign In Methods */
+            sign_in_methods: "github"[];
             /** Removed */
             removed: boolean;
         };
@@ -3107,6 +3113,11 @@ export interface components {
              * @default null
              */
             github: string | null;
+            /**
+             * Email
+             * @default null
+             */
+            email: string | null;
         };
         /**
          * ChangedMember
@@ -3123,6 +3134,11 @@ export interface components {
              * @default null
              */
             github: string | null;
+            /**
+             * Email
+             * @default null
+             */
+            email: string | null;
         };
         /**
          * AdminChange
