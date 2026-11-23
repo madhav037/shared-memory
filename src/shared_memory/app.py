@@ -1747,6 +1747,7 @@ def build_app(
             enable_dns_rebinding_protection=True, allowed_hosts=list(settings.allowed_hosts), allowed_origins=[]
         )
     console_sessions = ConsoleSessions(settings, db, identity, audit, clock)
+    identity.on_link_moved(console_sessions.end_for_moved_link)
     rate_limits = RateLimits(settings, db, identity, console_sessions, audit, clock)
     app = server.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
     app.router.routes.extend(

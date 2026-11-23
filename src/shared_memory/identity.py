@@ -29,6 +29,9 @@ NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
 # change, with whoever made it, so its writes commit with the change or not at all; what it gives back is called once
 # that transaction has committed, for whatever has to wait until then.
 AccessLost = Callable[[Conn, "Caller"], Callable[[], None]]
+# What another module does when a member's GitHub account is moved to another one or taken away: called inside the
+# transaction making the change, with the member's key, so whatever the old account still holds ends with it.
+LinkMoved = Callable[[Conn, int], None]
 
 
 @dataclass(frozen=True)
@@ -284,6 +287,8 @@ class Identity:
         # Called when a member may have lost a project: removed from the company, taken off an access list or a lead, no
         # longer an admin, or a project restricted.
         self._access_lost: list[AccessLost] = []
+        # Called when a member's GitHub account is moved or taken away, by an admin or on the server.
+        self._link_moved: list[LinkMoved] = []
         # Restricted departments keep members out of their projects too; Departments puts its wall up (`walled_by`).
         self._wall: DepartmentWall = _NoWall()
         self._db = db
@@ -386,6 +391,16 @@ class Identity:
 
     def on_access_lost(self, listener: AccessLost) -> None:
         self._access_lost.append(listener)
+
+    def on_link_moved(self, listener: LinkMoved) -> None:
+        self._link_moved.append(listener)
+
+    def _moved_link(self, conn: Conn, member_pk: int, before: str | None, after: str | None) -> None:
+        """Tell the listeners when a GitHub link went to another account or none: the same login again, in any case,
+        is the same account and moves nothing."""
+        if (before or "").lower() != (after or "").lower():
+            for listener in self._link_moved:
+                listener(conn, member_pk)
 
     def walled_by(self, wall: DepartmentWall) -> None:
         """Have restricted departments keep members out of their projects (ADR-0032)."""
@@ -611,6 +626,7 @@ class Identity:
                 " WHERE id = %s",
                 (login, login, row["id"]),
             )
+            self._moved_link(conn, row["id"], row["github_login"], login)
 
     def member_signing_in(self, proven: ProvenSignIn) -> SignedIn:
         """The member a sign-in is for, whichever way it came (ADR-0034): the one matcher every sign-in goes through.
@@ -842,12 +858,15 @@ class Identity:
                 # Clearing the account id lets the next sign-in bind this login to whoever signs in with it. Moving to
                 # another login, or none, drops the verified email: the account just unlinked would otherwise sign
                 # straight back in by it. The same login again keeps it.
+                before = conn.execute("SELECT github_login FROM members WHERE id = %s FOR NO KEY UPDATE", (pk,)).fetchone()
+                assert before is not None
                 conn.execute(
                     "UPDATE members SET github_login = %s, github_user_id = NULL,"
                     " verified_email = CASE WHEN lower(coalesce(%s, '')) = lower(coalesce(github_login, ''))"
                     " THEN verified_email END WHERE id = %s",
                     (login, login, pk),
                 )
+                self._moved_link(conn, pk, before["github_login"], login)
             if email is None:
                 return
             if wanted is None:

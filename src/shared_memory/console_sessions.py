@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
@@ -20,7 +20,7 @@ import httpx
 from shared_memory.audit import SIGN_IN_REFUSED, SIGNED_IN, Audit
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import GitHubAccount, Identity, Member, ProvenSignIn
 from shared_memory.platform_sign_in import MAX_LIFETIME, InvalidSignIn, verify
@@ -38,6 +38,11 @@ STATE_MINUTES = 10
 
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def end_member_sessions(conn: Conn, member_pk: int, at: datetime) -> None:
+    """End every open console session of one member, in the caller's transaction."""
+    conn.execute("UPDATE console_sessions SET ended_at = %s WHERE ended_at IS NULL AND member_id = %s", (at, member_pk))
 
 
 @dataclass(frozen=True)
@@ -287,6 +292,10 @@ class ConsoleSessions:
                 "SELECT member_id FROM console_sessions WHERE token_hash = %s AND ended_at IS NULL", (_hash(token),)
             ).fetchone()
         return int(row["member_id"]) if row else None
+
+    def end_for_moved_link(self, conn: Conn, member_pk: int) -> None:
+        """End a member's console sessions when their GitHub account is moved or taken away, inside that change."""
+        end_member_sessions(conn, member_pk, self._clock())
 
     def end_all_for(self, member_id: str, company_pk: int) -> None:
         """End every console session of one member, for when they are removed from the company."""
