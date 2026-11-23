@@ -25,7 +25,8 @@ MEMBER_NAME_LIMIT = 100
 # The longest an email address may be (RFC 5321): the one place the limit is named.
 EMAIL_LIMIT = 254
 PROJECT_ID_ATTEMPTS = 5
-NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}$")
+# \Z, not $: a $ would also take a name followed by a line break.
+NAME_PATTERN = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_LIMIT - 1}}}\Z")
 
 # What another module does when a member may have lost a project. It is called inside the transaction making the
 # change, with whoever made it, so its writes commit with the change or not at all; what it gives back is called once

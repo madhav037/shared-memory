@@ -67,6 +67,8 @@ def burst_of(per_minute: int) -> int:
 # worker looks every this often.
 IDLE_BUCKETS = timedelta(hours=1)
 PRUNE_EVERY = timedelta(minutes=10)
+# The longest address a bucket is kept under: an IPv6 address with its zone fits.
+ADDRESS_LIMIT = 64
 
 
 # What an admin may set a limit to, a minute.
@@ -184,7 +186,9 @@ class RateLimits:
         if session and (member := self._console_sessions.member_pk_of(session)) is not None:
             return self._count_call(f"console:{member}", limits.console_per_minute)
         self._prune_if_due()
-        return self._count_call(f"address:{address or 'unknown'}", limits.address_per_minute)
+        # No address is longer than this: anything longer shares one bucket, rather than a key too long to store.
+        readable = address if address and len(address) <= ADDRESS_LIMIT else "unreadable"
+        return self._count_call(f"address:{readable}", limits.address_per_minute)
 
     def _audit_limited(self, token_id: int, per_minute: int, key: str) -> None:
         """Write to the audit log that this personal token was limited, unless that was written within the hour, so
