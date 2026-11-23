@@ -27,13 +27,11 @@ MIN_AVAILABLE_MB="${SHARED_MEMORY_DEPLOY_MIN_AVAILABLE_MB:-1024}"
 IMAGES=(shared-memory-server shared-memory-caddy shared-memory-backup)
 SERVICES="backup caddy db server"
 
-# Every line also goes to a file here, and a line the connection can no longer take is dropped rather than fatal.
-log()  { local line; line="$(date -u +%H:%M:%S) $*"; echo "$line" >> "$STATE/deploy.log"; echo "$line" 2>/dev/null || true; }
-fail() {
-    local line; line="$(date -u +%H:%M:%S) ✗ $*"
-    echo "$line" >> "$STATE/deploy.log"; echo "$line" >&2 2>/dev/null || true
-    exit 1
-}
+# Lines go to the connection (descriptors 3 and 4, which `main` keeps) and to a file here. A line either can't take is
+# dropped rather than fatal, so a dropped connection or a full disk never stops a switch half-way.
+note() { echo "$2" >&"$1" 2>/dev/null || true; echo "$2" >> "$STATE/deploy.log" 2>/dev/null || true; }
+log()  { note 3 "$(date -u +%H:%M:%S) $*"; }
+fail() { note 4 "$(date -u +%H:%M:%S) ✗ $*"; exit 1; }
 usage() { fail "usage: check | layers | deploy <commit> | drill"; }
 
 compose() { (cd "$REPO/deploy" && docker compose "$@"); }
@@ -76,14 +74,13 @@ healthy() {
 }
 
 # Runs the images tagged $1 with the deploy files of commit $2. Called as a condition, where `set -e` doesn't hold, so
-# every step says itself whether it failed. What git and compose print goes to the log file, since a write to a
-# connection that has gone could stop them half-way through.
+# every step says itself whether it failed.
 switch_to() {
-    git -C "$REPO" checkout -q --detach "$2" >> "$STATE/deploy.log" 2>&1 || return 1
+    git -C "$REPO" checkout -q --detach "$2" || return 1
     local image
     for image in "${IMAGES[@]}"; do docker tag "$image:$1" "$image:latest" || return 1; done
     root_owns_memory || return 1
-    compose up -d --no-build --remove-orphans >> "$STATE/deploy.log" 2>&1 || return 1
+    compose up -d --no-build --remove-orphans || return 1
 }
 
 # A server image from before #388 runs as root, and git refuses a memory folder another user owns, so putting such a
@@ -91,17 +88,19 @@ switch_to() {
 root_owns_memory() {
     [ "$(docker image inspect -f '{{json .Config.Entrypoint}}' shared-memory-server:latest)" = null ] || return 0
     log "The server image runs as root, so /data goes back to root"
-    compose stop server >> "$STATE/deploy.log" 2>&1 || return 1
-    compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data >> "$STATE/deploy.log" 2>&1 || return 1
+    compose stop server || return 1
+    compose run --rm --no-deps -T --entrypoint chown server -R 0:0 /data || return 1
 }
 
 # From the switch until it is settled, a dropped connection or the job's timeout must not stop the script half-way:
-# hang-ups and closed output are ignored, and any other exit puts back the release tagged $1 with commit $2, as an
-# unhealthy release would be. A note of the switch stays until it is settled, so a switch the host itself cut off
-# (a kill, a reboot) stops the next deploy before it retags `previous` over the release to fall back to.
+# hang-ups and closed output are ignored, what git and docker print goes to the log file rather than to a connection
+# that may have gone, and any other exit puts back the release tagged $1 with commit $2, as an unhealthy release would
+# be. A note of the switch stays until it is settled, so a switch the host itself cut off (a kill, a reboot) stops the
+# next deploy before it retags `previous` over the release to fall back to.
 begin_switch() {
     echo "$2" > "$STATE/switching"
     trap '' HUP PIPE
+    exec >> "$STATE/deploy.log" 2>&1
     trap "put_back $1 $2" EXIT
 }
 settled() { trap - EXIT; rm -f "$STATE/switching"; }
@@ -241,6 +240,7 @@ main() {
     set -euo pipefail
     export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
     mkdir -p "$STATE"
+    exec 3>&1 4>&2
     # Over SSH, the forced command's words arrive in SSH_ORIGINAL_COMMAND, split here and never run as a command.
     local args
     if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then read -r -a args <<< "$SSH_ORIGINAL_COMMAND"; else args=("$@"); fi

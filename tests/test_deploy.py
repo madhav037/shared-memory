@@ -83,6 +83,8 @@ case "$1" in
     images) for f in "$images/$2":*; do [ -e "$f" ] && echo "${f##*:}"; done; true ;;
     compose)
         shift
+        # As the real CLI does, it writes to standard error, and dies when that connection has gone.
+        echo "WARN compose $1" >&2 2>/dev/null || exit 141
         case "$1 $2 $3 $4" in
             "exec -T backup backup") exit "${STUB_BACKUP_EXIT:-0}" ;;
         esac
@@ -253,6 +255,17 @@ def test_an_unhealthy_release_cut_off_from_its_connection_is_still_replaced(host
 
     assert host.serving() == "shared-memory-server@running"
     assert host.head() == host.running
+    assert not host.unfinished().exists()
+
+
+@pytest.mark.parametrize("sent", [None, "SIGHUP"], ids=["output gone", "hung up"])
+def test_a_healthy_release_cut_off_from_its_connection_stays(host: Host, sent: str | None) -> None:
+    host.ssh_cut_off(f"deploy {host.newer}", host.release(host.newer), sent=sent)
+
+    assert host.serving() == f"shared-memory-server:{host.newer}"
+    assert host.head() == host.newer
+    state = host.unfinished().parent
+    assert (state / "previous").read_text(encoding="utf-8").strip() == host.running
     assert not host.unfinished().exists()
 
 
