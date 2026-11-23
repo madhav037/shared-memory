@@ -11,6 +11,7 @@ What other modules stand on, all of it on `Activities`:
 - `in_project(project_id)`: the project's active sessions, oldest first, each a `SessionActivity`: the `Session`, its
   activity (None when it stated none and its member has no card in Doing) and whether that activity is a card's title.
 - `for_briefing(caller, session)`: those sessions as the briefing lists them, one line each, without the asking one.
+- `news_digest(conn, ids)`: a digest of these sessions' stated activities, for a standby to see whether they changed.
 
 Only this module reads the `session_activities` table.
 """
@@ -109,6 +110,19 @@ class Activities:
                 " ON CONFLICT (session_id) DO UPDATE SET activity = EXCLUDED.activity, stated_at = EXCLUDED.stated_at",
                 (session.id, stated, self._clock()),
             )
+        return stated
+
+    @staticmethod
+    def news_digest(conn: Conn, ids: Sequence[int]) -> str | None:
+        """A digest of the activities these sessions stated, read in a transaction already open: what a standby
+        compares to see whether news may have come (ADR-0027)."""
+        row = conn.execute(
+            "SELECT md5(string_agg(session_id || ':' || stated_at || ':' || activity, ',' ORDER BY session_id))"
+            " AS stated FROM session_activities WHERE session_id = ANY(%s)",
+            (list(ids),),
+        ).fetchone()
+        assert row is not None
+        stated: str | None = row["stated"]
         return stated
 
     def in_project(self, project_id: str) -> list[SessionActivity]:

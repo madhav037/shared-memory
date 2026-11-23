@@ -11,11 +11,13 @@ embeddings."""
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import shutil
 import subprocess
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future
 from pathlib import Path
@@ -28,9 +30,11 @@ from anyio.from_thread import start_blocking_portal
 from shared_memory.app import build_app
 from shared_memory.config import STAND_BY_TOOL_CAP_SECONDS, Settings
 from shared_memory.connection import connection_kit
-from shared_memory.standby import STAND_BY_SECONDS
+from shared_memory.db import Database
+from shared_memory.standby import STAND_BY_SECONDS, Standbys
 from tests.support import REPO_ROOT, RunningServer, Session, Company, TestClock, added_context, fresh_database
-from tests.test_collisions import RETRIES, WEBHOOKS, ChosenSimilarity, state
+from tests.test_board import card
+from tests.test_collisions import CARD, RETRIES, WEBHOOKS, ChosenSimilarity, state
 from tests.test_connection_kit import (
     POWERSHELLS,
     background_standby_commands,
@@ -45,6 +49,7 @@ from tests.test_gates import GATED, SHOW_FIRST, URGENT, answer_gate, collide, he
 from tests.test_locks import FILE, take
 from tests.test_messages import ASKED, PROMPT, REPLIED, send
 from tests.test_mute import mute
+from tests.test_never_lock_patterns import SNAPSHOT, payments
 
 CHECK_SECONDS = 0.05
 # Long enough for a standby that should still be held to have been checked many times over.
@@ -305,6 +310,128 @@ def test_a_muted_sessions_standby_ends_on_an_urgent_message(owner: Session, dana
     send_urgent(dana, "owner-1")
 
     assert URGENT in news_in(held)
+
+
+def test_a_standby_ends_with_a_collision_from_a_card_claimed(owner: Session, dana: Session) -> None:
+    card(owner, CARD)
+    dana.start()
+    state(owner, WEBHOOKS)
+    held = standing_by(owner)
+
+    dana.call("claim_card", number=1)
+
+    news = news_in(held)
+    assert "[possible collision]" in news and f'"{CARD}"' in news
+
+
+def test_a_standby_ends_with_a_message_to_its_members_session_that_ended(owner: Session, dana: Session) -> None:
+    owner.start()
+    other = dana.as_session("dana-elsewhere")
+    other.start()
+    send(owner, "emp-2", ASKED)
+    dana.start()
+    held = standing_by(dana)
+    assert still_held(held), "the message is the other session's while it is active"
+
+    other.end()
+
+    assert ASKED in news_in(held)
+
+
+def test_a_standby_ends_with_a_lock_an_added_pattern_ended(company: Company, dana: Session) -> None:
+    lead, cole, _ = payments(company, dana)
+    take(cole, SNAPSHOT)
+    held = standing_by(cole)
+
+    lead.call("never_lock", add="*.snap")
+
+    assert "no longer holds the lock" in news_in(held)
+
+
+def test_a_standby_ends_with_the_gate_lifting_when_the_projects_wait_is_shortened(
+    company: Company, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    company.server.clock.advance(minutes=2)
+    held = standing_by(dana)
+    assert still_held(held)
+
+    owner.call("project_wait", minutes=1)
+
+    news = news_in(held)
+    assert "[gate]" in news and "Olive Owner" in news and "wait" in news
+
+
+# What a check costs: one small query every 2 seconds (ADR-0027)
+
+# The most statements one check with no news runs, all in its one transaction.
+CHECK_STATEMENTS = 9
+
+
+class CountedConn:
+    """A connection that counts the statements run on it."""
+
+    def __init__(self, conn: Any, count: Counter[str]) -> None:  # noqa: ANN401  # the pool's connection, passed through
+        self._conn = conn
+        self._count = count
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401  # the connection's own
+        self._count["statements"] += 1
+        return self._conn.execute(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401  # the connection's own
+        return getattr(self._conn, name)
+
+
+@pytest.fixture
+def cost(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """The checks standbys make, and the transactions and statements the server runs, from when it is cleared."""
+    count: Counter[str] = Counter()
+    transaction, still_held = Database.transaction, Standbys._still_held
+
+    @contextlib.contextmanager
+    def counted(self: Database) -> Iterator[Any]:
+        count["transactions"] += 1
+        with transaction(self) as conn:
+            yield CountedConn(conn, count)
+
+    def checked(self: Standbys, *args: Any) -> Any:  # noqa: ANN401  # what it stands in for gives
+        count["checks"] += 1
+        return still_held(self, *args)
+
+    monkeypatch.setattr(Database, "transaction", counted)
+    monkeypatch.setattr(Standbys, "_still_held", checked)
+    return count
+
+
+def checked(cost: Counter[str], checks: int) -> None:
+    """Wait until the standby has made this many checks since `cost` was cleared."""
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while cost["checks"] < checks:
+        assert time.monotonic() < deadline, f"only {cost['checks']} checks"
+        time.sleep(CHECK_SECONDS / 2)
+
+
+@pytest.mark.parametrize("gated", [False, True], ids=["alone", "gated"])
+def test_a_standby_check_with_no_news_is_one_transaction_of_a_few_statements(
+    owner: Session, dana: Session, cost: Counter[str], gated: bool
+) -> None:
+    if gated:
+        collide(owner, dana)
+    else:
+        owner.start()
+        dana.start()
+    held = standing_by(dana)
+    checked(cost, 2)  # its first check asked for the news and found none
+    cost.clear()
+
+    checked(cost, 5)
+
+    checks = cost["checks"]
+    # One check may have been under way when counting began.
+    assert cost["transactions"] <= checks + 1, cost
+    assert cost["statements"] <= CHECK_STATEMENTS * (checks + 1), cost
+    assert end(dana, held)["ended"] == "moved_on"
 
 
 # What the member is shown (#590)

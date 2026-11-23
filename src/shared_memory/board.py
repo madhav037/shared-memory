@@ -583,6 +583,21 @@ class Board:
         titles = {named[row["assignee_id"]][0]: row["title"] for row in rows}
         return {member_id: title for member_id, title in titles.items() if member_id in asked}
 
+    @staticmethod
+    def doing_digest(conn: Conn, project_id: str) -> str | None:
+        """A digest of the project's cards in Doing and who has each, read in a transaction already open: a session
+        that stated no activity is shown with one (`doing_titles`), so a standby compares it to see whether news may
+        have come (ADR-0027)."""
+        row = conn.execute(
+            "SELECT md5(string_agg(id || ':' || assignee_id || ':' || moved_at || ':' || position || ':' || title, ','"
+            " ORDER BY id)) AS doing FROM cards WHERE project_id = %s AND board_column = 'doing'"
+            " AND assignee_id IS NOT NULL",
+            (project_id,),
+        ).fetchone()
+        assert row is not None
+        doing: str | None = row["doing"]
+        return doing
+
     def require_card(self, caller: Caller, number: int) -> None:
         """Refuse a card number this project's board doesn't have, or a card the caller may not change: a known issue
         names its card before it lands, so a link that would be refused is refused before anything is saved."""

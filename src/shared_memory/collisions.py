@@ -36,7 +36,7 @@ What other modules stand on, all of it on `Collisions`:
   it with.
 - `warnings(caller, session, prompt)`: what the session is told now, its prompt compared too when given. Asking marks
   it told and keeps each collision found.
-- `of(session)`: the collisions a session is in, as the later session or the earlier.
+- `of(session, conn)`: the collisions a session is in, as the later session or the earlier.
 - `reminders(caller, session, prompt)`: the recent work a session is reminded of now, each with whether it is the
   first time, which is when its handoff note comes with it.
 - `heed(session, member_id)`: the session messaged that member, or, with None, said it is different work.
@@ -222,7 +222,11 @@ class Collisions:
         gone = list(ids)
         # An ended session's last activity is kept for recent work; one back from idle is active again.
         ended = self._sessions.ended_among(conn, gone)
-        conn.execute("DELETE FROM recent_activities WHERE session_id = ANY(%s)", (gone,))
+        # Lines older than the window go as new ones come, not on every read: nothing sweeps (ADR-0018).
+        conn.execute(
+            "DELETE FROM recent_activities WHERE session_id = ANY(%s) OR ended_at <= %s",
+            (gone, self._clock() - self._recent),
+        )
         for session_id, where in ended.items():
             conn.execute(
                 "INSERT INTO recent_activities (session_id, activity, embedding, ended_at)"
@@ -320,14 +324,18 @@ class Collisions:
                     (later.project_id, later.id, overlap.session.id, overlap.score, overlap.cause.value, now),
                 )
 
-    def of(self, session: Session) -> list[Collision]:
-        """The collisions this session is in, as the later session or the earlier, oldest first."""
-        with self._db.transaction() as conn:
-            rows = conn.execute(
-                "SELECT project_id, later_session_id, earlier_session_id, score, cause, found_at FROM collisions"
-                " WHERE later_session_id = %s OR earlier_session_id = %s ORDER BY found_at, id",
-                (session.id, session.id),
-            ).fetchall()
+    def of(self, session: Session, conn: Conn | None = None) -> list[Collision]:
+        """The collisions this session is in, as the later session or the earlier, oldest first. Pass the connection
+        of a transaction already open to ask within it."""
+        query = (
+            "SELECT project_id, later_session_id, earlier_session_id, score, cause, found_at FROM collisions"
+            " WHERE later_session_id = %s OR earlier_session_id = %s ORDER BY found_at, id"
+        )
+        if conn is not None:
+            rows = conn.execute(query, (session.id, session.id)).fetchall()
+        else:
+            with self._db.transaction() as own:
+                rows = own.execute(query, (session.id, session.id)).fetchall()
         return [
             Collision(
                 row["project_id"],
@@ -403,13 +411,11 @@ class Collisions:
         return lines
 
     def _recent_lines(self, session: Session) -> list[tuple[Session, str, list[float]]]:
-        """The sessions gone lately in this session's project that had an activity, each with it and its embedding.
-        Ended sessions' lines older than the window are deleted as they are read: nothing sweeps (ADR-0018)."""
+        """The sessions gone lately in this session's project that had an activity, each with it and its embedding."""
         gone = self._gone_lately(session)
+        if not gone:
+            return []
         with self._db.transaction() as conn:
-            conn.execute("DELETE FROM recent_activities WHERE ended_at <= %s", (self._clock() - self._recent,))
-            if not gone:
-                return []
             lines = self._lines(conn, gone)
         return [(each, *lines[each.id]) for each in gone if each.id in lines]
 

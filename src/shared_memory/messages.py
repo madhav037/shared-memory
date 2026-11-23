@@ -23,6 +23,8 @@ What other modules stand on, all of it on `Messages`:
   urgent ones, for a muted session asking on a tool call (#514); the rest keep waiting. Asking marks them delivered.
   An urgent one carries a warning (#589), with the time left of the project's wait, which `wait` gives, its clock time
   in `zone`, the reader's time zone.
+- `news_digest(conn, session)`: the messages not yet delivered to a session's member in its project, for a standby to
+  see whether its news may have changed.
 - `awaiting_reply(session)`: the member IDs of the members whose reply this session's latest message awaits.
 - `exchanged(project_id, member_id)`: the messages a member's sessions in a project sent or were sent, still kept,
   changing nothing: what the console shows.
@@ -37,7 +39,7 @@ from datetime import datetime, timedelta, tzinfo
 from shared_memory import fence, warning
 from shared_memory.clock import Clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.identity import Caller
 from shared_memory.sessions import Session, Sessions
@@ -191,6 +193,19 @@ class Messages:
         return Sent(
             to=for_sessions[0].member_name, waiting=not active, muted=bool(active) and all(each.muted for each in active)
         )
+
+    @staticmethod
+    def news_digest(conn: Conn, session: Session) -> str | None:
+        """A digest of the messages not yet delivered to this session's member in its project, read in a transaction
+        already open, for a standby to see whether news may have come (ADR-0027)."""
+        row = conn.execute(
+            "SELECT md5(string_agg(id::text, ',' ORDER BY id)) AS waiting FROM messages"
+            " WHERE project_id = %s AND recipient_member_id = %s AND delivered_at IS NULL",
+            (session.project_id, session.member_id),
+        ).fetchone()
+        assert row is not None
+        waiting: str | None = row["waiting"]
+        return waiting
 
     def waiting_notices(self, session: Session, urgent_only: bool = False, zone: tzinfo | None = None) -> list[str]:
         """What this session is told once: each message sent to it, and each sent to another session of its member in

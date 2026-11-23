@@ -21,6 +21,7 @@ What other modules stand on, all of it on `Sessions`:
   idle, so a module clears what it kept for them. A session that goes idle and never calls again is never reported:
   `still_active` is what says it is gone.
 - `waiting_notices(session)`: what a session is told once: that it is back from idle, or back after it had ended.
+- `news_digest(conn, session)`: the project's active sessions, for a standby to see whether its news may have changed.
 - `report(session, branch, files)`: where a session is, from its hook before a tool: its git branch and the files
   that tool named, kept beside the session as the files it touched (ADR-0025).
 - `keep_utc_offset(session, minutes)`: the UTC offset its session-start hook reported, kept as
@@ -372,6 +373,19 @@ class Sessions:
             return {row["id"] for row in conn.execute(query, values).fetchall()}
         with self._db.transaction() as own:
             return {row["id"] for row in own.execute(query, values).fetchall()}
+
+    def news_digest(self, conn: Conn, session: Session) -> tuple[list[int], str | None]:
+        """The ids of the project's active sessions, and a digest of each with when it started and whether it is back
+        from idle or after it had ended, read in a transaction already open: what a standby compares to see whether
+        news may have come (ADR-0027). Never when one was last seen, which moves with every call."""
+        row = conn.execute(
+            "SELECT array_agg(id ORDER BY id) AS ids, md5(string_agg(id || ':' || started_at || ':' ||"
+            " (back_from_idle OR back_from_end), ',' ORDER BY id)) AS seen FROM sessions"
+            " WHERE project_id = %s AND ended_at IS NULL AND last_seen_at > %s",
+            (session.project_id, self._clock() - self.idle_after),
+        ).fetchone()
+        assert row is not None
+        return list(row["ids"] or []), row["seen"]
 
     def waiting_notices(self, session: Session) -> list[str]:
         """What this session is told once, with its next prompt or the answer of its next tool call: that it is back

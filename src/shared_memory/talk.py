@@ -18,6 +18,7 @@ What other modules stand on, all of it on `Talk`:
 - `answering(caller, member_id)`: the member's sessions in the project that can answer this member now.
 - `speaking(caller)`: the member's session in the project that a reply from the console comes from.
 - `waiting_notices(session)`: what its member did from the console, told once.
+- `news_digest(conn, session)`: how many of those wait, for a standby to see whether its news may have changed.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from shared_memory import fence
 from shared_memory.clock import Clock
 from shared_memory.collisions import Collisions
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.gates import ANSWERS, Answer, Gates
 from shared_memory.identity import Caller
@@ -157,6 +158,16 @@ class Talk:
             conn.execute(
                 "INSERT INTO console_doings (session_id, said, done_at) VALUES (%s, %s, %s)", (session.id, said, now)
             )
+
+    @staticmethod
+    def news_digest(conn: Conn, session: Session) -> int:
+        """How many of its member's doings from the console wait to be told to this session, read in a transaction
+        already open, for a standby to see whether news may have come (ADR-0027)."""
+        row = conn.execute(
+            "SELECT count(*) AS waiting FROM console_doings WHERE session_id = %s", (session.id,)
+        ).fetchone()
+        assert row is not None
+        return int(row["waiting"])
 
     def waiting_notices(self, session: Session) -> list[str]:
         """What this session's member did for it from the console, told once, oldest first."""

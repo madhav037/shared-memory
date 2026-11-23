@@ -64,6 +64,8 @@ What other modules stand on, all of it on `Gates`:
 - `urgent_awaits(session)`: the member IDs of the members whose answer this later session's urgent messages await.
 - `replied(session, to)`: this session sent this member a message, which answers their urgent messages to it.
 - `wait(project_id)` and `set_wait(caller, minutes)`: the project's wait.
+- `news_digest(conn, session, collisions)`: what a session's gates are worked out from, for a standby to see whether
+  its news may have changed.
 """
 
 from __future__ import annotations
@@ -469,6 +471,27 @@ class Gates:
         with self._db.transaction() as conn:
             row = conn.execute("SELECT minutes FROM project_waits WHERE project_id = %s", (project_id,)).fetchone()
         return int(row["minutes"]) if row else self._default_wait
+
+    def news_digest(self, conn: Conn, session: Session, collisions: Sequence[Collision]) -> tuple[object, ...]:
+        """What this session's gates are worked out from, read in a transaction already open, for a standby to see
+        whether news may have come (ADR-0027): the project's wait, how many of these collisions (`Collisions.of`) have
+        had their wait pass by the clock, which writes nothing, and a digest of each end of and answer to a gate the
+        session is in."""
+        row = conn.execute(
+            "SELECT (SELECT minutes FROM project_waits WHERE project_id = %(project)s) AS minutes,"
+            " (SELECT md5(string_agg(kept, ',' ORDER BY kept)) FROM ("
+            "SELECT 'end:' || later_session_id || ':' || earlier_session_id || ':' || ended_by || ':' || told"
+            " || ':' || later_told AS kept FROM gate_ends"
+            " WHERE later_session_id = %(session)s OR earlier_session_id = %(session)s"
+            " UNION ALL SELECT 'answer:' || later_session_id || ':' || earlier_session_id || ':' || answer || ':'"
+            " || answered_at || ':' || told FROM gate_answers"
+            " WHERE later_session_id = %(session)s OR earlier_session_id = %(session)s) AS gates) AS gates",
+            {"project": session.project_id, "session": session.id},
+        ).fetchone()
+        assert row is not None
+        minutes = int(row["minutes"]) if row["minutes"] is not None else self._default_wait
+        now, wait = self._clock(), timedelta(minutes=minutes)
+        return minutes, sum(now >= each.found_at + wait for each in collisions), row["gates"]
 
     def set_wait(self, caller: Caller, minutes: int) -> int:
         """Set the caller's project's wait: for its leads and the company's admins."""

@@ -43,7 +43,7 @@ from shared_memory.console_sessions import ConsoleSessions
 from shared_memory.challenges import Challenges
 from shared_memory.clock import Clock, system_clock
 from shared_memory.config import Settings
-from shared_memory.db import Database
+from shared_memory.db import Conn, Database
 from shared_memory.department_page import DepartmentPages
 from shared_memory.departments import Departments
 from shared_memory.draft_learnings import ASKING as DRAFT_LEARNINGS_ASKING
@@ -492,7 +492,8 @@ def build_app(
         for a later session no hook has reached, that its gate waits (#518). The one place it is gathered: the
         prompt hook asks it, the hook before each tool call (or after it, for an agent whose hook before a tool takes
         no added context) asks it, and so do the tools that take `session` and answer with `notices`, for a coding
-        agent with no hooks. A module with something for a session adds it here. Asking marks it all told, so a tool
+        agent with no hooks. A module with something for a session adds it here, and what it is worked out from to
+        `news_digest`, or a standby never hears of it. Asking marks it all told, so a tool
         asks only once its own work has succeeded. The prompt hook gives its prompt's embedding, which collisions
         compares with the other sessions' activities, and says it is `prompted`: a muted session hears its messages
         that are not urgent only then, or once it unmutes (#514); everything else gets through a mute."""
@@ -507,6 +508,25 @@ def build_app(
             *talk.waiting_notices(session),
             *recent_work(current, session, prompt),
         ]
+
+    def news_digest(session: Session, conn: Conn) -> tuple[object, ...]:
+        """What `waiting_for` works a session's news out from, read in one transaction already open, each from the
+        module that keeps it: the project's active sessions and their activities, the cards in Doing that stand in for
+        an activity, the session's collisions and gates, with the waits the clock has passed, and the takeovers,
+        messages and console doings waiting for it. A standby asks for the news only when this has changed (ADR-0027);
+        whatever only stops news coming, such as a mute or a warning already told, is left out."""
+        active, seen = sessions.news_digest(conn, session)
+        collided = collisions.of(session, conn)
+        return (
+            seen,
+            activities.news_digest(conn, active),
+            board.doing_digest(conn, session.project_id),
+            collided,
+            gates.news_digest(conn, session, collided),
+            locks.news_digest(conn, session),
+            messages.news_digest(conn, session),
+            talk.news_digest(conn, session),
+        )
 
     def recent_work(current: Caller, session: Session, prompt: list[float] | None) -> list[str]:
         """The reminder of each session gone lately whose work this session's prompt or activity matches, on every
@@ -849,7 +869,8 @@ def build_app(
 
         current, session, awaits = await anyio.to_thread.run_sync(started)
         news = functools.partial(waiting_for, current, session)
-        ended = await standbys.hold(session, news, awaits, seconds=seconds, gone=gone)
+        digest = functools.partial(news_digest, session)
+        ended = await standbys.hold(session, news, digest, awaits, seconds=seconds, gone=gone)
         zone = await anyio.to_thread.run_sync(reader_zone, current, session)
         return _standby_answer(ended, zone)
 
