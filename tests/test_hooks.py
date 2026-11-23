@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 import pytest
 
-from tests.support import Session, Company, added_context
+from tests.support import CLAUDE_EVENTS, WORKING_FOLDER, Session, Company, added_context
 
 # Where each agent family reads the context out of an answer, and so the shape the server owes it. None is the format
 # an agent that asks for none gets: Claude Code's, which is what these endpoints have always answered.
@@ -170,22 +172,33 @@ def test_a_payload_the_server_cannot_read_still_answers_every_family_emptily(own
 HOOK_BODY_LIMIT = 1_000_000
 
 
-def posted_raw(session: Session, event: str, framing: dict[str, str], body: bytes) -> tuple[int, dict[str, Any]]:
+def posted_raw(
+    session: Session,
+    event: str,
+    framing: dict[str, str],
+    body: bytes,
+    held: Callable[[], None] | None = None,
+) -> tuple[int, dict[str, Any]]:
     """Post a hook over a bare socket: send these headers and this much body, then wait for the answer.
 
     When the body sent is shorter than the headers promise, it never finishes arriving, so an answer at all shows the
     server answered without reading the body whole. The body is sent from another thread, because a server that stops
-    reading leaves the sender blocked.
+    reading leaves the sender blocked. `held` runs between the headers and the body, as for a body held back.
     """
     address = urlsplit(session.server.url)
     assert address.hostname is not None and address.port is not None
     lines = [f"POST /hooks/{event} HTTP/1.1", f"Host: {address.netloc}", "Content-Type: application/json"]
     lines += [f"{name}: {value}" for name, value in {**session.headers(), **framing}.items()]
     connection = socket.create_connection((address.hostname, address.port), timeout=15)
+    head = ("\r\n".join(lines) + "\r\n\r\n").encode()
+    if held is not None:
+        connection.sendall(head)
+        held()
+        head = b""
 
     def send() -> None:
         try:
-            connection.sendall(("\r\n".join(lines) + "\r\n\r\n").encode() + body)
+            connection.sendall(head + body)
         except OSError:
             pass
 
@@ -254,3 +267,45 @@ def test_a_hook_body_just_under_the_limit_is_still_answered(owner: Session) -> N
 
     assert status == 200
     assert "integer cents" in added_context(answer)
+
+
+def held_back(
+    session: Session, event: str, payload: dict[str, Any], meanwhile: Callable[[], None]
+) -> tuple[int, dict[str, Any]]:
+    """A hook whose headers arrive at once and whose body only once `meanwhile` has happened, a moment later."""
+    named = {"hook_event_name": CLAUDE_EVENTS[event]} if event in CLAUDE_EVENTS else {}
+    body = json.dumps({"session_id": session.identifier, "cwd": WORKING_FOLDER, **named, **payload}).encode()
+
+    def then() -> None:
+        meanwhile()
+        time.sleep(0.5)
+
+    return posted_raw(session, event, {"Content-Length": str(len(body))}, body, held=then)
+
+
+@pytest.mark.parametrize("shut_out", ["remove_member", "reissue_token"])
+def test_a_hook_whose_body_arrives_after_its_member_is_shut_out_gets_nothing(
+    company: Company, owner: Session, shut_out: str
+) -> None:
+    pinned(owner, "Money amounts", "All money amounts are stored as integer cents, never floats.")
+    added = owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    dana = Session(company.server, added["personal_token"], owner.project)
+    assert "integer cents" in context_in(dana.start(), None), "briefed while still in"
+
+    def shut() -> None:
+        owner.call(shut_out, member_id="emp-2")
+
+    status, answer = held_back(dana, "session-start", {"source": "startup"}, shut)
+
+    assert status == 200
+    assert "integer cents" not in json.dumps(answer), "briefed after being shut out"
+
+
+def test_a_standby_whose_body_arrives_after_its_member_is_removed_is_refused(company: Company, owner: Session) -> None:
+    added = owner.call("add_member", member_id="emp-2", name="Dana Dev")
+    dana = Session(company.server, added["personal_token"], owner.project)
+    dana.start()
+
+    status, answer = held_back(dana, "standby", {}, lambda: owner.call("remove_member", member_id="emp-2"))
+
+    assert status == 401, answer

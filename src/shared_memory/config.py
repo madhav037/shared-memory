@@ -44,6 +44,9 @@ class Settings:
     briefing_cap_tokens: int = 1500
     recall_limit: int = 3
     recall_budget_seconds: float = 2.0
+    # The whole of a hook, from its call to its answer, under the 3 seconds a coding agent waits (connection.py's
+    # HOOK_SECONDS): reading its body, the step its parts stand on, and recall all fit in it.
+    hook_deadline_seconds: float = 2.2
     recall_threshold: float = 0.63
     challenge_fallback_days: int = 3
     memory_word_limit: int = 600
