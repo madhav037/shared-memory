@@ -1817,9 +1817,29 @@ def worker_app() -> Starlette:
     return build_app(settings, setup=False)
 
 
+class _SkipHealthChecks(logging.Filter):
+    """Drops uvicorn's access-log line for `GET /health`: an uptime check, the deploy's health wait and the compose
+    health checks ask every few seconds, and a line each would fill the container's log with nothing to read."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and args[1] == "GET":
+            return str(args[2]).split("?", 1)[0] != "/health"
+        return True
+
+
+def skip_health_checks_in_access_log() -> None:
+    """Keep `GET /health` out of uvicorn's access log; every other request is still logged. Run in each worker, so
+    it holds however many there are."""
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(one, _SkipHealthChecks) for one in access.filters):
+        access.addFilter(_SkipHealthChecks())
+
+
 def show_log() -> None:
     """Send the server's own log lines to standard error, the informative ones included. Until something sets the
     logger up, Python writes only warnings and worse, so the query cache's counts would never be seen."""
+    skip_health_checks_in_access_log()
     if not log.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
