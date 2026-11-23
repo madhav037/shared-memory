@@ -1136,7 +1136,9 @@ def without_plugin_settings() -> dict[str, str]:
     }
 
 
-def run_session_start(tmp_path: Path, env_file: Path | None) -> subprocess.CompletedProcess[str]:
+def run_session_start(
+    tmp_path: Path, env_file: Path | None, token: str = AWKWARD_TOKEN, state: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     """Claude Code's session-start hook, with the awkward settings, a stand-in curl and its own state folder."""
     return subprocess.run(
         ["sh", "-c", claude_code_session_start_hook()],
@@ -1148,8 +1150,8 @@ def run_session_start(tmp_path: Path, env_file: Path | None) -> subprocess.Compl
             **without_plugin_settings(),
             **recording_curl(tmp_path),
             **({"CLAUDE_ENV_FILE": str(env_file)} if env_file else {}),
-            "XDG_STATE_HOME": str(tmp_path / "state"),
-            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": AWKWARD_TOKEN,
+            "XDG_STATE_HOME": str(state or tmp_path / "state"),
+            "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN": token,
             "CLAUDE_PLUGIN_OPTION_SERVER_URL": AWKWARD_SERVER_URL,
         },
     )
@@ -1178,10 +1180,48 @@ def test_claude_codes_session_start_hook_keeps_the_token_out_of_the_agents_envir
     assert "smt_" not in env_file.read_text(encoding="utf-8")
     seen = sourced(env_file, "ALREADY_THERE", "CLAUDE_PLUGIN_OPTION_SERVER_URL", "CLAUDE_PLUGIN_OPTION_PERSONAL_TOKEN")
     assert seen == ["kept", AWKWARD_SERVER_URL, "unset"]
-    arguments = (tmp_path / "arguments").read_text(encoding="utf-8")
-    assert [line for line in arguments.split("\n") if "smt_" in line] == [f"Authorization: Bearer {AWKWARD_TOKEN}"], (
-        "the hook's own request still carries the token as the hooks have always sent it"
-    )
+    arguments = (tmp_path / "arguments").read_text(encoding="utf-8").split("\n")
+    assert [line for line in arguments if "smt_" in line] == [], "nor on the hook's own command line"
+    [header_file] = sourced(env_file, "SHARED_MEMORY_HEADER_FILE")
+    assert f"@{header_file}" in arguments, "its own request reads the token from the header file too"
+
+
+def test_claude_codes_session_start_hook_keeps_one_header_file_per_server_whatever_the_token(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    for run, token in (("first", "smt_first"), ("second", "smt_second")):
+        (tmp_path / run).mkdir()
+        run_session_start(tmp_path / run, tmp_path / run / "claude-env", token=token, state=state)
+
+    [header_file] = list((state / "shared-memory").glob("*.headers"))
+    assert header_file.read_text(encoding="utf-8") == "Authorization: Bearer smt_second\n"
+    assert "smt_" not in header_file.name
+
+
+@pytest.mark.parametrize("header_file", ["gone", "empty"])
+def test_claude_codes_standby_command_without_its_header_file_asks_for_a_new_session(
+    tmp_path: Path, header_file: str
+) -> None:
+    if header_file == "empty":
+        (tmp_path / "empty.headers").write_text("", encoding="utf-8")
+    listener = HeaderListener()
+    command = standby_command(claude_code_skill()).replace("<session>", "test-session")
+    try:
+        ran = subprocess.run(
+            ["sh", "-c", command],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={
+                **without_plugin_settings(),
+                "SHARED_MEMORY_HEADER_FILE": str(tmp_path / f"{header_file}.headers"),
+                "CLAUDE_PLUGIN_OPTION_SERVER_URL": listener.url,
+            },
+        )
+    finally:
+        listener.stop()
+
+    assert "restart this session" in ran.stdout
+    assert listener.seen == [], "nothing is sent without the token"
 
 
 def test_claude_codes_session_start_hook_writes_a_header_file_only_its_owner_can_read(tmp_path: Path) -> None:
@@ -1212,6 +1252,8 @@ def test_claude_codes_session_start_hook_without_an_environment_file_only_briefs
 
     assert (ran.returncode, ran.stdout.strip(), ran.stderr) == (0, "{}", "")
     assert sorted(path.name for path in tmp_path.iterdir()) == ["arguments", "bin"], "and writes no header file"
+    arguments = (tmp_path / "arguments").read_text(encoding="utf-8").split("\n")
+    assert f"Authorization: Bearer {AWKWARD_TOKEN}" in arguments, "its request carries the token as before"
 
 
 # Every other agent's kit says how it stands by (ADR-0027, #527): the background command first and the `stand_by` tool

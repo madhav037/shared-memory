@@ -107,6 +107,8 @@ Access to the plugin marketplace repository is needed to install the plugin. Whi
 
 The plugin's hooks call the server with `curl`, which ships with Windows 10 and later, macOS and Linux. On Windows, Claude Code runs the hooks with Git Bash (from Git for Windows).
 
+The personal token never enters the environment of the commands the agent runs. The session-start hook writes it to a header file in `~/.local/state/shared-memory/` (or `$XDG_STATE_HOME/shared-memory/`), one per server, and `curl` reads it from there (`-H @file`, curl 7.55 or later). On macOS and Linux only its owner can read that file (mode 600). Windows doesn't enforce those modes: there it is protected by the user profile's own permissions, as any file in it is.
+
 ### Every other coding agent
 
 1. Set your personal token once on your machine, in the `SHARED_MEMORY_TOKEN` environment variable (on Windows, `setx SHARED_MEMORY_TOKEN <token>`), then restart the agent. VS Code asks for the token the first time instead, and keeps it.
