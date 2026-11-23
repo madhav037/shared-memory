@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.support import Console, ConsoleClient, Session
+from tests.support import Console, ConsoleClient, Session, ToolRefused, signed_in_owner
 
 
 def read_log(client: ConsoleClient, **filters: Any) -> dict[str, Any]:
@@ -134,3 +134,42 @@ def test_the_log_names_each_memory_by_its_title_now_and_keeps_the_path(console: 
     created = next(event for event in events if event["kind"] == "project_created")
     assert created["title"] is None
 
+
+
+def test_adding_removing_and_issuing_tokens_through_a_coding_agent_is_audited_as_the_console_does(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-audit-mcp", 291)
+
+    owner.call("add_member", member_id="emp-2", name="Dana Dev", github="dana-audit-mcp")
+    owner.call("reissue_token", member_id="emp-2")
+    owner.call("remove_member", member_id="emp-2")
+    owner.call("reissue_token", member_id="E1001")  # last: it revokes the token this session calls with
+
+    events = [
+        (event["kind"], event["actor"], event["target"], event["detail"])
+        for event in reversed(read_log(signed_out)["events"])
+        if event["kind"] in ("member_added", "token_issued", "member_removed")
+    ]
+    assert events == [
+        ("member_added", "E1001", "emp-2", {"name": "Dana Dev", "github": "dana-audit-mcp", "email": False}),
+        ("token_issued", "E1001", "emp-2", {"for": "emp-2"}),
+        ("token_issued", "E1001", "emp-2", {"for": "emp-2"}),
+        ("member_removed", "E1001", "emp-2", {}),
+        ("token_issued", "E1001", "E1001", {"for": "themselves"}),
+    ]
+
+
+def test_a_refused_admin_action_through_a_coding_agent_writes_no_audit_entry(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    owner = signed_in_owner(console, signed_out, "olive-audit-mcp-two", 293)
+    before = len(read_log(signed_out)["events"])
+
+    try:
+        owner.call("remove_member", member_id="E1001")
+        raise AssertionError("the owner removed themselves")
+    except ToolRefused:
+        pass
+
+    assert len(read_log(signed_out)["events"]) == before
