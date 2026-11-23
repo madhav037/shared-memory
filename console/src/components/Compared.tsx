@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 import { lineDiff } from "../lib/diff";
 import { visible } from "../lib/hidden";
 
@@ -8,7 +10,10 @@ import { visible } from "../lib/hidden";
  */
 export function Compared({ before, after, side }: { before: string; after: string; side: "now" | "offered" }) {
   const away = side === "now" ? "insert" : "delete";
-  const pieces = lineDiff(before.replace(/\r\n/g, "\n"), after.replace(/\r\n/g, "\n"));
+  const pieces = useMemo(
+    () => lineDiff(before.replace(/\r\n/g, "\n"), after.replace(/\r\n/g, "\n")),
+    [before, after],
+  );
   return (
     <pre className="source compared" data-testid="facing-source">
       {pieces

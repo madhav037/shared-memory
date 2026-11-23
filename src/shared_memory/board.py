@@ -29,7 +29,7 @@ from shared_memory.db import Conn, Database, moved_prefix
 from shared_memory.errors import Refused
 from shared_memory.identity import NAME_PATTERN, Caller, Identity, restricted_project
 from shared_memory.memory import locate
-from shared_memory.validation import CHARACTER_LIMIT, refuse_secret
+from shared_memory.validation import CHARACTER_LIMIT, refuse_secret, without_hidden
 
 log = logging.getLogger("shared_memory")
 
@@ -516,7 +516,8 @@ class Board:
         one that fails to retire is given back as not_retired with the reason, and stops neither the others nor the
         move, which has already happened."""
         number = card["number"]
-        reasoning = f'Card {number} "{card["title"]}", which was to fix this known issue, is done.'
+        # A title saved before hidden characters were refused loses them, so the card can still retire the issue.
+        reasoning = f'Card {number} "{without_hidden(card["title"])}", which was to fix this known issue, is done.'
         outcomes: list[dict[str, Any]] = []
         for path in card["known_issues"]:
             try:

@@ -80,9 +80,10 @@ LEVEL_DECISIONS = ("keep_exception", "follow")
 
 
 def _check_reasoning(reasoning: str | None) -> None:
-    """Reasoning is shown to whoever decides and folded into briefings, so it is checked like a memory's words."""
+    """Reasoning for a promotion, retirement or addition is shown to whoever decides, kept as an exception's reason, and
+    folded into briefings, so it is checked like a memory's words."""
     if reasoning and reasoning.strip():
-        refuse_secret(reasoning, "This reasoning", "into a challenge")
+        refuse_secret(reasoning, "This reasoning", "into reasoning, which members and their coding agents are shown")
 
 
 @dataclass(frozen=True)

@@ -63,6 +63,17 @@ def _find_secret(text: str) -> str | None:
     return None
 
 
+def without_hidden(text: str) -> str:
+    """Text saved before hidden characters were refused, without them: what a member didn't write now is never refused
+    for one."""
+    return _HIDDEN.sub("", text)
+
+
+def as_written(body: str) -> str:
+    """A body as its writer meant it: a byte order mark an editor put at its start is dropped, not refused."""
+    return body.removeprefix(chr(0xFEFF))
+
+
 def refuse_secret(text: str, what: str = "This memory", where: str = "into memory") -> None:
     """Refuse text that looks like it holds a secret, or that holds a character hiding or reordering what a reader
     sees: memory by default, or whatever else is named, such as a card's title on the board."""

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 import subprocess
 
 import pytest
 
+from shared_memory import validation
 from tests.support import Session, Company
 
 
@@ -95,6 +97,8 @@ def test_a_memory_with_a_bad_header_is_refused(member: Session, overrides: dict[
     assert complaint in refusal_to_remember(member, **overrides)
 
 
+RLO = chr(0x202E)
+BOM = chr(0xFEFF)
 HIDDEN = {
     "a tag character": "\U000e0070\U000e0075\U000e0073\U000e0068",
     "a bidi override": "\u202e",
@@ -122,6 +126,29 @@ def test_joiners_used_by_emoji_and_by_persian_and_indic_text_are_kept(member: Se
     body = "The on-call rota \U0001f469\u200d\U0001f4bb. می\u200cخواهم. क्\u200dष"
 
     assert member.call("read", path=remember(member, body=body)["path"])["body"].strip() == body
+
+
+def test_a_byte_order_mark_an_editor_put_at_the_start_of_a_body_is_dropped_not_refused(member: Session) -> None:
+    saved = remember(member, body=BOM + "Retry a failed charge twice.")
+
+    assert member.call("read", path=saved["path"])["body"].strip() == "Retry a failed charge twice."
+
+
+def test_a_memory_saved_before_hidden_characters_were_refused_can_still_be_edited_promoted_and_retired(
+    member: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(validation, "_HIDDEN", re.compile("(?!)"))  # as the server was before it refused them
+    kept = remember(member, title="Retries" + RLO, body="Retry a failed charge twice." + RLO)["path"]
+    moved = remember(member, title="Refunds" + RLO, summary="Refunds wait." + RLO, body="Refund in a week." + RLO)["path"]
+    monkeypatch.undo()
+
+    edited = member.call("edit_memory", path=kept, tied_files=["billing-api:src/charges.py"])
+    promoted = member.call("promote", path=moved, level="project")["path"]
+    member.call("retire", path=promoted)
+
+    assert edited["tied_files"] == ["billing-api:src/charges.py"]
+    assert RLO not in edited["title"] + edited["body"]
+    assert member.call("read", path=promoted)["status"] == "retired"
 
 
 @pytest.mark.parametrize("tool", ["read", "edit_memory", "delete_memory"])

@@ -317,7 +317,7 @@ function Waiting({
                 <div className="dispute-head">
                   <h3>{shown && <Link to={memoryUrl(shown.path)}>{visible(shown.title)}</Link>}</h3>
                   <span className="mark strong" data-testid="foundation-mark">
-                    {challenge.foundation_name} foundation
+                    {visible(challenge.foundation_name ?? "")} foundation
                   </span>
                 </div>
                 {proposal(challenge, 0)}
@@ -345,7 +345,7 @@ function Waiting({
                   )}
                 </h3>
                 <span className="mark strong" data-testid="department-mark">
-                  {challenge.target.title} department
+                  {visible(challenge.target.title)} department
                 </span>
               </div>
               {proposal(challenge, 0)}
@@ -505,8 +505,11 @@ function Proposal({
   // compare the memory with.
   const promoting = challenge.kind === "promote";
   const adding = challenge.kind === "add" || promoting;
-  const pieces = offered && marked && !adding ? offerDiff(challenge.target.body, offered.body) : null;
-  const changes = offered && !adding ? whatChanges(challenge.target.body, offered.body) : null;
+  // An offered memory deleted or moved since is no longer there to compare: it is said to be gone, not diffed as empty.
+  const gone = offered?.status === "gone";
+  const compared = offered && !adding && !gone ? offered : null;
+  const pieces = compared && marked ? offerDiff(challenge.target.body, compared.body) : null;
+  const changes = compared ? whatChanges(challenge.target.body, compared.body) : null;
   return (
     <div className="proposal">
       <p className="proposal-by">
@@ -566,7 +569,7 @@ function Proposal({
         {adding ? (
           <div>
             <span className="title">
-              {challenge.target.title} {promoting ? "department memory" : "foundation"}
+              {visible(challenge.target.title)} {promoting ? "department memory" : "foundation"}
             </span>
             <p className="by">Where it would be added</p>
           </div>
@@ -579,8 +582,8 @@ function Proposal({
             <p className="by">As it stands now, by {who(challenge.target.author)}</p>
             <div className="body">
               {view === "source" ? (
-                offered ? (
-                  <Compared before={challenge.target.source} after={offered.source} side="now" />
+                compared ? (
+                  <Compared before={challenge.target.source} after={compared.source} side="now" />
                 ) : (
                   <Source text={challenge.target.source} testid="facing-source" />
                 )
@@ -602,7 +605,11 @@ function Proposal({
                 by {who(offered.author)}
               </p>
               <div className="body">
-                {view === "source" ? (
+                {gone ? (
+                  <p className="retire-it" data-testid="offer-gone">
+                    The offered memory is gone: it was deleted or moved after the challenge was raised.
+                  </p>
+                ) : view === "source" ? (
                   adding ? (
                     <Source text={offered.source} testid="facing-source" />
                   ) : (
