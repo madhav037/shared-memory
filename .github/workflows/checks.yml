@@ -226,6 +226,24 @@ jobs:
           set +a
           docker run --rm             -e CADDY_SITE_ADDRESS="${SHARED_MEMORY_DOMAIN:-memory.example.com}"             -e CADDY_ROBOTS_TAG="${SHARED_MEMORY_ROBOTS_TAG:-noindex}"             console-edge caddy validate --config /etc/caddy/Caddyfile
 
+      # The server counts calls per client address by the X-Forwarded-For Caddy hands it. A stand-in server answers with
+      # that header, so what reaches it is checked: one address, and never one the caller wrote.
+      - name: Caddy hands the server one client address the caller can't choose
+        run: |
+          docker network create edge
+          docker run -d --rm --network edge --name server caddy:2 sh -c \
+            'printf ":8000 {\n\trespond \"got={header.X-Forwarded-For}\"\n}\n" > /tmp/Caddyfile && caddy run --config /tmp/Caddyfile --adapter caddyfile'
+          docker run -d --rm --network edge --name edge -e CADDY_SITE_ADDRESS=:80 console-edge
+          ask() { docker exec "$1" wget -qO- ${2:+--header "X-Forwarded-For: $2"} "$3"; }
+          # Until both answer: a call goes through the edge to the stand-in.
+          for _ in $(seq 30); do ask edge "" http://127.0.0.1/hooks/up 2>/dev/null | grep -q '^got=' && break; sleep 1; done
+          # From a trusted proxy (here the loopback, the default): the right-most address it didn't write.
+          got=$(ask edge "6.6.6.6, 203.0.113.5" http://127.0.0.1/hooks/probe); echo "$got"; [ "$got" = "got=203.0.113.5" ]
+          got=$(ask edge "" http://127.0.0.1/mcp); echo "$got"; [ "$got" = "got=127.0.0.1" ]
+          # From anywhere else: its own address alone, whatever it sends.
+          outside=$(docker inspect -f '{{(index .NetworkSettings.Networks "edge").IPAddress}}' server)
+          got=$(ask server "6.6.6.6" http://edge/api/probe); echo "$got"; [ "$got" = "got=$outside" ]
+
   # A deploy sends the server only the layers it lacks (deploy/upload.py). This builds the release twice, the second time
   # with only the server's code changed, and hands both to real Docker the way a deploy hands them to the server: the
   # first whole, then the second less what the daemon reports it holds (deploy.sh layers). The second must be small,

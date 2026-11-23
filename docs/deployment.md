@@ -230,11 +230,20 @@ personal tokens, so one never limits the other. The counts live in Postgres, so 
 
 Caddy applies a coarser version of the same limits at the edge, before a worker is woken: per personal token (default
 240 a minute) and per client address for `/mcp` and `/hooks` calls without one (60), and per client address for the
-console's `/api` (1200, room for a whole office). Set them with `SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`,
-`SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep them at
-or above the server's own. This needs the console image's Caddy, which is built with the
+console's `/api` (1200, room for a whole office). Calls carrying a personal token are counted per client address too
+(2400, room for a whole office), since a made-up token would otherwise be a fresh allowance on every call. Set them with
+`SHARED_MEMORY_EDGE_RATE_TOKEN_PER_MINUTE`, `SHARED_MEMORY_EDGE_RATE_ADDRESS_PER_MINUTE`,
+`SHARED_MEMORY_EDGE_RATE_TOKEN_ADDRESS_PER_MINUTE` and `SHARED_MEMORY_EDGE_RATE_CONSOLE_PER_MINUTE` in `.env`; keep
+them at or above the server's own. This needs the console image's Caddy, which is built with the
 [caddy-ratelimit](https://github.com/mholt/caddy-ratelimit) module. Behind your own nginx, `nginx-site.conf.example`
 has the equivalent `limit_req`.
+
+Every limit counts by the client's address, so the server is handed exactly one, which no caller can choose: Caddy
+takes the right-most address in `X-Forwarded-For` that isn't one of its trusted proxies, and passes on that address
+alone. Behind your own nginx, the example site passes on the address nginx saw (`X-Forwarded-For $remote_addr`) and
+counts every call per address as well. A site set up from an older example should take both from it again, then
+`sudo nginx -t && sudo systemctl reload nginx`. If that nginx itself sits behind a CDN or load balancer, set its
+`set_real_ip_from` and `real_ip_header` too, or every caller arrives as that one device.
 
 The numbers above are the defaults. The company's owner and its admins see and change them, or switch the limit off, on
 the console's Company page (every other member sees them read-only); a change is kept in the database, so it holds across

@@ -3,16 +3,28 @@
 #
 # Behind a web server the host already runs (behind-a-proxy.yaml), that server holds HTTPS and the site address is a
 # plain port; it is the only thing that can reach this one, so its X-Forwarded-* headers are believed and passed on.
+# Strict: the client is the right-most address in X-Forwarded-For that isn't a trusted proxy, so whatever a caller
+# writes in that header themselves, to the left, is never taken for their address.
 {
 	servers {
 		trusted_proxies static {$CADDY_TRUSTED_PROXIES:127.0.0.1/32}
+		trusted_proxies_strict
+	}
+}
+
+# The one way to the server. The server counts calls per address by X-Forwarded-For, so it is handed one address, the
+# client as found above, and never the header the caller sent.
+(to_server) {
+	reverse_proxy server:8000 {
+		header_up X-Forwarded-For {client_ip}
 	}
 }
 
 # The edge's rate limit is coarse: it refuses floods before they wake a worker, with ceilings at or above the server's own
 # (which count precisely, in Postgres). Calls carrying a personal token are counted per personal token, the rest per
-# client address (as trusted_proxies resolves it). Console calls come from browsers, so /api is counted per address with
-# room for a whole office. Set the ceilings in .env.
+# client address (as trusted_proxies resolves it). A made-up token would be a fresh allowance on every call, so calls
+# carrying a token are counted per address too, with room for a whole office. Console calls come from browsers, so /api
+# is counted per address with room for a whole office. Set the ceilings in .env.
 (agent_limits) {
 	rate_limit {
 		zone by_token {
@@ -22,6 +34,14 @@
 			key {http.request.header.Authorization}
 			window 1m
 			events {$CADDY_RATE_TOKEN_PER_MINUTE:240}
+		}
+		zone token_by_address {
+			match {
+				header Authorization Bearer*
+			}
+			key {client_ip}
+			window 1m
+			events {$CADDY_RATE_TOKEN_ADDRESS_PER_MINUTE:2400}
 		}
 		zone by_address {
 			match {
@@ -65,23 +85,23 @@
 				events {$CADDY_RATE_CONSOLE_PER_MINUTE:1200}
 			}
 		}
-		reverse_proxy server:8000
+		import to_server
 	}
 
 	# The uptime check: the server answers JSON when it can reach Postgres. Proxied before the single-page fallback, or
 	# it would answer 200 with the console's page while the server is dead. Never limited, as the server never limits it.
 	handle /health {
-		reverse_proxy server:8000
+		import to_server
 	}
 
 	handle /mcp* {
 		import agent_limits
-		reverse_proxy server:8000
+		import to_server
 	}
 
 	handle /hooks/* {
 		import agent_limits
-		reverse_proxy server:8000
+		import to_server
 	}
 
 	# The console is a single-page app: any address it owns is served by its own page. Only the console is compressed;

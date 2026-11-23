@@ -8,12 +8,15 @@
 
 # The same edge limit the stack's Caddy applies, for a host that runs its own nginx: calls carrying a personal token are
 # counted per personal token, the rest per client address. Ceilings at or above the server's own (120 a minute per
-# personal token, 30 per address). This goes in the http context, which is where sites-enabled files are included.
+# personal token, 30 per address). A made-up token would be a fresh allowance on every call, so every call is also
+# counted per address, with room for a whole office. This goes in the http context, which is where sites-enabled files
+# are included.
 map $http_authorization $shared_memory_caller {
     default $http_authorization;
     ""      $binary_remote_addr;
 }
 limit_req_zone $shared_memory_caller zone=shared_memory:10m rate=240r/m;
+limit_req_zone $binary_remote_addr zone=shared_memory_address:10m rate=2400r/m;
 
 server {
     listen 80;
@@ -33,12 +36,14 @@ server {
 
     location / {
         limit_req zone=shared_memory burst=60 nodelay;
+        limit_req zone=shared_memory_address burst=600 nodelay;
         limit_req_status 429;
         proxy_pass http://127.0.0.1:8180;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # The address nginx saw, alone: appending to the caller's own header would let them choose theirs.
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Host $host;
         # MCP answers can stream (server-sent events) and a session-start hook can take a few seconds.
         proxy_buffering off;
