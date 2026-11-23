@@ -17,9 +17,11 @@ from shared_memory.clock import Clock
 from shared_memory.db import Conn, Database
 from shared_memory.errors import Refused
 from shared_memory.memory import CORE_FOUNDATIONS, foundation_title, slugify
+from shared_memory.store import signable
 from shared_memory.time_zone import MemberTimeZone, checked
 
 NAME_LIMIT = 64
+MEMBER_NAME_LIMIT = 100
 # The longest an email address may be (RFC 5321): the one place the limit is named.
 EMAIL_LIMIT = 254
 PROJECT_ID_ATTEMPTS = 5
@@ -262,6 +264,16 @@ def check_name(kind: str, value: str) -> str:
     return value
 
 
+def checked_member_name(name: str) -> str:
+    """A member's name as it is stored and signs their saves: one line with a letter or digit, and no < or >."""
+    cleaned = name.strip()
+    if not any(each.isalnum() for each in cleaned) or len(cleaned) > MEMBER_NAME_LIMIT or signable(cleaned) != cleaned:
+        raise Refused(
+            f"A member's name is one line of up to {MEMBER_NAME_LIMIT} characters, with a letter or digit and no < or >."
+        )
+    return cleaned
+
+
 def unknown_foundation(slug: str, slugs: list[str]) -> Refused:
     return Refused(f"This project has no {slug!r} foundation. Its foundations are {', '.join(slugs)}.")
 
@@ -304,6 +316,7 @@ class Identity:
     ) -> str:
         check_name("Company ID", company_code)
         check_name("Member ID", owner_member_id)
+        owner_name = checked_member_name(owner_name)
         email = self._one_way_in(owner_github, owner_email)
         now = self._clock()
         with self._db.transaction() as conn:
@@ -523,8 +536,7 @@ class Identity:
         if company is not None and company != caller.company:
             raise Refused(f"You can only add members to your own company ({caller.company}).")
         check_name("Member ID", member_id)
-        if not name.strip():
-            raise Refused("A member needs a name.")
+        name = checked_member_name(name)
         with self._db.transaction() as conn:
             existing = conn.execute(
                 "SELECT removed_at FROM members WHERE team_id = %s AND member_id = %s",
@@ -546,7 +558,7 @@ class Identity:
             row = conn.execute(
                 "INSERT INTO members (team_id, member_id, name, github_login, added_email, created_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                (caller.member.company_pk, member_id, name.strip(), login, added, self._clock()),
+                (caller.member.company_pk, member_id, name, login, added, self._clock()),
             ).fetchone()
             assert row is not None
             return self._issue_token(conn, row["id"])
@@ -848,9 +860,7 @@ class Identity:
                 self._require_say_over_access(conn, caller, pk, "change", "GitHub account")
             wanted = checked_email(email) if email is not None and email.strip() else None
             if name is not None:
-                if not name.strip():
-                    raise Refused("A member needs a name.")
-                conn.execute("UPDATE members SET name = %s WHERE id = %s", (name.strip(), pk))
+                conn.execute("UPDATE members SET name = %s WHERE id = %s", (checked_member_name(name), pk))
             if github is not None:
                 login = _github_login(github)
                 if login is not None:

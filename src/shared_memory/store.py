@@ -40,6 +40,7 @@ import stat
 import sys
 import threading
 import time
+import unicodedata
 import uuid
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -161,8 +162,17 @@ class _Landed:
     parent: pygit2.Oid | None
 
 
+def signable(name: str) -> str:
+    """A name as a commit can carry it: one line, with no control characters and no angle brackets."""
+    return "".join(" " if each in "<>" or unicodedata.category(each) in ("Cc", "Zl", "Zp") else each for each in name).strip()
+
+
 def _author(committer: Committer) -> pygit2.Signature:
-    return pygit2.Signature(committer.name, f"{committer.member_id}@members.shared-memory.invalid")
+    # Names are checked when stored; this keeps one stored before that from writing a commit git can't read back.
+    name = signable(committer.name)
+    if not any(each.isalnum() for each in name):
+        name = committer.member_id
+    return pygit2.Signature(name, f"{committer.member_id}@members.shared-memory.invalid")
 
 
 def _cleaned(message: str) -> str:
