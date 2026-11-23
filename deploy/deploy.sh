@@ -98,10 +98,10 @@ root_owns_memory() {
 # be. A note of the switch stays until it is settled, so a switch the host itself cut off (a kill, a reboot) stops the
 # next deploy before it retags `previous` over the release to fall back to.
 begin_switch() {
-    echo "$2" > "$STATE/switching"
     trap '' HUP PIPE
     exec >> "$STATE/deploy.log" 2>&1
     trap "put_back $1 $2" EXIT
+    echo "$2" > "$STATE/switching"
 }
 settled() { trap - EXIT; rm -f "$STATE/switching"; }
 put_back() {
@@ -172,11 +172,13 @@ deploy() {
         log "$commit is healthy"
     else
         log "$commit isn't healthy. Putting $previous back"
+        # Until this is settled the trap stays, so a stop part-way through putting it back tries once more.
+        if switch_to previous "$previous" && healthy; then
+            settled
+            fail "$commit wasn't healthy, so $previous runs again."
+        fi
         trap - EXIT
-        { switch_to previous "$previous" && healthy; } \
-            || fail "$previous isn't healthy either. Look now: docker compose ps, docker compose logs."
-        settled
-        fail "$commit wasn't healthy, so $previous runs again."
+        fail "$previous isn't healthy either. Look now: docker compose ps, docker compose logs."
     fi
     echo "$previous" > "$STATE/previous"
 
@@ -224,9 +226,10 @@ drill() {
         earlier_healthy=no
     fi
     log "Coming back to $current"
-    trap - EXIT
-    { switch_to drill "$current" && healthy; } \
-        || fail "$current isn't healthy after coming back. Look now: docker compose ps, docker compose logs."
+    if ! { switch_to drill "$current" && healthy; }; then
+        trap - EXIT
+        fail "$current isn't healthy after coming back. Look now: docker compose ps, docker compose logs."
+    fi
     settled
     for image in "${IMAGES[@]}"; do docker image rm -f "$image:drill" >/dev/null; done
 

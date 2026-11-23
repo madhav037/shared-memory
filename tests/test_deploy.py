@@ -104,7 +104,7 @@ for arg in "$@"; do case "$arg" in http*) url="$arg" ;; esac; done
 case "$url" in
     https://127.0.0.1/|http://127.0.0.1/) cat "$STUB_OWNER" ;;
     */hooks/session-start)
-        [ "$(cat "$STUB_IMAGES/shared-memory-server:latest")" = "${STUB_UNHEALTHY:-none}" ] && echo 502 || echo 200 ;;
+        case " ${STUB_UNHEALTHY:-} " in *" $(cat "$STUB_IMAGES/shared-memory-server:latest") "*) echo 502 ;; *) echo 200 ;; esac ;;
     *) echo 200 ;;
 esac
 """
@@ -294,6 +294,17 @@ def test_nothing_switches_after_a_switch_that_never_settled(host: Host, command:
     assert b"never settled" in done.stderr
     for change in ("docker load", "docker tag", "compose up", "backup now"):
         assert change not in host.calls()
+    assert host.unfinished().read_text(encoding="utf-8").strip() == host.running
+
+
+def test_when_the_release_put_back_isnt_healthy_either_deploys_wait_for_someone_to_look(host: Host) -> None:
+    unhealthy = f"shared-memory-server:{host.newer} shared-memory-server@running"
+    done = host.ssh(f"deploy {host.newer}", host.release(host.newer), STUB_UNHEALTHY=unhealthy)
+
+    assert done.returncode == 1
+    assert b"isn't healthy either" in done.stderr
+    assert host.unfinished().read_text(encoding="utf-8").strip() == host.running
+    assert b"never settled" in host.ssh(f"deploy {host.newer}", host.release(host.newer)).stderr
 
 
 def test_an_unhealthy_release_is_replaced_by_the_one_it_replaced(host: Host) -> None:
