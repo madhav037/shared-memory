@@ -50,15 +50,19 @@ export function Challenges({
 
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
-    setAnswer(left);
     onDecided?.(left);
+    setAnswer(only ? { ...left, waiting: left.waiting.filter((one) => one.target.path === only) } : left);
+    if (!only) return;
+    // What deciding hands back is every memory's first page, so the one memory's challenges are asked for again.
+    fetchChallenges(undefined, { path: only })
+      .then(setAnswer)
+      .catch((problem: Error) => setMore({ busy: false, refused: problem.message }));
   };
   const dismiss = () => {
     setSlip(null);
     heading.current?.focus();
   };
-  // What deciding hands back is every memory's first page, so the one memory's are picked out of it here too.
-  const shown = !answer ? [] : only ? answer.waiting.filter((one) => one.target.path === only) : answer.waiting;
+  const shown = answer?.waiting ?? [];
   const showMore = async () => {
     if (!answer || answer.next === null || more.busy) return;
     setMore({ busy: true, refused: null });

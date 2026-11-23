@@ -54,17 +54,17 @@ def transactions(console: Console, monkeypatch: pytest.MonkeyPatch) -> Iterator[
     yield counted
 
 
-def a_retire_challenge(console: Console, signed_out: ConsoleClient, github: str, account: int) -> tuple[int, Session]:
-    """Dana asks for the owner's project memory to be retired, which waits for the owner's decision."""
-    owner = signed_in_owner(console, signed_out, github, account)
+def a_retire_challenge(console: Console, signed_out: ConsoleClient, github: str, account: int) -> int:
+    """Erin asks for Dana's project memory to be retired, which waits for the owner too, as the project's lead."""
+    signed_in_owner(console, signed_out, github, account)
     project = create(signed_out, "Billing")["project_id"]
-    path = promote_keeping_both(owner.in_project(project, "billing-api"), RULE)
-    dana = Session(console.server, add(signed_out, "emp-2", "Dana Dev")["personal_token"]).in_project(
-        project, "billing-api"
+    dana, erin = (
+        Session(console.server, add(signed_out, member_id, name)["personal_token"]).in_project(project, "billing-api")
+        for member_id, name in (("emp-2", "Dana Dev"), ("emp-3", "Erin Dev"))
     )
-    raised = dana.call("retire", path=path)
+    raised = erin.call("retire", path=promote_keeping_both(dana, RULE))
     assert raised["status"] == "challenge_raised", raised
-    return int(raised["challenge_id"]), owner
+    return int(raised["challenge_id"])
 
 
 def open_as_many(console: Console, challenge_id: int, how_many: int) -> None:
@@ -82,7 +82,7 @@ def open_as_many(console: Console, challenge_id: int, how_many: int) -> None:
 def test_the_challenge_list_opens_as_many_transactions_for_thirty_open_challenges_as_for_three(
     console: Console, signed_out: ConsoleClient, transactions: Transactions
 ) -> None:
-    challenge_id, _ = a_retire_challenge(console, signed_out, "olive-cheap-list", 9101)
+    challenge_id = a_retire_challenge(console, signed_out, "olive-cheap-list", 9101)
     open_as_many(console, challenge_id, 2)
     transactions.take()
     few = ask(signed_out, "/api/challenges", limit=50)
@@ -98,7 +98,7 @@ def test_the_challenge_list_opens_as_many_transactions_for_thirty_open_challenge
 def test_the_count_opens_as_many_transactions_for_thirty_open_challenges_as_for_three(
     console: Console, signed_out: ConsoleClient, transactions: Transactions
 ) -> None:
-    challenge_id, _ = a_retire_challenge(console, signed_out, "olive-cheap-count", 9103)
+    challenge_id = a_retire_challenge(console, signed_out, "olive-cheap-count", 9103)
     open_as_many(console, challenge_id, 2)
     transactions.take()
     few = ask(signed_out, "/api/challenges/count")
@@ -112,7 +112,7 @@ def test_the_count_opens_as_many_transactions_for_thirty_open_challenges_as_for_
 
 
 def test_the_list_comes_a_page_at_a_time_oldest_first(console: Console, signed_out: ConsoleClient) -> None:
-    challenge_id, _ = a_retire_challenge(console, signed_out, "olive-cheap-pages", 9105)
+    challenge_id = a_retire_challenge(console, signed_out, "olive-cheap-pages", 9105)
     open_as_many(console, challenge_id, 24)
 
     first = ask(signed_out, "/api/challenges")
@@ -128,7 +128,7 @@ def test_the_list_comes_a_page_at_a_time_oldest_first(console: Console, signed_o
 def test_the_list_holds_only_the_challenges_against_one_memory_when_asked(
     console: Console, signed_out: ConsoleClient
 ) -> None:
-    challenge_id, _ = a_retire_challenge(console, signed_out, "olive-cheap-one", 9107)
+    challenge_id = a_retire_challenge(console, signed_out, "olive-cheap-one", 9107)
     target = ask(signed_out, "/api/challenges")["waiting"][0]["target"]["path"]
 
     against = ask(signed_out, "/api/challenges", path=target)
