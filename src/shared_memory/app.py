@@ -23,7 +23,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
-from starlette.requests import ClientDisconnect, Request
+from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -33,7 +33,7 @@ from shared_memory.agents import agent_named
 from shared_memory.audit import MEMBER_ADDED, MEMBER_REMOVED, PROJECT_CREATED, TOKEN_ISSUED, Audit
 from shared_memory.board import DONE, Board
 from shared_memory.briefing import Briefing, Work
-from shared_memory.console_api import ConsoleApi, SessionTalk
+from shared_memory.console_api import ConsoleApi, SessionTalk, bounded_body
 from shared_memory.company_move import move_company_memory, rename_company_level
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.fence import escape, fenced, new_token
@@ -281,16 +281,8 @@ class _HookCall:
 async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
     """The hook's JSON payload, or None when it is unreadable or runs past `limit` bytes. A body that says it is too
     big is not read at all, and one that turns out to be is read no further than the limit."""
-    declared = request.headers.get("content-length")
-    if declared is not None and (not declared.isdigit() or int(declared) > limit):
-        return None
-    body = bytearray()
-    try:
-        async for chunk in request.stream():
-            body += chunk
-            if len(body) > limit:
-                return None
-    except ClientDisconnect:
+    body = await bounded_body(request, limit)
+    if body is None:
         return None
     try:
         payload = json.loads(body)
@@ -422,7 +414,8 @@ def build_app(
             if _unfiltered.get():
                 return None
             try:
-                current = authenticate(getattr(ctx.request, "headers", None) or {})
+                # Off the event loop: authenticating reads Postgres.
+                current = await anyio.to_thread.run_sync(authenticate, getattr(ctx.request, "headers", None) or {})
             except Refused:
                 return None
             current = dataclasses.replace(current, agent=agent_named(_reported_name(ctx.session, ctx.request)))

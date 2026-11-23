@@ -7,6 +7,7 @@ description and can't drift away from it. This module turns each declaration int
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from urllib.parse import quote
 
 import anyio.to_thread
 from pydantic import BaseModel, ValidationError
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
@@ -179,12 +180,37 @@ def _card_named(text: str) -> tuple[str | None, int | None]:
     return None, None
 
 
+# The most a console call's body weighs: its longest field, a license key or a card's description, fits many times over.
+CONSOLE_BODY_LIMIT = 64_000
+
+
+async def bounded_body(request: Request, limit: int) -> bytes | None:
+    """The request's body, or None when it runs past `limit` bytes. A body that says it is too big is not read at
+    all, and one that turns out to be is read no further than the limit."""
+    declared = request.headers.get("content-length")
+    if declared is not None and (not declared.isdigit() or int(declared) > limit):
+        return None
+    body = bytearray()
+    try:
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > limit:
+                return None
+    except ClientDisconnect:
+        return None
+    return bytes(body)
+
+
 def _plainly(wrong: Exception) -> str:
-    """A refusal a member can act on, rather than a validation dump."""
+    """A refusal a member can act on, rather than a validation dump: the first few fields that were wrong."""
     if isinstance(wrong, ValidationError):
-        missing = ", ".join(str(problem["loc"][-1]) for problem in wrong.errors())
-        return f"That request was missing something: {missing}."
+        fields = dict.fromkeys(str(problem["loc"][-1]) for problem in wrong.errors(include_url=False)[:20])
+        return f"That request was missing something: {', '.join(list(fields)[:5])}."
     return "That request wasn't understood."
+
+
+def _read(model: type[BaseModel], body: bytes) -> BaseModel:
+    return model.model_validate(json.loads(body))
 
 
 def _project_in(path: str) -> str | None:
@@ -534,8 +560,12 @@ class ConsoleApi:
             if declaration.changes and CONSOLE_HEADER not in request.headers:
                 return JSONResponse({"message": "This request didn't come from the console."}, status_code=403)
             if declaration.accepts is not None:
+                body = await bounded_body(request, CONSOLE_BODY_LIMIT)
+                if body is None:
+                    return JSONResponse({"message": "That request is too big."}, status_code=413)
                 try:
-                    request.state.asked = declaration.accepts.model_validate(await request.json())
+                    # Off the event loop: parsing and validating a body takes as long as the body is.
+                    request.state.asked = await anyio.to_thread.run_sync(_read, declaration.accepts, body)
                 except (ValueError, ValidationError) as wrong:
                     return JSONResponse({"message": _plainly(wrong)}, status_code=422)
             if declaration.operation_id in SAVING:

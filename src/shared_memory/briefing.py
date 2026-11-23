@@ -264,12 +264,14 @@ class Briefing:
     def listed(self, caller: Caller) -> list[dict[str, Any]]:
         """Everything pinned that this project's sessions are briefed with, oldest pin first."""
         project = caller.require_project()
+        # Before the transaction: it takes a connection of its own, and two held at once can run the pool dry.
+        department_id = self._department_of(project.project_id)
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT path, kind, level, project_id, department_id, pinned_by, pinned_at FROM pins WHERE team = %s"
                 " AND (level = 'company' OR project_id = %s OR (level = 'department' AND department_id = %s))"
                 " ORDER BY pinned_at, path",
-                (caller.company, project.project_id, self._department_of(project.project_id)),
+                (caller.company, project.project_id, department_id),
             ).fetchall()
         targets = [
             PinTarget(row["path"], row["kind"], row["level"], row["project_id"], row["department_id"]) for row in rows

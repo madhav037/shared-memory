@@ -537,6 +537,8 @@ class Identity:
             raise Refused(f"You can only add members to your own company ({caller.company}).")
         check_name("Member ID", member_id)
         name = checked_member_name(name)
+        # Before the transaction: reading the cap can take a connection of its own.
+        cap = self.member_cap()
         with self._db.transaction() as conn:
             existing = conn.execute(
                 "SELECT removed_at FROM members WHERE team_id = %s AND member_id = %s",
@@ -544,7 +546,6 @@ class Identity:
             ).fetchone()
             if existing is not None:
                 raise Refused(f"Member ID {member_id!r} is already a member of your company, or was one.")
-            cap = self.member_cap()
             if cap is not None and self._members_in_use(conn) >= cap:
                 raise Refused(
                     f"This server's member cap is {cap} and all {cap} places are taken, so no one more can be added. "
