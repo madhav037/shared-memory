@@ -25,6 +25,7 @@ from tests.support import (
     signed_in,
     signed_in_owner,
 )
+from tests.test_known_issues import FLAKY_UPLOADS
 
 REVIEWS = {
     "title": "Treasury reviews",
@@ -368,3 +369,147 @@ def test_every_change_to_a_departments_access_is_in_the_audit_log(console: Conso
         "department_restricted",
     ]
     assert [event["detail"].get("member_id") for event in log][1:3] == ["emp-2", "emp-2"]
+
+
+def test_a_restricted_department_still_holding_projects_cannot_be_removed(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty", 2741)
+
+    refused = signed_out.post(f"/api/departments/{it.treasury}/remove")
+
+    assert refused.status_code == 403
+    assert "Move its projects out first" in refused.json()["message"]
+    assert the(it.treasury, signed_out)["restricted"] is True
+    assert "is restricted" in it.dana.in_project(it.payments, "payments-api").refusal("read", path=it.project_memory)
+
+
+def test_a_removed_departments_memory_is_for_admins_only(console: Console, signed_out: ConsoleClient) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-one", 2742)
+    signed_out.post(f"/api/departments/{it.treasury}/projects/{it.billing}/remove")
+
+    removed = signed_out.post(f"/api/departments/{it.treasury}/remove")
+    versions = ask(signed_out, "/api/memory/history", path=it.department_memory)["versions"]
+    dana = signed_in(console, "dana-olive-closed-dept-twenty-one", 2743)
+    from_payments = it.dana.in_project(it.payments, "payments-api")
+    refused = [
+        dana.get(f"/api/files?folder=departments/{it.treasury}"),
+        dana.get(f"/api/memory?path={it.department_memory}"),
+        dana.get(f"/api/memory/history?path={it.department_memory}"),
+        dana.get(f"/api/memory/version?path={it.department_memory}&commit={versions[-1]['commit']}"),
+    ]
+    listed = ask(dana, "/api/files", folder="departments")
+    refusals = [
+        from_payments.refusal("read", path=it.department_memory),
+        from_payments.refusal("list", folder=f"departments/{it.treasury}"),
+    ]
+
+    assert removed.status_code == 200, removed.text
+    assert [answer.status_code for answer in refused] == [403] * len(refused)
+    assert not any("SECRET" in answer.text for answer in refused)
+    assert it.treasury not in str(listed)
+    assert all("is restricted" in refusal for refusal in refusals), refusals
+    assert f"departments/{it.treasury}" not in from_payments.call("list", folder="departments")["folders"]
+    assert "SECRET" not in str(from_payments.call("search", query="treasury reviewers"))
+    assert ask(signed_out, "/api/memory", path=it.department_memory)["status"] == "retired"
+    dana.close()
+
+
+def test_a_lead_shut_out_by_a_restricted_department_reads_only_the_log_of_projects_they_reach(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-two", 2744)
+    add(signed_out, "emp-3", "Ash Lead", "ash-olive-closed-dept-twenty-two")
+    restrict(signed_out, it.treasury, restricted=False)
+    for project, lead in [(it.billing, "emp-2"), (it.payments, "emp-2"), (it.billing, "emp-3")]:
+        appointed = signed_out.post_json(f"/api/projects/{project}/leads", {"member_id": lead})
+        assert appointed.status_code == 200, appointed.text
+    restrict(signed_out, it.treasury)
+    it.owner.in_project(it.billing, "billing-api").call("add_card", title="Reconcile the ledger")
+    dana = signed_in(console, "dana-olive-closed-dept-twenty-two", 2745)
+    ash = signed_in(console, "ash-olive-closed-dept-twenty-two", 2746)
+
+    log = ask(dana, "/api/audit")["events"]
+    billing_only = ask(dana, "/api/audit", project=it.billing)["events"]
+
+    assert dana.get(f"/api/projects/{it.billing}").status_code == 403
+    assert {event["project_id"] for event in log} == {it.payments}
+    assert billing_only == []
+    assert "Reconcile the ledger" not in str(log)
+    assert ash.get("/api/audit").status_code == 403
+    assert ash.status()["member"]["leads_a_project"] is False
+    dana.close()
+    ash.close()
+
+
+def test_a_lead_shut_out_by_a_restricted_department_is_not_told_about_its_board(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-three", 2747)
+    restrict(signed_out, it.treasury, restricted=False)
+    signed_out.post_json(f"/api/projects/{it.billing}/leads", {"member_id": "emp-2"})
+    restrict(signed_out, it.treasury)
+    in_billing = it.owner.in_project(it.billing, "billing-api")
+    saved = in_billing.call("save_known_issue", **FLAKY_UPLOADS)
+    assert saved["status"] == "saved", saved
+    dana = signed_in(console, "dana-olive-closed-dept-twenty-three", 2748)
+
+    in_billing.call("delete_card", number=saved["card"])
+
+    assert "deleted card" not in str(ask(dana, "/api/notices")["notices"])
+    dana.close()
+
+
+def test_governing_department_memory_from_the_console_is_logged_under_no_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-four", 2749)
+    it.dana.call("create_project", name="0 Notes")  # Dana leads a project that comes first by name
+    dana = signed_in(console, "dana-olive-closed-dept-twenty-four", 2750)
+
+    unpinned = signed_out.post_json("/api/memory/unpin", {"path": it.department_memory})
+    owners = [event for event in ask(signed_out, "/api/audit")["events"] if event["kind"] == "memory_unpinned"]
+    hers = ask(dana, "/api/audit")
+
+    assert unpinned.status_code == 200, unpinned.text
+    assert [(event["target"], event["project_id"]) for event in owners] == [(it.department_memory, None)]
+    assert it.department_memory not in str(hers)
+    assert "Treasury reviews" not in str(hers)
+    dana.close()
+
+
+def test_a_doubt_raised_from_another_project_is_logged_under_the_memorys_own_project(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-five", 2751)
+    signed_out.post_json(f"/api/departments/{it.treasury}/access", {"member_id": "emp-2"})
+    add(signed_out, "emp-3", "Ash Lead", "ash-olive-closed-dept-twenty-five")
+    signed_out.post_json(f"/api/projects/{it.payments}/leads", {"member_id": "emp-3"})
+    ash = signed_in(console, "ash-olive-closed-dept-twenty-five", 2752)
+
+    from_payments = it.dana.in_project(it.payments, "payments-api")
+    from_payments.call("challenge", path=it.project_memory, reason="misled", reasoning="The ledger moved.")
+    raised = [event for event in ask(signed_out, "/api/audit")["events"] if event["kind"] == "challenge_raised"]
+    his = ask(ash, "/api/audit")
+
+    assert [(event["target"], event["project_id"]) for event in raised] == [(it.project_memory, it.billing)]
+    assert it.project_memory not in str(his)
+    assert "Ledger closes at midnight" not in str(his)
+    ash.close()
+
+
+def test_a_lead_is_not_shown_log_entries_about_memory_they_cannot_reach(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    it = restricted(console, signed_out, "olive-closed-dept-twenty-six", 2753)
+    signed_out.post(f"/api/departments/{it.treasury}/projects/{it.billing}/remove")
+    add(signed_out, "emp-3", "Ash Lead", "ash-olive-closed-dept-twenty-six")
+    signed_out.post_json(f"/api/projects/{it.billing}/leads", {"member_id": "emp-3"})
+    ash = signed_in(console, "ash-olive-closed-dept-twenty-six", 2754)
+
+    his = ask(ash, "/api/audit")
+
+    assert it.project_memory in str(his)
+    assert it.department_memory not in str(his)
+    assert "Treasury reviews" not in str(his)
+    ash.close()

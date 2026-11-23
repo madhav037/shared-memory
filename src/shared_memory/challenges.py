@@ -363,10 +363,11 @@ class Challenges:
             about["imported_from"] = imported_from
         if kind == LEVEL_CONTRADICTION and challenger_path is not None:
             about["narrower"] = challenger_path  # the memory that holds, as an exception, until it is decided
+        # Under the challenging memory's project, as `project_of` has it, which is where an import waiting on it is counted.
         self._audit.memory(
-            caller, CHALLENGE_RAISED, target_path, challenge_id=challenge_id, challenge=kind, author=target_author,
-            **about,
-        )
+            caller, CHALLENGE_RAISED, target_path, project_id=project_in(challenger_path) if challenger_path else None,
+            challenge_id=challenge_id, challenge=kind, author=target_author, **about,
+        )  # fmt: skip
         return challenge_id
 
     def doubt(

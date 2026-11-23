@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from shared_memory.clock import Clock
 from shared_memory.db import Database
 from shared_memory.errors import Refused
-from shared_memory.identity import Caller, Identity, Member
+from shared_memory.identity import Caller, Identity, Member, project_in
 
 #: Every kind of change the server records. The constants below are annotated with it, so mypy refuses a new
 #: one that is not named here, and the console's contract offers the same list to `npm run api:check`.
@@ -243,15 +243,16 @@ class Audit:
     def memory(self, caller: Caller, change: str, path: str, *, project_id: str | None = None, **detail: object) -> None:
         """Note a change to one memory: who changed it, in which project, and at which path.
 
-        The project is the session's, or the memory's own when the change was made from somewhere that isn't in
-        one. It records where the memory is, never what it says: the memory folder's git history holds that.
+        The project is the memory's own, or the one named; never the project the change was made from, whose leads
+        need not reach the memory. Company and department memory belong to none. It records where the memory is,
+        never what it says: the memory folder's git history holds that.
         """
         if caller.agent is not None:
             detail = {**detail, "agent": caller.agent}
         self.record(
             change,
             member=caller.member,
-            project_id=project_id or (caller.project.project_id if caller.project else None),
+            project_id=project_id or project_in(path),
             target=path,
             detail=detail,
         )
@@ -319,15 +320,18 @@ class Audit:
     ) -> Page:
         """The reader's company's log, newest first. One page, with where the next page starts.
 
-        A project lead who doesn't run the company sees their own projects' events and nothing else.
+        A project lead who doesn't run the company sees their own projects' events and nothing else, and of those
+        none naming a memory or folder they can't reach.
         """
         self.require_reader(reader)
         limit = max(1, min(limit, 200))
         wheres = ["(e.team_id = %s OR e.team_id IS NULL)"]
         values: list[Any] = [reader.company_pk]
+        reach = None
         if not _runs_the_company(reader):
             wheres = ["e.team_id = %s", "e.project_id = ANY(%s)"]
             values = [reader.company_pk, self._identity.leads_of(reader)]
+            reach = self._identity.caller_in(reader, None)
         if before is not None:
             wheres.append("e.id < %s")
             values.append(before)
@@ -366,8 +370,10 @@ class Audit:
                 detail=row["detail"],
             )
             for row in rows[:limit]
+            if reach is None or all(reach.reaches(path) for path in _paths(row["target"], row["detail"]))
         ]
-        return Page(events, events[-1].id if len(rows) > limit and events else None)
+        # The next page starts after the last row read, even one left out, so leaving rows out never ends the log.
+        return Page(events, rows[limit - 1]["id"] if len(rows) > limit else None)
 
     def _may_read(self, member: Member) -> bool:
         """The owner and the admins read the whole log; a project lead reads their own projects'."""
@@ -380,3 +386,8 @@ class Audit:
 
 def _runs_the_company(member: Member) -> bool:
     return member.is_owner or member.is_admin
+
+
+def _paths(target: str | None, detail: dict[str, Any]) -> list[str]:
+    """Every value of an entry that may name a memory or folder: its target and its detail's text."""
+    return [value for value in [target, *detail.values()] if isinstance(value, str)]
