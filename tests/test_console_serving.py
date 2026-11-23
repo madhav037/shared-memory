@@ -43,7 +43,7 @@ def test_the_health_check_is_proxied_to_the_server_and_never_limited_or_answered
     found = re.search(r"^\thandle /health \{\n(.*?)^\t\}", CADDYFILE, re.MULTILINE | re.DOTALL)
 
     assert found, "/health would fall through to the console's page and answer 200 html while the server is dead"
-    assert "reverse_proxy server:8000" in found.group(1)
+    assert "import to_server" in found.group(1)
     assert "rate_limit" not in found.group(1) and "agent_limits" not in found.group(1)
     assert CADDYFILE.index("handle /health") < CADDYFILE.index("try_files"), "the console's fallback comes last"
 
@@ -117,10 +117,14 @@ def test_caddy_counts_agent_calls_per_personal_token_and_falls_back_to_the_addre
     assert limits, "no agent_limits snippet"
     by_token = re.search(r"zone by_token \{(.*?)\n\t\t\}", limits.group(1), re.DOTALL)
     by_address = re.search(r"zone by_address \{(.*?)\n\t\t\}", limits.group(1), re.DOTALL)
-    assert by_token and by_address
+    token_by_address = re.search(r"zone token_by_address \{(.*?)\n\t\t\}", limits.group(1), re.DOTALL)
+    assert by_token and by_address and token_by_address
 
     assert "header Authorization Bearer*" in by_token.group(1)
     assert "key {http.request.header.Authorization}" in by_token.group(1)
+    # A made-up token is a fresh allowance, so a call carrying one is counted per address as well.
+    assert "header Authorization Bearer*" in token_by_address.group(1)
+    assert "key {client_ip}" in token_by_address.group(1)
     assert "not header Authorization Bearer*" in by_address.group(1)
     assert "key {client_ip}" in by_address.group(1)
     for path in ("/mcp*", "/hooks/*"):
@@ -139,6 +143,7 @@ def test_the_edge_ceilings_are_at_or_above_the_servers_and_set_in_the_environmen
     server = Settings("", Path("."), Path("."))
     ceilings = {
         "CADDY_RATE_TOKEN_PER_MINUTE": server.rate_limit_token_per_minute,
+        "CADDY_RATE_TOKEN_ADDRESS_PER_MINUTE": server.rate_limit_token_per_minute,
         "CADDY_RATE_ADDRESS_PER_MINUTE": server.rate_limit_address_per_minute,
         "CADDY_RATE_CONSOLE_PER_MINUTE": server.rate_limit_console_per_minute,
     }
@@ -161,5 +166,8 @@ def test_the_example_nginx_site_has_the_equivalent_limit() -> None:
 
     assert "limit_req_zone $shared_memory_caller" in nginx
     assert "$http_authorization" in nginx and "$binary_remote_addr" in nginx
-    assert "limit_req zone=shared_memory" in nginx
+    assert "limit_req zone=shared_memory " in nginx
+    # A made-up token is a fresh allowance, so every call is counted per address as well.
+    assert re.search(r"limit_req_zone \$binary_remote_addr zone=shared_memory_address:", nginx)
+    assert "limit_req zone=shared_memory_address " in nginx
     assert "limit_req_status 429;" in nginx
