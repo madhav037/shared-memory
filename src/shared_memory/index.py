@@ -248,7 +248,7 @@ class SearchIndex:
                     conn.execute("ALTER TABLE sections ALTER COLUMN chunk_no DROP DEFAULT")
                 if conn.execute("SELECT 1 FROM sections_cut_by_words").fetchone() is None:
                     if conn.execute("SELECT 1 FROM sections LIMIT 1").fetchone() is None:
-                        conn.execute("INSERT INTO sections_cut_by_words DEFAULT VALUES")
+                        conn.execute("INSERT INTO sections_cut_by_words DEFAULT VALUES ON CONFLICT DO NOTHING")
                     else:
                         self._overcut = True
 
