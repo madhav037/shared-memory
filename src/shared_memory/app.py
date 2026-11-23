@@ -278,6 +278,11 @@ class _HookCall:
     payload: dict[str, Any] | None
 
 
+# A hook's agent sends its body with its headers; one that takes longer than this to come was held back. A body held
+# back for less is not authenticated again: doing that for every hook would cost a transaction on every tool call.
+_BODY_AT_ONCE_SECONDS = 0.2
+
+
 async def _hook_payload(request: Request, limit: int) -> dict[str, Any] | None:
     """The hook's JSON payload, or None when it is unreadable or runs past `limit` bytes. A body that says it is too
     big is not read at all, and one that turns out to be is read no further than the limit."""
@@ -522,20 +527,26 @@ def build_app(
     Ready = Callable[[Caller, dict[str, Any]], bool]
 
     async def within_recall_budget(
-        part: Callable[[Caller, dict[str, Any]], T], current: Caller, payload: dict[str, Any]
+        part: Callable[[Caller, dict[str, Any]], T], current: Caller, payload: dict[str, Any], deadline: float
     ) -> T | None:
         """Run a hook's optional part (recall) on a worker thread, or give up on it.
 
         It has the recall budget to reach a thread, and the whole budget again from the moment it starts running, so
-        time spent waiting for a thread never eats into recall itself. Given up on, it adds nothing to the answer and
-        its thread is left to finish.
+        time spent waiting for a thread never eats into recall itself; neither runs past the hook's `deadline`. Given
+        up on, it adds nothing to the answer and its thread is left to finish.
         """
         budget = settings.recall_budget_seconds
-        with anyio.move_on_after(budget) as scope:
+
+        def until() -> float:
+            return min(anyio.current_time() + budget, deadline)
+
+        if anyio.current_time() >= deadline:
+            return None
+        with anyio.CancelScope(deadline=until()) as scope:
 
             def started() -> None:
                 if not scope.cancel_called:
-                    scope.deadline = anyio.current_time() + budget
+                    scope.deadline = until()
 
             def run() -> T:
                 anyio.from_thread.run_sync(started)
@@ -551,10 +562,16 @@ def build_app(
         optional: OptionalPart | None = None,
         *,
         first: Ready | None = None,
+        wanted: Callable[[], bool] | None = None,
         report_refusals: bool = False,
         answer: Callable[[str | None, str, str], dict[str, Any]] = hooks.answered,
     ) -> Response:
         """Answer a coding agent's hook. Anything that goes wrong leaves the session unaffected.
+
+        The whole hook, from its call to its answer, has one deadline under the agent's own wait
+        (`hook_deadline_seconds`): its body, its `first` step and its optional part each get only what is left of it.
+        The optional part is skipped once nothing is left, or when `wanted` says, after the required part, that it no
+        longer is (a blocked edit's refusal goes out at once).
 
         What the parts give is carried to the agent by `answer`: as context added to the session, unless the hook is
         the one that blocks, whose parts give the reason. Parts that give nothing are answered emptily.
@@ -572,9 +589,10 @@ def build_app(
         for one.
         """
         answer_format = request.query_params.get("format")
+        deadline = anyio.current_time() + settings.hook_deadline_seconds
         parts: list[str | None] = []
         try:
-            call = await hook_call(request)
+            call = await hook_call(request, deadline)
             if isinstance(call, Refused):
                 connected = request.headers.get("x-shared-memory-project") or request.headers.get("authorization")
                 if report_refusals and connected:
@@ -587,14 +605,14 @@ def build_app(
             # Recall failing, as on a prompt Postgres can't store, drops recall alone: the required part marks news as
             # delivered, so its answer must still go out.
             try:
-                ready = first is None or await within_recall_budget(first, current, payload) is not None
+                ready = first is None or await within_recall_budget(first, current, payload, deadline) is not None
             except Exception:
                 log.exception("%s hook's first step failed; answering without recall", event)
                 ready = False
             parts.append(await anyio.to_thread.run_sync(required, current, payload))
-            if optional is not None and ready:
+            if optional is not None and ready and (wanted is None or wanted()):
                 try:
-                    telling = await within_recall_budget(optional, current, payload)
+                    telling = await within_recall_budget(optional, current, payload, deadline)
                     if telling is not None:
                         await anyio.to_thread.run_sync(telling.told)
                         parts.append(telling.text)
@@ -612,10 +630,14 @@ def build_app(
         member_line = hooks.headline(current.agent, "\n".join(headlines)) if headlines else {}
         return JSONResponse({**answer(answer_format, named_event, context), **member_line})
 
-    async def hook_call(request: Request) -> _HookCall | Refused | None:
+    async def hook_call(request: Request, deadline: float) -> _HookCall | Refused | None:
         """What every hook call opens with: its caller, authenticated from the headers before the body is read, so a
         call without a valid personal token costs next to nothing; then, once it names its project, the coding agent
-        the hook names and the payload. Why it was refused, or None when it names no project."""
+        the hook names and the payload, which is None when it hasn't arrived by `deadline`. Why it was refused, or None
+        when it names no project.
+
+        A body held back can arrive after its member was removed, their token revoked or their project closed to them,
+        so a caller whose body was slow to come is authenticated again before anything is done for it."""
         headers = Headers(scope=request.scope)
 
         def authenticated() -> Caller | Refused:
@@ -630,7 +652,14 @@ def build_app(
         if current.project is None:
             return None
         agent = hooks.agent_of(headers.get(hooks.AGENT_HEADER.lower()), request.query_params.get("format"))
-        payload = await _hook_payload(request, settings.hook_body_limit_bytes)
+        asked = anyio.current_time()
+        payload = None
+        with anyio.move_on_after(deadline - asked):
+            payload = await _hook_payload(request, settings.hook_body_limit_bytes)
+        if payload is not None and anyio.current_time() - asked > _BODY_AT_ONCE_SECONDS:
+            current = await anyio.to_thread.run_sync(authenticated)
+            if isinstance(current, Refused):
+                return current
         return _HookCall(dataclasses.replace(current, agent=agent), payload)
 
     @server.custom_route("/health", methods=["GET"])  # type: ignore[untyped-decorator]
@@ -751,7 +780,7 @@ def build_app(
         def answer(format: str | None, event: str, text: str) -> dict[str, Any]:
             return hooks.blocked(format, event, text) if stopped else hooks.answered(format, event, text)
 
-        return await hook(request, "PreToolUse", held, tied_to_the_edit, answer=answer)
+        return await hook(request, "PreToolUse", held, tied_to_the_edit, wanted=lambda: not stopped, answer=answer)
 
     @server.custom_route("/hooks/after-tool", methods=["POST"])  # type: ignore[untyped-decorator]
     async def after_tool(request: Request) -> Response:
@@ -774,7 +803,7 @@ def build_app(
         nothing yet `member` (the warnings `message` asks the agent to show first, or null), and for nothing yet
         `wait_left_seconds`."""
         try:
-            call = await hook_call(request)
+            call = await hook_call(request, anyio.current_time() + settings.hook_deadline_seconds)
             if isinstance(call, Refused):
                 return JSONResponse({"message": f"Shared Memory refused this standby: {call}"}, status_code=401)
             if call is None:

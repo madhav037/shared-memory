@@ -12,6 +12,8 @@ import pytest
 from anyio.from_thread import start_blocking_portal
 
 from shared_memory.app import build_app
+from shared_memory.collisions import Collisions
+from shared_memory.connection import HOOK_SECONDS
 from shared_memory.embeddings import FastEmbedEmbedder
 from shared_memory.index import SearchIndex
 from tests.support import RunningServer, Session, Company, added_context, new_company, promote_keeping_both
@@ -326,3 +328,27 @@ def test_a_session_start_that_is_not_a_compaction_leaves_what_was_told(owner: Se
     start_from(owner, source)
 
     assert path not in added_context(owner.prompt(prompt))
+
+
+def test_a_prompt_is_answered_before_its_hook_gives_up_however_long_each_part_takes(
+    owner: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The prompt's embedding and its recall each take nearly the recall budget, so each part alone is within it, but
+    together they would outlast the agent's wait: the hook has one deadline for the whole of it."""
+    embedding, searched = Collisions.prompt_embedding, SearchIndex.search
+
+    def embedding_slowly(self: Collisions, *args: Any, **kwargs: Any) -> Any:
+        time.sleep(1.7)
+        return embedding(self, *args, **kwargs)
+
+    def searched_slowly(self: SearchIndex, *args: Any, **kwargs: Any) -> Any:
+        time.sleep(1.7)
+        return searched(self, *args, **kwargs)
+
+    monkeypatch.setattr(Collisions, "prompt_embedding", embedding_slowly)
+    monkeypatch.setattr(SearchIndex, "search", searched_slowly)
+    started = time.monotonic()
+    owner.prompt("store the refund amount in the database")
+
+    assert time.monotonic() - started < HOOK_SECONDS - 0.1, "the agent would have given up"
+    assert owner.server.settings.hook_deadline_seconds < HOOK_SECONDS - 0.5, "room for the network"
