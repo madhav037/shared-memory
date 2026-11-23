@@ -161,6 +161,8 @@ CONSOLE_API = pathlib.Path(__file__).resolve().parent.parent / "src" / "shared_m
 #: decision about ADR-0009, which is why it is written out rather than derived.
 MAY_ASK: dict[str, set[str]] = {
     "_service": {
+        # Only reads: a memory as it stands, shown beside a challenge.
+        "as_it_stands",
         "connection_files",
         # Only reads: which memory a removed department leaves, for the console to retire.
         "department_memory",
@@ -214,4 +216,8 @@ def test_the_console_has_no_route_to_raise_a_challenge() -> None:
         (one.method, one.path) for one in DECLARATIONS if "challenge" in one.path or "doubt" in one.path
     )
 
-    assert about_challenges == [("GET", "/challenges"), ("POST", "/challenges/{challenge_id}/decide")]
+    assert about_challenges == [
+        ("GET", "/challenges"),
+        ("GET", "/challenges/count"),
+        ("POST", "/challenges/{challenge_id}/decide"),
+    ]

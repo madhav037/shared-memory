@@ -932,8 +932,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Challenges waiting for this member's decision, and the ones they raised. */
+        /** A page of the challenges waiting for this member's decision, oldest first, after the challenge `after` and against the memory at `path` when given, and the last ones they raised. */
         get: operations["challenges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/challenges/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many challenges are waiting for this member's decision. */
+        get: operations["challenge_count"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2834,6 +2851,8 @@ export interface components {
             foundation_name: string | null;
             target: components["schemas"]["ChallengedMemory"];
             challenger: components["schemas"]["ChallengedMemory"] | null;
+            /** Challenger Unseen */
+            challenger_unseen: boolean;
             /** Reasoning */
             reasoning: string | null;
             /** Reason */
@@ -2912,13 +2931,28 @@ export interface components {
         };
         /**
          * ChallengeList
-         * @description What is waiting for this member's decision, and what they have asked of others.
+         * @description A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where
+         *     the next page starts; and the last challenges they raised themselves, with whether they raised more before them.
          */
         ChallengeList: {
             /** Waiting */
             waiting: components["schemas"]["ChallengeDetail"][];
+            /** Total */
+            total: number;
+            /** Next */
+            next: number | null;
             /** Raised */
             raised: components["schemas"]["RaisedChallenge"][];
+            /** Raised More */
+            raised_more: boolean;
+        };
+        /**
+         * ChallengeCount
+         * @description How many challenges are waiting for this member's decision.
+         */
+        ChallengeCount: {
+            /** Waiting */
+            waiting: number;
         };
         /**
          * Notice
@@ -2971,8 +3005,14 @@ export interface components {
         DecidedChallenges: {
             /** Waiting */
             waiting: components["schemas"]["ChallengeDetail"][];
+            /** Total */
+            total: number;
+            /** Next */
+            next: number | null;
             /** Raised */
             raised: components["schemas"]["RaisedChallenge"][];
+            /** Raised More */
+            raised_more: boolean;
             decided: components["schemas"]["Decided"];
         };
         /**
@@ -4558,6 +4598,30 @@ export interface operations {
     };
     challenges: {
         parameters: {
+            query?: {
+                after?: string;
+                limit?: string;
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the challenges waiting for this member's decision, oldest first, after the challenge `after` and against the memory at `path` when given, and the last ones they raised. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChallengeList"];
+                };
+            };
+        };
+    };
+    challenge_count: {
+        parameters: {
             query?: never;
             header?: never;
             path?: never;
@@ -4565,13 +4629,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Challenges waiting for this member's decision, and the ones they raised. */
+            /** @description How many challenges are waiting for this member's decision. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChallengeList"];
+                    "application/json": components["schemas"]["ChallengeCount"];
                 };
             };
         };

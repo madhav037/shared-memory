@@ -331,6 +331,46 @@ class Waiting:
     decides_as: DecidesAs
 
 
+class Standing:
+    """What deciding asks about one member, each asked once however many challenges are weighed for them."""
+
+    def __init__(self, identity: Identity, departments: Departments, caller: Caller) -> None:
+        self._identity = identity
+        self._departments = departments
+        self._caller = caller
+        self._leads: frozenset[str] | None = None
+        self._removed: dict[str, bool] = {}
+        self._keeps: dict[tuple[str, str], bool] = {}
+        self._leads_department: dict[str, bool] = {}
+        self._department_has_leads: dict[str, bool] = {}
+
+    def leads_project(self, project_id: str | None) -> bool:
+        """Whether the member leads this project; company and department memory (None) have no lead."""
+        if self._leads is None:
+            self._leads = frozenset(self._identity.leads_of(self._caller.member))
+        return project_id in self._leads
+
+    def removed(self, member_id: str) -> bool:
+        if member_id not in self._removed:
+            self._removed[member_id] = self._identity.is_removed(self._caller.company, member_id)
+        return self._removed[member_id]
+
+    def keeps(self, project_id: str, foundation: str) -> bool:
+        if (project_id, foundation) not in self._keeps:
+            self._keeps[project_id, foundation] = self._identity.keeps(self._caller.member, project_id, foundation)
+        return self._keeps[project_id, foundation]
+
+    def leads_department(self, department_id: str) -> bool:
+        if department_id not in self._leads_department:
+            self._leads_department[department_id] = self._departments.leads(self._caller.member, department_id)
+        return self._leads_department[department_id]
+
+    def department_has_leads(self, department_id: str) -> bool:
+        if department_id not in self._department_has_leads:
+            self._department_has_leads[department_id] = self._departments.has_leads(department_id)
+        return self._department_has_leads[department_id]
+
+
 def department_of(challenge: Challenge) -> str | None:
     """The department a promotion into department memory asks to join; None for every other kind."""
     if challenge.kind != PROMOTE:
@@ -654,15 +694,16 @@ class Challenges:
         listed = []
         challenges = self.open_challenges(caller.company, target_path=path)
         raisers = self.raisers(challenges)
+        standing = Standing(self._identity, self._departments, caller)
         for c in challenges:
-            decides_as = self.decides_as(caller, c, raisers[c.id])
+            decides_as = self.decides_as(caller, c, raisers[c.id], standing)
             listed.append(
                 {
                     "challenge_id": c.id,
                     "kind": c.kind,
                     "raised_by": c.raised_by,
                     # Raised from memory the member can't reach: named by its number alone (as `_render_group` does).
-                    "challenger_path": None if _hidden(caller, c) else c.challenger_path,
+                    "challenger_path": None if challenger_unseen(caller, c) else c.challenger_path,
                     "reason": c.reason,
                     "may_decide": decides_as is not None,
                     "decides_as": decides_as,
@@ -681,19 +722,21 @@ class Challenges:
             if project_of(one) in reachable and caller.reaches(one.target_path)
         ]
         raisers = self.raisers(reached)
+        standing = Standing(self._identity, self._departments, caller)
         for challenge in reached:
-            decides_as = self.decides_as(caller, challenge, raisers[challenge.id])
+            decides_as = self.decides_as(caller, challenge, raisers[challenge.id], standing)
             if decides_as is not None:
                 waiting.append(Waiting(challenge, decides_as))
         return waiting
 
-    def raised_by(self, caller: Caller) -> list[dict[str, Any]]:
-        """Every challenge this member raised, newest first, and how each one ended."""
+    def raised_by(self, caller: Caller, limit: int) -> list[dict[str, Any]]:
+        """The last `limit` challenges this member raised, newest first, and how each one ended."""
         with self._db.transaction() as conn:
             rows = conn.execute(
                 "SELECT id, kind, reason, target_path, challenger_path, raised_at, state, decided_by, decided_at,"
-                " explanation, reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s ORDER BY id DESC",
-                (caller.company, caller.member_id),
+                " explanation, reasoning, foundation FROM challenges WHERE team = %s AND raised_by = %s"
+                " ORDER BY id DESC LIMIT %s",
+                (caller.company, caller.member_id, limit),
             ).fetchall()
         return [
             {
@@ -733,7 +776,9 @@ class Challenges:
 
     # Who decides
 
-    def decides_as(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...]) -> DecidesAs | None:
+    def decides_as(
+        self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...], standing: Standing | None = None
+    ) -> DecidesAs | None:
         """In what capacity this member may decide a challenge, or None when they may not (ADR-0017).
 
         The challenged memory's author decides. So may a lead of the project the challenged memory is in, and one of
@@ -744,60 +789,64 @@ class Challenges:
         A foundation challenge is the exception: only a lead of the project it is in, or a keeper of that foundation,
         decides it, and never whoever raised it. No author, admin or fallback standing applies. So is a promotion into
         department memory: only the department's leads decide it, or the company's admins once it has no lead left.
+
+        `standing` is what is known of the member, shared by every challenge weighed for them in one go.
         """
+        standing = standing or Standing(self._identity, self._departments, caller)
         if challenge.kind == LEVEL_CONTRADICTION:
-            return self._decides_level_contradiction(caller, challenge)
+            return self._decides_level_contradiction(caller, challenge, standing)
         department_id = department_of(challenge)
         if department_id is not None:
             if challenge.raised_by == caller.member_id:
                 return None
-            if self._departments.leads(caller.member, department_id):
+            if standing.leads_department(department_id):
                 return "department_lead"
-            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(department_id):
+            if (caller.member.is_owner or caller.member.is_admin) and not standing.department_has_leads(department_id):
                 return "admin"
             return None
         if challenge.foundation is not None:
             if challenge.raised_by == caller.member_id:
                 return None
-            if self._leads_the_challenged(caller, challenge):
+            if self._leads_the_challenged(caller, challenge, standing):
                 return "lead"
             project_id = project_in(challenge.target_path)
-            if project_id is not None and self._identity.keeps(caller.member, project_id, challenge.foundation):
+            if project_id is not None and standing.keeps(project_id, challenge.foundation):
                 return "keeper"
             return None
         if challenge.target_author == caller.member_id:
             return "author"
         if caller.member_id not in raisers:
-            if self._leads_the_challenged(caller, challenge):
+            if self._leads_the_challenged(caller, challenge, standing):
                 return "lead"
             if caller.member.is_owner or caller.member.is_admin:
                 return "admin"
-        if self._identity.is_removed(caller.company, challenge.target_author):
+        if standing.removed(challenge.target_author):
             return "author_left"
         if self._clock() - challenge.raised_at >= timedelta(days=self._settings.challenge_fallback_days):
             return "fallback"
         return None
 
-    def _decides_level_contradiction(self, caller: Caller, challenge: Challenge) -> DecidesAs | None:
+    def _decides_level_contradiction(self, caller: Caller, challenge: Challenge, standing: Standing) -> DecidesAs | None:
         """Only the narrower level's leads decide a level contradiction: its project's leads, or its department's,
         and the company's admins once a department has no lead left."""
         assert challenge.challenger_path is not None
         narrower = locate(challenge.challenger_path)
         if narrower.department_id is not None:
-            if self._departments.leads(caller.member, narrower.department_id):
+            if standing.leads_department(narrower.department_id):
                 return "department_lead"
-            if (caller.member.is_owner or caller.member.is_admin) and not self._departments.has_leads(
+            if (caller.member.is_owner or caller.member.is_admin) and not standing.department_has_leads(
                 narrower.department_id
             ):
                 return "admin"
             return None
-        return "lead" if narrower.project_id in self._identity.leads_of(caller.member) else None
+        return "lead" if standing.leads_project(narrower.project_id) else None
 
-    def _leads_the_challenged(self, caller: Caller, challenge: Challenge) -> bool:
+    def _leads_the_challenged(self, caller: Caller, challenge: Challenge, standing: Standing | None = None) -> bool:
         """Whether the member leads the project the challenged memory is in. The challenging memory's project gives
         nobody standing."""
         project_id = project_in(challenge.target_path)
-        return project_id is not None and project_id in self._identity.leads_of(caller.member)
+        standing = standing or Standing(self._identity, self._departments, caller)
+        return project_id is not None and standing.leads_project(project_id)
 
     def require_decider(self, caller: Caller, challenge: Challenge, raisers: tuple[str, ...]) -> DecidesAs:
         """The capacity this member decides the challenge in, given who raised it; refused when it isn't theirs to
@@ -944,7 +993,7 @@ class Challenges:
                 c = one.challenge
                 # A challenge against the member's own memory needs no reason; any other says why it is theirs.
                 whose = "" if one.decides_as == "author" else f", yours to decide {self._capacity(one.decides_as)}"
-                if _hidden(caller, c):
+                if challenger_unseen(caller, c):
                     lines.append(f"- Challenge {c.id}{whose}: {HIDDEN}")
                     continue
                 if c.kind == DOUBT:
@@ -982,7 +1031,7 @@ class Challenges:
         lines = ["[level contradictions waiting for your decision]"]
         for c in waiting:
             assert c.challenger_path is not None
-            if _hidden(caller, c):
+            if challenger_unseen(caller, c):
                 lines.append(f"- Level contradiction {c.id}: {HIDDEN}")
                 continue
             days = (self._clock() - c.raised_at).days
@@ -1049,7 +1098,7 @@ HIDDEN = "raised from memory you can't reach, so only its number is shown."
 HIDDEN_EVIDENCE = "raised from a project you can't reach, so none of it is shown."
 
 
-def _hidden(caller: Caller, challenge: Challenge) -> bool:
+def challenger_unseen(caller: Caller, challenge: Challenge) -> bool:
     """Whether the challenging memory is somewhere this member can't reach, so nothing of it may be shown."""
     return challenge.challenger_path is not None and not caller.reaches(challenge.challenger_path)
 

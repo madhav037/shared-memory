@@ -320,6 +320,15 @@ class MemoryService:
             memory["in_doubt"] = in_doubt.line()
         return memory
 
+    def as_it_stands(self, caller: Caller, path: str) -> dict[str, Any]:
+        """One memory as it stands, with its file as every coding agent reads it, and none of its challenges: what is
+        shown beside a challenge."""
+        caller.require_reach(path)
+        location = locate(path)
+        memory = describe(location.path, self._store.read(caller.company, location.path))
+        memory["source"] = self._store.text(caller.company, location.path)
+        return memory
+
     def tied_memories(self, caller: Caller, file: str) -> dict[str, Any]:
         """The memories tied to one file, written repository:path, within recall's reach: their own personal memory in
         this project, this project's memory and company memory. A memory in doubt carries its in-doubt line."""

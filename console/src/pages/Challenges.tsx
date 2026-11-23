@@ -22,7 +22,7 @@ import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
-import { asks, REASON_NAMES } from "../lib/challenge";
+import { afterDeciding, asks, REASON_NAMES, withNextPage } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
 import { visible } from "../lib/hidden";
 import { useAsked } from "../lib/useAsked";
@@ -36,10 +36,11 @@ export function Challenges({
   /** Told what is still waiting once a decision lands, so the masthead's count needn't wait for the next page. */
   onDecided?: (left: ChallengeList) => void;
 }) {
-  const { answer, refused, setAnswer } = useAsked((signal) => fetchChallenges(signal), []);
   // A memory's page links here for the challenges against that one memory, its doubts among them.
   const [asked] = useSearchParams();
   const only = asked.get("path");
+  const { answer, refused, setAnswer } = useAsked((signal) => fetchChallenges(signal, { path: only }), [only]);
+  const [more, setMore] = useState<{ busy: boolean; refused: string | null }>({ busy: false, refused: null });
   const { answer: company } = useAsked((signal) => fetchMembers(signal), []);
   const [slip, setSlip] = useState<Slip | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -49,14 +50,36 @@ export function Challenges({
 
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
-    setAnswer(left);
     onDecided?.(left);
+    if (!only) {
+      // The pages loaded beyond the first stay loaded, without what the decision closed.
+      const closesOthers =
+        said.decided.decision === "accepted" && said.challenge.kind !== "add" && said.challenge.kind !== "promote";
+      setAnswer((loaded) => (loaded ? { ...left, ...afterDeciding(loaded, left, said.challenge, closesOthers) } : left));
+      return;
+    }
+    setAnswer({ ...left, waiting: left.waiting.filter((one) => one.target.path === only) });
+    // What deciding hands back is every memory's first page, so the one memory's challenges are asked for again.
+    fetchChallenges(undefined, { path: only })
+      .then(setAnswer)
+      .catch((problem: Error) => setMore({ busy: false, refused: problem.message }));
   };
   const dismiss = () => {
     setSlip(null);
     heading.current?.focus();
   };
-  const shown = !answer ? [] : only ? answer.waiting.filter((one) => one.target.path === only) : answer.waiting;
+  const shown = answer?.waiting ?? [];
+  const showMore = async () => {
+    if (!answer || answer.next === null || more.busy) return;
+    setMore({ busy: true, refused: null });
+    try {
+      const page = await fetchChallenges(undefined, { after: answer.next, path: only });
+      setAnswer({ ...page, ...withNextPage(answer, page) });
+      setMore({ busy: false, refused: null });
+    } catch (problem) {
+      setMore({ busy: false, refused: (problem as Error).message });
+    }
+  };
 
   return (
     <div className="medium">
@@ -90,8 +113,17 @@ export function Challenges({
           ) : (
             <Waiting waiting={shown} who={who} onDecided={decided} />
           )}
+          {answer.next !== null && (
+            <p className="showing-one" data-testid="more-waiting">
+              Showing {answer.waiting.length} of the {answer.total} waiting.{" "}
+              <Button size="xs" variant="default" onClick={showMore} aria-busy={more.busy || undefined}>
+                {more.busy ? "Showing more…" : "Show more"}
+              </Button>
+            </p>
+          )}
+          {more.refused && <Refusal>{more.refused}</Refusal>}
           {only && <OthersDoubts path={only} who={who} />}
-          <Raised raised={answer.raised} who={who} />
+          <Raised raised={answer.raised} more={answer.raised_more} who={who} />
         </>
       )}
     </div>
@@ -227,7 +259,8 @@ function Waiting({
     try {
       const answer = await decideChallenge(challenge.challenge_id, decision, reason);
       refresh();
-      onDecided({ decided: answer.decided, challenge, others }, { waiting: answer.waiting, raised: answer.raised });
+      const { decided, ...left } = answer;
+      onDecided({ decided, challenge, others }, left);
     } catch (problem) {
       setRefused({ challengeId: challenge.challenge_id, message: (problem as Error).message });
     } finally {
@@ -381,6 +414,9 @@ function Waiting({
 
 const LEVEL_CONTRADICTION = "level_contradiction";
 
+/** What stands for a challenging memory this member can't reach: the server sends none of it, nor its reasoning. */
+const UNSEEN = "Raised from memory you can't reach, so only its number is shown.";
+
 /** A level contradiction: the narrower memory beside the broader one it contradicts, each with its level. Keeping an
  * exception records a reason; following retires the narrower memory. Neither changes what a memory says (ADR-0009). */
 function LevelContradiction({
@@ -408,7 +444,7 @@ function LevelContradiction({
   return (
     <section
       className="dispute"
-      aria-label={`Level contradiction: ${narrower?.title ?? ""} against ${broader.title}`}
+      aria-label={`Level contradiction: ${narrower?.title ?? `challenge ${challenge.challenge_id}`} against ${broader.title}`}
       data-testid="level-contradiction"
     >
       <div className="proposal">
@@ -421,6 +457,11 @@ function LevelContradiction({
           )}
         </p>
         <p className="dispute-note">Until you decide, the {where} memory holds for its {where}.</p>
+        {challenge.challenger_unseen && (
+          <p className="dispute-note" data-testid="challenger-unseen">
+            {UNSEEN}
+          </p>
+        )}
         <HiddenWarning texts={wordsOf(challenge)} />
         <div className="facing" data-testid="facing">
           {[narrower, broader].map(
@@ -478,7 +519,7 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
 type Choice = "accept" | "reject" | "keep_exception" | "follow";
 
 
-function Proposal({
+export function Proposal({
   challenge,
   who,
   view,
@@ -501,6 +542,7 @@ function Proposal({
   // Busy, not disabled: a disabled button drops the focus it holds, and the guard in decide refuses a second send.
   const busy = deciding ? { "data-disabled": true, "aria-disabled": true } : {};
   const offered = challenge.challenger;
+  const unseen = challenge.challenger_unseen;
   // An "add" brings a memory into a foundation, and a "promote" into department memory: there is nothing there to
   // compare the memory with.
   const promoting = challenge.kind === "promote";
@@ -594,7 +636,16 @@ function Proposal({
           </div>
         )}
         <div>
-          {offered ? (
+          {unseen ? (
+            <>
+              <span className="title" style={{ color: "var(--ink-2)" }}>
+                Challenge {challenge.challenge_id}
+              </span>
+              <p className="body retire-it" data-testid="challenger-unseen">
+                {UNSEEN}
+              </p>
+            </>
+          ) : offered ? (
             <>
               <Link className="title" to={memoryUrl(offered.path)}>
                 {visible(offered.title)}
@@ -654,7 +705,7 @@ function Proposal({
               ? "Accept: promote it into department memory"
               : adding
                 ? "Accept: add it to the foundation"
-              : offered
+              : offered || unseen
                 ? "Accept: supersede it"
                 : "Accept: retire it"}
         </Button>
@@ -778,7 +829,16 @@ const STATES: Record<string, string> = {
   withdrawn: "Withdrawn",
 };
 
-function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: string) => string }) {
+function Raised({
+  raised,
+  more,
+  who,
+}: {
+  raised: RaisedChallenge[];
+  /** Whether they have raised more than the newest shown. */
+  more: boolean;
+  who: (memberId: string) => string;
+}) {
   return (
     <>
       <h2 className="section-heading">Challenges you raised</h2>
@@ -836,6 +896,11 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
             </tbody>
           </table>
         </div>
+      )}
+      {more && (
+        <p className="empty" data-testid="raised-more">
+          These are the newest {raised.length} you raised; the ones before them aren’t shown.
+        </p>
       )}
     </>
   );

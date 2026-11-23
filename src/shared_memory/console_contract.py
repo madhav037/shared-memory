@@ -471,6 +471,9 @@ class ChallengeDetail(BaseModel):
     foundation_name: str | None
     target: ChallengedMemory
     challenger: ChallengedMemory | None
+    # Raised from memory this member can't reach: none of it is sent, neither the challenger nor the reasoning, so the
+    # challenge is shown by its number alone.
+    challenger_unseen: bool
     # Why the member who raised it believes the memory should go, when they said. The console shows it, never edits it.
     reasoning: str | None
     # For a doubt: the reason it names, every raise's evidence (the first raiser's first) and how many raises it has
@@ -501,10 +504,20 @@ class RaisedChallenge(BaseModel):
 
 
 class ChallengeList(BaseModel):
-    """What is waiting for this member's decision, and what they have asked of others."""
+    """A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where
+    the next page starts; and the last challenges they raised themselves, with whether they raised more before them."""
 
     waiting: list[ChallengeDetail]
+    total: int
+    next: int | None
     raised: list[RaisedChallenge]
+    raised_more: bool
+
+
+class ChallengeCount(BaseModel):
+    """How many challenges are waiting for this member's decision."""
+
+    waiting: int
 
 
 class Decision(BaseModel):
@@ -1685,8 +1698,17 @@ DECLARATIONS: tuple[Declaration, ...] = (
         path="/challenges",
         method="GET",
         operation_id="challenges",
-        summary="Challenges waiting for this member's decision, and the ones they raised.",
+        summary="A page of the challenges waiting for this member's decision, oldest first, after the challenge `after` "
+        "and against the memory at `path` when given, and the last ones they raised.",
         answers=ChallengeList,
+        query=("after", "limit", "path"),
+    ),
+    Declaration(
+        path="/challenges/count",
+        method="GET",
+        operation_id="challenge_count",
+        summary="How many challenges are waiting for this member's decision.",
+        answers=ChallengeCount,
     ),
     Declaration(
         path="/notices",
