@@ -234,8 +234,9 @@ jobs:
           docker run -d --rm --network edge --name server caddy:2 sh -c \
             'printf ":8000 {\n\trespond \"got={header.X-Forwarded-For}\"\n}\n" > /tmp/Caddyfile && caddy run --config /tmp/Caddyfile --adapter caddyfile'
           docker run -d --rm --network edge --name edge -e CADDY_SITE_ADDRESS=:80 console-edge
-          sleep 3
           ask() { docker exec "$1" wget -qO- ${2:+--header "X-Forwarded-For: $2"} "$3"; }
+          # Until both answer: a call goes through the edge to the stand-in.
+          for _ in $(seq 30); do ask edge "" http://127.0.0.1/hooks/up 2>/dev/null | grep -q '^got=' && break; sleep 1; done
           # From a trusted proxy (here the loopback, the default): the right-most address it didn't write.
           got=$(ask edge "6.6.6.6, 203.0.113.5" http://127.0.0.1/hooks/probe); echo "$got"; [ "$got" = "got=203.0.113.5" ]
           got=$(ask edge "" http://127.0.0.1/mcp); echo "$got"; [ "$got" = "got=127.0.0.1" ]
