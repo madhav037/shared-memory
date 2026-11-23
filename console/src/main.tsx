@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 
 import { App } from "./App";
+import { Guarded } from "./components/Guarded";
 import { theme } from "./theme";
 
 import "@fontsource/charis-sil/400.css";
@@ -27,7 +28,9 @@ createRoot(root).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="auto">
       <BrowserRouter>
-        <App />
+        <Guarded fallback={<p role="alert">Something on this page couldn't be shown. Go back, or reload the page.</p>}>
+          <App />
+        </Guarded>
       </BrowserRouter>
     </MantineProvider>
   </StrictMode>,

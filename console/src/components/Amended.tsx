@@ -4,6 +4,9 @@ import remarkGfm from "remark-gfm";
 
 import { amend, hasMarks, markOf, withoutMarks, type Amendment } from "../lib/amend";
 import type { Piece } from "../lib/diff";
+import { tooIntricate } from "../lib/markdown";
+import { Guarded } from "./Guarded";
+import { WordForWord } from "./Prose";
 
 /**
  * A text as an amending version left it, set as printed text and marked up the way consolidated legislation is:
@@ -18,9 +21,15 @@ export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: s
   return (
     <>
       <div className="prose amended" data-testid={testid}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
-          {markdown}
-        </Markdown>
+        {tooIntricate(markdown) ? (
+          <WordForWord text={withoutMarks(markdown)} />
+        ) : (
+          <Guarded fallback={<WordForWord text={withoutMarks(markdown)} />}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
+              {markdown}
+            </Markdown>
+          </Guarded>
+        )}
       </div>
       {notes.length > 0 && (
         <ol className="amendments" aria-label="Amendments">

@@ -80,3 +80,17 @@ describe("an offer, against the memory it would replace", () => {
     ]);
   });
 });
+
+describe("a line diff past the limit", () => {
+  it("compares two very long texts as all taken out and all put in, without a table of every pair", () => {
+    const before = "a\n".repeat(12_000);
+    const after = "b\n".repeat(12_000);
+
+    const pieces = lineDiff(before, after);
+
+    // Each line is given back with its newline, so a text ending in one reads back with one more, as below the limit.
+    expect(side(pieces, "insert")).toBe(`${before}\n`);
+    expect(side(pieces, "delete")).toBe(`${after}\n`);
+    expect(pieces.some((piece) => piece.kind === "same")).toBe(false);
+  });
+});

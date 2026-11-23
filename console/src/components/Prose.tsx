@@ -2,13 +2,34 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { headerEnd } from "../lib/format";
+import { tooIntricate } from "../lib/markdown";
+import { Guarded } from "./Guarded";
 
 /** A memory's Markdown set as printed text. Raw HTML in a memory is shown as text, never run. */
 export function Prose({ children, testid }: { children: string; testid?: string }) {
+  const plain = <WordForWord text={children} />;
   return (
     <div className="prose" data-testid={testid}>
-      <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
+      {tooIntricate(children) ? (
+        plain
+      ) : (
+        <Guarded fallback={plain}>
+          <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
+        </Guarded>
+      )}
     </div>
+  );
+}
+
+/** A text that couldn't be set as printed text, shown word for word with a line saying why. */
+export function WordForWord({ text }: { text: string }) {
+  return (
+    <>
+      <p className="hint" data-testid="shown-word-for-word">
+        Shown word for word: it is nested too deep, or a table is too wide, to be set as text.
+      </p>
+      <pre className="source">{text}</pre>
+    </>
   );
 }
 

@@ -59,6 +59,12 @@ export function wordDiff(before: string, after: string): Piece[] {
 export function lineDiff(before: string, after: string): Piece[] {
   const a = before.split("\n");
   const b = after.split("\n");
+  if (a.length * b.length > LIMIT) {
+    return merge([
+      ...a.map((line) => ({ kind: "delete" as const, text: `${line}\n` })),
+      ...b.map((line) => ({ kind: "insert" as const, text: `${line}\n` })),
+    ]);
+  }
   const width = b.length + 1;
   const table = new Uint32Array((a.length + 1) * width);
   for (let i = a.length - 1; i >= 0; i -= 1) {
