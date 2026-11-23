@@ -213,7 +213,7 @@ def test_the_export_carries_departments_and_department_memory(
     payments = department(signed_out, "Payments", billing)
     path = promoted(owner.in_project(billing), REVIEWS, "department")
 
-    response = signed_out.get("/api/export")
+    response = signed_out.post("/api/export")
 
     assert response.status_code == 200, response.text
     archive = zipfile.ZipFile(io.BytesIO(response.content))

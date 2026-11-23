@@ -275,7 +275,7 @@ def test_no_console_route_exposes_draft_learnings(console: Console, signed_out: 
     keep(agent, learned(secret_title))
 
     description = signed_out.get("/api/openapi.json")
-    archive = signed_out.get("/api/export")
+    archive = signed_out.post("/api/export")
 
     assert description.status_code == 200 and archive.status_code == 200, archive.text
     assert "draft" not in description.text.lower()

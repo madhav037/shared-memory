@@ -7,6 +7,7 @@ import {
   addMember,
   changeMember,
   changeRateLimits,
+  downloadExport,
   fetchLicense,
   fetchMembers,
   fetchRateLimits,
@@ -38,7 +39,20 @@ export function Company({ me }: { me: SignedInMember }) {
   const [refused, setRefused] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedToken | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
+  const [exporting, setExporting] = useState(false);
   const runs = me.role === "owner" || me.role === "admin";
+
+  const download = async () => {
+    setExporting(true);
+    try {
+      await downloadExport();
+      setRefused(null);
+    } catch (problem) {
+      setRefused((problem as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const attempt = async (what: () => Promise<Members>) => {
     try {
@@ -169,7 +183,7 @@ export function Company({ me }: { me: SignedInMember }) {
             One zip with the memory and its full history, the members, the projects and their cards, and the audit log.
             Downloading it is recorded in the audit log.
           </p>
-          <Button component="a" href="/api/export" download data-testid="download-export">
+          <Button onClick={() => void download()} loading={exporting} data-testid="download-export">
             Download all company data
           </Button>
         </section>
