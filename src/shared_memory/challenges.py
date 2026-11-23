@@ -345,6 +345,7 @@ class Standing:
         self._department_has_leads: dict[str, bool] = {}
 
     def leads_project(self, project_id: str | None) -> bool:
+        """Whether the member leads this project; company and department memory (None) have no lead."""
         if self._leads is None:
             self._leads = frozenset(self._identity.leads_of(self._caller.member))
         return project_id in self._leads

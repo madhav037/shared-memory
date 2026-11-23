@@ -6728,7 +6728,7 @@
         "type": "object"
       },
       "ChallengeList": {
-        "description": "A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where\nthe next page starts; and the last challenges they raised themselves.",
+        "description": "A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where\nthe next page starts; and the last challenges they raised themselves, with whether they raised more before them.",
         "properties": {
           "waiting": {
             "items": {
@@ -6758,13 +6758,18 @@
             },
             "title": "Raised",
             "type": "array"
+          },
+          "raised_more": {
+            "title": "Raised More",
+            "type": "boolean"
           }
         },
         "required": [
           "waiting",
           "total",
           "next",
-          "raised"
+          "raised",
+          "raised_more"
         ],
         "title": "ChallengeList",
         "type": "object"
@@ -6918,6 +6923,10 @@
             "title": "Raised",
             "type": "array"
           },
+          "raised_more": {
+            "title": "Raised More",
+            "type": "boolean"
+          },
           "decided": {
             "$ref": "#/components/schemas/Decided"
           }
@@ -6927,6 +6936,7 @@
           "total",
           "next",
           "raised",
+          "raised_more",
           "decided"
         ],
         "title": "DecidedChallenges",

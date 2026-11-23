@@ -22,7 +22,7 @@ import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
-import { asks, REASON_NAMES } from "../lib/challenge";
+import { afterDeciding, asks, REASON_NAMES, withNextPage } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
 import { visible } from "../lib/hidden";
 import { useAsked } from "../lib/useAsked";
@@ -51,8 +51,14 @@ export function Challenges({
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
     onDecided?.(left);
-    setAnswer(only ? { ...left, waiting: left.waiting.filter((one) => one.target.path === only) } : left);
-    if (!only) return;
+    if (!only) {
+      // The pages loaded beyond the first stay loaded, without what the decision closed.
+      const closesOthers =
+        said.decided.decision === "accepted" && said.challenge.kind !== "add" && said.challenge.kind !== "promote";
+      setAnswer((loaded) => (loaded ? { ...left, ...afterDeciding(loaded, left, said.challenge, closesOthers) } : left));
+      return;
+    }
+    setAnswer({ ...left, waiting: left.waiting.filter((one) => one.target.path === only) });
     // What deciding hands back is every memory's first page, so the one memory's challenges are asked for again.
     fetchChallenges(undefined, { path: only })
       .then(setAnswer)
@@ -68,7 +74,7 @@ export function Challenges({
     setMore({ busy: true, refused: null });
     try {
       const page = await fetchChallenges(undefined, { after: answer.next, path: only });
-      setAnswer({ ...page, waiting: [...answer.waiting, ...page.waiting] });
+      setAnswer({ ...page, ...withNextPage(answer, page) });
       setMore({ busy: false, refused: null });
     } catch (problem) {
       setMore({ busy: false, refused: (problem as Error).message });
@@ -117,7 +123,7 @@ export function Challenges({
           )}
           {more.refused && <Refusal>{more.refused}</Refusal>}
           {only && <OthersDoubts path={only} who={who} />}
-          <Raised raised={answer.raised} who={who} />
+          <Raised raised={answer.raised} more={answer.raised_more} who={who} />
         </>
       )}
     </div>
@@ -513,7 +519,7 @@ const WHY_YOURS: Record<Exclude<ChallengeDetail["decides_as"], "author">, string
 type Choice = "accept" | "reject" | "keep_exception" | "follow";
 
 
-function Proposal({
+export function Proposal({
   challenge,
   who,
   view,
@@ -823,7 +829,16 @@ const STATES: Record<string, string> = {
   withdrawn: "Withdrawn",
 };
 
-function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: string) => string }) {
+function Raised({
+  raised,
+  more,
+  who,
+}: {
+  raised: RaisedChallenge[];
+  /** Whether they have raised more than the newest shown. */
+  more: boolean;
+  who: (memberId: string) => string;
+}) {
   return (
     <>
       <h2 className="section-heading">Challenges you raised</h2>
@@ -881,6 +896,11 @@ function Raised({ raised, who }: { raised: RaisedChallenge[]; who: (memberId: st
             </tbody>
           </table>
         </div>
+      )}
+      {more && (
+        <p className="empty" data-testid="raised-more">
+          These are the newest {raised.length} you raised; the ones before them aren’t shown.
+        </p>
       )}
     </>
   );

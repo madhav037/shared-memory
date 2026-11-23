@@ -2932,7 +2932,7 @@ export interface components {
         /**
          * ChallengeList
          * @description A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where
-         *     the next page starts; and the last challenges they raised themselves.
+         *     the next page starts; and the last challenges they raised themselves, with whether they raised more before them.
          */
         ChallengeList: {
             /** Waiting */
@@ -2943,6 +2943,8 @@ export interface components {
             next: number | null;
             /** Raised */
             raised: components["schemas"]["RaisedChallenge"][];
+            /** Raised More */
+            raised_more: boolean;
         };
         /**
          * ChallengeCount
@@ -3009,6 +3011,8 @@ export interface components {
             next: number | null;
             /** Raised */
             raised: components["schemas"]["RaisedChallenge"][];
+            /** Raised More */
+            raised_more: boolean;
             decided: components["schemas"]["Decided"];
         };
         /**

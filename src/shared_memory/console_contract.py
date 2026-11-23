@@ -505,12 +505,13 @@ class RaisedChallenge(BaseModel):
 
 class ChallengeList(BaseModel):
     """A page of what is waiting for this member's decision, oldest first, with how many are waiting in all and where
-    the next page starts; and the last challenges they raised themselves."""
+    the next page starts; and the last challenges they raised themselves, with whether they raised more before them."""
 
     waiting: list[ChallengeDetail]
     total: int
     next: int | None
     raised: list[RaisedChallenge]
+    raised_more: bool
 
 
 class ChallengeCount(BaseModel):

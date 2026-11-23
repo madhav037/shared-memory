@@ -38,3 +38,35 @@ export function says(challenge: Asking): string {
 export function doubtsUrl(path: string): string {
   return `/challenges?path=${encodeURIComponent(path)}`;
 }
+
+/** Enough of a waiting challenge to page through: its number, which orders the list, and what it is against. */
+type Paged = { challenge_id: number; target: { path: string } };
+
+/** The pages of waiting challenges loaded so far: the challenges, how many wait in all, and where the next page starts. */
+type Pages<T extends Paged> = { waiting: T[]; total: number; next: number | null };
+
+/** The loaded pages with the next page after them. */
+export function withNextPage<T extends Paged>(loaded: Pages<T>, page: Pages<T>): Pages<T> {
+  return { waiting: [...loaded.waiting, ...page.waiting], total: page.total, next: page.next };
+}
+
+/**
+ * What stays loaded once a challenge is decided. Deciding hands back the first page as it stands now, which is the
+ * truth for every challenge up to where that page ends; the pages loaded beyond it stay, without the one decided and,
+ * when `closesOthers` (an accepted retire or supersede), without the others against the same memory.
+ */
+export function afterDeciding<T extends Paged>(
+  loaded: Pages<T>,
+  left: Pages<T>,
+  decided: Paged,
+  closesOthers: boolean,
+): Pages<T> {
+  const covered = left.next;
+  if (covered === null) return { waiting: left.waiting, total: left.total, next: null };
+  const beyond = loaded.waiting.filter((one) => one.challenge_id > covered);
+  const kept = beyond.filter(
+    (one) =>
+      one.challenge_id !== decided.challenge_id && !(closesOthers && one.target.path === decided.target.path),
+  );
+  return { waiting: [...left.waiting, ...kept], total: left.total, next: beyond.length > 0 ? loaded.next : covered };
+}

@@ -59,8 +59,10 @@ def a_retire_challenge(console: Console, signed_out: ConsoleClient, github: str,
     signed_in_owner(console, signed_out, github, account)
     project = create(signed_out, "Billing")["project_id"]
     dana, erin = (
-        Session(console.server, add(signed_out, member_id, name)["personal_token"]).in_project(project, "billing-api")
-        for member_id, name in (("emp-2", "Dana Dev"), ("emp-3", "Erin Dev"))
+        Session(console.server, add(signed_out, member_id, name, login)["personal_token"]).in_project(
+            project, "billing-api"
+        )
+        for member_id, name, login in (("emp-2", "Dana Dev", None), ("emp-3", "Erin Dev", f"erin-{github}"))
     )
     raised = erin.call("retire", path=promote_keeping_both(dana, RULE))
     assert raised["status"] == "challenge_raised", raised
@@ -172,4 +174,49 @@ def test_a_challenge_from_memory_the_decider_cant_reach_is_shown_by_its_number_a
     assert seen["challenge_id"] == raised["challenge_id"]
     assert (seen["challenger"], seen["reasoning"], seen["challenger_unseen"]) == (None, None, True)
     assert "acquisition-plan" not in str(seen) and "HIDDEN-REASONING" not in str(seen)
+    browser.close()
+
+
+def test_the_challenges_a_member_raised_show_the_newest_fifty_and_say_there_are_more(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    challenge_id = a_retire_challenge(console, signed_out, "olive-cheap-raised", 9113)
+    erin = signed_in(console, "erin-olive-cheap-raised", 9114)
+    open_as_many(console, challenge_id, 49)
+    fifty = ask(erin, "/api/challenges")
+    open_as_many(console, challenge_id, 1)
+    more = ask(erin, "/api/challenges")
+
+    assert (len(fifty["raised"]), fifty["raised_more"]) == (50, False)
+    assert (len(more["raised"]), more["raised_more"]) == (50, True)
+    newest = [one["challenge_id"] for one in more["raised"]]
+    assert newest == sorted(newest, reverse=True) and challenge_id not in newest, "the first raised is the one left out"
+    erin.close()
+
+
+def test_memory_in_a_project_the_member_is_let_into_shows_beside_a_challenge_with_no_project_chosen(
+    console: Console, signed_out: ConsoleClient
+) -> None:
+    signed_in_owner(console, signed_out, "olive-cheap-placed", 9115)
+    billing = create(signed_out, "Billing")["project_id"]
+    dana, erin = (
+        Session(console.server, add(signed_out, member_id, name, login)["personal_token"])
+        for member_id, name, login in (("emp-2", "Dana Dev", "dana-cheap-placed"), ("emp-3", "Erin Dev", None))
+    )
+    assert signed_out.post_json(f"/api/projects/{billing}/restrict", {"restricted": True}).status_code == 200
+    for member_id in ("emp-2", "emp-3"):
+        let_in = signed_out.post_json(f"/api/projects/{billing}/access", {"member_id": member_id})
+        assert let_in.status_code == 200, let_in.text
+    target = promote_keeping_both(dana.in_project(billing, "billing-api"), RULE)
+    offered = challenge(erin.in_project(billing, "billing-api"), {**RULE, "title": "Invoices number by month"}, target)
+    browser = signed_in(console, "dana-cheap-placed", 9116)
+
+    (seen,) = ask(browser, "/api/challenges")["waiting"]
+
+    assert (seen["target"]["path"], seen["target"]["title"], seen["target"]["status"]) == (target, RULE["title"], "active")
+    assert seen["target"]["source"].strip(), "the project memory is read as agents read it"
+    personal = seen["challenger"]
+    assert (personal["path"], personal["title"]) == (offered["personal"], "Invoices number by month")
+    assert personal["status"] == "active" and personal["source"].strip(), "and the personal memory offered in its place"
+    assert seen["challenger_unseen"] is False
     browser.close()

@@ -11,8 +11,8 @@ import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import cache, partial
 from datetime import UTC, date, datetime, time
+from functools import cache, partial
 from typing import Any
 from urllib.parse import quote
 
@@ -71,8 +71,15 @@ from shared_memory.audit import (
 from shared_memory.board import COLUMNS, Board
 from shared_memory.briefing import Briefing, pin_target
 from shared_memory.challenges import (
-    PROMOTE, Challenges, Doubt, Evidence, InDoubt, Waiting, challenger_unseen, project_of,
-)  # fmt: skip
+    PROMOTE,
+    Challenges,
+    Doubt,
+    Evidence,
+    InDoubt,
+    Waiting,
+    challenger_unseen,
+    project_of,
+)
 from shared_memory.config import Settings
 from shared_memory.console_memory import ConsoleMemory
 from shared_memory.console_sessions import COOKIE, NONCE_COOKIE, STATE_MINUTES, ConsoleSessions
@@ -1584,6 +1591,7 @@ class ConsoleApi:
     ) -> ChallengeList:
         """A page of the challenges waiting for this member, and the last ones they raised. Who decides each is worked
         out for them all at once; only the page's are read, each memory and foundation once however many name it."""
+        # The page is sliced here, in Python, after the whole waiting list is decided: not in SQL.
         found = sorted(self._challenging.waiting_for(caller), key=lambda one: one.challenge.id)
         if path is not None:
             found = [one for one in found if one.challenge.target_path == path]
@@ -1627,15 +1635,17 @@ class ConsoleApi:
                 count=None if doubt is None else doubt.count,
             )
 
-        raised = [
-            RaisedChallenge(**one, target_title=target(one["kind"], one["foundation"], one["target_path"]).title)
-            for one in self._challenging.raised_by(caller, RAISED_SHOWN)
-        ]
+        # One more than is shown, to know whether there are more.
+        raised = self._challenging.raised_by(caller, RAISED_SHOWN + 1)
         return ChallengeList(
             waiting=[dispute(one, doubts.get(one.challenge.id)) for one in page],
             total=len(found),
             next=page[-1].challenge.id if len(later) > limit else None,
-            raised=raised,
+            raised=[
+                RaisedChallenge(**one, target_title=target(one["kind"], one["foundation"], one["target_path"]).title)
+                for one in raised[:RAISED_SHOWN]
+            ],
+            raised_more=len(raised) > RAISED_SHOWN,
         )
 
     def _target(self, caller: Caller, kind: str, foundation: str | None, path: str) -> ChallengedMemory:

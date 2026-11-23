@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { asks, doubtsUrl, says } from "./challenge";
+import { afterDeciding, asks, doubtsUrl, says, withNextPage } from "./challenge";
 
 describe("what a challenge asks, in words", () => {
   it("names what a challenge that names no reason wants done to the memory", () => {
@@ -33,5 +33,56 @@ describe("a memory's open doubts", () => {
     expect(doubtsUrl("projects/billing/shared/gotchas/tax.md")).toBe(
       "/challenges?path=projects%2Fbilling%2Fshared%2Fgotchas%2Ftax.md",
     );
+  });
+});
+
+const one = (challenge_id: number, path = `projects/billing/shared/conventions/${challenge_id}.md`) => ({
+  challenge_id,
+  target: { path },
+});
+
+describe("the pages of waiting challenges", () => {
+  it("puts the next page after the ones loaded, with its total and where the page after starts", () => {
+    const loaded = { waiting: [one(1), one(2)], total: 5, next: 2 };
+
+    expect(withNextPage(loaded, { waiting: [one(3), one(4)], total: 5, next: 4 })).toEqual({
+      waiting: [one(1), one(2), one(3), one(4)],
+      total: 5,
+      next: 4,
+    });
+  });
+
+  it("keeps the pages loaded beyond the first once one on them is decided, without it", () => {
+    const loaded = { waiting: [one(1), one(2), one(3), one(4), one(5)], total: 6, next: 5 };
+    const left = { waiting: [one(1), one(2)], total: 5, next: 2 };
+
+    expect(afterDeciding(loaded, left, one(4), false)).toEqual({
+      waiting: [one(1), one(2), one(3), one(5)],
+      total: 5,
+      next: 5,
+    });
+  });
+
+  it("drops the others against the same memory when accepting one closed them", () => {
+    const same = "projects/billing/shared/conventions/pnpm.md";
+    const loaded = { waiting: [one(1), one(2), one(3, same), one(4, same)], total: 4, next: null };
+    const left = { waiting: [one(1), one(2)], total: 2, next: 2 };
+
+    expect(afterDeciding(loaded, left, one(3, same), true).waiting).toEqual([one(1), one(2)]);
+    expect(afterDeciding(loaded, left, one(3, same), false).waiting).toEqual([one(1), one(2), one(4, same)]);
+  });
+
+  it("takes what deciding hands back as it is when that is every challenge left", () => {
+    const loaded = { waiting: [one(1), one(2), one(3)], total: 3, next: null };
+    const left = { waiting: [one(1), one(3)], total: 2, next: null };
+
+    expect(afterDeciding(loaded, left, one(2), false)).toEqual(left);
+  });
+
+  it("goes on from where the first page ends when nothing beyond it was loaded", () => {
+    const loaded = { waiting: [one(1), one(2)], total: 4, next: 2 };
+    const left = { waiting: [one(2), one(3)], total: 3, next: 3 };
+
+    expect(afterDeciding(loaded, left, one(1), false)).toEqual(left);
   });
 });
