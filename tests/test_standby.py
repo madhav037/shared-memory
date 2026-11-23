@@ -348,6 +348,20 @@ def test_a_standby_ends_with_a_lock_an_added_pattern_ended(company: Company, dan
     assert "no longer holds the lock" in news_in(held)
 
 
+def test_a_standby_ends_with_the_gate_lifting_when_the_projects_wait_is_shortened(
+    company: Company, owner: Session, dana: Session
+) -> None:
+    collide(owner, dana)
+    company.server.clock.advance(minutes=2)
+    held = standing_by(dana)
+    assert still_held(held)
+
+    owner.call("project_wait", minutes=1)
+
+    news = news_in(held)
+    assert "[gate]" in news and "Olive Owner" in news and "wait" in news
+
+
 # What a check costs: one small query every 2 seconds (ADR-0027)
 
 # The most statements one check with no news runs, all in its one transaction.
@@ -390,6 +404,14 @@ def cost(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     return count
 
 
+def checked(cost: Counter[str], checks: int) -> None:
+    """Wait until the standby has made this many checks since `cost` was cleared."""
+    deadline = time.monotonic() + ANSWERED_WITHIN_SECONDS
+    while cost["checks"] < checks:
+        assert time.monotonic() < deadline, f"only {cost['checks']} checks"
+        time.sleep(CHECK_SECONDS / 2)
+
+
 @pytest.mark.parametrize("gated", [False, True], ids=["alone", "gated"])
 def test_a_standby_check_with_no_news_is_one_transaction_of_a_few_statements(
     owner: Session, dana: Session, cost: Counter[str], gated: bool
@@ -400,13 +422,12 @@ def test_a_standby_check_with_no_news_is_one_transaction_of_a_few_statements(
         owner.start()
         dana.start()
     held = standing_by(dana)
-    time.sleep(STILL_HELD_SECONDS)  # its first check asked for the news and found none
+    checked(cost, 2)  # its first check asked for the news and found none
     cost.clear()
 
-    time.sleep(STILL_HELD_SECONDS)
+    checked(cost, 5)
 
     checks = cost["checks"]
-    assert checks >= 3
     # One check may have been under way when counting began.
     assert cost["transactions"] <= checks + 1, cost
     assert cost["statements"] <= CHECK_STATEMENTS * (checks + 1), cost
