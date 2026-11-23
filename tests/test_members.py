@@ -109,3 +109,7 @@ def test_saves_still_land_when_a_stored_name_has_a_line_break(company: Company) 
 
     assert member.call("read", path=first["path"])["author"] == "emp-2"
     assert member.call("read", path=second["path"])["author"] == "owner-1"
+
+
+def test_a_member_id_with_a_trailing_line_break_is_refused(company: Company) -> None:
+    assert "not valid" in company.owner().refusal("add_member", member_id="twin\n", name="Twin")

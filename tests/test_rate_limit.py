@@ -446,3 +446,11 @@ def test_a_coding_agents_calls_never_use_up_the_members_console_allowance(consol
 
     assert client.get("/api/status").status_code == 200
     client.close()
+
+
+def test_an_address_too_long_to_be_one_is_still_limited(limited: RunningServer) -> None:
+    limited.clock.now = TestClock().now
+
+    refused = flood(from_address(limited, "a" * 6_000))
+
+    assert wait_of(refused) >= 1
