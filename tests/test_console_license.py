@@ -481,7 +481,7 @@ def test_an_admin_can_still_export_remove_members_and_revoke_personal_tokens_whi
     add(client, "emp-3", "Eve Eng", "eve-ro-still")
     install(client, lapsed_hosted_key())
 
-    exported = client.get("/api/export")
+    exported = client.post("/api/export")
     assert exported.status_code == 200, exported.text
     assert exported.headers["content-type"] == "application/zip"
 
