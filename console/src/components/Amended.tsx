@@ -4,6 +4,9 @@ import remarkGfm from "remark-gfm";
 
 import { amend, hasMarks, markOf, withoutMarks, type Amendment } from "../lib/amend";
 import type { Piece } from "../lib/diff";
+import { tooIntricate } from "../lib/markdown";
+import { Guarded } from "./Guarded";
+import { WordForWord } from "./Prose";
 
 /**
  * A text as an amending version left it, set as printed text and marked up the way consolidated legislation is:
@@ -14,15 +17,24 @@ export function Amended({ pieces, source, testid }: { pieces: Piece[]; source: s
   const scope = `amend${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const { markdown, notes } = amend(pieces);
   const plugins = [[markAmendments, { notes, scope }]] as Options["rehypePlugins"];
+  // Too intricate to set, the text is shown word for word without its marks, so the notes keyed to them are left out.
+  // A text that fails to draw for another reason keeps its notes: its source is shown, and they still say what changed.
+  const plain = tooIntricate(markdown);
 
   return (
     <>
       <div className="prose amended" data-testid={testid}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
-          {markdown}
-        </Markdown>
+        {plain ? (
+          <WordForWord text={withoutMarks(markdown)} />
+        ) : (
+          <Guarded fallback={<WordForWord text={withoutMarks(markdown)} />} resetKey={markdown}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins}>
+              {markdown}
+            </Markdown>
+          </Guarded>
+        )}
       </div>
-      {notes.length > 0 && (
+      {!plain && notes.length > 0 && (
         <ol className="amendments" aria-label="Amendments">
           {notes.map((note) => (
             <li key={note.marker} id={`${scope}-${note.marker}`}>
