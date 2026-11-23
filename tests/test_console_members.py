@@ -352,3 +352,13 @@ def test_the_same_github_account_again_or_a_new_name_keeps_their_console_session
     assert dana.status()["signed_in"] is True
     assert signed_out.status()["signed_in"] is True
     dana.close()
+
+
+def test_a_corrected_name_must_be_one_line(console: Console, signed_out: ConsoleClient) -> None:
+    signed_in_owner(console, signed_out, "olive-members-oneline", 6911)
+    add(signed_out, "emp-2", "Dana Dev", "dana-members-oneline")
+
+    answer = signed_out.post_json("/api/members/emp-2/change", {"name": "Dana\nCommitter: Olive"})
+
+    assert answer.status_code == 403
+    assert [one["name"] for one in members(signed_out) if one["member_id"] == "emp-2"] == ["Dana Dev"]
