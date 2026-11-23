@@ -546,6 +546,8 @@ class MemoryService:
                 "promoting a memory that supersedes it."
             )
         # A memory offered in a challenge stays as offered, so whoever decides it accepts the text they read.
+        # shortcut: a challenge raised while this save holds its turn isn't seen; take the area's turn when raising if
+        # that gap ever matters (a decider would have to read the offer in those milliseconds).
         if waiting := self._challenges.open_challenges(caller.company, challenger_paths=[str(location.path)]):
             raise Refused(f"This memory is waiting on challenge {waiting[0].id}. Wait for it to be decided.")
         return location, memory
