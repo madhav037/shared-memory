@@ -1,11 +1,19 @@
-import Markdown from "react-markdown";
+import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { headerEnd } from "../lib/format";
 import { tooIntricate } from "../lib/markdown";
 import { Guarded } from "./Guarded";
 
-/** A memory's Markdown set as printed text. Raw HTML in a memory is shown as text, never run. */
+/**
+ * How a member's Markdown is set wherever the console sets it. An image is shown as the Markdown it was written in and
+ * never fetched: the viewer's browser would ask for its address with their signed-in cookie.
+ */
+export const MEMBER_TEXT: Components = {
+  img: ({ src, alt }) => <code className="image-as-text">{`![${alt ?? ""}](${String(src ?? "")})`}</code>,
+};
+
+/** A memory's Markdown set as printed text. Raw HTML in a memory is shown as text, never run, and images too. */
 export function Prose({ children, testid }: { children: string; testid?: string }) {
   const plain = <WordForWord text={children} />;
   return (
@@ -14,7 +22,9 @@ export function Prose({ children, testid }: { children: string; testid?: string 
         plain
       ) : (
         <Guarded fallback={plain} resetKey={children}>
-          <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={MEMBER_TEXT}>
+            {children}
+          </Markdown>
         </Guarded>
       )}
     </div>
