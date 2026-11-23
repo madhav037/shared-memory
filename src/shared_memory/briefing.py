@@ -181,16 +181,25 @@ class Briefing:
                 (caller.company,),
             ).fetchall()
         cap = self._settings.briefing_cap_tokens
+        over = []
         for project_id, department_id in self._reached(target, pinned_at):
             pinned = self._pinned(caller.company, project_id, department_id)
             framed = estimate_tokens(framing(new_token()))
-            total = framed + sum(tokens for _, tokens in pinned) + estimate_tokens(rendered)
-            if total > cap:
-                listing = "; ".join(f"{pin_path} (about {tokens} tokens)" for pin_path, tokens in pinned) or "nothing"
+            if framed + sum(tokens for _, tokens in pinned) + estimate_tokens(rendered) > cap:
+                over.append(pinned)
+        if over:
+            # Every briefing is checked, but only one whose pins the member reaches is listed to them.
+            seen = next((pinned for pinned in over if all(caller.reaches(pin_path) for pin_path, _ in pinned)), None)
+            if seen is None:
                 raise Refused(
-                    f"Pinning this (about {estimate_tokens(rendered)} tokens) would put the briefing over its cap of about "
-                    f"{cap} tokens. Unpin something first. Pinned now: {listing}."
+                    f"Pinning this (about {estimate_tokens(rendered)} tokens) would put a briefing you can't see over "
+                    f"its cap of about {cap} tokens."
                 )
+            listing = "; ".join(f"{pin_path} (about {tokens} tokens)" for pin_path, tokens in seen) or "nothing"
+            raise Refused(
+                f"Pinning this (about {estimate_tokens(rendered)} tokens) would put the briefing over its cap of about "
+                f"{cap} tokens. Unpin something first. Pinned now: {listing}."
+            )
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO pins (team, path, kind, level, project_id, department_id, pinned_by, pinned_at)"

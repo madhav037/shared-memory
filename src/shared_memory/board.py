@@ -46,8 +46,8 @@ COMMENT_CHARACTER_LIMIT = 1_500
 # A card stays in Done on the board this long after it got there, then leaves the board for the archive.
 DONE_KEPT = timedelta(days=14)
 
-# Tell a member something in their next briefing: company, member ID, text.
-Tell = Callable[[str, str, str], None]
+# Tell a member something in their next briefing: company, member ID, text, the project it is about.
+Tell = Callable[[str, str, str, str | None], None]
 # Retire a known issue whose card is done, or challenge its author: caller, path, reasoning. None when there is nothing
 # to retire.
 RetireFixed = Callable[[Caller, str, str], dict[str, Any] | None]
@@ -506,7 +506,7 @@ class Board:
                 moved |= {"blocked_reason": card["blocked_reason"], "waits_on": card["waits_on"]}
             self._audit.card(caller, CARD_MOVED, project_id, number, **moved)
         for member_id, text in notices:
-            self._tell(caller.company, member_id, text)
+            self._tell(caller.company, member_id, text, project_id)
         if card["column"] == "done" and (from_column != "done" or to_column == "done"):
             card["known_issues_fixed"] = self._fixed(caller, card)
         return card
@@ -733,7 +733,7 @@ class Board:
         self._audit.card(caller, CARD_COMMENTED, project_id, number)
         if found["assignee"] is not None and found["assignee"] != caller.member_id:
             named = _named_card(number, found["title"], project_id)
-            self._tell(caller.company, found["assignee"], f'{_who(caller)} commented on your {named}: "{body}"')
+            self._tell(caller.company, found["assignee"], f'{_who(caller)} commented on your {named}: "{body}"', project_id)
         return card
 
     def delete(self, caller: Caller, number: int) -> dict[str, Any]:
@@ -775,7 +775,7 @@ class Board:
                 )
             for lead in leads:
                 if lead != caller.member_id:
-                    self._tell(caller.company, lead, text)
+                    self._tell(caller.company, lead, text, project_id)
         return {"deleted": number}
 
     def return_cards(self, conn: Conn, caller: Caller) -> Callable[[], None]:
@@ -833,7 +833,7 @@ class Board:
                     f"{name} ({member_id}) can no longer reach {project_id}, so {listed} went back to To do with no "
                     "assignee."
                 )
-                self._tell(caller.company, lead, text)
+                self._tell(caller.company, lead, text, project_id)
 
         return committed
 
