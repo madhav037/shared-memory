@@ -223,7 +223,7 @@ class Recall:
         strong = [
             hit for hit in hits if hit.similarity >= self._settings.recall_threshold and hit.path not in overridden_here
         ]
-        in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in strong])
+        in_doubt = self._challenges.in_doubt(caller.company, [hit.path for hit in strong], caller.unreachable)
         penalty = self._settings.in_doubt_penalty
         strong.sort(key=lambda hit: -ranked(hit.similarity, in_doubt.get(hit.path), penalty))
         found: list[_Found] = []
@@ -280,7 +280,7 @@ class Recall:
         # are told by the section they matched.
         told = [(each.path, number, text) for each in found[:1] for number, text in each.sections]
         told += [(each.path, each.sections[0][0], each.sections[0][1]) for each in found[1:]]
-        in_doubt = self._challenges.in_doubt(caller.company, [each.path for each in found])
+        in_doubt = self._challenges.in_doubt(caller.company, [each.path for each in found], caller.unreachable)
         return self._telling(caller, session, found, told, in_doubt)
 
     def _told_as_recall(self, caller: Caller, found: list[_Found], in_doubt: dict[str, InDoubt]) -> str:

@@ -289,7 +289,9 @@ class InDoubt:
     count: int
 
     @classmethod
-    def of(cls, doubts: Iterable[Doubt]) -> InDoubt:
+    def of(cls, doubts: Iterable[Doubt], unreachable: frozenset[str] = frozenset()) -> InDoubt:
+        """The mark of these doubts, naming no code reference raised from a project in `unreachable`, those the
+        member it is shown to can't reach."""
         listed = list(doubts)
         counts: dict[Reason, int] = {}
         references: dict[Reason, dict[str, None]] = {}
@@ -298,7 +300,7 @@ class InDoubt:
             counts[doubt.reason] = doubt.count
             quoted = references.setdefault(doubt.reason, {})
             for each in doubt.evidence:
-                if each.code_reference is not None:
+                if each.code_reference is not None and each.project_id not in unreachable:
                     quoted[str(each.code_reference)] = None
         return cls(
             tuple(ReasonRaised(r, counts[r], tuple(references[r])) for r in REASONS if counts.get(r)),
@@ -527,12 +529,16 @@ class Challenges:
             doubts[challenge.target_path].append(Doubt(challenge, challenge.reason, evidence.get(challenge.id, ())))
         return doubts
 
-    def in_doubt(self, company: str, paths: Iterable[str]) -> dict[str, InDoubt]:
-        """Those of these memories that are in doubt, each with what marks it so. One batch, however many paths."""
+    def in_doubt(
+        self, company: str, paths: Iterable[str], unreachable: frozenset[str] = frozenset()
+    ) -> dict[str, InDoubt]:
+        """Those of these memories that are in doubt, each with what marks it so, as shown to a member who can't reach
+        the projects in `unreachable` (a caller's own). One batch, however many paths."""
         wanted = list(paths)
         if not wanted:
             return {}
-        return {path: InDoubt.of(doubts) for path, doubts in self.doubts_against(company, wanted).items() if doubts}
+        against = self.doubts_against(company, wanted)
+        return {path: InDoubt.of(doubts, unreachable) for path, doubts in against.items() if doubts}
 
     def _evidence(self, challenge_ids: list[int]) -> dict[int, tuple[Evidence, ...]]:
         """Each challenge's evidence, first raised first."""

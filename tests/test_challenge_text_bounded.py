@@ -129,5 +129,8 @@ def test_a_doubt_raised_from_a_project_the_reader_cant_reach_shows_none_of_what_
     assert "HIDDEN-REASONING" not in told and "HIDDEN_LINE" not in told
     (evidence,) = detail["open_challenges"][0]["evidence"]
     assert (evidence["reasoning"], evidence["quoted_line"], evidence["code_reference"]) == (None, None, None)
+    assert "secret.py" not in str(detail), "nor does the in-doubt mark name its code"
+    assert "secret.py" not in str(dana.in_project(payments, "payments-api").call("read", path=target))
     (owners,) = ask(signed_out, "/api/memory", path=target)["open_challenges"][0]["evidence"]
     assert owners["reasoning"] == "HIDDEN-REASONING", "who reaches the project still sees it"
+    assert "secret.py" in owner.in_project(billing, "billing-api").call("read", path=target)["in_doubt"]

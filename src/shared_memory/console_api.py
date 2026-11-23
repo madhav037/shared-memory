@@ -1035,7 +1035,7 @@ class ConsoleApi:
         memory["open_challenges"] = [
             _with_evidence(caller, one, doubts.get(one["challenge_id"])) for one in memory["open_challenges"]
         ]
-        memory["in_doubt"] = _marked(InDoubt.of(doubts.values()) if doubts else None)
+        memory["in_doubt"] = _marked(InDoubt.of(doubts.values(), caller.unreachable) if doubts else None)
         return MemoryDetail(**memory)
 
     def _names(self, member: Member) -> dict[str, str]:
