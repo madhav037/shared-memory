@@ -32,7 +32,7 @@ from shared_memory.suspected import answer_for, reasons_for
 from shared_memory.store import Change, Committer, MemoryStore
 from shared_memory.tied import Tie, TiedFiles, file_named
 from shared_memory.uses import Uses
-from shared_memory.validation import validate, validate_tied_files
+from shared_memory.validation import as_written, validate, validate_tied_files, without_hidden
 
 
 def _promoting(path: str) -> str:
@@ -119,6 +119,20 @@ def _areas_of(path: str) -> list[Area]:
     except Refused:
         return []
     return [area] if area is not None else []
+
+
+def _edited(
+    memory: Memory, title: str | None, summary: str | None, body: str | None, tied_files: list[str] | None
+) -> Memory:
+    """A memory with an edit's new text. What the edit leaves as it was loses any hidden character saved before the
+    server refused them, so only what the member writes now is refused for one."""
+    return replace(
+        memory,
+        title=without_hidden(memory.title) if title is None else title.strip(),
+        summary=without_hidden(memory.summary) if summary is None else summary.strip(),
+        body=without_hidden(memory.body) if body is None else as_written(body),
+        tied_files=[without_hidden(one) for one in memory.tied_files] if tied_files is None else list(tied_files),
+    )
 
 
 def committer(caller: Caller) -> Committer:
@@ -242,7 +256,7 @@ class MemoryService:
             summary=summary.strip(),
             type=type,
             author=caller.member_id,
-            body=body,
+            body=as_written(body),
             tied_files=list(tied_files or []),
         )
         validate(memory, self._settings.memory_word_limit)
@@ -568,13 +582,7 @@ class MemoryService:
             if location.level != "personal" or location.member_id != caller.member_id:
                 return
             memory = self._store.read(caller.company, location.path)
-            edited = replace(
-                memory,
-                title=memory.title if title is None else title.strip(),
-                summary=memory.summary if summary is None else summary.strip(),
-                body=memory.body if body is None else body,
-                tied_files=memory.tied_files if tied_files is None else list(tied_files),
-            )
+            edited = _edited(memory, title, summary, body, tied_files)
             validate(edited, self._settings.memory_word_limit)
         except Refused:
             return
@@ -598,13 +606,7 @@ class MemoryService:
                     f"This memory is in the {location.type} folder, so its type must match. To change its type, "
                     "remember it again with the new type and delete this one."
                 )
-            edited = replace(
-                memory,
-                title=memory.title if title is None else title.strip(),
-                summary=memory.summary if summary is None else summary.strip(),
-                body=memory.body if body is None else body,
-                tied_files=memory.tied_files if tied_files is None else list(tied_files),
-            )
+            edited = _edited(memory, title, summary, body, tied_files)
             validate(edited, self._settings.memory_word_limit)
             change.message = f"Edit: {edited.title}"
             change.write(location.path, edited)

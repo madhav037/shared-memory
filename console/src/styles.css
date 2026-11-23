@@ -2244,6 +2244,39 @@ div.dotted {
   font-size: 0.875rem;
   color: var(--ink-3);
 }
+.facing .told {
+  margin: 6px 0 0;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+}
+/* Two files compared: the lines only one side has. */
+.source.compared del,
+.source.compared ins {
+  text-decoration: none;
+  font-weight: 700;
+}
+.source.compared del {
+  background: var(--danger-wash);
+}
+.source.compared ins {
+  background: var(--accent-wash);
+}
+/* Text a setting would leave out, or characters that hide or reorder it: said before the reader decides. */
+.left-out {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--danger);
+  background: var(--danger-wash);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+.link-address {
+  font-family: var(--mono);
+  font-size: 0.8em;
+  color: var(--ink-3);
+  word-break: break-all;
+}
 .decide {
   display: flex;
   flex-wrap: wrap;

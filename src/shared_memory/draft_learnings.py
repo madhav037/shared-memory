@@ -44,7 +44,7 @@ from shared_memory.identity import Caller
 from shared_memory.memory import KNOWN_ISSUE, Memory
 from shared_memory.service import MemoryService
 from shared_memory.sessions import Session
-from shared_memory.validation import validate
+from shared_memory.validation import as_written, validate
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS draft_learnings (
@@ -169,7 +169,7 @@ class DraftLearnings:
             raise Refused(f"A draft learning's moment is one of {', '.join(MOMENTS)}; this one is {sent.moment!r}.")
         if sent.type == KNOWN_ISSUE:
             raise Refused("A known issue is not a draft learning: save it with save_known_issue.")
-        checked = replace(sent, title=sent.title.strip(), summary=sent.summary.strip())
+        checked = replace(sent, title=sent.title.strip(), summary=sent.summary.strip(), body=as_written(sent.body))
         validate(_memory(checked, author=""), self._settings.memory_word_limit)
         return checked
 

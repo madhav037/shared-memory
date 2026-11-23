@@ -25,6 +25,24 @@ def test_superseding_another_authors_memory_raises_a_challenge(owner: Session, d
     assert [c["challenge_id"] for c in challenged["open_challenges"]] == [raised["challenge_id"]]
 
 
+def test_a_promotion_whose_reasoning_hides_or_reorders_text_is_refused(owner: Session, dana: Session) -> None:
+    target = promote_now(owner, NPM)
+    personal = dana.call("remember", **PNPM)["path"]
+    similar = dana.call("promote", path=personal, level="project")
+
+    refusal = dana.refusal(
+        "promote",
+        path=personal,
+        level="project",
+        reference=similar["reference"],
+        resolutions={one["path"]: "supersede" for one in similar["similar"]},
+        reasoning="pnpm is now standard.\u202e",
+    )
+
+    assert "U+202E" in refusal
+    assert dana.call("read", path=target)["open_challenges"] == []
+
+
 def test_a_challengers_reasoning_is_folded_into_the_authors_briefing_and_prompt(owner: Session, dana: Session) -> None:
     target = promote_now(owner, NPM)
 

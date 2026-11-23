@@ -449,6 +449,9 @@ class ChallengedMemory(BaseModel):
     type: str
     author: str
     status: str
+    tied_files: list[str] = []
+    # Its file exactly as every coding agent reads it, header and all; empty for a stand-in.
+    source: str = ""
 
 
 class ChallengeDetail(BaseModel):

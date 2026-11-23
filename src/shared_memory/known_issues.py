@@ -24,7 +24,7 @@ from shared_memory.memory import KNOWN_ISSUE, Area, Memory, level_folder
 from shared_memory.service import committer, describe
 from shared_memory.store import MemoryStore
 from shared_memory.suspected import answer_for, reasons_for
-from shared_memory.validation import validate
+from shared_memory.validation import as_written, validate
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS known_issue_saves (
@@ -156,7 +156,7 @@ class KnownIssues:
             summary=summary.strip(),
             type=KNOWN_ISSUE,
             author=caller.member_id,
-            body=body,
+            body=as_written(body),
             tied_files=list(tied_files or []),
         )
         validate(memory, self._settings.memory_word_limit)

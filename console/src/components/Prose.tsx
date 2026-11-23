@@ -2,7 +2,8 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { headerEnd } from "../lib/format";
-import { tooIntricate } from "../lib/markdown";
+import { visible } from "../lib/hidden";
+import { showLeftOut, tooIntricate } from "../lib/markdown";
 import { Guarded } from "./Guarded";
 
 /**
@@ -22,7 +23,7 @@ export function Prose({ children, testid }: { children: string; testid?: string 
         plain
       ) : (
         <Guarded fallback={plain} resetKey={children}>
-          <Markdown remarkPlugins={[remarkGfm]} components={MEMBER_TEXT}>
+          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[showLeftOut]} components={MEMBER_TEXT}>
             {children}
           </Markdown>
         </Guarded>
@@ -38,7 +39,7 @@ export function WordForWord({ text }: { text: string }) {
       <p className="hint" data-testid="shown-word-for-word">
         Shown word for word, as it couldn't be set as text.
       </p>
-      <pre className="source">{text}</pre>
+      <pre className="source">{visible(text)}</pre>
     </>
   );
 }
@@ -80,7 +81,7 @@ export function Source({ text, testid = "memory-source" }: { text: string; testi
     <pre className="source" data-testid={testid}>
       {lines.map((line, number) => (
         <span key={number} className={number <= closing ? "header-line" : undefined}>
-          {line}
+          {visible(line)}
           {"\n"}
         </span>
       ))}

@@ -16,12 +16,15 @@ import {
 } from "../api/client";
 import { Amended } from "../components/Amended";
 import { Placeholder, Rank, Refusal } from "../components/Bits";
+import { Compared } from "../components/Compared";
+import { HiddenWarning, Told } from "../components/Told";
 import { Prose, Source, ViewSwitch, type ReadingView } from "../components/Prose";
 import { useContents } from "../lib/contents";
 import { whatChanges } from "../lib/changes";
 import { changed, offerDiff } from "../lib/diff";
 import { asks, REASON_NAMES } from "../lib/challenge";
 import { day, memoryUrl, moment } from "../lib/format";
+import { visible } from "../lib/hidden";
 import { useAsked } from "../lib/useAsked";
 
 /** Everything disputed: what is waiting for this member's decision, and what they have asked of others. */
@@ -42,7 +45,7 @@ export function Challenges({
   const heading = useRef<HTMLHeadingElement>(null);
   const names = new Map((company?.members ?? []).map((one) => [one.member_id, one.name]));
   // A member is their name here; their member ID belongs on Company.
-  const who = (memberId: string) => names.get(memberId) ?? memberId;
+  const who = (memberId: string) => visible(names.get(memberId) ?? memberId);
 
   const decided = (said: Slip, left: ChallengeList) => {
     setSlip(said);
@@ -211,7 +214,8 @@ function Waiting({
   const [deciding, setDeciding] = useState<{ challengeId: number; decision: Choice } | null>(null);
   const busy = useRef(false);
   const [refused, setRefused] = useState<{ challengeId: number; message: string } | null>(null);
-  const [view, setView] = useState<ReadingView>("text");
+  // A decision is made on what coding agents will read, so the files come first, word for word.
+  const [view, setView] = useState<ReadingView>("source");
   const [marked, setMarked] = useState(true);
   const { refresh } = useContents();
 
@@ -281,7 +285,7 @@ function Waiting({
             <section className="dispute" key={path} aria-label={`Challenges against ${first.target.title}`}>
               <div className="dispute-head">
                 <h3>
-                  <Link to={memoryUrl(first.target.path)}>{first.target.title}</Link>
+                  <Link to={memoryUrl(first.target.path)}>{visible(first.target.title)}</Link>
                 </h3>
                 <Rank level={first.target.level} />
                 {against.length > 1 && <span className="mark alert">{against.length} challenges</span>}
@@ -311,9 +315,9 @@ function Waiting({
                 aria-label={`Foundation challenge to the ${challenge.foundation_name} foundation`}
               >
                 <div className="dispute-head">
-                  <h3>{shown && <Link to={memoryUrl(shown.path)}>{shown.title}</Link>}</h3>
+                  <h3>{shown && <Link to={memoryUrl(shown.path)}>{visible(shown.title)}</Link>}</h3>
                   <span className="mark strong" data-testid="foundation-mark">
-                    {challenge.foundation_name} foundation
+                    {visible(challenge.foundation_name ?? "")} foundation
                   </span>
                 </div>
                 {proposal(challenge, 0)}
@@ -337,11 +341,11 @@ function Waiting({
               <div className="dispute-head">
                 <h3>
                   {challenge.challenger && (
-                    <Link to={memoryUrl(challenge.challenger.path)}>{challenge.challenger.title}</Link>
+                    <Link to={memoryUrl(challenge.challenger.path)}>{visible(challenge.challenger.title)}</Link>
                   )}
                 </h3>
                 <span className="mark strong" data-testid="department-mark">
-                  {challenge.target.title} department
+                  {visible(challenge.target.title)} department
                 </span>
               </div>
               {proposal(challenge, 0)}
@@ -353,12 +357,16 @@ function Waiting({
     {levels.length > 0 && (
       <>
         <h2 className="section-heading">Level contradictions</h2>
+        {ordinary.length === 0 && foundations.length === 0 && departments.length === 0 && (
+          <ViewSwitch view={view} onChange={setView} />
+        )}
         <div className="waiting" data-testid="level-contradictions">
           {levels.map((challenge) => (
             <LevelContradiction
               key={challenge.challenge_id}
               challenge={challenge}
               who={who}
+              view={view}
               deciding={deciding}
               refused={refused?.challengeId === challenge.challenge_id ? refused.message : null}
               onDecide={(decision, reason) => decide(challenge, decision, 0, reason)}
@@ -378,12 +386,14 @@ const LEVEL_CONTRADICTION = "level_contradiction";
 function LevelContradiction({
   challenge,
   who,
+  view,
   deciding,
   refused,
   onDecide,
 }: {
   challenge: ChallengeDetail;
   who: (memberId: string) => string;
+  view: ReadingView;
   deciding: { challengeId: number; decision: Choice } | null;
   refused: string | null;
   onDecide: (decision: Choice, reason?: string) => void;
@@ -411,6 +421,7 @@ function LevelContradiction({
           )}
         </p>
         <p className="dispute-note">Until you decide, the {where} memory holds for its {where}.</p>
+        <HiddenWarning texts={wordsOf(challenge)} />
         <div className="facing" data-testid="facing">
           {[narrower, broader].map(
             (side) =>
@@ -418,11 +429,16 @@ function LevelContradiction({
                 <div key={side.path} data-testid="level-side">
                   <Rank level={side.level} />
                   <Link className="title" to={memoryUrl(side.path)}>
-                    {side.title}
+                    {visible(side.title)}
                   </Link>
+                  <Told summary={side.summary} tiedFiles={side.tied_files} />
                   <p className="by">By {who(side.author)}</p>
                   <div className="body">
-                    <Prose testid="facing-text">{side.body}</Prose>
+                    {view === "source" ? (
+                      <Source text={side.source} testid="facing-source" />
+                    ) : (
+                      <Prose testid="facing-text">{side.body}</Prose>
+                    )}
                   </div>
                 </div>
               ),
@@ -489,8 +505,11 @@ function Proposal({
   // compare the memory with.
   const promoting = challenge.kind === "promote";
   const adding = challenge.kind === "add" || promoting;
-  const pieces = offered && marked && !adding ? offerDiff(challenge.target.body, offered.body) : null;
-  const changes = offered && !adding ? whatChanges(challenge.target.body, offered.body) : null;
+  // An offered memory deleted or moved since is no longer there to compare: it is said to be gone, not diffed as empty.
+  const gone = offered?.status === "gone";
+  const compared = offered && !adding && !gone ? offered : null;
+  const pieces = compared && marked ? offerDiff(challenge.target.body, compared.body) : null;
+  const changes = compared ? whatChanges(challenge.target.body, compared.body) : null;
   return (
     <div className="proposal">
       <p className="proposal-by">
@@ -511,9 +530,10 @@ function Proposal({
       {challenge.reasoning && (
         <div className="reasoning" data-testid="reasoning">
           <p className="reasoning-head">Reasoning</p>
-          <p className="reasoning-text" data-testid="reasoning-text">{challenge.reasoning}</p>
+          <p className="reasoning-text" data-testid="reasoning-text">{visible(challenge.reasoning)}</p>
         </div>
       )}
+      <HiddenWarning texts={wordsOf(challenge)} />
       {challenge.evidence.length > 0 && <EvidenceList evidence={challenge.evidence} who={who} />}
       {changes && (
         <div className="what-changes" data-testid="what-changes">
@@ -549,19 +569,24 @@ function Proposal({
         {adding ? (
           <div>
             <span className="title">
-              {challenge.target.title} {promoting ? "department memory" : "foundation"}
+              {visible(challenge.target.title)} {promoting ? "department memory" : "foundation"}
             </span>
             <p className="by">Where it would be added</p>
           </div>
         ) : (
           <div>
             <Link className="title" to={memoryUrl(challenge.target.path)}>
-              {challenge.target.title}
+              {visible(challenge.target.title)}
             </Link>
+            <Told summary={challenge.target.summary} tiedFiles={challenge.target.tied_files} />
             <p className="by">As it stands now, by {who(challenge.target.author)}</p>
             <div className="body">
               {view === "source" ? (
-                <Source text={challenge.target.body} testid="facing-source" />
+                compared ? (
+                  <Compared before={challenge.target.source} after={compared.source} side="now" />
+                ) : (
+                  <Source text={challenge.target.source} testid="facing-source" />
+                )
               ) : (
                 <Prose testid="facing-text">{challenge.target.body}</Prose>
               )}
@@ -572,15 +597,24 @@ function Proposal({
           {offered ? (
             <>
               <Link className="title" to={memoryUrl(offered.path)}>
-                {offered.title}
+                {visible(offered.title)}
               </Link>
+              <Told summary={offered.summary} tiedFiles={offered.tied_files} />
               <p className="by">
                 {promoting ? "Offered for department memory" : adding ? "Offered for the foundation" : "Offered in its place"}{" "}
                 by {who(offered.author)}
               </p>
               <div className="body">
-                {view === "source" ? (
-                  <Source text={offered.body} testid="facing-source" />
+                {gone ? (
+                  <p className="retire-it" data-testid="offer-gone">
+                    The offered memory is gone: it was deleted or moved after the challenge was raised.
+                  </p>
+                ) : view === "source" ? (
+                  adding ? (
+                    <Source text={offered.source} testid="facing-source" />
+                  ) : (
+                    <Compared before={challenge.target.source} after={offered.source} side="offered" />
+                  )
                 ) : pieces && changed(pieces) ? (
                   <Amended pieces={pieces} source="this offer" testid="amended" />
                 ) : (
@@ -712,13 +746,13 @@ function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memb
             <p className="evidence-by">
               <b>{who(each.member_id)}</b> · {moment(each.raised_at)}
             </p>
-            {each.reasoning && <p className="reasoning-text">{each.reasoning}</p>}
+            {each.reasoning && <p className="reasoning-text">{visible(each.reasoning)}</p>}
             {each.code_reference && (
               <p className="evidence-code">
                 <code className="path" data-testid="evidence-reference">
                   {each.code_reference}
                 </code>
-                {each.quoted_line && <code className="quoted">{each.quoted_line}</code>}
+                {each.quoted_line && <code className="quoted">{visible(each.quoted_line)}</code>}
               </p>
             )}
           </li>
@@ -726,6 +760,14 @@ function EvidenceList({ evidence, who }: { evidence: DoubtEvidence[]; who: (memb
       </ol>
     </div>
   );
+}
+
+/** Every word of a challenge a coding agent may be given: both memories, the reasoning and the evidence. */
+function wordsOf(challenge: ChallengeDetail): (string | null)[] {
+  const sides = [challenge.target, challenge.challenger].flatMap((side) =>
+    side ? [side.title, side.summary, side.body, side.source, ...side.tied_files] : [],
+  );
+  return [challenge.reasoning, ...sides, ...challenge.evidence.flatMap((each) => [each.reasoning, each.quoted_line])];
 }
 
 const STATES: Record<string, string> = {

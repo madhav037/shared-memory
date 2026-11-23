@@ -79,6 +79,13 @@ RESOLUTIONS = ("supersede", "keep_both", "cancel")
 LEVEL_DECISIONS = ("keep_exception", "follow")
 
 
+def _check_reasoning(reasoning: str | None) -> None:
+    """Reasoning for a promotion, retirement or addition is shown to whoever decides, kept as an exception's reason, and
+    folded into briefings, so it is checked like a memory's words."""
+    if reasoning and reasoning.strip():
+        refuse_secret(reasoning, "This reasoning", "into reasoning, which members and their coding agents are shown")
+
+
 @dataclass(frozen=True)
 class Promotable:
     """A promotion that can happen: where the memory is, its new level, who promotes it (when not its author), the
@@ -144,6 +151,7 @@ class Lifecycle:
         imported_from: str | None = None,
         foundation: str | None = None,
     ) -> dict[str, Any]:
+        _check_reasoning(reasoning)
         promotable = self._promotable(caller, path, level, foundation)
         location, target, promoted_by = promotable.location, promotable.target, promotable.promoted_by
         project, into, department_id = promotable.project, promotable.foundation, promotable.department_id
@@ -540,6 +548,7 @@ class Lifecycle:
     def add_to_foundation(self, caller: Caller, path: str, foundation: str, reasoning: str | None = None) -> dict[str, Any]:
         """Bring an existing project memory into a foundation: at once for a lead of the project or a keeper of that
         foundation, otherwise as a challenge they decide while the memory stays where it is."""
+        _check_reasoning(reasoning)
         project = caller.require_project()
         caller.require_reach(path)
         location = locate(path)
@@ -881,6 +890,7 @@ class Lifecycle:
     # Retiring
 
     def retire(self, caller: Caller, path: str, reasoning: str | None = None) -> dict[str, Any]:
+        _check_reasoning(reasoning)
         caller.require_project()
         caller.require_reach(path)
         location = locate(path)

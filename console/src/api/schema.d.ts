@@ -2864,6 +2864,16 @@ export interface components {
             author: string;
             /** Status */
             status: string;
+            /**
+             * Tied Files
+             * @default []
+             */
+            tied_files: string[];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
         };
         /**
          * RaisedChallenge
