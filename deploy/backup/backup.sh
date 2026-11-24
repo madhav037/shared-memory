@@ -83,6 +83,8 @@ backup_plain() {
     # Dump the database before pushing memory, so every memory the dump refers to is already in the push.
     pg_dump --clean --if-exists --no-owner --exclude-table-data=sections -f "$DATABASE_WORK/shared_memory.sql"
     git -C "$DATABASE_WORK" add shared_memory.sql
+    # Files left by an earlier encrypted backup would be restored in preference to this dump.
+    git -C "$DATABASE_WORK" rm -q -f --ignore-unmatch shared_memory.sql.age memory.bundle.age
     commit_database_work
     # The server creates the repository at start, but main has no commit until the first memory is saved.
     if git -C "$MEMORY" rev-parse --verify -q main >/dev/null 2>&1; then

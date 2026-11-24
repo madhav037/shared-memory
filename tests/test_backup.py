@@ -256,3 +256,33 @@ def test_a_backup_continues_after_unencrypted_ones_without_keeping_the_plain_dum
         check=True,
     ).stdout.split()
     assert tip == ["memory.bundle.age", "shared_memory.sql.age"]
+
+
+@pytest.mark.parametrize("work_folder", ["kept", "rebuilt from the remote"])
+def test_after_encryption_is_turned_off_the_restore_loads_the_latest_plain_backup(
+    tmp_path: Path, work_folder: str
+) -> None:
+    host = Host(tmp_path)
+    host.save_memory()
+    work = tmp_path / "backups" / "database"
+    if work_folder == "kept":
+        assert host.run("now").returncode == 0
+    else:
+        subprocess.run(["git", "init", "-q", "-b", "database", work.as_posix()], check=True)
+    # What an encrypted night leaves at the tip of branch database; the content doesn't matter here.
+    for name in ("shared_memory.sql.age", "memory.bundle.age"):
+        (work / name).write_text("age-encryption.org/v1 stand-in")
+    subprocess.run([*GIT, "-C", work.as_posix(), "add", "."], check=True)
+    subprocess.run([*GIT, "-C", work.as_posix(), "commit", "-q", "-m", "encrypted night"], check=True)
+    subprocess.run(["git", "-C", work.as_posix(), "push", "-q", host.remote.as_posix(), "HEAD:database"], check=True)
+    if work_folder == "rebuilt from the remote":
+        shutil.rmtree(work)
+
+    assert host.run("now").returncode == 0
+    fresh = tmp_path / "fresh-memory"
+    fresh.mkdir()
+    restored = host.run("restore", memory=fresh)
+
+    assert restored.returncode == 0, restored.stdout + restored.stderr
+    assert host.received.read_text().strip() == DUMP
+    assert (fresh / "a.md").read_text() == MEMORY_TEXT
