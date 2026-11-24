@@ -565,12 +565,14 @@ Everything in the last backup comes back: memories with their history, members a
 **Practice a restore** now and then, without touching the running server, in a throwaway stack with its own project name. Start only the database and the server in it, and run the restore as a one-off command:
 
 ```bash
-docker compose -p restore-drill up -d --no-build db
+docker compose -p restore-drill up -d --no-build --wait db
 docker compose -p restore-drill run --rm --no-deps backup restore
 docker compose -p restore-drill up -d --no-build --no-deps server
 docker compose -p restore-drill exec server shared-memory reindex
 docker compose -p restore-drill down -v
 ```
+
+If the backups are encrypted, give the restore the identity as shown above, with `-v "$PWD/age_identity.txt:/run/secrets/age_identity:ro"`.
 
 Never start the practice stack's `backup` service, and never build in it:
 - **No backup service.** It has the real `BACKUP_REMOTE` and key. At its next scheduled backup it would push the practice copy over the real backups, and from then on the real server's backups and deploys fail. For the practice run, a key that can only read the backup repository is safer still.
