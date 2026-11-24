@@ -176,7 +176,7 @@ def test_with_a_recipient_the_remote_holds_only_ciphertext(tmp_path: Path) -> No
     assert "unencrypted" not in done.stdout
     assert "encrypted with age" in done.stdout
     held = host.everything_the_remote_holds()
-    assert sorted(held) == ["database:memory.bundle.age", "database:shared_memory.sql.age"]
+    assert {name.split(":", 1)[1] for name in held} == {"memory.bundle.age", "shared_memory.sql.age"}
     for name, content in held.items():
         assert content.startswith(b"age-encryption.org/"), f"{name} is not an age file"
         assert DUMP.encode() not in content and MEMORY_TEXT.encode() not in content
@@ -293,3 +293,100 @@ def test_after_encryption_is_turned_off_the_restore_loads_the_latest_plain_backu
     assert restored.returncode == 0, restored.stdout + restored.stderr
     assert host.received.read_text().strip() == DUMP
     assert (fresh / "a.md").read_text() == MEMORY_TEXT
+
+
+def stand_in_age(host: Host) -> str:
+    """An `age` on the path that writes a changed copy (`age -r R -o OUT IN`): what is encrypted doesn't matter here,
+    only which commits and files reach the remote. Returns the recipient to pass."""
+    stub(host.bin / "age", 'printf "age-encryption.org/v1 stand-in %s\n" "$(date +%N)" > "$4"; base64 "$5" >> "$4"')
+    return "age1standin"
+
+
+def everything_reachable(remote: Path, *refs: str) -> bytes:
+    """The bytes of every file in every commit reachable from the refs (all of them by default): history included."""
+    objects = subprocess.run(
+        ["git", "-C", remote.as_posix(), "rev-list", "--objects", *(refs or ("--all",))],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\n")
+    return b"".join(
+        subprocess.run(["git", "-C", remote.as_posix(), "cat-file", "-p", line.split()[0]], capture_output=True).stdout
+        for line in objects
+        if line.strip()
+    )
+
+
+def heads(remote: Path) -> dict[str, str]:
+    listed = subprocess.run(
+        ["git", "-C", remote.as_posix(), "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\n")
+    return dict(line.split() for line in listed if line)
+
+
+def parents(remote: Path, ref: str) -> list[str]:
+    return subprocess.run(
+        ["git", "-C", remote.as_posix(), "rev-list", "--parents", "-n", "1", ref], capture_output=True, text=True
+    ).stdout.split()[1:]
+
+
+def test_turning_encryption_on_sends_no_earlier_plaintext_to_a_new_repository(tmp_path: Path) -> None:
+    host = Host(tmp_path)
+    recipient = stand_in_age(host)
+    host.save_memory()
+    assert host.run("now").returncode == 0
+    recreated = tmp_path / "recreated.git"
+    subprocess.run(["git", "init", "-q", "--bare", recreated.as_posix()], check=True)
+
+    done = host.run("now", extra={"BACKUP_AGE_RECIPIENT": recipient, "BACKUP_REMOTE": recreated.as_posix()})
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    held = everything_reachable(recreated)
+    assert DUMP.encode() not in held and MEMORY_TEXT.encode() not in held
+    assert not (tmp_path / "backups" / "database").exists(), "the plain history is gone from the server too"
+
+
+def test_turning_encryption_on_keeps_the_earlier_backups_apart_from_branch_database(tmp_path: Path) -> None:
+    host = Host(tmp_path)
+    recipient = stand_in_age(host)
+    host.save_memory()
+    assert host.run("now").returncode == 0
+    plain_tip = heads(host.remote)["database"]
+
+    done = host.run("now", extra={"BACKUP_AGE_RECIPIENT": recipient})
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    branches = heads(host.remote)
+    assert DUMP.encode() not in everything_reachable(host.remote, "database")
+    assert parents(host.remote, "database") == []
+    kept = [name for name in branches if name.startswith("database-before-")]
+    assert len(kept) == 1 and branches[kept[0]] == plain_tip, "the unencrypted backups are kept, not dropped"
+    assert "database-before-" in done.stdout
+
+
+def test_encrypted_backups_keep_the_last_seven_nights_and_no_history(tmp_path: Path) -> None:
+    host = Host(tmp_path)
+    recipient = stand_in_age(host)
+    host.save_memory()
+
+    for _ in range(9):
+        done = host.run("now", extra={"BACKUP_AGE_RECIPIENT": recipient})
+        assert done.returncode == 0, done.stdout + done.stderr
+
+    branches = heads(host.remote)
+    nights = sorted(name for name in branches if name.startswith("backup/"))
+    assert len(nights) == 7
+    assert all(parents(host.remote, night) == [] for night in nights), "each night is one commit, with no history"
+    assert branches["database"] == branches[nights[-1]]
+    assert sorted(branches) == sorted([*nights, "database"])
+    commits = subprocess.run(
+        ["git", "-C", host.remote.as_posix(), "rev-list", "--all", "--count"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert commits == "7"
+    assert not (tmp_path / "backups" / "database").exists()
