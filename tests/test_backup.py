@@ -279,6 +279,13 @@ def test_after_encryption_is_turned_off_the_restore_loads_the_latest_plain_backu
         shutil.rmtree(work)
 
     assert host.run("now").returncode == 0
+    tip = subprocess.run(
+        ["git", "-C", host.remote.as_posix(), "ls-tree", "-r", "--name-only", "database"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert tip == ["shared_memory.sql"]
     fresh = tmp_path / "fresh-memory"
     fresh.mkdir()
     restored = host.run("restore", memory=fresh)
