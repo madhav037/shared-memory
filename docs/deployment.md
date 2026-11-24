@@ -562,4 +562,16 @@ Without the identity the restore stops before changing anything and says so; wit
 
 Everything in the last backup comes back: memories with their history, members and their personal tokens (members don't need new ones), projects, pins and open challenges. The next nightly backup continues the backup repository's history.
 
-**Practice a restore** now and then, without touching the running server, by restoring into a throwaway stack with its own project name, for example `docker compose -p restore-drill ...`. Remove it afterwards with `docker compose -p restore-drill down -v`. Its Caddy needs other host ports than 80 and 443 while the real server runs.
+**Practice a restore** now and then, without touching the running server, in a throwaway stack with its own project name. Start only the database and the server in it, and run the restore as a one-off command:
+
+```bash
+docker compose -p restore-drill up -d --no-build db
+docker compose -p restore-drill run --rm --no-deps backup restore
+docker compose -p restore-drill up -d --no-build --no-deps server
+docker compose -p restore-drill exec server shared-memory reindex
+docker compose -p restore-drill down -v
+```
+
+Never start the practice stack's `backup` service, and never build in it:
+- **No backup service.** It has the real `BACKUP_REMOTE` and key. At its next scheduled backup it would push the practice copy over the real backups, and from then on the real server's backups and deploys fail. For the practice run, a key that can only read the backup repository is safer still.
+- **No building.** Images are named the same in every project, so a build there replaces the ones the real server starts from next.
