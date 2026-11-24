@@ -55,14 +55,6 @@ backup_now() {
     else
         log "Backups are unencrypted: set SHARED_MEMORY_BACKUP_AGE_RECIPIENT to an age public key to encrypt them"
     fi
-    if [ ! -d "$DATABASE_WORK/.git" ]; then
-        git init -q -b database "$DATABASE_WORK"
-        # Continue the remote's history, for example on a host restored from this backup.
-        if git ls-remote --exit-code --heads "$BACKUP_REMOTE" database >/dev/null; then
-            git -C "$DATABASE_WORK" fetch -q "$BACKUP_REMOTE" database
-            git -C "$DATABASE_WORK" reset -q FETCH_HEAD
-        fi
-    fi
     if [ -n "$AGE_RECIPIENT" ]; then
         backup_encrypted
     else
@@ -80,6 +72,14 @@ commit_database_work() {
 }
 
 backup_plain() {
+    if [ ! -d "$DATABASE_WORK/.git" ]; then
+        git init -q -b database "$DATABASE_WORK"
+        # Continue the remote's history, for example on a host restored from this backup.
+        if git ls-remote --exit-code --heads "$BACKUP_REMOTE" database >/dev/null; then
+            git -C "$DATABASE_WORK" fetch -q "$BACKUP_REMOTE" database
+            git -C "$DATABASE_WORK" reset -q FETCH_HEAD
+        fi
+    fi
     # Dump the database before pushing memory, so every memory the dump refers to is already in the push.
     pg_dump --clean --if-exists --no-owner --exclude-table-data=sections -f "$DATABASE_WORK/shared_memory.sql"
     git -C "$DATABASE_WORK" add shared_memory.sql
@@ -94,24 +94,47 @@ backup_plain() {
     fi
 }
 
-# The dump and the memory history go into one commit on branch database, so a dump never refers to a memory the
-# backup lacks. The plain dump and bundle exist only in a temporary folder. A plain dump left in the work folder by an
-# earlier, unencrypted backup is dropped from the new commit; it stays in older commits and on a remote's main branch,
-# which docs/deployment.md says to delete.
+# The dump and the memory history go into one commit, so a dump never refers to a memory the backup lacks. The plain
+# dump and bundle exist only in a temporary folder. Each encrypted backup is a commit with no parent, so nothing earlier
+# rides along: not the plaintext of backups from before encryption, and not earlier nights, which age's output would
+# add whole to the repository every night (it never compresses against them). The last KEEP backups stay as branches
+# backup/<time>, and branch database, which restore reads, points at the newest.
+KEEP=7
 backup_encrypted() {
     PLAIN=$(mktemp -d)
+    # The work folder of unencrypted backups holds their plain history, which has no place on the server any more.
+    rm -rf "$DATABASE_WORK"
+    local work=$PLAIN/work
+    git init -q -b database "$work"
     pg_dump --clean --if-exists --no-owner --exclude-table-data=sections -f "$PLAIN/shared_memory.sql"
-    age -r "$AGE_RECIPIENT" -o "$DATABASE_WORK/shared_memory.sql.age" "$PLAIN/shared_memory.sql"
-    git -C "$DATABASE_WORK" rm -q -f --ignore-unmatch shared_memory.sql
-    git -C "$DATABASE_WORK" add shared_memory.sql.age
+    age -r "$AGE_RECIPIENT" -o "$work/shared_memory.sql.age" "$PLAIN/shared_memory.sql"
     if git -C "$MEMORY" rev-parse --verify -q main >/dev/null 2>&1; then
         git -C "$MEMORY" bundle create -q "$PLAIN/memory.bundle" main
-        age -r "$AGE_RECIPIENT" -o "$DATABASE_WORK/memory.bundle.age" "$PLAIN/memory.bundle"
-        git -C "$DATABASE_WORK" add memory.bundle.age
+        age -r "$AGE_RECIPIENT" -o "$work/memory.bundle.age" "$PLAIN/memory.bundle"
     else
         log "The memory folder has no saved memory yet: no bundle to encrypt"
     fi
-    commit_database_work
+    git -C "$work" add -A
+    git -C "$work" commit -q -m "Database backup $(date -Is)"
+    local night heads tip newest
+    night=$(date -u +%Y%m%dT%H%M%S.%NZ)
+    local refs=("HEAD:refs/heads/backup/$night" "+HEAD:refs/heads/database")
+    heads=$(git ls-remote --heads "$BACKUP_REMOTE")
+    tip=$(awk '$2 == "refs/heads/database" { print $1 }' <<<"$heads")
+    newest=$(awk '$2 ~ /^refs\/heads\/backup\// { print $2, $1 }' <<<"$heads" | sort | tail -n 1 | cut -d " " -f 2)
+    if [ -n "$tip" ] && [ "$tip" != "$newest" ]; then
+        # Branch database holds backups this form didn't write (unencrypted ones, or an older version's): keep them.
+        git -C "$work" fetch -q --depth 1 "$BACKUP_REMOTE" database
+        refs+=("FETCH_HEAD:refs/heads/database-before-$night")
+        log "The earlier backups on branch database are kept as branch database-before-$night: delete it, and the main branch, if their history must go (docs/deployment.md)"
+    fi
+    git -C "$work" push -q --atomic "$BACKUP_REMOTE" "${refs[@]}"
+    local stale
+    stale=$(awk '$2 ~ /^refs\/heads\/backup\// { print $2 }' <<<"$(git ls-remote --heads "$BACKUP_REMOTE")" | sort | head -n -"$KEEP")
+    if [ -n "$stale" ]; then
+        # shellcheck disable=SC2086 # one ref name per word
+        git -C "$work" push -q "$BACKUP_REMOTE" --delete $stale || log "Could not delete backups older than the last $KEEP: $stale"
+    fi
 }
 
 schedule() {

@@ -514,9 +514,9 @@ By default the backup repository holds your data readable by whoever can read th
 
    The server never holds the identity, so a stolen server or backup repository does not reveal past backups. With the variable unset, backups behave as before and each one logs that it is unencrypted.
 
-Encrypted, the `database` branch holds two files in one commit per night, `shared_memory.sql.age` and `memory.bundle.age` (the memory folder's git history as a git bundle), and there is no `main` branch. Each night's bundle is the whole history, so the repository grows faster than an unencrypted one.
+Encrypted, each backup is one commit with no history behind it, holding two files: `shared_memory.sql.age` and `memory.bundle.age` (the memory folder's git history as a git bundle). There is no `main` branch. Encrypted files can't be compressed against each other, so the repository keeps only the last 7 backups, as branches `backup/<time>`, and deletes older ones. Branch `database` points at the newest, and the restore reads it. Each bundle holds the memory folder's whole history, so a backup is as large as that history.
 
-**Turning encryption on for an existing backup repository:** earlier commits on `database`, and the `main` branch, are still plaintext. Delete the `main` branch, and delete and recreate the repository if the old history must go too. The next backup continues from the old `database` branch unless you do.
+**Turning encryption on for an existing backup repository:** the first encrypted backup moves the earlier backups from `database` to a branch named `database-before-<time>`, and the log names it. That branch and `main` are still plaintext. Delete both once you no longer need them as restore points. To be sure no copy is left, delete and recreate the repository: nothing earlier is pushed to the new one.
 
 **Checking on it:**
 
